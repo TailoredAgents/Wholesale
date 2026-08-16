@@ -1283,11 +1283,35 @@ class SuppressionRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class LeadFormSubmission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lead_form_submissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "intake_attempt_id",
+            name="uq_lead_form_submissions_org_intake_attempt",
+        ),
+        CheckConstraint(
+            "(completion_status = 'address_only' AND intake_attempt_id IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "completion_status = 'completed'",
+            name="ck_lead_form_submissions_completion_state",
+        ),
+        Index(
+            "ix_lead_form_submissions_org_completion_created",
+            "organization_id",
+            "completion_status",
+            "created_at",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
+    intake_attempt_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    completion_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="completed", server_default="completed"
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
     fbclid_captured_at: Mapped[datetime | None] = mapped_column(

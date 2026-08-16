@@ -605,6 +605,10 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
+function isAddressOnlyLead(lead: Pick<LeadDetail, "qualification_context">) {
+  return lead.qualification_context?.website_intake_status === "address_only";
+}
+
 function LandValuationTab({ lead }: { lead: LeadDetail }) {
   return <LandValuationWorkspace leadId={lead.id} />;
 }
@@ -1231,6 +1235,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
         lead.assigned_user_id === profile.user_id),
   );
   const lastContact = lead.communications[0]?.occurred_at ?? null;
+  const addressOnlyLead = isAddressOnlyLead(lead);
   const tabHref = (tab: LeadTab, options?: { editLead?: boolean }) => {
     const values = new URLSearchParams({ tab });
     if (returnTo !== "/os/leads") values.set("returnTo", returnTo);
@@ -1251,7 +1256,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
       <div className={styles.breadcrumb}><Link href={returnTo}>Back</Link><span>/</span><span>{lead.seller_name}</span></div>
       <header className={styles.commandHeader}>
         <div className={styles.identity}>
-          <p className={styles.eyebrow}>Seller lead</p>
+          <p className={styles.eyebrow}>{addressOnlyLead ? "Address-only lead" : "Seller lead"}</p>
           <h1>{lead.seller_name}</h1>
           <p>{lead.property_address}</p>
           <div className={styles.identityBadges}>
@@ -1267,13 +1272,17 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
               {phone ? <Link href={`/os/inbox?lead=${lead.id}&channel=sms`}>Text</Link> : null}
               {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
               <Link href={tabHref("property", { editLead: true }) + "#edit-lead"}>Edit lead</Link>
-              <Link href={tabHref("activity")}>Log contact</Link>
-              <Link href={tabHref("valuation")}>
-                {lead.asset_class === "land" ? "Run Land valuation" : "Run comps"}
-              </Link>
-              <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
-                {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
-              </Link>
+              {!addressOnlyLead ? (
+                <>
+                  <Link href={tabHref("activity")}>Log contact</Link>
+                  <Link href={tabHref("valuation")}>
+                    {lead.asset_class === "land" ? "Run Land valuation" : "Run comps"}
+                  </Link>
+                  <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
+                    {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
+                  </Link>
+                </>
+              ) : null}
             </>
           ) : null}
           <LeadLifecycleActions
@@ -1308,6 +1317,16 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
         </>
       ) : (
         <>
+          {addressOnlyLead ? (
+            <section className={styles.addressOnlyNotice}>
+              <strong>Contact information was not completed.</strong>
+              <p>
+                This visitor completed the property step of the website form, so the address and
+                timeline were saved as a cold lead. Research and skip trace the owner, then check
+                DNC status manually before outreach. Automated follow-up has not started.
+              </p>
+            </section>
+          ) : null}
           <section className={styles.commandStrip}>
             <div className={styles.nextAction}>
               <span>Next best action</span>

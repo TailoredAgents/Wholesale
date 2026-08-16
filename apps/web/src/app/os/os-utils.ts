@@ -45,6 +45,11 @@ export const savedLeadViews = [
     description: "Every seller record in the active database.",
   },
   {
+    key: "address_only",
+    label: "Address Only",
+    description: "Incomplete website forms ready for owner research and skip tracing.",
+  },
+  {
     key: "urgent",
     label: "Urgent",
     description: "Hot, fast-timeline, or overdue leads.",
@@ -185,15 +190,16 @@ export function qualificationFieldCount(
 }
 
 export function getWorkspaceQueues(leads: LeadListItem[], openTasks: SpeedToLeadTask[]) {
+  const operationalLeads = leads.filter((lead) => !isAddressOnlyLead(lead));
   return {
     overdueTasks: openTasks.filter((task) => task.due_status === "overdue"),
     dueTasks: openTasks.filter((task) => task.due_status === "due"),
-    needsQualification: leads.filter(
+    needsQualification: operationalLeads.filter(
       (lead) =>
         ["new", "contacted", "qualification_in_progress"].includes(lead.stage_key) &&
         qualificationFieldCount(lead) < qualificationFieldTarget,
     ),
-    appointmentQueue: leads.filter(
+    appointmentQueue: operationalLeads.filter(
       (lead) =>
         [
           "qualified",
@@ -204,7 +210,7 @@ export function getWorkspaceQueues(leads: LeadListItem[], openTasks: SpeedToLead
         ].includes(lead.stage_key) ||
         ["appointment_requested", "not_scheduled"].includes(lead.appointment_status ?? ""),
     ),
-    offerQueue: leads.filter((lead) =>
+    offerQueue: operationalLeads.filter((lead) =>
       ["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key),
     ),
   };
@@ -226,7 +232,7 @@ export function normalizeLeadViewKey(value: string | string[] | null | undefined
 }
 
 export function defaultLeadSortKey(viewKey: SavedLeadViewKey): LeadSortKey {
-  return viewKey === "all" ? "newest" : "priority";
+  return ["all", "address_only"].includes(viewKey) ? "newest" : "priority";
 }
 
 export function normalizeLeadSortKey(
@@ -260,6 +266,9 @@ export function getFilteredLeads(
 }
 
 export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
+  if (isAddressOnlyLead(lead)) {
+    return "Skip trace needed";
+  }
   if (lead.stage_key === "under_contract") {
     return "Under contract";
   }
@@ -321,6 +330,12 @@ function leadMatchesView(
 ) {
   if (viewKey === "all") {
     return true;
+  }
+  if (viewKey === "address_only") {
+    return isAddressOnlyLead(lead);
+  }
+  if (isAddressOnlyLead(lead)) {
+    return false;
   }
   if (viewKey === "urgent") {
     return (
@@ -385,6 +400,9 @@ function sortLeads(
 }
 
 function leadWorkRank(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
+  if (isAddressOnlyLead(lead)) {
+    return 0;
+  }
   let rank = 0;
   if (lead.lead_temperature === "hot") {
     rank += 40;
@@ -402,6 +420,12 @@ function leadWorkRank(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
     rank += 10;
   }
   return rank;
+}
+
+export function isAddressOnlyLead(
+  lead: Pick<LeadListItem, "qualification_context">,
+) {
+  return lead.qualification_context?.website_intake_status === "address_only";
 }
 
 function hasUrgentTimeline(lead: Pick<LeadListItem, "desired_timeline">) {

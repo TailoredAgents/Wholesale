@@ -7,6 +7,7 @@ from app.models.foundation import Lead
 
 TERMINAL_CLOSE_OUT_STAGES = {"dead", "disqualified"}
 INACTIVE_LEAD_STAGES = TERMINAL_CLOSE_OUT_STAGES | {"closed"}
+ADDRESS_ONLY_WEBSITE_INTAKE_STATUS = "address_only"
 
 
 class LeadLifecycleConflictError(ValueError):
@@ -30,6 +31,13 @@ def require_lead_not_closed_out(lead: Lead) -> None:
         raise LeadLifecycleConflictError(
             "This lead is closed. Reopen it before changing its deal workflow."
         )
+
+
+def require_lead_contact_ready_for_appointment(lead: Lead) -> None:
+    if (lead.qualification_context or {}).get(
+        "website_intake_status"
+    ) == ADDRESS_ONLY_WEBSITE_INTAKE_STATUS:
+        raise ValueError("Complete the seller's contact details before scheduling an appointment.")
 
 
 def lock_organization_lead(

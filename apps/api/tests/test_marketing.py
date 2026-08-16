@@ -19,17 +19,22 @@ from app.integrations.marketing_conversions import (
 from app.main import app
 from app.models.foundation import (
     Appointment,
+    AttributionTouch,
     AuditEvent,
     ConversionEvent,
     Deal,
     Lead,
     MarketingSpend,
     OfflineConversionExport,
+    Organization,
     RevenueRecord,
     Transaction,
 )
 from app.services.bootstrap import bootstrap_foundation
-from app.services.marketing import process_next_marketing_conversion
+from app.services.marketing import (
+    build_meta_match_coverage,
+    process_next_marketing_conversion,
+)
 from app.services.operations import register_worker, safe_meta_runtime_metadata
 
 OWNER_EMAIL = "owner@example.com"
@@ -88,6 +93,21 @@ def live_meta_settings(*, access_token: str = "meta-token") -> Settings:
             "META_PIXEL_ID": "meta-pixel",
         }
     )
+
+
+def test_meta_match_coverage_reports_contact_events_separately() -> None:
+    contact_export = meta_delivery_export()
+    contact_export.event_name = "Contact"
+
+    coverage = build_meta_match_coverage([contact_export])
+
+    contact = next(row for row in coverage if row.event_name == "Contact")
+    lead = next(row for row in coverage if row.event_name == "Lead")
+    assert contact.total == 1
+    assert contact.fbp_basis_points == 10_000
+    assert contact.fbc_basis_points == 10_000
+    assert lead.total == 0
+    assert lead.fbp_basis_points is None
 
 
 def test_meta_delivery_requires_explicit_single_event_acceptance() -> None:
@@ -265,10 +285,15 @@ def test_unconfirmed_meta_acceptance_retries_and_dashboard_stays_safe(
     overall_coverage = next(
         row for row in measurement["meta_match_coverage"] if row["event_name"] == "all"
     )
+    contact_coverage = next(
+        row for row in measurement["meta_match_coverage"] if row["event_name"] == "Contact"
+    )
     assert overall_coverage["total"] == 1
     assert overall_coverage["fbp_basis_points"] == 10000
     assert overall_coverage["fbc_basis_points"] == 0
     assert overall_coverage["client_ip_basis_points"] == 0
+    assert contact_coverage["total"] == 0
+    assert contact_coverage["fbp_basis_points"] is None
     assert measurement["oldest_meta_pending_at"] is not None
     serialized = json.dumps(
         {
@@ -332,6 +357,20 @@ def test_marketing_overview_and_offline_export_generation(
         },
     )
     lead_id = intake_response.json()["lead_id"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    db_session.add(
+        AttributionTouch(
+            organization_id=lead.organization_id,
+            lead_id=lead.id,
+            touch_type="lead_creation",
+            source="duplicate_source",
+            medium="duplicate_medium",
+            campaign="duplicate_campaign",
+            landing_page="/duplicate",
+        )
+    )
+    db_session.commit()
     spend_response = client.post(
         "/api/v1/finance/marketing-spend",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -395,13 +434,23 @@ def test_marketing_overview_and_offline_export_generation(
     google_row = next(row for row in overview["campaigns"] if row["source"] == "google_ppc")
     assert google_row["leads_created"] == 1
     assert google_row["form_submits"] == 1
+    assert google_row["address_leads"] == 0
+    assert google_row["contact_completed_leads"] == 0
+    assert google_row["address_to_contact_rate_basis_points"] is None
+    assert google_row["cost_per_address_lead_cents"] is None
+    assert google_row["cost_per_contact_completed_lead_cents"] is None
     assert google_row["collected_revenue_cents"] == 2500000
+    assert sum(row["leads_created"] for row in overview["campaigns"]) == 1
+    assert sum(row["collected_revenue_cents"] for row in overview["campaigns"]) == 2500000
     assert overview["public_funnel"]["offer_starts"] == 1
     assert overview["public_funnel"]["form_starts"] == 1
     assert overview["public_funnel"]["step_completions"] == {"property": 1}
     assert overview["public_funnel"]["validation_errors"] == 1
     assert overview["public_funnel"]["submit_attempts"] == 1
     assert overview["public_funnel"]["form_submits"] == 1
+    assert overview["public_funnel"]["address_leads"] == 0
+    assert overview["public_funnel"]["contact_completed_leads"] == 0
+    assert overview["public_funnel"]["address_to_contact_rate_basis_points"] is None
     assert overview["public_funnel"]["start_to_submit_rate_basis_points"] == 10000
     assert overview["web_vitals"] == [
         {
@@ -466,6 +515,91 @@ def test_marketing_overview_and_offline_export_generation(
         )
         == 1
     )
+
+
+def test_marketing_funnel_separates_address_and_contact_cpl_without_duplicating_spend(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    organization = db_session.scalar(select(Organization))
+    assert organization is not None
+    common = {
+        "organization_id": organization.id,
+        "landing_page": "/get-a-cash-offer",
+        "source": "meta_ads",
+        "campaign": "georgia-sellers",
+        "device_category": "mobile",
+    }
+    db_session.add_all(
+        [
+            ConversionEvent(
+                **common,
+                medium="paid_social",
+                event_type="address_capture",
+                session_id="address-session-1",
+            ),
+            ConversionEvent(
+                **common,
+                medium="paid_social",
+                event_type="address_capture",
+                session_id="address-session-2",
+            ),
+            ConversionEvent(
+                **common,
+                medium="paid_social",
+                event_type="contact_complete",
+                session_id="address-session-1",
+            ),
+            ConversionEvent(
+                **common,
+                medium="social",
+                event_type="page_view",
+                session_id="page-session",
+            ),
+            MarketingSpend(
+                organization_id=organization.id,
+                source="meta_ads",
+                campaign="georgia-sellers",
+                amount_cents=10_000,
+                spend_month_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = TestClient(app).get(
+        "/api/v1/marketing",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200
+    overview = response.json()
+    matching_rows = [
+        row
+        for row in overview["campaigns"]
+        if row["source"] == "meta_ads" and row["campaign"] == "georgia-sellers"
+    ]
+    assert len(matching_rows) == 1
+    campaign = matching_rows[0]
+    assert campaign["medium"] == "mixed"
+    assert campaign["page_views"] == 1
+    assert campaign["address_leads"] == 2
+    assert campaign["contact_completed_leads"] == 1
+    assert campaign["form_submits"] == 1
+    assert campaign["marketing_spend_cents"] == 10_000
+    assert campaign["cost_per_address_lead_cents"] == 5_000
+    assert campaign["cost_per_contact_completed_lead_cents"] == 10_000
+    assert campaign["address_to_contact_rate_basis_points"] == 5_000
+    assert overview["summary"]["total_spend_cents"] == 10_000
+    assert overview["summary"]["address_leads"] == 2
+    assert overview["summary"]["contact_completed_leads"] == 1
+    assert overview["summary"]["cost_per_address_lead_cents"] == 5_000
+    assert overview["summary"]["cost_per_contact_completed_lead_cents"] == 10_000
+    assert overview["summary"]["address_to_contact_rate_basis_points"] == 5_000
+    assert overview["public_funnel"]["address_leads"] == 2
+    assert overview["public_funnel"]["contact_completed_leads"] == 1
+    assert overview["public_funnel"]["address_to_contact_rate_basis_points"] == 5_000
 
 
 def test_conversion_queue_covers_each_outcome_and_platform(

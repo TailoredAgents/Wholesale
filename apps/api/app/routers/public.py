@@ -15,12 +15,18 @@ from app.schemas.public_intake import (
     SellerIntakeEnrichmentCreate,
     SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
+    WebsiteSellerAddressCaptureCreate,
+    WebsiteSellerAddressCaptureResponse,
     WebsiteSellerIntakeCreate,
 )
 from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
 from app.services.marketing_experiments import list_public_experiments
-from app.services.public_intake import create_public_seller_lead, enrich_public_seller_lead
+from app.services.public_intake import (
+    capture_public_seller_address,
+    create_public_seller_lead,
+    enrich_public_seller_lead,
+)
 from app.services.request_rate_limit import (
     public_intake_rate_limiter,
     trusted_client_address,
@@ -99,6 +105,22 @@ def create_seller_lead_from_public_form(
 ) -> SellerIntakeResponse:
     enforce_public_intake_rate_limit(request, route_key="seller-lead:create")
     return create_public_seller_lead(
+        db,
+        payload,
+        ip_address=get_ip_address(request),
+        user_agent=user_agent,
+    )
+
+
+@router.post("/seller-leads/address-capture", status_code=201)
+def capture_seller_address_from_public_form(
+    payload: WebsiteSellerAddressCaptureCreate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
+) -> WebsiteSellerAddressCaptureResponse:
+    enforce_public_intake_rate_limit(request, route_key="seller-lead:address-capture")
+    return capture_public_seller_address(
         db,
         payload,
         ip_address=get_ip_address(request),

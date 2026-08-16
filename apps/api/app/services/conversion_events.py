@@ -84,7 +84,7 @@ def record_conversion_event(
         event_type=event_type,
         landing_page=attribution.landing_page,
         referrer=attribution.referrer,
-        source=attribution.utm_source,
+        source=resolve_conversion_source(attribution),
         medium=attribution.utm_medium,
         campaign=attribution.utm_campaign,
         term=attribution.utm_term,
@@ -103,6 +103,16 @@ def record_conversion_event(
     db.add(event)
     db.flush()
     return event
+
+
+def resolve_conversion_source(attribution: SellerIntakeAttribution) -> str | None:
+    if attribution.utm_source:
+        return attribution.utm_source
+    if attribution.fbclid:
+        return "meta_ads"
+    if attribution.gclid:
+        return "google_ads"
+    return None
 
 
 def resolve_experiment_assignment(

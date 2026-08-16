@@ -242,7 +242,7 @@ Role-specific default routes include:
 | Route | Purpose |
 | --- | --- |
 | `/` | Main address-first direct-offer experience |
-| `/get-a-cash-offer` | Focused two-step seller inquiry with a logo-and-phone header, passive phone/email authorization, separate optional SMS opt-in, and optional follow-up details |
+| `/get-a-cash-offer` | Focused two-step seller inquiry with address-stage capture, passive phone/email authorization, separate optional SMS opt-in, and an unnumbered optional enrichment section after confirmation |
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
@@ -257,13 +257,26 @@ Role-specific default routes include:
 
 ### 6.2 Seller Intake
 
-The two required steps collect the property address, seller identity, contact information, and a
-preferred phone or email follow-up method. The contact step displays the phone/email authorization
-as passive text; submitting the form is that authorization action and records
-`consent_to_contact=true`. A separate unchecked box optionally records recurring automated SMS
-consent. The lead is accepted at that point. The confirmation offers an optional section for
-timing, condition, occupancy, asking-price, mortgage, and seller context; a random 24-hour token
-connects those answers to the same lead without exposing CRM access.
+The first visible step requires a complete property address and desired selling timeline. Selecting
+**Continue** captures those values under a browser-generated `intake_attempt_id` and creates a cold
+address-only CRM lead. The record has a placeholder contact, no contact methods or consent, and the
+canonical `qualification_context.website_intake_status="address_only"` marker. Staff sees it in
+**Leads > Address Only** with **Skip trace needed**.
+
+Address-only capture is evidence and prospect-research work, not a completed seller inquiry. It does
+not create a conversation, speed-to-lead task, property-research job, AI lead-preparation job, staff
+notification, internal lead-alert SMS, or seller-contact automation. Stonegate may research/skip
+trace the owner, but staff must manually check DNC status before any cold outreach; the intake path
+does not perform an automatic DNC check.
+
+The second visible step requires name and phone, accepts optional email, displays passive phone/email
+authorization, and offers a separate unchecked recurring automated SMS choice. Submitting it
+promotes the same contact, property, lead, and form-submission record to
+`website_intake_status="completed"`; it does not create a second lead. Normal conversation,
+property-research, AI, speed-to-lead, notification, and staff-alert workflows start only at this
+point. The confirmation then offers an unnumbered optional section for condition, occupancy,
+asking-price, mortgage, repairs, and seller context. A random 24-hour token adds those answers to the
+same lead without exposing CRM access.
 
 At mobile widths, every public page also provides fixed **Call** and **See My Options** actions. Their
 conversion events include the mobile placement and source route. This bar belongs to the public
@@ -294,29 +307,39 @@ Build-time validation blocks incomplete content, duplicate slugs, multiple featu
 unsupported image formats, and common placeholder language. The approval and photograph workflow
 is documented in `PUBLIC_TEAM_CONTENT.md`.
 
-Submission creates or matches:
+The address stage creates or reuses:
 
-- contact and contact methods
 - property
-- lead
-- consent evidence
-- form submission evidence
+- cold address-only lead and placeholder contact
+- incomplete form-submission evidence
 - attribution touches
-- conversion events
-- speed-to-lead work
+- the first-party `address_capture` event and Meta `Lead`
+
+The contact stage promotes that same record and adds or starts:
+
+- real seller identity and contact methods
+- phone/email and optional SMS consent evidence
+- completed form-submission evidence
+- the first-party `contact_complete` event and Meta `Contact`
+- speed-to-lead, staff alerts, AI preparation, and property research
 - a shared conversation and initial ownership context
 
-Duplicate active submissions are matched using normalized phone, email, and property address.
-Stonegate keeps the new form, attribution, and consent evidence while avoiding unnecessary
-duplicate active leads.
+The intake attempt ID, row locking, and an organization-scoped unique constraint make address-stage
+retries deterministic and serialize concurrent Step 1/Step 2 requests. A repeated Step 1 request
+updates or returns the same address-only record. Step 2 promotes that record once. If Step 2 is
+processed first, a later Step 1 request records missing address-stage conversion evidence but never
+downgrades the completed lead. A repeated completed submission returns the same lead. Separate
+completed journeys still use normalized phone, email, and property evidence to match active CRM
+records while preserving new form, attribution, and consent evidence.
 
 ### 6.3 Contact Authorization And SMS Consent
 
-The public property form displays the versioned phone/email disclosure next to the final action and
-submits `consent_to_contact=true` when the seller sends the inquiry. Recurring automated SMS consent
-is a separate unchecked choice. When checked, evidence includes the `seller-sms-web-v3` wording
-version, timestamp, source, IP address, and user agent. The checkbox is never required, selected by
-default, persisted in a browser draft, or inferred from general permission to contact.
+Step 1 grants no permission to contact. The public property form displays the versioned phone/email
+disclosure next to the Step 2 final action and submits `consent_to_contact=true` only when the seller
+sends that completed inquiry. Recurring automated SMS consent is a separate unchecked choice. When
+checked, evidence includes the `seller-sms-web-v3` wording version, timestamp, source, IP address,
+and user agent. The checkbox is never required, selected by default, persisted in a browser draft,
+or inferred from general permission to contact.
 
 Internal new-lead SMS alerts are a separate operational use case sent only to employees who enabled
 the staff alert preference; the seller-facing checkbox does not control those alerts.
@@ -334,9 +357,14 @@ replacing a seller's primary number does not silently transfer prior permission 
 ### 6.4 Conversion Measurement
 
 The public site records privacy-safe events for offer starts, form progress, validation friction,
-abandonment, submit attempts, failures, successful submissions, phone clicks, and Core Web Vitals.
-Marketing uses these events to evaluate funnel performance. Public event intake does not grant OS
-access.
+address capture, abandonment, submit attempts, failures, successful contact submissions, phone
+clicks, and Core Web Vitals. Marketing reports address leads, contact-completed leads, the
+address-to-contact rate, and separate cost figures so a raw address capture is never confused with
+a contactable seller. Public event intake does not grant OS access.
+
+Meta uses `Lead` for the valid address-and-timeline stage and `Contact` for the completed name,
+required-phone, optional-email, and consent stage. Each browser/server pair shares a deterministic
+event ID for deduplication. The post-confirmation optional enrichment section has no Meta event.
 
 PC7 adds governed `MarketingExperiment` and `MarketingExperimentAssignment` records. A running
 homepage CTA experiment is exposed through a read-only public endpoint. The browser makes a stable
@@ -345,10 +373,10 @@ mobile category with conversion events and seller intake. The API validates the 
 experiment, prevents a session from switching variants, and links the assignment to the created
 lead.
 
-Marketing reports each version through assigned sessions, form starts, submissions, qualified
-leads, appointments, executed contracts, funded deals, and collected revenue. Runtime and
-per-version traffic thresholds control when the result becomes ready for human review; the system
-does not choose a winner or change the public site autonomously.
+Marketing reports each version through assigned sessions, form starts, address leads,
+contact-completed leads, qualified leads, appointments, executed contracts, funded deals, and
+collected revenue. Runtime and per-version traffic thresholds control when the result becomes ready
+for human review; the system does not choose a winner or change the public site autonomously.
 
 ### 6.5 Public Trust Proof
 
@@ -1261,16 +1289,19 @@ Marketing combines:
 - campaign costs
 - prospect and handoff outcomes
 - public conversion events
+- address-only website leads and contact-completed website leads as separate funnel outcomes
 - qualified leads
 - appointments
 - signed contracts
 - funded deals
 - cost per result and deal profitability
 
-Offline conversion adapters exist for Google Data Manager and Meta Conversions API. Contact
-identifiers are normalized and hashed, event keys are stable, and retries are audited. Meta Pixel
-and Conversions API delivery passed controlled acceptance; Google delivery remains behind its
-account credentials and acceptance tests.
+Offline conversion adapters exist for Google Data Manager and Meta Conversions API. Meta `Lead`
+represents valid Step 1 address capture, while Meta `Contact` represents completed Step 2 contact
+submission; optional enrichment does not emit a Meta event. Contact identifiers are normalized and
+hashed where the privacy policy permits, deterministic event keys support browser/server
+deduplication, and retries are audited. Meta Pixel and Conversions API delivery passed controlled
+acceptance; Google delivery remains behind its account credentials and acceptance tests.
 
 Meta Lead Ads intake uses one Zapier action to send a Page-bound payload to Stonegate. At the
 Owner's direction the route is intentionally secretless and publicly reachable. It enforces the

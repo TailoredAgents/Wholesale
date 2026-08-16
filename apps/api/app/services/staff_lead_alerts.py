@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.foundation import (
@@ -126,9 +126,7 @@ def queue_staff_lead_alerts_for_lead(
             continue
         contact_name = contact.legal_name if contact else "New seller"
         market = (
-            property_record.city
-            or property_record.county
-            or property_record.state
+            property_record.city or property_record.county or property_record.state
             if property_record
             else "Georgia"
         )
@@ -478,20 +476,22 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
     ready_recipients, _diagnostics = eligible_staff_alert_recipients(db)
     recipient_ids_by_organization: dict[UUID, set[UUID]] = {}
     for recipient in ready_recipients:
-        recipient_ids_by_organization.setdefault(recipient.organization_id, set()).add(
-            recipient.id
-        )
+        recipient_ids_by_organization.setdefault(recipient.organization_id, set()).add(recipient.id)
     if not recipient_ids_by_organization:
         return 0
 
+    completed_at = func.coalesce(
+        LeadFormSubmission.completed_at,
+        LeadFormSubmission.created_at,
+    )
     submissions = list(
         db.scalars(
             select(LeadFormSubmission)
             .where(
-                LeadFormSubmission.created_at
-                >= datetime.now(UTC) - STAFF_ALERT_RECOVERY_WINDOW
+                LeadFormSubmission.completion_status == "completed",
+                completed_at >= datetime.now(UTC) - STAFF_ALERT_RECOVERY_WINDOW,
             )
-            .order_by(LeadFormSubmission.created_at, LeadFormSubmission.id)
+            .order_by(completed_at, LeadFormSubmission.id)
             .limit(250)
         ).all()
     )
@@ -517,11 +517,7 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
         if recipient_ids <= existing_recipient_ids:
             continue
         lead = db.get(Lead, submission.lead_id)
-        if (
-            lead is None
-            or lead.archived_at is not None
-            or lead.stage_key in INACTIVE_LEAD_STAGES
-        ):
+        if lead is None or lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES:
             continue
         created = queue_staff_lead_alerts_for_lead(
             db,
@@ -539,9 +535,7 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
                 source_event_id=str(submission.id),
                 lead_id=str(lead.id),
                 alerts_created=created,
-                recovery_window_hours=int(
-                    STAFF_ALERT_RECOVERY_WINDOW.total_seconds() // 3600
-                ),
+                recovery_window_hours=int(STAFF_ALERT_RECOVERY_WINDOW.total_seconds() // 3600),
             )
             return created
     return 0

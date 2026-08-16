@@ -23,6 +23,7 @@ import {
   getLeadOperatingStatus,
   getPipelineStage,
   getSavedLeadViewCounts,
+  isAddressOnlyLead,
   leadSortOptions,
   labelize,
   pipelineStages,
@@ -41,12 +42,16 @@ function ownerLabel(email: string | null) {
 function operatingTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
   if (status === "Overdue follow-up") return "danger";
   if (["Needs qualification", "Needs follow-up"].includes(status)) return "warning";
+  if (status === "Skip trace needed") return "info";
   if (["Appointment work", "Offer prep", "Negotiation"].includes(status)) return "info";
   if (status === "Under contract") return "success";
   return "neutral";
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
+  if (isAddressOnlyLead(lead)) {
+    return { href: `/os/leads/${lead.id}`, label: "Review address-only lead" };
+  }
   if (lead.primary_next_action) {
     return {
       href: `/os/tasks?item=task:${lead.primary_next_action.task_id}`,
@@ -152,8 +157,9 @@ export function LeadsWorkspace({
     stage === "all"
       ? pipelineStages
       : pipelineStages.filter((item) => item.key === stage);
-  const newLeadCount = leads.filter((lead) => lead.stage_key === "new").length;
-  const qualifiedCount = leads.filter((lead) =>
+  const contactReadyLeads = leads.filter((lead) => !isAddressOnlyLead(lead));
+  const newLeadCount = contactReadyLeads.filter((lead) => lead.stage_key === "new").length;
+  const qualifiedCount = contactReadyLeads.filter((lead) =>
     [
       "qualified",
       "qualification_complete",
@@ -165,9 +171,11 @@ export function LeadsWorkspace({
       "offer_ready",
     ].includes(lead.stage_key),
   ).length;
-  const unassignedCount = leads.filter((lead) => !lead.assigned_user_email).length;
-  const withoutFollowUpCount = leads.filter(
-    (lead) => !lead.next_follow_up_at && !["dead", "disqualified", "under_contract"].includes(lead.stage_key),
+  const unassignedCount = contactReadyLeads.filter((lead) => !lead.assigned_user_email).length;
+  const withoutFollowUpCount = contactReadyLeads.filter(
+    (lead) =>
+      !lead.next_follow_up_at &&
+      !["dead", "disqualified", "under_contract"].includes(lead.stage_key),
   ).length;
 
   function replaceLocation(overrides: {
@@ -234,7 +242,7 @@ export function LeadsWorkspace({
         <div><span>Qualified+</span><strong>{qualifiedCount}</strong><small>Appointment or offer work</small></div>
         <div><span>Unassigned</span><strong>{unassignedCount}</strong><small>Needs an owner</small></div>
         <div><span>No follow-up</span><strong>{withoutFollowUpCount}</strong><small>No dated next action</small></div>
-        <div><span>Paid leads</span><strong>{newPaidLeadCount}</strong><small>New paid-source records</small></div>
+        <div><span>Paid prospects</span><strong>{newPaidLeadCount}</strong><small>Includes address-only captures</small></div>
       </section>
 
       <section className={styles.views} aria-label="Saved lead views">
@@ -408,7 +416,7 @@ export function LeadsWorkspace({
                   <div><dt>Primary action</dt><dd>{selectedLead.primary_next_action?.title ?? "Not set"}</dd></div>
                   <div><dt>Action owner</dt><dd>{ownerLabel(selectedLead.primary_next_action?.responsible_user_email ?? null)}</dd></div>
                   <div><dt>Due</dt><dd>{formatDateTime(selectedLead.primary_next_action?.due_at ?? selectedLead.next_follow_up_at)}</dd></div>
-                  <div><dt>Qualification</dt><dd>{qualificationFieldCount(selectedLead)}/{qualificationFieldTarget}</dd></div>
+                  <div><dt>Qualification</dt><dd>{isAddressOnlyLead(selectedLead) ? "Contact pending" : `${qualificationFieldCount(selectedLead)}/${qualificationFieldTarget}`}</dd></div>
                   <div><dt>Appointment</dt><dd>{labelize(selectedLead.appointment_status)}</dd></div>
                 </dl>
                 <section>
@@ -419,7 +427,7 @@ export function LeadsWorkspace({
                 </section>
                 <div className={styles.previewActions}>
                   <Link className={styles.primaryAction} href={selectedAction.href}>{selectedAction.label}<ArrowRight size={15} /></Link>
-                  <Link href={`/os/inbox?lead=${selectedLead.id}`}><Inbox size={15} />Conversation</Link>
+                  {!isAddressOnlyLead(selectedLead) ? <Link href={`/os/inbox?lead=${selectedLead.id}`}><Inbox size={15} />Conversation</Link> : null}
                   <Link href={fullRecordHref(selectedLead.id)}><ExternalLink size={15} />Full record</Link>
                   {selectedLead.appointment_status ? <Link href={`/os/calendar`}><CalendarDays size={15} />Calendar</Link> : null}
                 </div>

@@ -995,6 +995,36 @@ def test_dashboard_summary_counts_leads(
     ]
 
 
+def test_dashboard_paid_prospect_kpi_keeps_address_only_captures(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    assert created.status_code == 201, created.text
+    lead = db_session.get(Lead, UUID(created.json()["id"]))
+    assert lead is not None
+    lead.qualification_context = {
+        **lead.qualification_context,
+        "website_intake_status": "address_only",
+        "contact_details_status": "missing",
+    }
+    db_session.commit()
+
+    response = client.get(
+        "/api/v1/dashboard/summary",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["new_paid_leads"] == 1
+
+
 def test_read_lead_detail_and_update_stage(
     db_session: Session,
     api_db_override: None,

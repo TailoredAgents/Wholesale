@@ -12,12 +12,17 @@ class MarketingCampaignPerformance(BaseModel):
     form_starts: int
     form_abandons: int
     form_submits: int
+    address_leads: int
+    contact_completed_leads: int
+    address_to_contact_rate_basis_points: int | None
     call_clicks: int
     leads_created: int
     contracted_leads: int
     collected_revenue_cents: int
     marketing_spend_cents: int
     cost_per_lead_cents: int | None
+    cost_per_address_lead_cents: int | None
+    cost_per_contact_completed_lead_cents: int | None
     cost_per_contract_cents: int | None
     return_on_ad_spend_basis_points: int | None
 
@@ -56,8 +61,13 @@ class MarketingSummary(BaseModel):
     total_spend_cents: int
     collected_revenue_cents: int
     leads_created: int
+    address_leads: int
+    contact_completed_leads: int
+    address_to_contact_rate_basis_points: int | None
     contracted_leads: int
     cost_per_lead_cents: int | None
+    cost_per_address_lead_cents: int | None
+    cost_per_contact_completed_lead_cents: int | None
     cost_per_contract_cents: int | None
     return_on_ad_spend_basis_points: int | None
     pending_offline_exports: int
@@ -71,6 +81,9 @@ class PublicFunnelSummary(BaseModel):
     validation_errors: int
     submit_attempts: int
     form_submits: int
+    address_leads: int
+    contact_completed_leads: int
+    address_to_contact_rate_basis_points: int | None
     submit_errors: int
     form_abandons: int
     start_to_submit_rate_basis_points: int | None

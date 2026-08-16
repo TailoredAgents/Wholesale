@@ -2436,8 +2436,13 @@ export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
   leads_created: number;
+  address_leads: number;
+  contact_completed_leads: number;
+  address_to_contact_rate_basis_points: number | null;
   contracted_leads: number;
   cost_per_lead_cents: number | null;
+  cost_per_address_lead_cents: number | null;
+  cost_per_contact_completed_lead_cents: number | null;
   cost_per_contract_cents: number | null;
   return_on_ad_spend_basis_points: number | null;
   pending_offline_exports: number;
@@ -2457,6 +2462,9 @@ export type MarketingOverview = {
     validation_errors: number;
     submit_attempts: number;
     form_submits: number;
+    address_leads: number;
+    contact_completed_leads: number;
+    address_to_contact_rate_basis_points: number | null;
     submit_errors: number;
     form_abandons: number;
     start_to_submit_rate_basis_points: number | null;
@@ -2518,12 +2526,17 @@ export type MarketingOverview = {
     form_starts: number;
     form_abandons: number;
     form_submits: number;
+    address_leads: number;
+    contact_completed_leads: number;
+    address_to_contact_rate_basis_points: number | null;
     call_clicks: number;
     leads_created: number;
     contracted_leads: number;
     collected_revenue_cents: number;
     marketing_spend_cents: number;
     cost_per_lead_cents: number | null;
+    cost_per_address_lead_cents: number | null;
+    cost_per_contact_completed_lead_cents: number | null;
     cost_per_contract_cents: number | null;
     return_on_ad_spend_basis_points: number | null;
   }>;
@@ -4435,8 +4448,13 @@ const emptyMarketingOverview: MarketingOverview = {
     total_spend_cents: 0,
     collected_revenue_cents: 0,
     leads_created: 0,
+    address_leads: 0,
+    contact_completed_leads: 0,
+    address_to_contact_rate_basis_points: null,
     contracted_leads: 0,
     cost_per_lead_cents: null,
+    cost_per_address_lead_cents: null,
+    cost_per_contact_completed_lead_cents: null,
     cost_per_contract_cents: null,
     return_on_ad_spend_basis_points: null,
     pending_offline_exports: 0,
@@ -4449,6 +4467,9 @@ const emptyMarketingOverview: MarketingOverview = {
     validation_errors: 0,
     submit_attempts: 0,
     form_submits: 0,
+    address_leads: 0,
+    contact_completed_leads: 0,
+    address_to_contact_rate_basis_points: null,
     submit_errors: 0,
     form_abandons: 0,
     start_to_submit_rate_basis_points: null,
@@ -4482,12 +4503,106 @@ const emptyMarketingOverview: MarketingOverview = {
   offline_exports: [],
 };
 
+function safeMarketingCost(spendCents: number, count: number) {
+  return count > 0 ? Math.round(spendCents / count) : null;
+}
+
+function safeMarketingRate(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round((numerator / denominator) * 10_000) : null;
+}
+
 function normalizeMarketingOverview(value: MarketingOverview): MarketingOverview {
   // The API and web services can finish a Render deployment a few minutes apart.
   // Keep the Marketing workspace usable while an older API response is still live.
   const measurement = value.measurement ?? emptyMarketingOverview.measurement;
+  const campaigns = (value.campaigns ?? []).map((item) => {
+    const addressLeads = item.address_leads ?? 0;
+    const contactCompletedLeads = item.contact_completed_leads ?? 0;
+    return {
+      ...item,
+      source: item.source?.trim() || "direct",
+      medium: item.medium?.trim() || "unknown",
+      campaign: item.campaign?.trim() || "uncategorized",
+      address_leads: addressLeads,
+      contact_completed_leads: contactCompletedLeads,
+      address_to_contact_rate_basis_points:
+        item.address_to_contact_rate_basis_points ??
+        safeMarketingRate(contactCompletedLeads, addressLeads),
+      cost_per_address_lead_cents:
+        item.cost_per_address_lead_cents ??
+        safeMarketingCost(item.marketing_spend_cents, addressLeads),
+      cost_per_contact_completed_lead_cents:
+        item.cost_per_contact_completed_lead_cents ??
+        safeMarketingCost(item.marketing_spend_cents, contactCompletedLeads),
+    };
+  });
+  const summary = value.summary ?? emptyMarketingOverview.summary;
+  const summaryAddressLeads = summary.address_leads ?? 0;
+  const summaryContactCompletedLeads =
+    summary.contact_completed_leads ??
+    campaigns.reduce((total, item) => total + item.contact_completed_leads, 0);
+  const publicFunnel = value.public_funnel ?? emptyMarketingOverview.public_funnel;
+  const funnelAddressLeads = publicFunnel.address_leads ?? 0;
+  const funnelContactCompletedLeads =
+    publicFunnel.contact_completed_leads ?? 0;
+  const coverageByName = new Map(
+    (measurement.meta_match_coverage ?? []).map((item) => [item.event_name, item]),
+  );
+  const canonicalCoverage = ["all", "ViewContent", "Lead", "Contact"].map(
+    (eventName) =>
+      coverageByName.get(eventName) ?? {
+        event_name: eventName,
+        total: 0,
+        fbp_count: 0,
+        fbc_count: 0,
+        client_ip_count: 0,
+        client_user_agent_count: 0,
+        fbp_basis_points: null,
+        fbc_basis_points: null,
+        client_ip_basis_points: null,
+        client_user_agent_basis_points: null,
+      },
+  );
   return {
     ...value,
+    summary: {
+      ...emptyMarketingOverview.summary,
+      ...summary,
+      address_leads: summaryAddressLeads,
+      contact_completed_leads: summaryContactCompletedLeads,
+      address_to_contact_rate_basis_points:
+        summary.address_to_contact_rate_basis_points ??
+        safeMarketingRate(summaryContactCompletedLeads, summaryAddressLeads),
+      cost_per_address_lead_cents:
+        summary.cost_per_address_lead_cents ??
+        safeMarketingCost(summary.total_spend_cents, summaryAddressLeads),
+      cost_per_contact_completed_lead_cents:
+        summary.cost_per_contact_completed_lead_cents ??
+        safeMarketingCost(summary.total_spend_cents, summaryContactCompletedLeads),
+    },
+    previous_summary: value.previous_summary
+      ? {
+          ...emptyMarketingOverview.summary,
+          ...value.previous_summary,
+          address_leads: value.previous_summary.address_leads ?? 0,
+          contact_completed_leads: value.previous_summary.contact_completed_leads ?? 0,
+          address_to_contact_rate_basis_points:
+            value.previous_summary.address_to_contact_rate_basis_points ?? null,
+          cost_per_address_lead_cents:
+            value.previous_summary.cost_per_address_lead_cents ?? null,
+          cost_per_contact_completed_lead_cents:
+            value.previous_summary.cost_per_contact_completed_lead_cents ?? null,
+        }
+      : null,
+    public_funnel: {
+      ...emptyMarketingOverview.public_funnel,
+      ...publicFunnel,
+      address_leads: funnelAddressLeads,
+      contact_completed_leads: funnelContactCompletedLeads,
+      address_to_contact_rate_basis_points:
+        publicFunnel.address_to_contact_rate_basis_points ??
+        safeMarketingRate(funnelContactCompletedLeads, funnelAddressLeads),
+    },
     measurement: {
       ...emptyMarketingOverview.measurement,
       ...measurement,
@@ -4495,11 +4610,12 @@ function normalizeMarketingOverview(value: MarketingOverview): MarketingOverview
         ...emptyMarketingOverview.measurement.worker,
         ...(measurement.worker ?? {}),
       },
-      meta_match_coverage: measurement.meta_match_coverage ?? [],
+      meta_match_coverage: canonicalCoverage,
       meta_match_coverage_window_days:
         measurement.meta_match_coverage_window_days ?? 30,
       oldest_meta_pending_at: measurement.oldest_meta_pending_at ?? null,
     },
+    campaigns,
     offline_exports: (value.offline_exports ?? []).map((item) => ({
       ...item,
       provider_accepted_count: item.provider_accepted_count ?? null,

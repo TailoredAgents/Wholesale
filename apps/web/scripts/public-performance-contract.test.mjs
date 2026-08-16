@@ -47,28 +47,67 @@ test("standard public pages keep the full navigation shell", () => {
   assert.doesNotMatch(homePage, /variant="conversion"/);
 });
 
-test("successful cash-offer submissions report one deduplicated Meta Lead", () => {
+test("cash-offer stages use distinct deduplicated Meta Lead and Contact events", () => {
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
-  assert.match(form, /pendingMetaLeadEventIdRef/);
-  assert.match(
-    form,
-    /createMetaBrowserEvent\(\s*pendingMetaLeadEventIdRef\.current \?\? undefined,?\s*\)/,
+  const captureStart = form.indexOf("const captureAddressOnlyLead = useCallback(");
+  const captureEnd = form.indexOf("useEffect(() => {", captureStart);
+  const captureImplementation = form.slice(captureStart, captureEnd);
+  assert.ok(captureStart >= 0 && captureEnd > captureStart);
+  assert.match(form, /`stonegate-lead-\$\{intakeAttemptId\}`/);
+  assert.match(form, /`stonegate-contact-\$\{intakeAttemptId\}`/);
+  assert.match(form, /waitForMetaBrowserCookies\(/);
+  assert.match(form, /meta_pixel_event_name\?: "Lead" \| "Contact"/);
+  assert.match(form, /const metaPixelEventName = result\.meta_pixel_event_name \?\? "Lead"/);
+  assert.match(form, /metaPixelEventName === "Contact"/);
+  assert.match(form, /trackMetaPixelEvent\(metaPixelEventName, metaBrowserEvent\.event_id\)/);
+  assert.doesNotMatch(form, /pendingMeta(?:Lead|Contact)EventIdRef/);
+  assert.ok(
+    captureImplementation.indexOf('if (!response?.ok) throw new Error(') <
+      captureImplementation.indexOf('addressMetaLeadTrackedRef.current = trackMetaPixelEvent('),
+    "The address browser Lead must fire only after the address API confirms success.",
   );
-  assert.match(form, /stonegate_cash_offer_pending_meta_lead_v1/);
-  assert.match(form, /storePendingMetaLeadEventId\(metaBrowserEvent\.event_id\)/);
-  assert.match(form, /restorePendingMetaLeadEventId\(\)/);
-  assert.match(
-    form,
-    /trackMetaPixelEvent\("Lead", metaBrowserEvent\.event_id\)/,
+});
+
+test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocking", () => {
+  const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const captureStart = form.indexOf("const captureAddressOnlyLead = useCallback(");
+  const captureEnd = form.indexOf("useEffect(() => {", captureStart);
+  const captureImplementation = form.slice(captureStart, captureEnd);
+  assert.ok(captureStart >= 0 && captureEnd > captureStart);
+  assert.match(form, /stonegate_cash_offer_draft_v1/);
+  assert.match(form, /intakeAttemptIdRef/);
+  assert.match(form, /intakeAttemptId:\s*intakeAttemptIdRef\.current/);
+  assert.match(form, /seller-leads\/address-capture/);
+  assert.match(form, /keepalive:\s*true/);
+  assert.match(form, /intake_attempt_id:\s*intakeAttemptIdRef\.current/);
+  assert.match(form, /void captureAddressOnlyLead\(values\)/);
+  assert.ok(
+    form.indexOf("void captureAddressOnlyLead(values)") <
+      form.indexOf("moveToStep(Math.min(activeStep + 1"),
+    "Address capture should start before Step 2 while navigation remains nonblocking.",
   );
   assert.ok(
-    form.indexOf('if (!response.ok)') <
-      form.indexOf('trackMetaPixelEvent("Lead", metaBrowserEvent.event_id)'),
-    "The browser Lead must fire only after the API confirms success.",
+    captureImplementation.indexOf("sendAddressCapture(initialMetaBrowserEvent)") <
+      captureImplementation.indexOf("waitForMetaBrowserCookies("),
+    "The first persistence request must start before Meta cookie polling begins.",
   );
-  assert.doesNotMatch(
-    form,
-    /trackMetaPixelEvent\("Contact", metaBrowserEvent\.event_id\)/,
+  assert.ok(
+    captureImplementation.indexOf("await initialAddressCaptureRequest") <
+      captureImplementation.indexOf("await strongestMetaBrowserEventPromise"),
+    "The first persistence request must start before waiting for Meta browser cookies.",
+  );
+  assert.match(form, /confirmedAddressCaptureSignatureRef/);
+  assert.match(form, /addressCaptureInFlightRef/);
+  assert.match(form, /retryIfInFlight:\s*true/);
+  assert.match(form, /retryWithEnrichedCookies:\s*false/);
+  assert.match(form, /window\.addEventListener\("pagehide", handlePageExit\)/);
+  assert.match(form, /window\.addEventListener\("beforeunload", handlePageExit\)/);
+  assert.match(form, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
+  assert.match(form, /Property details may be saved when you continue/);
+  assert.ok(
+    form.indexOf("Property details may be saved when you continue") <
+      form.indexOf("<div className={styles.formActions}>"),
+    "The Step 1 property-saving notice must precede Continue in DOM and reading order.",
   );
 });
 

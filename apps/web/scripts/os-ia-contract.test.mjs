@@ -359,6 +359,34 @@ test("seller lead close-out is atomic, auditable, and separate from administrati
   assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "page"));
 });
 
+test("address-only website leads stay visible without polluting operational queues", () => {
+  const utilities = readFileSync(resolve(osSourceRoot, "os-utils.ts"), "utf8");
+  const workspace = readFileSync(
+    resolve(osSourceRoot, "leads/leads-workspace.tsx"),
+    "utf8",
+  );
+  const leadDetail = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+
+  assert.match(utilities, /key: "address_only"/);
+  assert.match(utilities, /label: "Address Only"/);
+  assert.match(utilities, /website_intake_status === "address_only"/);
+  assert.match(utilities, /return "Skip trace needed"/);
+  assert.match(utilities, /\["all", "address_only"\]\.includes\(viewKey\) \? "newest" : "priority"/);
+  assert.match(utilities, /if \(isAddressOnlyLead\(lead\)\) \{\s*return false;/);
+  assert.match(workspace, /Review address-only lead/);
+  assert.match(workspace, /const contactReadyLeads = leads\.filter\(\(lead\) => !isAddressOnlyLead\(lead\)\)/);
+  assert.match(workspace, /const newLeadCount = contactReadyLeads\.filter/);
+  assert.match(workspace, /const unassignedCount = contactReadyLeads\.filter/);
+  assert.match(workspace, /Paid prospects/);
+  assert.match(workspace, /Includes address-only captures/);
+  assert.match(leadDetail, /Contact information was not completed/);
+  assert.match(leadDetail, /DNC status manually before outreach/);
+  assert.match(leadDetail, /Automated follow-up has not started/);
+});
+
 test("RBAC permission and role inventories remain synchronized with the API", () => {
   const source = readFileSync(resolve(repositoryRoot, "apps/api/app/domain/rbac.py"), "utf8");
   const permissionClass = source.slice(

@@ -49,7 +49,12 @@ from app.schemas.field_operations import (
     FieldOperationsMetrics,
     FieldOperationsOverview,
 )
-from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
+from app.services.lead_lifecycle import (
+    ADDRESS_ONLY_WEBSITE_INTAKE_STATUS,
+    lock_organization_lead,
+    require_lead_contact_ready_for_appointment,
+    require_lead_open_for_work,
+)
 
 ELIGIBLE_CLOSER_ROLES = {
     "administrator",
@@ -315,6 +320,8 @@ def list_ready_leads(db: Session, principal: Principal) -> list[DispatchLeadRead
         Lead.archived_at.is_(None),
         Lead.stage_key.in_(READY_TO_SCHEDULE_STAGES),
         Lead.id.not_in(scheduled_lead_ids),
+        func.coalesce(Lead.qualification_context["website_intake_status"].as_string(), "")
+        != ADDRESS_ONLY_WEBSITE_INTAKE_STATUS,
     )
     if not can_manage(principal):
         statement = statement.where(Lead.assigned_user_id == principal.user_id)
@@ -332,6 +339,8 @@ def list_schedulable_leads(db: Session, principal: Principal) -> list[DispatchLe
     statement = select(Lead).where(
         Lead.organization_id == principal.organization_id,
         Lead.archived_at.is_(None),
+        func.coalesce(Lead.qualification_context["website_intake_status"].as_string(), "")
+        != ADDRESS_ONLY_WEBSITE_INTAKE_STATUS,
     )
     if not can_manage(principal):
         statement = statement.where(Lead.assigned_user_id == principal.user_id)
@@ -617,6 +626,7 @@ def evaluate_slot(
         return None
     if not can_manage(principal) and lead.assigned_user_id != principal.user_id:
         raise PermissionError("Only the assigned closer can schedule this lead.")
+    require_lead_contact_ready_for_appointment(lead)
     start = utc_value(payload.scheduled_start_at)
     end = (
         utc_value(payload.scheduled_end_at)
@@ -845,6 +855,7 @@ def dispatch_appointment(
     if lead is None:
         return None
     require_lead_open_for_work(lead)
+    require_lead_contact_ready_for_appointment(lead)
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
     if contact is None or property_record is None:

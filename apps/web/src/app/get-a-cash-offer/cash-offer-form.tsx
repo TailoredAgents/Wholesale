@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,6 +21,7 @@ import {
   getDeviceCategory,
   recordConversionEvent,
   trackMetaPixelEvent,
+  waitForMetaBrowserCookies,
 } from "../lib/conversion-events";
 import { siteConfig } from "../site-config";
 import { TrackedEmailLink } from "../tracked-email-link";
@@ -35,7 +36,6 @@ const consentWording =
   "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
 const draftStorageKey = "stonegate_cash_offer_draft_v1";
 const confirmationStorageKey = "stonegate_cash_offer_confirmation_v1";
-const pendingMetaLeadStorageKey = "stonegate_cash_offer_pending_meta_lead_v1";
 const storageLifetimeMs = 24 * 60 * 60 * 1000;
 
 const steps = [
@@ -81,6 +81,15 @@ type Confirmation = {
   enrichmentToken?: string;
   enrichmentExpiresAt?: string;
   enriched?: boolean;
+};
+type StoredDraft = {
+  values: Partial<FormValues>;
+  activeStep: number;
+  intakeAttemptId?: string;
+};
+type AddressCaptureOptions = {
+  retryIfInFlight?: boolean;
+  retryWithEnrichedCookies?: boolean;
 };
 
 const initialValues: FormValues = {
@@ -150,11 +159,22 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   const completedSteps = useRef(new Set<number>());
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const experimentContextRef = useRef<ConversionExperimentContext | null>(null);
-  const pendingMetaLeadEventIdRef = useRef<string | null>(null);
+  const intakeAttemptIdRef = useRef(createIntakeAttemptId());
+  const confirmedAddressCaptureSignatureRef = useRef<string | null>(null);
+  const addressCaptureInFlightRef = useRef(new Map<string, number>());
+  const addressMetaLeadTrackedRef = useRef(false);
+  const latestValuesRef = useRef(values);
+  const captureAddressOnlyLeadRef = useRef<
+    (snapshot: FormValues, options?: AddressCaptureOptions) => void
+  >(() => undefined);
 
   useEffect(() => {
     activeStepRef.current = activeStep;
   }, [activeStep]);
+
+  useEffect(() => {
+    latestValuesRef.current = values;
+  }, [values]);
 
   useEffect(() => {
     void getConversionExperimentContext(apiBaseUrl).then((experiment) => {
@@ -168,18 +188,17 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       const preferredAddress = initialAddress || queryAddress;
       const savedConfirmation = parseStoredValue<Confirmation>(confirmationStorageKey);
       if (savedConfirmation) {
-        clearPendingMetaLeadEvent();
         setConfirmation(savedConfirmation);
         hasSubmitted.current = true;
         setHasRestoredDraft(true);
         return;
       }
 
-      const draft = parseStoredValue<{ values: Partial<FormValues>; activeStep: number }>(
-        draftStorageKey,
-      );
+      const draft = parseStoredValue<StoredDraft>(draftStorageKey);
       if (draft) {
-        pendingMetaLeadEventIdRef.current = restorePendingMetaLeadEventId();
+        if (isIntakeAttemptId(draft.intakeAttemptId)) {
+          intakeAttemptIdRef.current = draft.intakeAttemptId;
+        }
         const restoredValues = { ...draft.values } as Partial<FormValues> & {
           consent_to_contact?: boolean;
           sms_consent?: boolean;
@@ -211,14 +230,126 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     try {
       window.sessionStorage.setItem(
         draftStorageKey,
-        JSON.stringify({ values, activeStep, savedAt: Date.now() }),
+        JSON.stringify({
+          values,
+          activeStep,
+          intakeAttemptId: intakeAttemptIdRef.current,
+          savedAt: Date.now(),
+        }),
       );
     } catch {
       // The form remains fully usable when storage is unavailable.
     }
   }, [activeStep, confirmation, hasRestoredDraft, values]);
 
+  const captureAddressOnlyLead = useCallback(
+    async (snapshot: FormValues, options: AddressCaptureOptions = {}) => {
+      if (Object.keys(validateStep(0, snapshot)).length) return;
+      const intakeAttemptId = intakeAttemptIdRef.current;
+      const signature = JSON.stringify([
+        intakeAttemptId,
+        snapshot.property_address.trim().toLowerCase(),
+        snapshot.property_city.trim().toLowerCase(),
+        snapshot.property_state.trim().toUpperCase(),
+        snapshot.property_postal_code.trim(),
+        snapshot.desired_timeline,
+      ]);
+      if (confirmedAddressCaptureSignatureRef.current === signature) return;
+
+      const inFlightCount = addressCaptureInFlightRef.current.get(signature) ?? 0;
+      if (inFlightCount > 0 && !options.retryIfInFlight) return;
+      addressCaptureInFlightRef.current.set(signature, inFlightCount + 1);
+
+      const experiment = experimentContextRef.current;
+      const initialMetaBrowserEvent = createMetaBrowserEvent(
+        addressLeadEventId(intakeAttemptId),
+      );
+      const sendAddressCapture = (metaBrowserEvent: typeof initialMetaBrowserEvent) =>
+        fetch(`${apiBaseUrl}/api/v1/public/seller-leads/address-capture`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({
+            intake_attempt_id: intakeAttemptId,
+            property_address: snapshot.property_address.trim(),
+            property_city: snapshot.property_city.trim(),
+            property_state: snapshot.property_state.trim().toUpperCase(),
+            property_postal_code: snapshot.property_postal_code.trim(),
+            desired_timeline: snapshot.desired_timeline,
+            company_website: snapshot.company_website,
+            conversion_session_id: getConversionSessionId(),
+            experiment_key: experiment?.experiment_key ?? null,
+            experiment_variant: experiment?.experiment_variant ?? null,
+            device_category: getDeviceCategory(),
+            attribution: getConversionAttribution(),
+            meta_browser_event: metaBrowserEvent,
+          }),
+        });
+      const initialAddressCaptureRequest = sendAddressCapture(initialMetaBrowserEvent);
+      const strongestMetaBrowserEventPromise = waitForMetaBrowserCookies(
+        initialMetaBrowserEvent,
+      );
+
+      try {
+        // Persist immediately with every identifier already available. Cookie polling continues
+        // in parallel and is used by the retry/browser event without delaying this request.
+        let response: Response | null = null;
+        try {
+          response = await initialAddressCaptureRequest;
+        } catch {
+          // A single enriched retry below recovers a transient or interrupted first request.
+        }
+
+        if (!response?.ok && options.retryWithEnrichedCookies !== false) {
+          const strongestMetaBrowserEvent = await strongestMetaBrowserEventPromise;
+          try {
+            response = await sendAddressCapture(strongestMetaBrowserEvent);
+          } catch {
+            // A later visibility/page-exit fallback can retry this deterministic intake attempt.
+          }
+        }
+        if (!response?.ok) throw new Error("Address capture was not accepted.");
+        if (intakeAttemptIdRef.current !== intakeAttemptId) return;
+
+        confirmedAddressCaptureSignatureRef.current = signature;
+        const strongestMetaBrowserEvent = await strongestMetaBrowserEventPromise;
+        if (!addressMetaLeadTrackedRef.current) {
+          addressMetaLeadTrackedRef.current = trackMetaPixelEvent(
+            "Lead",
+            strongestMetaBrowserEvent.event_id,
+          );
+        }
+      } catch {
+        // Unconfirmed captures stay retryable; deterministic IDs keep retries idempotent.
+      } finally {
+        const remaining = (addressCaptureInFlightRef.current.get(signature) ?? 1) - 1;
+        if (remaining > 0) addressCaptureInFlightRef.current.set(signature, remaining);
+        else addressCaptureInFlightRef.current.delete(signature);
+      }
+    },
+    [apiBaseUrl],
+  );
+
   useEffect(() => {
+    captureAddressOnlyLeadRef.current = (snapshot, options) => {
+      void captureAddressOnlyLead(snapshot, options);
+    };
+  }, [captureAddressOnlyLead]);
+
+  useEffect(() => {
+    if (!hasRestoredDraft || confirmation || activeStep === 0) return;
+    void captureAddressOnlyLead(values);
+  }, [activeStep, captureAddressOnlyLead, confirmation, hasRestoredDraft, values]);
+
+  useEffect(() => {
+    function retryAddressCaptureOnExit() {
+      if (hasSubmitted.current) return;
+      captureAddressOnlyLeadRef.current(latestValuesRef.current, {
+        retryIfInFlight: true,
+        retryWithEnrichedCookies: false,
+      });
+    }
+
     function trackAbandonment() {
       if (
         !hasTrackedFormStart.current ||
@@ -237,13 +368,23 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     }
 
     function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") trackAbandonment();
+      if (document.visibilityState === "hidden") {
+        retryAddressCaptureOnExit();
+        trackAbandonment();
+      }
     }
 
-    window.addEventListener("beforeunload", trackAbandonment);
+    function handlePageExit() {
+      retryAddressCaptureOnExit();
+      trackAbandonment();
+    }
+
+    window.addEventListener("beforeunload", handlePageExit);
+    window.addEventListener("pagehide", handlePageExit);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      window.removeEventListener("beforeunload", trackAbandonment);
+      window.removeEventListener("beforeunload", handlePageExit);
+      window.removeEventListener("pagehide", handlePageExit);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [apiBaseUrl]);
@@ -303,6 +444,9 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         step_number: activeStep + 1,
       });
     }
+    if (activeStep === 0) {
+      void captureAddressOnlyLead(values);
+    }
     moveToStep(Math.min(activeStep + 1, steps.length - 1));
   }
 
@@ -354,12 +498,11 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     });
 
     const experiment = experimentContextRef.current;
-    const metaBrowserEvent = createMetaBrowserEvent(
-      pendingMetaLeadEventIdRef.current ?? undefined,
+    const metaBrowserEvent = await waitForMetaBrowserCookies(
+      createMetaBrowserEvent(contactEventId(intakeAttemptIdRef.current)),
     );
-    pendingMetaLeadEventIdRef.current = metaBrowserEvent.event_id;
-    storePendingMetaLeadEventId(metaBrowserEvent.event_id);
     const payload = {
+      intake_attempt_id: intakeAttemptIdRef.current,
       property_address: values.property_address.trim(),
       property_city: values.property_city.trim(),
       property_state: values.property_state.trim().toUpperCase(),
@@ -408,6 +551,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         enrichment_token?: string;
         enrichment_expires_at?: string;
         message?: string;
+        meta_pixel_event_name?: "Lead" | "Contact";
       };
       const nextConfirmation: Confirmation = {
         message:
@@ -421,9 +565,14 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         enriched: false,
       };
       hasSubmitted.current = true;
-      trackMetaPixelEvent("Lead", metaBrowserEvent.event_id);
-      pendingMetaLeadEventIdRef.current = null;
-      clearPendingMetaLeadEvent();
+      const metaPixelEventName = result.meta_pixel_event_name ?? "Lead";
+      if (metaPixelEventName === "Contact" && !addressMetaLeadTrackedRef.current) {
+        addressMetaLeadTrackedRef.current = trackMetaPixelEvent(
+          "Lead",
+          addressLeadEventId(intakeAttemptIdRef.current),
+        );
+      }
+      trackMetaPixelEvent(metaPixelEventName, metaBrowserEvent.event_id);
       isSubmitting.current = false;
       setConfirmation(nextConfirmation);
       setSubmitState({ status: "idle", message: "" });
@@ -533,7 +682,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     hasTrackedFormStart.current = false;
     hasTrackedFormAbandon.current = false;
     completedSteps.current.clear();
-    pendingMetaLeadEventIdRef.current = null;
+    intakeAttemptIdRef.current = createIntakeAttemptId();
+    confirmedAddressCaptureSignatureRef.current = null;
+    addressCaptureInFlightRef.current.clear();
+    addressMetaLeadTrackedRef.current = false;
     setValues(initialValues);
     setSmsConsent(false);
     setActiveStep(0);
@@ -545,7 +697,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     try {
       window.sessionStorage.removeItem(draftStorageKey);
       window.sessionStorage.removeItem(confirmationStorageKey);
-      clearPendingMetaLeadEvent();
       window.history.replaceState({}, "", "/get-a-cash-offer");
     } catch {
       // Resetting the visible form is sufficient if browser storage is unavailable.
@@ -651,6 +802,16 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       onFocusCapture={handleFormStart}
       onSubmit={handleSubmit}
     >
+      <label className={styles.visuallyHidden} aria-hidden="true">
+        Company website
+        <input
+          name="company_website"
+          autoComplete="off"
+          tabIndex={-1}
+          value={values.company_website}
+          onChange={(event) => updateValue("company_website", event.target.value)}
+        />
+      </label>
       <div className={styles.progressHeader}>
         <div>
           <p className={styles.eyebrow}>Property review</p>
@@ -766,16 +927,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       {activeStep === 1 ? (
         <fieldset className={styles.stepFields}>
           <legend className={styles.visuallyHidden}>Contact details and consent</legend>
-          <label className={styles.visuallyHidden} aria-hidden="true">
-            Company website
-            <input
-              name="company_website"
-              autoComplete="off"
-              tabIndex={-1}
-              value={values.company_website}
-              onChange={(event) => updateValue("company_website", event.target.value)}
-            />
-          </label>
           <Field label="Your name" name="name" error={errors.name} required>
             <input
               id="name"
@@ -848,6 +999,14 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         </fieldset>
       ) : null}
 
+      {activeStep === 0 ? (
+        <p className={styles.formPrivacy}>
+          Property details may be saved when you continue, even if you do not finish the form. We
+          may use them to identify the property, maintain inquiry records, research the property
+          owner, and measure form performance.
+        </p>
+      ) : null}
+
       <div className={styles.formActions}>
         {activeStep > 0 ? (
           <button className={styles.backButton} type="button" onClick={handleBack}>
@@ -871,10 +1030,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       {submitState.message ? (
         <p className={styles[submitState.status]} role="status">{submitState.message}</p>
       ) : null}
-      <p className={styles.formPrivacy}>
-        Your information is used to review this property inquiry and follow up about possible
-        selling options. Text messages are optional.
-      </p>
     </form>
   );
 }
@@ -1148,33 +1303,30 @@ function storeConfirmation(confirmation: Confirmation) {
   );
 }
 
-function storePendingMetaLeadEventId(eventId: string) {
-  try {
-    window.sessionStorage.setItem(
-      pendingMetaLeadStorageKey,
-      JSON.stringify({ event_id: eventId, savedAt: Date.now() }),
-    );
-  } catch {
-    // The in-memory identifier still deduplicates retries in this page lifecycle.
+function createIntakeAttemptId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
   }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
-function restorePendingMetaLeadEventId() {
-  try {
-    const pending = parseStoredValue<{ event_id?: string }>(pendingMetaLeadStorageKey);
-    const eventId = pending?.event_id?.trim() ?? "";
-    return eventId.length >= 8 && eventId.length <= 255 ? eventId : null;
-  } catch {
-    return null;
-  }
+function addressLeadEventId(intakeAttemptId: string) {
+  return `stonegate-lead-${intakeAttemptId}`;
 }
 
-function clearPendingMetaLeadEvent() {
-  try {
-    window.sessionStorage.removeItem(pendingMetaLeadStorageKey);
-  } catch {
-    // Storage may be unavailable; the caller also clears the in-memory ref.
-  }
+function contactEventId(intakeAttemptId: string) {
+  return `stonegate-contact-${intakeAttemptId}`;
+}
+
+function isIntakeAttemptId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
 function parseStoredValue<T>(key: string): T | null {

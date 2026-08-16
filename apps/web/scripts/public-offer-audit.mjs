@@ -86,6 +86,20 @@ async function installApiStubs(page, state) {
       }),
     });
   });
+  await page.route("**/api/v1/public/seller-leads/address-capture", async (route) => {
+    state.addressCaptures.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        lead_id: "11111111-2222-4333-8444-555555555555",
+        contact_id: "22222222-2222-4333-8444-555555555555",
+        property_id: "33333333-2222-4333-8444-555555555555",
+        completion_status: "address_only",
+        created: state.addressCaptures.length === 1,
+      }),
+    });
+  });
   await page.route("**/api/v1/public/seller-leads", async (route) => {
     state.submissions.push(route.request().postDataJSON());
     if (state.failNextSubmission) {
@@ -110,6 +124,7 @@ async function installApiStubs(page, state) {
         enrichment_token: "test-enrichment-token-that-is-long-enough-for-the-api",
         enrichment_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
         message: "Thanks. Your property inquiry was received.",
+        meta_pixel_event_name: "Contact",
       }),
     });
   });
@@ -518,7 +533,13 @@ async function auditServiceAreaPage(page, viewport) {
 async function auditJourney(browser, viewport) {
   const context = await browser.newContext({ reducedMotion: "reduce", viewport });
   const page = await context.newPage();
-  const state = { events: [], submissions: [], enrichments: [], failNextSubmission: true };
+  const state = {
+    addressCaptures: [],
+    events: [],
+    submissions: [],
+    enrichments: [],
+    failNextSubmission: true,
+  };
   const browserErrors = [];
   page.on("console", (message) => {
     if (
@@ -635,6 +656,9 @@ async function auditJourney(browser, viewport) {
   await page.locator("#property_city").fill("");
   await page.locator("#property_postal_code").fill("");
   await page.getByRole("button", { name: /Continue/ }).click();
+  if (state.addressCaptures.length !== 0) {
+    record(viewport.name, "address-capture", "Invalid Step 1 created an address-only lead.");
+  }
   if (!(await page.locator("#property_city-error").isVisible())) {
     record(viewport.name, "validation", "Property step did not expose field errors.");
   }
@@ -646,12 +670,59 @@ async function auditJourney(browser, viewport) {
   await page.locator("#property_postal_code").fill("30303");
   await page.locator("#desired_timeline").selectOption("within_30_days");
   await page.getByRole("button", { name: /Continue/ }).click();
+  await page.waitForTimeout(900);
+  if (state.addressCaptures.length !== 1) {
+    record(viewport.name, "address-capture", {
+      detail: "Valid Step 1 did not create exactly one initial address capture.",
+      count: state.addressCaptures.length,
+    });
+  }
+  const initialAddressCapture = state.addressCaptures[0];
+  if (
+    !initialAddressCapture?.intake_attempt_id ||
+    initialAddressCapture.property_address !== "123 Main St" ||
+    initialAddressCapture.property_city !== "Atlanta" ||
+    initialAddressCapture.property_state !== "GA" ||
+    initialAddressCapture.property_postal_code !== "30303" ||
+    initialAddressCapture.desired_timeline !== "within_30_days"
+  ) {
+    record(viewport.name, "address-capture-payload", initialAddressCapture ?? null);
+  }
+  for (const forbidden of [
+    "name",
+    "phone",
+    "email",
+    "consent_to_contact",
+    "sms_consent",
+  ]) {
+    if (forbidden in (initialAddressCapture ?? {})) {
+      record(viewport.name, "address-capture-payload", `Step 1 included ${forbidden}.`);
+    }
+  }
+  if (
+    initialAddressCapture?.meta_browser_event?.event_id !==
+    `stonegate-lead-${initialAddressCapture?.intake_attempt_id}`
+  ) {
+    record(
+      viewport.name,
+      "meta-lead-identity",
+      "Step 1 did not use the deterministic address Lead event ID.",
+    );
+  }
   await checkPage(page, viewport.name, "contact");
   await page.getByRole("button", { name: "Back" }).click();
   if ((await page.locator("#property_city").inputValue()) !== "Atlanta") {
     record(viewport.name, "back-navigation", "Property answer was not preserved.");
   }
   await page.getByRole("button", { name: /Continue/ }).click();
+  await page.waitForTimeout(20);
+  if (
+    state.addressCaptures.some(
+      (capture) => capture.intake_attempt_id !== initialAddressCapture?.intake_attempt_id,
+    )
+  ) {
+    record(viewport.name, "address-capture-identity", "Back/continue changed the attempt ID.");
+  }
   const contactFieldSemantics = await page.evaluate(() =>
     Object.fromEntries(
       ["name", "phone", "email", "sms_consent"].map((id) => {
@@ -754,16 +825,14 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "sms-consent-payload", "An unchecked SMS box did not submit false.");
   }
   const failedMetaEventId = state.submissions.at(-1)?.meta_browser_event?.event_id;
-  const storedPendingMetaEvent = await page.evaluate(() =>
-    JSON.parse(
-      sessionStorage.getItem("stonegate_cash_offer_pending_meta_lead_v1") ?? "null",
-    ),
-  );
-  if (!failedMetaEventId || storedPendingMetaEvent?.event_id !== failedMetaEventId) {
+  if (
+    failedMetaEventId !==
+    `stonegate-contact-${state.submissions.at(-1)?.intake_attempt_id}`
+  ) {
     record(
       viewport.name,
-      "meta-lead-persistence",
-      "The failed submission did not persist its Meta event ID for a reload-safe retry.",
+      "meta-contact-identity",
+      "The failed submission did not use its deterministic Contact event ID.",
     );
   }
 
@@ -792,6 +861,7 @@ async function auditJourney(browser, viewport) {
   } catch {
     record(viewport.name, "submission", {
       submissions: state.submissions.length,
+      addressCaptures: state.addressCaptures.length,
       visibleError: await page.locator('[role="status"]').last().textContent().catch(() => null),
       visibleFieldErrors: await page.locator('[id$="-error"]').allTextContents(),
     });
@@ -819,21 +889,40 @@ async function auditJourney(browser, viewport) {
   ) {
     record(
       viewport.name,
-      "meta-lead-retry",
+      "meta-contact-retry",
       "A retried seller submission did not preserve its original Meta event ID.",
     );
   }
-  const pendingAfterSuccess = await page.evaluate(() =>
-    sessionStorage.getItem("stonegate_cash_offer_pending_meta_lead_v1"),
-  );
-  if (pendingAfterSuccess !== null) {
+  const payload = state.submissions.at(-1);
+  if (
+    payload?.meta_browser_event?.event_id !==
+      `stonegate-contact-${payload?.intake_attempt_id}` ||
+    payload?.meta_browser_event?.event_id === initialAddressCapture?.meta_browser_event?.event_id
+  ) {
     record(
       viewport.name,
-      "meta-lead-persistence",
-      "The confirmed submission did not clear its pending Meta event ID.",
+      "meta-contact-identity",
+      "Step 2 did not use a distinct deterministic Contact event ID.",
     );
   }
-  const payload = state.submissions.at(-1);
+  if (
+    !payload?.intake_attempt_id ||
+    payload.intake_attempt_id !== initialAddressCapture?.intake_attempt_id ||
+    state.addressCaptures.some(
+      (capture) => capture.intake_attempt_id !== payload.intake_attempt_id,
+    )
+  ) {
+    record(viewport.name, "address-capture-identity", {
+      finalAttemptId: payload?.intake_attempt_id ?? null,
+      captureAttemptIds: state.addressCaptures.map((capture) => capture.intake_attempt_id),
+    });
+  }
+  const draftAfterSuccess = await page.evaluate(() =>
+    sessionStorage.getItem("stonegate_cash_offer_draft_v1"),
+  );
+  if (draftAfterSuccess !== null) {
+    record(viewport.name, "address-capture-identity", "Successful intake retained its draft ID.");
+  }
   for (const [key, expected] of Object.entries({
     property_state: "GA",
     property_type: null,

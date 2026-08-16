@@ -1951,6 +1951,27 @@
   font-size: 14px;
 }
 
+.addressOnlyNotice {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid #9db9ce;
+  border-radius: 8px;
+  background: #f0f7fb;
+  display: grid;
+  gap: 5px;
+}
+
+.addressOnlyNotice strong {
+  color: #234a66;
+}
+
+.addressOnlyNotice p {
+  margin: 0;
+  color: #476273;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .archivedRecord {
   margin-top: 16px;
   display: grid;

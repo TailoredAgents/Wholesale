@@ -127,7 +127,7 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | Property / Contact steps | Shows the two required form stages | Contact remains disabled until the property information passes validation |
 | Completed step button | Returns to an earlier completed step without losing the draft | Only current or completed steps can be opened |
 | **Back** | Returns to the prior step | Hidden on the first step |
-| **Continue** | Validates the current step, records step completion, and advances | Validation errors focus the first invalid field |
+| **Continue** | Validates the current step, records step completion, and advances; on Property it also creates or reuses the cold address-only CRM record and sends the Meta `Lead` event | Validation errors focus the first invalid field; a deterministic intake-attempt ID keeps retries on one record |
 | Error summary links | Move focus to the field needing correction | Appears only after validation fails |
 | Saved browser draft | Restores unfinished non-consent answers for up to 24 hours | SMS consent intentionally does not persist or restore |
 
@@ -142,6 +142,11 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | ZIP code | Supports market, duplicate, and property matching during manual entry | Required; five digits or ZIP+4 |
 | Desired selling timeline | Records when the seller would ideally like to sell | Required |
 
+After the complete address and timeline pass validation, **Continue** sends the address capture while
+the seller advances to Contact. The saved record appears in **Leads > Address Only** as cold and
+**Skip trace needed**. It has no contact permission and starts no automated research, conversation,
+follow-up, staff alert, or seller contact. Staff must check DNC status manually before cold outreach.
+
 ### Contact Step
 
 | Control or field | Purpose and effect | Availability and common blocker |
@@ -151,7 +156,7 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | Email | Additional contact method | Optional; must be valid when entered |
 | Contact authorization disclosure | Explains that submitting authorizes phone or email follow-up about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
 | Optional SMS consent | Separately records recurring automated SMS consent and the `seller-sms-web-v3` wording version | Unchecked initially, never required, and never saved in the browser draft |
-| **Request My Options Review** | Submits one seller inquiry with phone follow-up, phone/email authorization evidence, optional SMS consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
+| **Request My Options Review** | Promotes the same address-only record into a contact-completed seller inquiry, adds phone/email authorization evidence and optional SMS consent evidence, and sends the Meta `Contact` event | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
@@ -179,7 +184,7 @@ change staff-reviewed information.
 | Estimated mortgage balance | Preliminary debt context, not verified payoff | Optional; numbers only |
 | Repairs, access, ownership, or timing details | Context that helps prepare the first conversation | Optional; maximum 1,000 characters |
 | **Skip for now** | Closes the optional section without changing the accepted request | Always available while the section is open |
-| **Save property details** | Adds the entered context to the accepted lead and records an audit/conversion event | At least one optional answer is required |
+| **Save property details** | Adds the entered context to the accepted lead and records an internal audit/conversion event; it does not send a Meta event | At least one optional answer is required |
 
 ## OS Global Shell
 
@@ -291,18 +296,18 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Temperature / Next follow-up | Sets urgency and the first dated commitment | Optional but recommended |
 | Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
 | **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
-| Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid leads | Read-only |
-| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Leads work without changing records | Underwriting requires underwriting access |
-| Saved lead views | Filters by predefined operating state and updates the URL | Filter only |
+| Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid prospects; address-only records are excluded from operational counts but remain included in paid-prospect acquisition totals | Read-only |
+| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Leads work without changing records | Underwriting requires underwriting access; address-only records do not enter operational queues |
+| Saved lead views | Filters by predefined operating state and updates the URL | **Address Only** shows incomplete website records; other operational views exclude them |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
 | Stage filter | Shows one normalized pipeline stage | Filter only |
-| Sort | Orders the visible leads by Newest, Oldest, or Highest priority | All Leads defaults to Newest; saved operational queues default to Highest priority |
+| Sort | Orders the visible leads by Newest, Oldest, or Highest priority | All Leads and Address Only default to Newest; saved operational queues default to Highest priority |
 | Table / Board | Changes display while preserving saved view, search, owner, stage, and selected seller | Display only |
 | Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Lead Queue, Inbox, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
-| **Conversation** | Opens Inbox on this seller | Requires conversation access |
+| **Conversation** | Opens Inbox on this seller | Requires conversation access; absent for an address-only record until contact details are completed |
 | **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
@@ -1532,8 +1537,8 @@ books. Sensitive vendor, banking, tax, and accounting controls are permission-ga
 | Reporting period | Changes the performance comparison window | Refreshes metrics |
 | Marketing Copilot | Drafts channel performance, conversion, and budget observations | Advisory only |
 | Source/campaign row | Opens the underlying campaign or lead cohort | Requires related access |
-| Funnel metrics | Shows visits, starts, submissions, leads, appointments, contracts, and revenue | Read-only |
-| Cost metrics | Shows spend, cost per lead, acquisition cost, and return | Depends on linked spend and revenue |
+| Funnel metrics | Separates valid Step 1 address leads, Step 2 contact-completed leads, address-to-contact rate, appointments, contracts, and revenue | Read-only; optional enrichment is not another Meta outcome |
+| Cost metrics | Separates cost per address lead from cost per contact-completed lead, then shows acquisition cost and return | Depends on linked spend and revenue |
 | Web performance | Shows Core Web Vitals and public-site health | Read-only monitoring |
 | Experiment ledger | Lists draft, running, paused, and completed homepage CTA tests | Visible to Marketing reporting roles |
 | **New test** | Opens a controlled two-version CTA experiment draft | Owner or Marketing Manager |

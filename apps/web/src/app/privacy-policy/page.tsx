@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>
         <h1>Privacy Policy</h1>
-        <p className={styles.effective}>Effective August 13, 2026</p>
+        <p className={styles.effective}>Effective August 16, 2026</p>
         <p className={styles.intro}>
           This Privacy Policy explains how Stonegate Home Buyers collects, uses, discloses, and
           protects information when you visit our website, request a property offer, call us, or
@@ -38,6 +38,10 @@ export default function PrivacyPolicyPage() {
               mortgage details you choose to provide, and your desired selling timeline.
             </li>
             <li>
+              Property details entered in a multi-step form after you continue to the next step,
+              even if you do not finish the form or provide contact information.
+            </li>
+            <li>
               Communications, including emails, text messages, call details, notes, and information
               you provide during conversations.
             </li>
@@ -52,6 +56,10 @@ export default function PrivacyPolicyPage() {
           <h2>How we use information</h2>
           <ul>
             <li>Review your property and respond to your property inquiry.</li>
+            <li>
+              Identify properties, maintain incomplete inquiry records, research publicly or
+              commercially available property-owner information, and prevent duplicate records.
+            </li>
             <li>Schedule appointments and communicate about possible selling options.</li>
             <li>Operate, secure, analyze, and improve our website and business systems.</li>
             <li>Maintain consent, suppression, transaction, and compliance records.</li>
@@ -110,9 +118,9 @@ export default function PrivacyPolicyPage() {
           <h2>Data retention and security</h2>
           <p>
             We retain information for as long as reasonably necessary for the purposes described
-            here, including maintaining transaction, consent, opt-out, and legal records. We use
-            reasonable administrative, technical, and physical safeguards, but no system can
-            guarantee absolute security.
+            here, including incomplete form records and transaction, consent, opt-out, and legal
+            records. We use reasonable administrative, technical, and physical safeguards, but no
+            system can guarantee absolute security.
           </p>
         </section>
 

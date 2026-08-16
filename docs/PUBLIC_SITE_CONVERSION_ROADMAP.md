@@ -1,6 +1,6 @@
 # Stonegate Public Site Conversion Roadmap
 
-Last updated: August 14, 2026
+Last updated: August 16, 2026
 
 ## Purpose
 
@@ -19,8 +19,10 @@ The public site already provides:
 
 - a Georgia-specific address-first homepage offer
 - a two-step selling-options inquiry with optional post-submission property details
+- a cold address-only CRM capture and Meta `Lead` after valid Property completion, followed by
+  promotion of the same record and Meta `Contact` after Contact completion
 - passive phone/email authorization on submission with a separate optional SMS checkbox
-- draft recovery, duplicate handling, and submission recovery
+- draft recovery, deterministic attempt deduplication, race-safe promotion, and submission recovery
 - phone-click, page-view, offer-start, form-step, abandonment, and submission measurement
 - real-user LCP, INP, and CLS reporting
 - direct-offer versus traditional-listing education
@@ -70,14 +72,26 @@ Status: **Implemented**. Branded production verification follows the Render depl
 ### Work
 
 - Reduce the initial journey to Property, Contact, and Confirmation.
-- Create the lead as soon as the minimum valid property and contact information is submitted.
+- Create a cold address-only CRM lead as soon as a complete address and desired timeline pass Step 1
+  validation and the seller selects **Continue**.
+- Keep address-only records in **Leads > Address Only** as **Skip trace needed**. Do not start
+  contact, property research, AI preparation, conversations, speed-to-lead work, or staff alerts at
+  this stage. Require staff to check DNC status manually before cold outreach; do not imply that the
+  system performs the check automatically.
+- Promote the same lead when Step 2 supplies name, required phone, optional email, and consent
+  evidence. Start normal completed-inquiry workflows only after that promotion.
 - Keep the seller's desired timeline in the initial property step, and move condition, occupancy,
   repairs, mortgage, motivation, and comments into an optional
   post-submission enrichment step.
+- Keep that enrichment section unnumbered and exclude it from Meta conversion events.
 - Issue a random, 24-hour, one-purpose enrichment token whose hash is stored with the intake
   submission; the token can add optional context to that lead but cannot read or edit other data.
-- Preserve draft recovery, duplicate handling, validation, attribution, failure recovery, and
-  versioned phone/email and optional SMS consent evidence.
+- Generate one intake-attempt UUID for each property journey. Use the organization-scoped unique
+  attempt identity and database locking so Step 1 retries reuse one record, Step 2 promotes it once,
+  a late Step 1 request cannot downgrade a completed inquiry, and a completed retry returns the same
+  lead.
+- Preserve draft recovery, validation, attribution, failure recovery, and versioned phone/email and
+  optional SMS consent evidence. Step 1 records no contact consent.
 - Offer RealEstateAPI property-address suggestions that fill city, state, and ZIP from one selection.
 - Preserve direct manual address entry so intake never depends on a third-party provider, and retain
   the returned state instead of silently labeling every property as Georgia.
@@ -86,9 +100,17 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ### Exit Criteria
 
-- A seller can submit a valid inquiry with only the minimum necessary information.
-- Optional enrichment remains connected to the same lead.
+- A valid address and timeline create one cold address-only lead and a Meta `Lead` without requiring
+  contact details.
+- Valid contact completion promotes the same lead and sends Meta `Contact` without creating a
+  duplicate CRM record.
+- Optional enrichment remains connected to the same lead, is visually unnumbered, and sends no Meta
+  event.
 - Existing phone/email, optional SMS, and conversion evidence remains intact.
+- Address-only records do not create operational automation, and the UI clearly directs staff to
+  manually check DNC status before cold outreach.
+- Retry and concurrent-order tests prove deterministic identity and no completed-to-address-only
+  downgrade.
 - Automated desktop and mobile submission and recovery tests pass.
 
 ## Phase PC3: Mobile Conversion Experience
@@ -240,8 +262,9 @@ remain operational steps.
 - A persistent anonymous browser identifier assigns a visitor deterministically to a 50/50
   control or treatment. The assignment cannot change within the seller journey.
 - Conversion events record device category without storing seller field values. When a seller
-  submits, the assignment links to the resulting lead and follows qualification, appointments,
-  signed contracts, collected revenue, source, and campaign.
+  completes the address stage, the assignment links to the resulting lead and follows contact
+  completion, qualification, appointments, signed contracts, collected revenue, source, and
+  campaign.
 - Every experiment requires a hypothesis, primary business outcome, at least 20 sessions per
   version, at least seven active runtime days, and a written decision rule before launch.
 - Thresholds produce **Ready for human review**, never an automatic winner. Marketing records the
@@ -251,8 +274,11 @@ remain operational steps.
 
 ### Work
 
-- Measure CTA placement, initial submission, optional enrichment, phone clicks, qualification,
-  appointments, contracts, and funded outcomes.
+- Measure CTA placement, Step 1 address leads, Step 2 contact-completed leads, address-to-contact
+  rate, optional enrichment, phone clicks, qualification, appointments, contracts, and funded
+  outcomes.
+- Send deduplicated browser/server Meta `Lead` at valid address capture and Meta `Contact` at contact
+  completion. Do not send a Meta event for optional enrichment.
 - Add controlled experiment assignment and variant attribution.
 - Report results by device, source, campaign, and qualified business outcome.
 - Establish a production baseline before changing major headlines or offers.
@@ -260,6 +286,7 @@ remain operational steps.
 ### Exit Criteria
 
 - A variation can be tied to downstream CRM outcomes without exposing seller details.
+- Reports and cost metrics distinguish address leads from contact-completed leads.
 - Decisions are based on qualified appointments, contracts, cost per contract, and funded margin.
 - Experiments do not run without enough traffic or a named decision rule.
 - Stable assignment, downstream lead linkage, permission controls, and experiment decisions are

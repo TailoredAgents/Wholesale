@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -126,7 +127,68 @@ class PublicAddressSuggestionsResponse(BaseModel):
     suggestions: list[PublicAddressSuggestion] = Field(default_factory=list, max_length=6)
 
 
+class WebsiteSellerAddressCaptureCreate(BaseModel):
+    intake_attempt_id: UUID
+    property_address: str = Field(min_length=1, max_length=255)
+    property_city: str = Field(min_length=1, max_length=120)
+    property_state: str = Field(default="GA", pattern=r"^[A-Za-z]{2}$")
+    property_postal_code: str = Field(pattern=r"^\d{5}(?:-\d{4})?$")
+    desired_timeline: str = Field(min_length=1, max_length=120)
+    company_website: str | None = Field(default=None, max_length=255)
+    conversion_session_id: str | None = Field(default=None, max_length=120)
+    experiment_key: str | None = Field(default=None, max_length=80)
+    experiment_variant: str | None = Field(default=None, max_length=80)
+    device_category: str = Field(default="unknown", max_length=20)
+    attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
+    meta_browser_event: MetaBrowserEvent
+
+    @field_validator(
+        "property_address",
+        "property_city",
+        "property_state",
+        "property_postal_code",
+        "desired_timeline",
+        mode="before",
+    )
+    @classmethod
+    def normalize_address_capture_values(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("property_state")
+    @classmethod
+    def uppercase_address_capture_state(cls, value: str) -> str:
+        return value.upper()
+
+    @model_validator(mode="after")
+    def require_complete_property_address(self) -> "WebsiteSellerAddressCaptureCreate":
+        if self.company_website:
+            raise ValueError("Invalid form submission.")
+        if not all(
+            value.strip()
+            for value in (
+                self.property_address,
+                self.property_city,
+                self.property_state,
+                self.property_postal_code,
+            )
+        ):
+            raise ValueError("A complete property address is required.")
+        expected_event_id = f"stonegate-lead-{self.intake_attempt_id}"
+        if self.meta_browser_event.event_id != expected_event_id:
+            raise ValueError("The address-lead event identity is invalid.")
+        return self
+
+
+class WebsiteSellerAddressCaptureResponse(BaseModel):
+    lead_id: UUID
+    contact_id: UUID
+    property_id: UUID
+    completion_status: str
+    created: bool
+
+
 class SellerIntakeCreate(BaseModel):
+    intake_attempt_id: UUID | None = None
     property_address: str = Field(default="", max_length=255)
     property_city: str = Field(default="", max_length=120)
     property_state: str = Field(default="GA", min_length=2, max_length=2)
@@ -220,6 +282,14 @@ class WebsiteSellerIntakeCreate(SellerIntakeCreate):
         digits = "".join(character for character in self.phone if character.isdigit())
         if not 10 <= len(digits) <= 15:
             raise ValueError("Enter a complete phone number.")
+        if self.intake_attempt_id is not None and self.meta_browser_event is None:
+            raise ValueError(
+                "The website intake attempt and Meta browser event must be provided together."
+            )
+        if self.intake_attempt_id is not None and self.meta_browser_event is not None:
+            expected_event_id = f"stonegate-contact-{self.intake_attempt_id}"
+            if self.meta_browser_event.event_id != expected_event_id:
+                raise ValueError("The contact event identity is invalid.")
         return self
 
 
@@ -233,6 +303,7 @@ class SellerIntakeResponse(BaseModel):
     enrichment_token: str
     enrichment_expires_at: datetime
     message: str
+    meta_pixel_event_name: Literal["Lead", "Contact"] | None = None
 
 
 class SellerIntakeEnrichmentCreate(BaseModel):

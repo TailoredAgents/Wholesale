@@ -313,3 +313,103 @@ def test_lead_manager_routes_new_field_appointment_to_dispatch_queue(
     assert lead.appointment_status == "needs_scheduling"
     assert lead.next_follow_up_at == requested_time.replace(tzinfo=None)
     assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 0
+
+
+def test_address_only_website_lead_is_not_available_for_appointment_scheduling(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    schedulable_lead = create_ready_lead(
+        db_session,
+        seller="Contact Ready Seller",
+        street="401 Main St",
+    )
+    address_only_lead = create_ready_lead(
+        db_session,
+        seller="Contact Pending Website Lead",
+        street="402 Main St",
+    )
+    address_only_lead.qualification_context = {
+        "website_intake_status": "address_only",
+        "contact_details_status": "missing",
+    }
+    db_session.commit()
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    response = client.get(
+        "/api/v1/field-operations",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    schedulable_ids = {item["id"] for item in payload["schedulable_leads"]}
+    ready_ids = {item["id"] for item in payload["ready_leads"]}
+    assert str(schedulable_lead.id) in schedulable_ids
+    assert str(schedulable_lead.id) in ready_ids
+    assert str(address_only_lead.id) not in schedulable_ids
+    assert str(address_only_lead.id) not in ready_ids
+    assert payload["metrics"]["ready_to_schedule"] == 1
+
+    configured = client.put(
+        f"/api/v1/field-operations/profiles/{owner.id}",
+        headers=headers,
+        json={
+            "working_days": [0, 1, 2, 3, 4, 5, 6],
+            "workday_start_minute": 0,
+            "workday_end_minute": 1440,
+            "daily_capacity": 4,
+            "territory_enforcement_enabled": False,
+        },
+    )
+    assert configured.status_code == 200, configured.text
+    starts_at = (datetime.now(UTC) + timedelta(days=2)).replace(
+        hour=15,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    ends_at = starts_at + timedelta(hours=1)
+    appointment_payload = {
+        "scheduled_start_at": starts_at.isoformat(),
+        "scheduled_end_at": ends_at.isoformat(),
+    }
+
+    manual_schedule = client.post(
+        f"/api/v1/leads/{address_only_lead.id}/appointments",
+        headers=headers,
+        json={
+            **appointment_payload,
+            "appointment_type": "seller_call",
+            "status": "scheduled",
+            "location_type": "phone",
+        },
+    )
+    evaluation = client.post(
+        "/api/v1/field-operations/evaluate",
+        headers=headers,
+        json={"lead_id": str(address_only_lead.id), **appointment_payload},
+    )
+    dispatch = client.post(
+        "/api/v1/field-operations/dispatch",
+        headers=headers,
+        json={
+            "lead_id": str(address_only_lead.id),
+            "closer_user_id": str(owner.id),
+            **appointment_payload,
+        },
+    )
+
+    for blocked in (manual_schedule, evaluation, dispatch):
+        assert blocked.status_code == 422, blocked.text
+        assert "Complete the seller's contact details" in blocked.json()["detail"]
+    assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 0

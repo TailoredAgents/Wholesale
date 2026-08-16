@@ -393,7 +393,7 @@ export function initializeMetaPixel(): Promise<boolean> {
 }
 
 export function trackMetaPixelEvent(
-  eventName: "PageView" | "ViewContent" | "Lead",
+  eventName: "PageView" | "ViewContent" | "Lead" | "Contact",
   eventId?: string,
 ) {
   if (!isPublicTrackingPath(window.location.pathname)) return false;

@@ -156,6 +156,7 @@ from app.services.inbox import (
 from app.services.lead_lifecycle import (
     TERMINAL_CLOSE_OUT_STAGES,
     LeadLifecycleConflictError,
+    require_lead_contact_ready_for_appointment,
     require_lead_open_for_work,
 )
 from app.services.property_identity import (
@@ -1523,6 +1524,7 @@ def create_lead_appointment(
     if lead is None:
         return None
     require_lead_open_for_work(lead)
+    require_lead_contact_ready_for_appointment(lead)
 
     owner_user_id = payload.owner_user_id or lead.assigned_user_id or principal.user_id
     owner = db.scalar(

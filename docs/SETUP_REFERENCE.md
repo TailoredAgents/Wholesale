@@ -827,22 +827,35 @@ The direct Meta integration combines the browser Pixel with server-side Conversi
 - `MARKETING_CONVERSION_MODE=disabled` stores events without delivery. Use `live` only after the
   Pixel ID and access token are present on both the API and worker services.
 
-Implemented events are `PageView` from the Pixel, deduplicated browser/server `ViewContent` and
-`Lead`, and server-side `QualifiedLead` and `Schedule` from later CRM outcomes. Browser and server
-copies of `ViewContent` and `Lead` use the same event name and event ID. Server delivery includes
-the source URL and user agent; Lead also uses hashed email and external ID plus IP, `fbc`, and `fbp`
-when available. The phone hash is deliberately withheld from Meta because the current mobile
-privacy promise excludes sharing mobile information for third-party marketing.
+Implemented events are `PageView` from the Pixel; deduplicated browser/server `ViewContent`,
+`Lead`, and `Contact`; and server-side `QualifiedLead` and `Schedule` from later CRM outcomes. In
+the public seller funnel, `Lead` means the visitor completed the valid address-and-timeline step.
+`Contact` means the visitor then supplied a name and required phone number and submitted the contact
+step. The unnumbered optional property-details section after confirmation does not send another Meta
+event.
+
+Browser and server copies use the same event name and deterministic event ID for each intake
+attempt: the address stage uses `stonegate-lead-{intake_attempt_id}` and the completed contact stage
+uses `stonegate-contact-{intake_attempt_id}`. Server delivery includes the source URL, user agent,
+IP, `fbc`, and `fbp` when available. The address-stage `Lead` has no seller email or phone because
+those fields have not been collected. The contact-stage `Contact` also includes hashed email when
+provided and the CRM external ID. The phone hash is deliberately withheld from Meta because the
+current mobile privacy promise excludes sharing mobile information for third-party marketing.
 
 Acceptance sequence:
 
 1. Generate the Conversions API access token in Meta Events Manager and store it in Render.
 2. Add the Pixel ID to the web, API, and worker variables described above.
 3. Add Meta's Test Events code to the API and worker, switch delivery to `live`, and redeploy.
-4. Visit a public page and submit one controlled seller test lead.
-5. In Test Events, confirm browser and server `ViewContent` and `Lead` arrive and deduplicate.
-6. Confirm Event Match Quality includes the expected non-phone match keys.
-7. Remove the test event code, redeploy, and monitor deduplication, freshness, coverage, and match
+4. Visit a public page and complete the property step of one controlled seller inquiry.
+5. In Test Events, confirm browser and server `ViewContent` and address-stage `Lead` arrive and
+   deduplicate.
+6. Complete the contact step and confirm browser and server `Contact` arrive and deduplicate under a
+   different event ID for the same intake attempt.
+7. Confirm `Contact` Event Match Quality includes the expected non-phone match keys. Do not expect
+   email coverage on the earlier address-only `Lead`.
+8. Add optional post-submit details and confirm no additional Meta event is created.
+9. Remove the test event code, redeploy, and monitor deduplication, freshness, coverage, and match
    quality during the first campaigns.
 
 Meta rejects events older than seven days; the worker expires those instead of retrying an invalid
@@ -851,11 +864,30 @@ events.
 
 ## Website And Zapier Lead Intake Staff Alerts
 
-The public **See My Selling Options** form creates a Stonegate lead directly. Its property search can
-fill street, city, state, and ZIP from RealEstateAPI autocomplete, while manual address entry remains
-available and independent of the provider. A complete address, seller timeline, name, and phone are
-required before submission. Its browser `Lead` event and matching server conversion use the same
-event ID for Meta deduplication.
+The public **See My Selling Options** form has two visible stages and one unnumbered optional stage:
+
+- Completing a valid property address and desired timeline and selecting **Continue** sends
+  `POST /api/v1/public/seller-leads/address-capture`. It creates a cold address-only CRM lead, an
+  address-stage conversion record, and a deduplicated Meta `Lead`. RealEstateAPI autocomplete may
+  fill street, city, state, and ZIP, but manual entry remains available and provider-independent.
+- The address-only record has no seller contact channel or contact authorization. It appears in
+  **Leads > Address Only** as **Skip trace needed** and does not start AI preparation, property
+  research, a conversation, speed-to-lead work, staff alerts, or seller contact automation. Staff
+  must research/skip trace the owner and check DNC status manually before any cold outreach; the
+  system does not perform that DNC check automatically.
+- Submitting the visible Contact step with name, required phone, optional email, and the displayed
+  consent choices promotes the same CRM record to a completed seller inquiry. It sends the
+  deduplicated Meta `Contact` event and only then starts normal property research, AI work,
+  conversation, speed-to-lead, notification, and staff-SMS-alert workflows.
+- The optional property-details section shown after confirmation writes condition, occupancy,
+  motivation, price, mortgage, repairs, and comments to the same lead. It is not a numbered funnel
+  step and does not send a Meta event.
+
+One browser-generated `intake_attempt_id` identifies the property journey. Database locking and the
+organization-scoped unique attempt constraint make Step 1 retries idempotent, make Step 2 promote
+the same record, and prevent concurrent requests from creating two records. If the completed contact
+request wins the race, a later Step 1 request can add the missing address-stage evidence but cannot
+downgrade the completed lead. Retrying an already completed attempt returns the same lead.
 
 Facebook instant forms are separate from the Pixel and Conversions API. The Pixel reports activity
 back to Meta; Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead.
@@ -886,8 +918,9 @@ legitimate Zap replay does not consume another accepted-lead slot.
 
 The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
 address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
-Website and Facebook intake both create source-tagged alerts for every active user who has a valid
-cellphone and **Text new leads** enabled. The worker also recovers a recent website submission when
+Completed website contact submissions and completed Facebook intake create source-tagged alerts for
+every active user who has a valid cellphone and **Text new leads** enabled. Address-only website
+captures intentionally do not. The worker also recovers a recent completed website submission when
 a recipient was not alert-ready at intake, without sending duplicates.
 
 The endpoint is:

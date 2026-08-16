@@ -78,6 +78,8 @@ class CampaignRow:
     form_starts: int = 0
     form_abandons: int = 0
     form_submits: int = 0
+    address_leads: int = 0
+    contact_completed_leads: int = 0
     call_clicks: int = 0
     leads_created: int = 0
     contracted_leads: int = 0
@@ -111,7 +113,7 @@ def enqueue_meta_web_conversion(
     occurred_at: datetime | None = None,
 ) -> OfflineConversionExport | None:
     """Queue a Meta server event that shares its ID with the browser Pixel event."""
-    if event_name not in {"ViewContent", "Lead"}:
+    if event_name not in {"ViewContent", "Lead", "Contact"}:
         raise ValueError(f"Unsupported immediate Meta web event: {event_name}")
     existing = db.scalar(
         select(OfflineConversionExport.id).where(
@@ -276,6 +278,8 @@ def get_marketing_overview(
             campaign_rows.values(),
             key=lambda item: (
                 -item.collected_revenue_cents,
+                -item.contact_completed_leads,
+                -item.address_leads,
                 -item.leads_created,
                 -item.form_submits,
                 item.source,
@@ -340,6 +344,8 @@ def get_public_experience_summary(
         "form_step_complete",
         "form_validation_error",
         "form_submit_attempt",
+        "address_capture",
+        "contact_complete",
         "form_submit",
         "form_submit_error",
         "form_abandon",
@@ -374,7 +380,9 @@ def get_public_experience_summary(
                 vital_values[str(metric)].append((float(value), str(rating or "unknown")))
 
     starts = counts["form_start"]
-    submits = counts["form_submit"]
+    contact_completed_leads = counts["contact_complete"]
+    submits = counts["form_submit"] + contact_completed_leads
+    address_leads = counts["address_capture"]
     funnel = PublicFunnelSummary(
         page_views=counts["page_view"],
         offer_starts=counts["offer_start"],
@@ -383,6 +391,11 @@ def get_public_experience_summary(
         validation_errors=counts["form_validation_error"],
         submit_attempts=counts["form_submit_attempt"],
         form_submits=submits,
+        address_leads=address_leads,
+        contact_completed_leads=contact_completed_leads,
+        address_to_contact_rate_basis_points=(
+            round(contact_completed_leads / address_leads * 10000) if address_leads else None
+        ),
         submit_errors=counts["form_submit_error"],
         form_abandons=counts["form_abandon"],
         start_to_submit_rate_basis_points=(round(submits / starts * 10000) if starts else None),
@@ -818,6 +831,11 @@ def add_conversion_events(
             row.form_starts += count_value
         elif event_type == "form_abandon":
             row.form_abandons += count_value
+        elif event_type == "address_capture":
+            row.address_leads += count_value
+        elif event_type == "contact_complete":
+            row.form_submits += count_value
+            row.contact_completed_leads += count_value
         elif event_type == "form_submit":
             row.form_submits += count_value
         elif event_type == "call_click":
@@ -831,6 +849,18 @@ def add_leads(
     start_at: datetime | None,
     end_at: datetime | None,
 ) -> None:
+    canonical_touch_id = (
+        select(AttributionTouch.id)
+        .where(
+            AttributionTouch.lead_id == Lead.id,
+            AttributionTouch.organization_id == Lead.organization_id,
+            AttributionTouch.touch_type == "lead_creation",
+        )
+        .order_by(AttributionTouch.created_at.asc(), AttributionTouch.id.asc())
+        .limit(1)
+        .correlate(Lead)
+        .scalar_subquery()
+    )
     lead_rows = db.execute(
         select(
             func.coalesce(AttributionTouch.source, Lead.source),
@@ -842,11 +872,7 @@ def add_leads(
         .select_from(Lead)
         .outerjoin(
             AttributionTouch,
-            and_(
-                AttributionTouch.lead_id == Lead.id,
-                AttributionTouch.organization_id == Lead.organization_id,
-                AttributionTouch.touch_type == "lead_creation",
-            ),
+            AttributionTouch.id == canonical_touch_id,
         )
         .where(
             Lead.organization_id == principal.organization_id,
@@ -874,6 +900,18 @@ def add_revenue(
     start_at: datetime | None,
     end_at: datetime | None,
 ) -> None:
+    canonical_touch_id = (
+        select(AttributionTouch.id)
+        .where(
+            AttributionTouch.lead_id == Lead.id,
+            AttributionTouch.organization_id == Lead.organization_id,
+            AttributionTouch.touch_type == "lead_creation",
+        )
+        .order_by(AttributionTouch.created_at.asc(), AttributionTouch.id.asc())
+        .limit(1)
+        .correlate(Lead)
+        .scalar_subquery()
+    )
     revenue_rows = db.execute(
         select(
             func.coalesce(AttributionTouch.source, Lead.source),
@@ -884,11 +922,7 @@ def add_revenue(
         .join(Lead, Lead.id == RevenueRecord.lead_id)
         .outerjoin(
             AttributionTouch,
-            and_(
-                AttributionTouch.lead_id == Lead.id,
-                AttributionTouch.organization_id == Lead.organization_id,
-                AttributionTouch.touch_type == "lead_creation",
-            ),
+            AttributionTouch.id == canonical_touch_id,
         )
         .where(
             RevenueRecord.organization_id == principal.organization_id,
@@ -926,15 +960,43 @@ def add_spend(
         .group_by(MarketingSpend.source, MarketingSpend.campaign)
     ).all()
     for source, campaign, spend in spend_rows:
-        matching_rows = [
-            row
-            for row in rows.values()
-            if row.source == (source or "direct") and row.campaign == (campaign or "uncategorized")
+        target_source = source or "direct"
+        target_campaign = campaign or "uncategorized"
+        matching_keys = [
+            key
+            for key, row in rows.items()
+            if row.source == target_source and row.campaign == target_campaign
         ]
-        if not matching_rows:
-            matching_rows = [ensure_row(rows, source, None, campaign)]
-        for row in matching_rows:
-            row.marketing_spend_cents += int(spend)
+        if not matching_keys:
+            target = ensure_row(rows, source, None, campaign)
+        elif len(matching_keys) == 1:
+            target = rows[matching_keys[0]]
+        else:
+            # Spend is recorded only at source + campaign grain. Collapse multiple
+            # media into one row rather than assigning the full spend to every row.
+            target = CampaignRow(
+                source=target_source,
+                medium="mixed",
+                campaign=target_campaign,
+            )
+            for key in matching_keys:
+                merge_campaign_row(target, rows.pop(key))
+            rows[(target_source, "mixed", target_campaign)] = target
+        target.marketing_spend_cents += int(spend)
+
+
+def merge_campaign_row(target: CampaignRow, source: CampaignRow) -> None:
+    target.page_views += source.page_views
+    target.form_starts += source.form_starts
+    target.form_abandons += source.form_abandons
+    target.form_submits += source.form_submits
+    target.address_leads += source.address_leads
+    target.contact_completed_leads += source.contact_completed_leads
+    target.call_clicks += source.call_clicks
+    target.leads_created += source.leads_created
+    target.contracted_leads += source.contracted_leads
+    target.collected_revenue_cents += source.collected_revenue_cents
+    target.marketing_spend_cents += source.marketing_spend_cents
 
 
 def get_best_click_event(
@@ -981,12 +1043,26 @@ def row_to_performance(row: CampaignRow) -> MarketingCampaignPerformance:
         form_starts=row.form_starts,
         form_abandons=row.form_abandons,
         form_submits=row.form_submits,
+        address_leads=row.address_leads,
+        contact_completed_leads=row.contact_completed_leads,
+        address_to_contact_rate_basis_points=safe_rate_basis_points(
+            row.contact_completed_leads,
+            row.address_leads,
+        ),
         call_clicks=row.call_clicks,
         leads_created=row.leads_created,
         contracted_leads=row.contracted_leads,
         collected_revenue_cents=row.collected_revenue_cents,
         marketing_spend_cents=row.marketing_spend_cents,
         cost_per_lead_cents=safe_divide(row.marketing_spend_cents, row.leads_created),
+        cost_per_address_lead_cents=safe_divide(
+            row.marketing_spend_cents,
+            row.address_leads,
+        ),
+        cost_per_contact_completed_lead_cents=safe_divide(
+            row.marketing_spend_cents,
+            row.contact_completed_leads,
+        ),
         cost_per_contract_cents=safe_divide(row.marketing_spend_cents, row.contracted_leads),
         return_on_ad_spend_basis_points=safe_basis_points(
             row.collected_revenue_cents,
@@ -1168,7 +1244,7 @@ def build_meta_match_coverage(
         ("all", exports),
         *[
             (event_name, [export for export in exports if export.event_name == event_name])
-            for event_name in ("ViewContent", "Lead")
+            for event_name in ("ViewContent", "Lead", "Contact")
         ],
     ]
     result: list[MetaMatchCoverage] = []
@@ -1336,6 +1412,12 @@ def safe_basis_points(revenue: int, spend: int) -> int | None:
     return round(revenue / spend * 10000)
 
 
+def safe_rate_basis_points(numerator: int, denominator: int) -> int | None:
+    if denominator == 0:
+        return None
+    return round(numerator / denominator * 10000)
+
+
 def summarize_rows(
     rows: dict[tuple[str, str, str], CampaignRow],
     pending_exports: int,
@@ -1343,13 +1425,26 @@ def summarize_rows(
     total_spend = sum(row.marketing_spend_cents for row in rows.values())
     total_revenue = sum(row.collected_revenue_cents for row in rows.values())
     total_leads = sum(row.leads_created for row in rows.values())
+    total_address_leads = sum(row.address_leads for row in rows.values())
+    total_contact_completed_leads = sum(row.contact_completed_leads for row in rows.values())
     total_contracts = sum(row.contracted_leads for row in rows.values())
     return MarketingSummary(
         total_spend_cents=total_spend,
         collected_revenue_cents=total_revenue,
         leads_created=total_leads,
+        address_leads=total_address_leads,
+        contact_completed_leads=total_contact_completed_leads,
+        address_to_contact_rate_basis_points=safe_rate_basis_points(
+            total_contact_completed_leads,
+            total_address_leads,
+        ),
         contracted_leads=total_contracts,
         cost_per_lead_cents=safe_divide(total_spend, total_leads),
+        cost_per_address_lead_cents=safe_divide(total_spend, total_address_leads),
+        cost_per_contact_completed_lead_cents=safe_divide(
+            total_spend,
+            total_contact_completed_leads,
+        ),
         cost_per_contract_cents=safe_divide(total_spend, total_contracts),
         return_on_ad_spend_basis_points=safe_basis_points(total_revenue, total_spend),
         pending_offline_exports=pending_exports,

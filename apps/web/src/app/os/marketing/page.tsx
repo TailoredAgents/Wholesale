@@ -83,6 +83,22 @@ function deliveryTone(status: string) {
   return "warning";
 }
 
+function campaignDetail(medium: string, campaign: string) {
+  const values = [
+    medium === "mixed" ? "Mixed media" : medium,
+    campaign,
+  ].filter((value) => !["unknown", "uncategorized"].includes(value));
+  return values.map(labelize).join(" / ") || "No campaign";
+}
+
+function metaEventLabel(eventName: string) {
+  if (eventName === "all") return "All web events";
+  if (eventName === "ViewContent") return "View content";
+  if (eventName === "Lead") return "Address lead";
+  if (eventName === "Contact") return "Contact completed";
+  return labelize(eventName);
+}
+
 export default async function MarketingPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const params = await searchParams;
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
@@ -104,15 +120,13 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   const previous = marketing.previous_summary;
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
   const exceptions = marketing.campaigns.filter((campaign) =>
-    (campaign.marketing_spend_cents > 0 && campaign.leads_created === 0) ||
-    (campaign.leads_created > 0 && campaign.contracted_leads === 0) ||
+    (campaign.marketing_spend_cents > 0 && campaign.address_leads === 0 && campaign.contact_completed_leads === 0) ||
+    (campaign.address_leads > 0 && campaign.contact_completed_leads === 0) ||
+    (campaign.contact_completed_leads > 0 && campaign.contracted_leads === 0) ||
     (campaign.return_on_ad_spend_basis_points !== null && campaign.return_on_ad_spend_basis_points < 10000),
   );
   const canExport = Boolean(profile?.permissions.some((permission) => ["financials:view", "communications:send_bulk"].includes(permission)));
   const primary = exceptions[0] ?? null;
-  const submitRate = marketing.campaigns.reduce((total, item) => total + item.form_starts, 0)
-    ? marketing.campaigns.reduce((total, item) => total + item.form_submits, 0) / marketing.campaigns.reduce((total, item) => total + item.form_starts, 0) * 100
-    : 0;
   const funnel = marketing.public_funnel;
   const measurement = marketing.measurement;
   const metaProvider = measurement.providers.find((provider) => provider.platform === "meta") ?? null;
@@ -150,10 +164,8 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     ["Public page views", funnel.page_views],
     ["Address offer starts", funnel.offer_starts],
     ["Form starts", funnel.form_starts],
-    ["Property step complete", funnel.step_completions.property ?? 0],
-    ["Situation step complete", funnel.step_completions.situation ?? 0],
-    ["Details step complete", funnel.step_completions.details ?? 0],
-    ["Successful submissions", funnel.form_submits],
+    ["Address leads accepted", funnel.address_leads],
+    ["Contact details completed", funnel.contact_completed_leads],
   ] as const;
 
   return <WorkspacePage>
@@ -184,13 +196,14 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     <section className={styles.metricGrid} aria-label="Marketing performance">
       <div><BadgeDollarSign size={17} /><span>Marketing spend</span><strong>{money(marketing.summary.total_spend_cents)}</strong><small>{delta(marketing.summary.total_spend_cents, previous?.total_spend_cents)}</small></div>
       <div><CircleDollarSign size={17} /><span>Attributed revenue</span><strong>{money(marketing.summary.collected_revenue_cents)}</strong><small>{delta(marketing.summary.collected_revenue_cents, previous?.collected_revenue_cents)}</small></div>
-      <div><UsersRound size={17} /><span>Cost per lead</span><strong>{money(marketing.summary.cost_per_lead_cents)}</strong><small>{marketing.summary.leads_created} attributed leads</small></div>
+      <div><UsersRound size={17} /><span>Blended cost per address lead</span><strong>{money(marketing.summary.cost_per_address_lead_cents)}</strong><small>{marketing.summary.address_leads} accepted address leads</small></div>
+      <div><UsersRound size={17} /><span>Blended cost per contact lead</span><strong>{money(marketing.summary.cost_per_contact_completed_lead_cents)}</strong><small>{marketing.summary.contact_completed_leads} completed contact steps</small></div>
       <div><Megaphone size={17} /><span>Cost per contract</span><strong>{money(marketing.summary.cost_per_contract_cents)}</strong><small>{marketing.summary.contracted_leads} contracts</small></div>
-      <div><ChartNoAxesCombined size={17} /><span>Return on ad spend</span><strong>{roas(marketing.summary.return_on_ad_spend_basis_points)}</strong><small>{submitRate.toFixed(1)}% form-start conversion</small></div>
+      <div><ChartNoAxesCombined size={17} /><span>Return on ad spend</span><strong>{roas(marketing.summary.return_on_ad_spend_basis_points)}</strong><small>{percentage(marketing.summary.address_to_contact_rate_basis_points)} address-to-contact</small></div>
     </section>
 
     <section className={styles.section}>
-      <div className={styles.sectionHeading}><div><span>Public experience baseline</span><h2>Offer journey and real-user performance</h2></div><strong>{percentage(funnel.start_to_submit_rate_basis_points)} start-to-submit</strong></div>
+      <div className={styles.sectionHeading}><div><span>Public experience baseline</span><h2>Offer journey and real-user performance</h2></div><strong>{percentage(funnel.address_to_contact_rate_basis_points)} address-to-contact</strong></div>
       <div className={marketingStyles.funnelLayout}>
         <div className={marketingStyles.funnelRows}>
           {funnelRows.map(([label, count], index) => <div key={label}><span>{index + 1}</span><strong>{label}</strong><b>{count}</b></div>)}
@@ -203,7 +216,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
             <div><dt>Submit failures</dt><dd>{funnel.submit_errors}</dd></div>
             <div><dt>Abandonments</dt><dd>{funnel.form_abandons}</dd></div>
           </dl>
-          <p>Counts are anonymous browser-session events. Field values are not included.</p>
+          <p>Page and interaction counts are browser events. Accepted address and contact totals are server records; field values are not shown here.</p>
         </aside>
       </div>
       <div className={marketingStyles.vitalGrid} aria-label="Core Web Vitals p75">
@@ -223,12 +236,12 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
 
     <section className={styles.exceptionBand}>
       <div className={styles.sectionHeading}><div><span>Exception management</span><h2>Source economics requiring attention</h2></div><strong>{exceptions.length} sources</strong></div>
-      <div className={marketingStyles.exceptionRows}>{exceptions.length ? exceptions.map((campaign) => <Link href={`/os/leads?q=${encodeURIComponent(campaign.source)}`} key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`}><div><strong>{labelize(campaign.source)}</strong><span>{[campaign.medium, campaign.campaign].filter((value) => !["unknown", "uncategorized"].includes(value)).map(labelize).join(" / ") || "Uncategorized campaign"}</span></div><dl><div><dt>Spend</dt><dd>{money(campaign.marketing_spend_cents)}</dd></div><div><dt>Leads</dt><dd>{campaign.leads_created}</dd></div><div><dt>Contracts</dt><dd>{campaign.contracted_leads}</dd></div><div><dt>ROAS</dt><dd>{roas(campaign.return_on_ad_spend_basis_points)}</dd></div></dl><ArrowRight size={15} /></Link>) : <p className={styles.empty}>No source economics exceptions appear in this period.</p>}</div>
+      <div className={marketingStyles.exceptionRows}>{exceptions.length ? exceptions.map((campaign) => <Link href={`/os/leads?q=${encodeURIComponent(campaign.source)}`} key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`}><div><strong>{labelize(campaign.source)}</strong><span>{campaignDetail(campaign.medium, campaign.campaign)}</span></div><dl><div><dt>Spend</dt><dd>{money(campaign.marketing_spend_cents)}</dd></div><div><dt>Addresses</dt><dd>{campaign.address_leads}</dd></div><div><dt>Contacts</dt><dd>{campaign.contact_completed_leads}</dd></div><div><dt>Contracts</dt><dd>{campaign.contracted_leads}</dd></div></dl><ArrowRight size={15} /></Link>) : <p className={styles.empty}>No source economics exceptions appear in this period.</p>}</div>
     </section>
 
     <section className={styles.section}>
       <div className={styles.sectionHeading}><div><span>Attribution ledger</span><h2>Campaign and source performance</h2></div><strong>{marketing.campaigns.length} rows</strong></div>
-      <div className={styles.tableWrap}><table><thead><tr><th>Source / campaign</th><th>Views</th><th>Starts</th><th>Submits</th><th>Leads</th><th>Contracts</th><th>Spend</th><th>Revenue</th><th>CPL</th><th>ROAS</th><th>Records</th></tr></thead><tbody>{marketing.campaigns.length ? marketing.campaigns.map((campaign) => <tr key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`}><td><strong>{labelize(campaign.source)}</strong><small>{[campaign.medium, campaign.campaign].filter((value) => !["unknown", "uncategorized"].includes(value)).map(labelize).join(" / ") || "No campaign"}</small></td><td>{campaign.page_views}</td><td>{campaign.form_starts}</td><td>{campaign.form_submits}</td><td>{campaign.leads_created}</td><td>{campaign.contracted_leads}</td><td>{money(campaign.marketing_spend_cents)}</td><td>{money(campaign.collected_revenue_cents)}</td><td>{money(campaign.cost_per_lead_cents)}</td><td>{roas(campaign.return_on_ad_spend_basis_points)}</td><td><Link href={`/os/leads?q=${encodeURIComponent(campaign.source)}`}>View leads</Link></td></tr>) : <tr><td colSpan={11}>No campaign data exists in this reporting period.</td></tr>}</tbody></table></div>
+      <div className={styles.tableWrap}><table><thead><tr><th>Source / campaign</th><th>Views</th><th>Starts</th><th>Address leads</th><th>Contact leads</th><th>Address CPL</th><th>Contact CPL</th><th>Address → contact</th><th>CRM records</th><th>Contracts</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Records</th></tr></thead><tbody>{marketing.campaigns.length ? marketing.campaigns.map((campaign) => <tr key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`}><td><strong>{labelize(campaign.source)}</strong><small>{campaignDetail(campaign.medium, campaign.campaign)}</small></td><td>{campaign.page_views}</td><td>{campaign.form_starts}</td><td>{campaign.address_leads}</td><td>{campaign.contact_completed_leads}</td><td>{money(campaign.cost_per_address_lead_cents)}</td><td>{money(campaign.cost_per_contact_completed_lead_cents)}</td><td>{percentage(campaign.address_to_contact_rate_basis_points)}</td><td>{campaign.leads_created}</td><td>{campaign.contracted_leads}</td><td>{money(campaign.marketing_spend_cents)}</td><td>{money(campaign.collected_revenue_cents)}</td><td>{roas(campaign.return_on_ad_spend_basis_points)}</td><td><Link href={`/os/leads?q=${encodeURIComponent(campaign.source)}`}>View leads</Link></td></tr>) : <tr><td colSpan={14}>No campaign data exists in this reporting period.</td></tr>}</tbody></table></div>
     </section>
 
     <section className={styles.section}>
@@ -270,7 +283,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
         <article>
           <div><strong>Meta match-key coverage</strong><StatusBadge tone="neutral">Last {measurement.meta_match_coverage_window_days} days</StatusBadge></div>
           <div className={marketingStyles.coverageRows}>
-            {measurement.meta_match_coverage.map((coverage) => <div key={coverage.event_name}><strong>{coverage.event_name === "all" ? "All web events" : labelize(coverage.event_name)}</strong><dl><div><dt>Browser ID</dt><dd>{percentage(coverage.fbp_basis_points)}</dd></div><div><dt>Click ID</dt><dd>{percentage(coverage.fbc_basis_points)}</dd></div><div><dt>Client IP</dt><dd>{percentage(coverage.client_ip_basis_points)}</dd></div><div><dt>User agent</dt><dd>{percentage(coverage.client_user_agent_basis_points)}</dd></div></dl><small>{coverage.total} event{coverage.total === 1 ? "" : "s"}</small></div>)}
+            {measurement.meta_match_coverage.map((coverage) => <div key={coverage.event_name}><strong>{metaEventLabel(coverage.event_name)}</strong><dl><div><dt>Browser ID</dt><dd>{percentage(coverage.fbp_basis_points)}</dd></div><div><dt>Click ID</dt><dd>{percentage(coverage.fbc_basis_points)}</dd></div><div><dt>Client IP</dt><dd>{percentage(coverage.client_ip_basis_points)}</dd></div><div><dt>User agent</dt><dd>{percentage(coverage.client_user_agent_basis_points)}</dd></div></dl><small>{coverage.total} event{coverage.total === 1 ? "" : "s"}</small></div>)}
           </div>
         </article>
       </div>

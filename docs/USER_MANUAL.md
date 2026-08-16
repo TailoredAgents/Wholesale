@@ -683,6 +683,7 @@ The normal deal path and its completion evidence are:
 
 | Stage | Primary workspace | The stage is complete when |
 | --- | --- | --- |
+| Address-only website capture | Public form, Leads > Address Only | A complete property address and timeline exist as a cold record awaiting research and a manual DNC check; this is not yet a contactable seller inquiry |
 | Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
 | Warm handoff | Prospecting, Lead Queue | The Lead Manager accepted a sufficiently documented handoff |
 | Qualification | Lead Queue, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
@@ -702,37 +703,64 @@ evidence in this table exists.
 The seller starts from **See My Selling Options** on the public site, then requests a review of the
 selling options that may fit the property and situation.
 
-The form collects:
+The visible Property step collects:
 
 - One property-address search and the required selling timeline first. Selecting a suggested
   property fills city, state, and ZIP automatically; **Enter address manually** remains available
   when a suggestion is missing, incorrect, or temporarily unavailable. City, state, and ZIP also
   appear as the seller engages the address control so browser-saved addresses can fill the complete
   address instead of only the street.
+
+When those values pass validation and the seller selects **Continue**, Stonegate creates or reuses a
+cold address-only CRM lead and records Meta `Lead`. It appears under **Leads > Address Only** with
+**Skip trace needed**, even if the visitor leaves before supplying contact details. This stage has no
+seller name, phone, email, or permission to contact. It does not start property research, AI
+preparation, a conversation, speed-to-lead work, staff notifications, lead-alert texts, or automated
+seller outreach.
+
+Treat an address-only record as a cold research opportunity, not as a warm inbound seller. Research
+or skip trace the owner, then check DNC status manually before any cold call or text. Stonegate does
+not perform an automatic DNC check for this record.
+
+The visible Contact step collects:
+
 - Name, required phone number, and optional email. Stonegate follows up by phone by default.
 - A passive disclosure explaining that submitting the form authorizes Stonegate to follow up by
   phone or email about the property inquiry and possible selling options.
 - A separate optional, unchecked SMS consent box for recurring text messages about the property
   inquiry, appointments, and possible selling options. SMS consent is not saved in browser drafts.
-- Optional post-submission details such as property type, condition, occupancy, seller situation,
-  asking price, mortgage balance, repairs, and comments.
 - Marketing attribution and privacy-safe conversion evidence.
 
-After submission:
+When the seller selects **Request My Options Review**:
 
 1. The API validates the request.
-2. Duplicate matching checks contact and property evidence.
-3. The system creates or reuses the seller, property, lead, and conversation.
-4. Consent and attribution are retained even when the submission matches an existing lead.
-5. A speed-to-lead task is created.
-6. Each active staff member with **Text new leads** enabled is queued one SMS alert.
-7. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
+2. The system promotes the same address-only record to a completed seller inquiry; it does not make
+   a second lead for the same property journey.
+3. Duplicate matching checks contact and property evidence from other completed journeys.
+4. The system creates or reuses the real seller identity, contact methods, property, lead, and
+   conversation.
+5. Consent and attribution are retained even when the submission matches an existing lead.
+6. Property research, AI preparation, and speed-to-lead work start.
+7. Each active staff member with **Text new leads** enabled is queued one SMS alert.
+8. Staff sees the completed lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard
+   queues.
+9. The browser and server send one deduplicated Meta `Contact` event.
+
+The confirmation offers an unnumbered optional section for property type, condition, occupancy,
+seller situation, asking price, mortgage balance, repairs, and comments. A 24-hour one-purpose token
+adds those answers to the same lead. This optional save creates internal evidence but does not send
+another Meta event.
+
+One intake-attempt ID follows the browser's property journey. Retrying Step 1 returns or updates the
+same address-only record; retrying the completed contact submission returns the same completed lead.
+If concurrent requests arrive out of order, the completed contact state wins and a late address
+capture cannot downgrade it.
 
 Address suggestions use the existing RealEstateAPI configuration and are intentionally fail-open.
 Autocomplete failure never disables **Continue** or submission; the seller can enter the complete
 address manually, and Stonegate stores the actual state supplied or selected.
 
-The staff alert in step 6 is an internal operational message to an employee who separately enabled
+The staff alert in step 7 is an internal operational message to an employee who separately enabled
 that preference. It is unaffected by the website's seller-facing SMS choice and does not create
 seller SMS consent.
 
@@ -1383,8 +1411,8 @@ until the device is returned.
 
 ### Leads
 
-Use **Leads** to work from one seller database. Its local views are **Lead Queue**, **All
-Leads**, **Pipeline**, and **Underwriting**.
+Use **Leads** to work from one seller database. Its local views include **Lead Queue**, **All
+Leads**, **Address Only**, **Pipeline**, and **Underwriting**.
 
 1. Select **New Lead** for a warm call, referral, networking contact, or other staff-entered seller.
 2. Enter the seller name and at least one phone number or email.
@@ -1404,8 +1432,16 @@ Leads**, **Pipeline**, and **Underwriting**.
 When you open **Full record** from a filtered list or Pipeline view, Stonegate remembers that exact
 view. Select **Back** in the seller record to return to the same filters and selected seller.
 
-Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
-Prospecting as prospects until the seller expresses interest.
+Use **New Lead** only for a genuine CRM opportunity. Cold list records normally belong in Campaigns
+and Prospecting as prospects until the seller expresses interest. **Address Only** is the deliberate
+exception for valid Property steps abandoned before the website Contact step. Those records are
+cold, show **Skip trace needed**, have no Inbox conversation, and are excluded from qualification,
+no-follow-up, urgency, and other operational queues until the visitor completes Contact.
+
+For an address-only record, review the property and source evidence, research or skip trace the
+owner, and manually check DNC status before outreach. Do not assume the website visitor was the owner
+or granted permission to contact. If the visitor later completes the same form journey, Stonegate
+promotes that record automatically and normal seller workflows begin.
 
 Closing a lead cancels its open tasks, scheduled appointments, automated follow-up, calling and
 handoff work, every pending approval tied to the lead, and unused offer authority. It closes the
@@ -2143,9 +2179,11 @@ Use 30-day, 90-day, or all-time reporting periods.
 
 Review:
 
-- Page views, offer starts, form starts, submits, errors, and abandonment.
+- Page views, offer starts, form starts, Step 1 address leads, Step 2 contact-completed leads,
+  address-to-contact rate, errors, and abandonment.
 - Leads, contracts, and collected revenue by source and campaign.
-- Marketing spend, cost per lead, cost per contract, and return on ad spend.
+- Marketing spend, cost per address lead, cost per contact-completed lead, cost per contract, and
+  return on ad spend.
 - Spend without leads.
 - Leads without contracts.
 - Advertising measurement mode and Google/Meta readiness.
@@ -2163,6 +2201,11 @@ Open the attributed lead when a record needs review. `Credentials pending` means
 queue is working but Stonegate has not activated that provider. `Blocked` means configuration is
 missing, `Retry` means another attempt is scheduled, and `Exhausted` requires an owner to review
 the provider error before retrying operationally.
+
+For Meta website measurement, `Lead` is the valid address-and-timeline capture and `Contact` is the
+completed name/required-phone/optional-email submission. The two events have separate deterministic
+IDs, with browser and server copies deduplicated inside each event. Optional post-confirmation
+details do not create another Meta event.
 
 Drill into source records before changing spend. The Marketing Copilot may recommend tests but
 cannot change budgets, audiences, ads, or campaigns. Preparing or delivering outcomes never edits
@@ -2190,9 +2233,10 @@ change. It does not require another provider account.
 10. When the report says **Ready for human review**, apply the written rule. Select **Complete
     test** and record what Stonegate decided and why.
 
-Assignment is anonymous until a seller submits. At submission, the experiment follows the lead
-through the CRM. The system prevents one browser session from changing versions and never
-automatically declares or publishes a winner.
+Assignment is anonymous until the Property step creates an address lead. At that capture, the
+experiment follows the same record through Contact completion and the rest of the CRM. The system
+prevents one browser session from changing versions and never automatically declares or publishes a
+winner.
 
 ### Publishing Public Proof
 
@@ -2380,14 +2424,16 @@ operating exception.
 ### Seller Form Returns A Validation Error
 
 - Review required fields and field-level messages.
-- Confirm contact permission is checked.
 - Use a valid phone and complete property address.
+- The phone/email authorization is passive text on the Contact step; there is no required contact
+  permission checkbox. The separate SMS choice is optional.
 - Retry after correcting the highlighted field.
 - A `201 Created` API log means the lead was accepted even if the browser later showed a UI error.
 
 ### Lead Was Submitted But Is Not Visible
 
-- Search **All Leads** by phone, email, seller, and property.
+- Search **All Leads** by phone, email, seller, and property. If only Property was completed, open
+  **Address Only** and search by property address; there will be no seller name, phone, or email yet.
 - Check whether duplicate matching reused an existing active lead.
 - Confirm your role can view the lead.
 - If OS requests return `401`, fix Clerk authorization before submitting another lead.

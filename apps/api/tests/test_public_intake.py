@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +15,7 @@ from app.integrations.marketing_conversions import build_meta_payload
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
+    AiOrchestratorEvent,
     AttributionTouch,
     AuditEvent,
     ConsentRecord,
@@ -25,6 +28,7 @@ from app.models.foundation import (
     LeadManagementCase,
     OfflineConversionExport,
     Property,
+    PropertyResearchRun,
     StaffLeadAlert,
     Task,
     User,
@@ -80,6 +84,642 @@ def seed_org(db_session: Session) -> None:
         admin_email="owner@example.com",
         admin_name="Owner",
     )
+
+
+def address_capture_payload(*, attempt_id: str | None = None) -> dict[str, object]:
+    resolved_attempt_id = attempt_id or str(uuid.uuid4())
+    return {
+        "intake_attempt_id": resolved_attempt_id,
+        "property_address": "55 Auburn Ave",
+        "property_city": "Atlanta",
+        "property_state": "ga",
+        "property_postal_code": "30303",
+        "desired_timeline": "within_30_days",
+        "conversion_session_id": "session-intake-123",
+        "device_category": "mobile",
+        "attribution": {
+            "landing_page": "/get-a-cash-offer",
+            "utm_source": "facebook_ads",
+            "utm_medium": "paid_social",
+            "utm_campaign": "georgia-seller-options",
+            "fbclid": "test-fbclid",
+        },
+        "meta_browser_event": {
+            "event_id": f"stonegate-lead-{resolved_attempt_id}",
+            "event_source_url": "https://www.stonegatehb.com/get-a-cash-offer",
+            "fbc": "fb.1.1785875287.test-fbclid",
+            "fbp": "fb.1.1785875287.123456789",
+        },
+    }
+
+
+def completed_website_payload(attempt_id: str) -> dict[str, object]:
+    payload = public_payload()
+    payload["intake_attempt_id"] = attempt_id
+    payload["meta_browser_event"] = {
+        "event_id": f"stonegate-contact-{attempt_id}",
+        "event_source_url": "https://www.stonegatehb.com/get-a-cash-offer",
+        "fbc": "fb.1.1785875287.test-fbclid",
+        "fbp": "fb.1.1785875287.123456789",
+    }
+    return payload
+
+
+def test_address_capture_creates_cold_crm_lead_without_contact_automation(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+
+    response = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(),
+        headers={"User-Agent": "pytest"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created"] is True
+    assert response.json()["completion_status"] == "address_only"
+    lead = db_session.scalar(select(Lead))
+    contact = db_session.scalar(select(Contact))
+    property_record = db_session.scalar(select(Property))
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert lead is not None
+    assert contact is not None
+    assert property_record is not None
+    assert submission is not None
+    assert str(lead.id) == response.json()["lead_id"]
+    assert contact.legal_name == "Contact pending (website form)"
+    assert lead.source == "facebook_ads"
+    assert lead.stage_key == "new"
+    assert lead.lead_temperature == "cold"
+    assert lead.desired_timeline == "within_30_days"
+    assert lead.qualification_context == {
+        "website_intake_status": "address_only",
+        "contact_details_status": "missing",
+        "prospecting_status": "skip_trace_needed",
+    }
+    assert property_record.state == "GA"
+    assert submission.completion_status == "address_only"
+    assert submission.completed_at is None
+    assert submission.enrichment_token_hash is None
+    assert submission.raw_payload["_intake_status"] == "address_only"
+    assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(PropertyResearchRun)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(AiOrchestratorEvent)) or 0) == 0
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    assert export.event_name == "Lead"
+    assert export.event_key == f"stonegate-lead-{submission.intake_attempt_id}"
+    assert export.payload_snapshot["email_hashes"] == []
+    assert export.payload_snapshot["phone_hashes"] == []
+    event = db_session.scalar(select(ConversionEvent))
+    assert event is not None and event.event_type == "address_capture"
+    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
+
+
+def test_address_capture_is_idempotent_and_does_not_merge_separate_attempts(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    first = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    retry_payload = address_capture_payload(attempt_id=attempt_id)
+    retry_payload["desired_timeline"] = "exploring"
+    retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=retry_payload,
+    )
+    separate = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(),
+    )
+
+    assert first.status_code == retry.status_code == separate.status_code == 201
+    assert retry.json()["created"] is False
+    assert retry.json()["lead_id"] == first.json()["lead_id"]
+    assert separate.json()["lead_id"] != first.json()["lead_id"]
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(OfflineConversionExport)) or 0) == 2
+    )
+    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
+    first_lead = db_session.get(Lead, uuid.UUID(first.json()["lead_id"]))
+    assert first_lead is not None and first_lead.desired_timeline == "exploring"
+
+
+@pytest.mark.parametrize("invalid_event", ["missing", "wrong"])
+def test_address_capture_requires_its_deterministic_meta_lead_event(
+    db_session: Session,
+    api_db_override: None,
+    invalid_event: str,
+) -> None:
+    seed_org(db_session)
+    payload = address_capture_payload()
+    if invalid_event == "missing":
+        payload.pop("meta_browser_event")
+    else:
+        payload["meta_browser_event"]["event_id"] = "stonegate-lead-wrong-attempt"
+
+    response = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+@pytest.mark.parametrize("invalid_event", ["missing", "wrong"])
+def test_attempt_aware_contact_step_requires_its_deterministic_meta_contact_event(
+    db_session: Session,
+    api_db_override: None,
+    invalid_event: str,
+) -> None:
+    seed_org(db_session)
+    attempt_id = str(uuid.uuid4())
+    payload = completed_website_payload(attempt_id)
+    if invalid_event == "missing":
+        payload.pop("meta_browser_event")
+    else:
+        payload["meta_browser_event"]["event_id"] = "stonegate-contact-wrong-attempt"
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+def test_completed_contact_step_promotes_same_address_capture_exactly_once(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    payload = completed_website_payload(attempt_id)
+
+    completed = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert completed.status_code == 201, completed.text
+    result = completed.json()
+    assert result["lead_id"] == capture.json()["lead_id"]
+    assert result["contact_id"] == capture.json()["contact_id"]
+    assert result["property_id"] == capture.json()["property_id"]
+    assert result["matched_existing_lead"] is False
+    assert result["meta_pixel_event_name"] == "Contact"
+    lead = db_session.get(Lead, uuid.UUID(result["lead_id"]))
+    contact = db_session.get(Contact, uuid.UUID(result["contact_id"]))
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert lead is not None and contact is not None and submission is not None
+    assert contact.legal_name == "Sam Seller"
+    assert lead.source == "google_ppc"
+    assert lead.lead_temperature is None
+    assert lead.qualification_context["website_intake_status"] == "completed"
+    assert lead.qualification_context["contact_details_status"] == "provided"
+    assert "prospecting_status" not in lead.qualification_context
+    assert submission.completion_status == "completed"
+    assert submission.completed_at is not None
+    assert submission.raw_payload["_promoted_address_capture"] is True
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(PropertyResearchRun)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
+    assert {event.event_type for event in db_session.scalars(select(ConversionEvent)).all()} == {
+        "address_capture",
+        "contact_complete",
+    }
+    exports = db_session.scalars(
+        select(OfflineConversionExport).order_by(OfflineConversionExport.event_name)
+    ).all()
+    assert {(export.event_name, export.event_key) for export in exports} == {
+        ("Lead", f"stonegate-lead-{attempt_id}"),
+        ("Contact", f"stonegate-contact-{attempt_id}"),
+    }
+
+    counts_before_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            LeadFormSubmission,
+            ContactMethod,
+            ConsentRecord,
+            LeadManagementCase,
+            Task,
+            Conversation,
+            PropertyResearchRun,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+        )
+    }
+    retry = client.post("/api/v1/public/seller-leads", json=payload)
+    counts_after_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            LeadFormSubmission,
+            ContactMethod,
+            ConsentRecord,
+            LeadManagementCase,
+            Task,
+            Conversation,
+            PropertyResearchRun,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+        )
+    }
+    assert retry.status_code == 201, retry.text
+    assert retry.json()["lead_id"] == result["lead_id"]
+    assert retry.json()["duplicate_status"] == "already_completed"
+    assert counts_after_retry == counts_before_retry
+
+    late_capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert late_capture.status_code == 201
+    assert late_capture.json()["completion_status"] == "completed"
+    assert late_capture.json()["lead_id"] == result["lead_id"]
+    counts_after_late_capture = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            LeadFormSubmission,
+            ContactMethod,
+            ConsentRecord,
+            LeadManagementCase,
+            Task,
+            Conversation,
+            PropertyResearchRun,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+        )
+    }
+    assert counts_after_late_capture == counts_before_retry
+
+
+def test_contact_step_arriving_first_creates_both_meta_events_and_late_capture_is_noop(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    payload = completed_website_payload(attempt_id)
+
+    completed = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert completed.status_code == 201, completed.text
+    result = completed.json()
+    assert result["meta_pixel_event_name"] == "Contact"
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
+    exports = db_session.scalars(select(OfflineConversionExport)).all()
+    assert {(export.event_name, export.event_key) for export in exports} == {
+        ("Lead", f"stonegate-lead-{attempt_id}"),
+        ("Contact", f"stonegate-contact-{attempt_id}"),
+    }
+    counts_before_late_capture = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            LeadFormSubmission,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+            ActivityEvent,
+            AuditEvent,
+            Task,
+            StaffLeadAlert,
+        )
+    }
+
+    late_capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+
+    assert late_capture.status_code == 201, late_capture.text
+    assert late_capture.json()["lead_id"] == result["lead_id"]
+    assert late_capture.json()["completion_status"] == "completed"
+    counts_after_late_capture = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            LeadFormSubmission,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+            ActivityEvent,
+            AuditEvent,
+            Task,
+            StaffLeadAlert,
+        )
+    }
+    assert counts_after_late_capture == counts_before_late_capture
+
+
+def test_completed_retry_repairs_missing_contact_export_without_replaying_operations(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    payload = completed_website_payload(attempt_id)
+    completed = client.post("/api/v1/public/seller-leads", json=payload)
+    assert completed.status_code == 201, completed.text
+    contact_export = db_session.scalar(
+        select(OfflineConversionExport).where(OfflineConversionExport.event_name == "Contact")
+    )
+    assert contact_export is not None
+    db_session.delete(contact_export)
+    db_session.commit()
+    operational_models = (
+        Lead,
+        LeadFormSubmission,
+        ContactMethod,
+        ConsentRecord,
+        LeadManagementCase,
+        Task,
+        Conversation,
+        PropertyResearchRun,
+        AttributionTouch,
+        ConversionEvent,
+        ActivityEvent,
+        AuditEvent,
+        StaffLeadAlert,
+    )
+    counts_before_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in operational_models
+    }
+
+    retry = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert retry.status_code == 201, retry.text
+    assert retry.json()["duplicate_status"] == "already_completed"
+    assert retry.json()["meta_pixel_event_name"] == "Contact"
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(OfflineConversionExport)) or 0) == 2
+    )
+    counts_after_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in operational_models
+    }
+    assert counts_after_retry == counts_before_retry
+
+
+def test_address_capture_rejects_a_meta_event_identity_collision(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    payload = address_capture_payload(attempt_id=attempt_id)
+    created = client.post("/api/v1/public/seller-leads/address-capture", json=payload)
+    assert created.status_code == 201, created.text
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    export.event_name = "Contact"
+    db_session.commit()
+
+    with pytest.raises(RuntimeError, match="Address-lead conversion identity is already in use"):
+        client.post("/api/v1/public/seller-leads/address-capture", json=payload)
+
+
+def test_address_capture_promotion_reuses_known_contact_without_orphaning_placeholder(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    partial_lead = db_session.get(Lead, uuid.UUID(capture.json()["lead_id"]))
+    assert partial_lead is not None
+    known_contact = Contact(
+        organization_id=partial_lead.organization_id,
+        legal_name="Known Seller",
+        preferred_name=None,
+        contact_type="seller",
+        assigned_user_id=None,
+    )
+    db_session.add(known_contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=partial_lead.organization_id,
+            contact_id=known_contact.id,
+            method_type="email",
+            value="sam@example.com",
+            normalized_value="sam@example.com",
+            is_primary=True,
+        )
+    )
+    db_session.commit()
+
+    payload = completed_website_payload(attempt_id)
+    completed = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["lead_id"] == capture.json()["lead_id"]
+    assert completed.json()["contact_id"] == str(known_contact.id)
+    assert db_session.get(Contact, uuid.UUID(capture.json()["contact_id"])) is None
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+
+
+def test_address_capture_promotion_merges_into_existing_active_person_property_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    existing_response = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert existing_response.status_code == 201, existing_response.text
+    existing = existing_response.json()
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    placeholder_lead_id = uuid.UUID(capture.json()["lead_id"])
+    placeholder_contact_id = uuid.UUID(capture.json()["contact_id"])
+    assert placeholder_lead_id != uuid.UUID(existing["lead_id"])
+    automation_models = (
+        Task,
+        AiOrchestratorEvent,
+        StaffLeadAlert,
+        Conversation,
+        LeadManagementCase,
+        PropertyResearchRun,
+    )
+    automation_before_completion = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in automation_models
+    }
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    result = completed.json()
+    assert result["lead_id"] == existing["lead_id"]
+    assert result["contact_id"] == existing["contact_id"]
+    assert result["property_id"] == existing["property_id"]
+    assert result["duplicate_status"] == "matched_existing_lead"
+    assert result["matched_existing_lead"] is True
+    assert result["meta_pixel_event_name"] == "Contact"
+    assert db_session.get(Lead, placeholder_lead_id) is None
+    assert db_session.get(Contact, placeholder_contact_id) is None
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
+    automation_after_completion = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in automation_models
+    }
+    assert automation_after_completion == automation_before_completion
+
+    submission = db_session.scalar(
+        select(LeadFormSubmission).where(
+            LeadFormSubmission.intake_attempt_id == uuid.UUID(attempt_id)
+        )
+    )
+    assert submission is not None
+    assert str(submission.lead_id) == existing["lead_id"]
+    assert submission.completion_status == "completed"
+    assert submission.raw_payload["_matched_existing_lead"] is True
+    assert submission.raw_payload["_promoted_address_capture"] is True
+    address_event = db_session.scalar(
+        select(ConversionEvent).where(ConversionEvent.event_type == "address_capture")
+    )
+    assert address_event is not None
+    assert str(address_event.lead_id) == existing["lead_id"]
+    address_export = db_session.scalar(
+        select(OfflineConversionExport).where(
+            OfflineConversionExport.event_key == f"stonegate-lead-{attempt_id}"
+        )
+    )
+    assert address_export is not None
+    assert str(address_export.lead_id) == existing["lead_id"]
+    expected_external_id = hashlib.sha256(
+        f"{address_export.organization_id}:{existing['lead_id']}".encode()
+    ).hexdigest()
+    assert address_export.payload_snapshot["external_id_hash"] == expected_external_id
+    contact_export = db_session.scalar(
+        select(OfflineConversionExport).where(
+            OfflineConversionExport.event_key == f"stonegate-contact-{attempt_id}"
+        )
+    )
+    assert contact_export is not None
+    assert str(contact_export.lead_id) == existing["lead_id"]
+    assert {touch.lead_id for touch in db_session.scalars(select(AttributionTouch)).all()} == {
+        uuid.UUID(existing["lead_id"])
+    }
+
+    counts_before_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            Contact,
+            LeadFormSubmission,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+            ActivityEvent,
+            AuditEvent,
+            *automation_models,
+        )
+    }
+    retry = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    assert retry.status_code == 201, retry.text
+    assert retry.json()["duplicate_status"] == "already_completed"
+    assert retry.json()["matched_existing_lead"] is True
+    assert retry.json()["lead_id"] == existing["lead_id"]
+    counts_after_retry = {
+        model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
+        for model in (
+            Lead,
+            Contact,
+            LeadFormSubmission,
+            AttributionTouch,
+            ConversionEvent,
+            OfflineConversionExport,
+            ActivityEvent,
+            AuditEvent,
+            *automation_models,
+        )
+    }
+    assert counts_after_retry == counts_before_retry
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("property_state", "Georgia"),
+        ("property_state", "G1"),
+        ("property_postal_code", "3030"),
+        ("property_postal_code", "abcde"),
+    ],
+)
+def test_address_capture_rejects_invalid_address_components(
+    db_session: Session,
+    api_db_override: None,
+    field: str,
+    value: str,
+) -> None:
+    seed_org(db_session)
+    payload = address_capture_payload()
+    payload[field] = value
+
+    response = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
 def test_public_seller_intake_creates_lead_consent_and_attribution(
@@ -702,6 +1342,7 @@ def test_public_page_view_queues_deduplicated_meta_view_content(
     assert export.payload_snapshot["click_captured_at"] == "2026-08-04T21:48:07+00:00"
     conversion_event = db_session.scalar(select(ConversionEvent))
     assert conversion_event is not None
+    assert conversion_event.source == "meta_ads"
     assert conversion_event.fbclid_captured_at is not None
 
 
@@ -732,13 +1373,14 @@ def test_public_seller_intake_queues_hashed_meta_lead(
     )
 
     assert response.status_code == 201
+    assert response.json()["meta_pixel_event_name"] == "Lead"
     export = db_session.scalar(select(OfflineConversionExport))
     assert export is not None
     assert export.event_name == "Lead"
     assert export.event_key == "meta-lead-event-123"
     assert export.lead_id is not None
     assert export.payload_snapshot["email_hashes"]
-    assert export.payload_snapshot["phone_hashes"]
+    assert export.payload_snapshot["phone_hashes"] == []
     assert export.payload_snapshot["external_id_hash"]
     assert "sam@example.com" not in str(export.payload_snapshot)
     assert "4045551212" not in str(export.payload_snapshot)
@@ -1046,7 +1688,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
+    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
 
 
