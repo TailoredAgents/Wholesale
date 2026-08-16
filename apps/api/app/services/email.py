@@ -6,6 +6,7 @@ from email.utils import getaddresses
 from html import escape
 from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import jwt
@@ -94,11 +95,61 @@ class _HtmlTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self._link_stack: list[tuple[str | None, int]] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag.lower() != "a":
+            return
+        href = next(
+            (
+                safe_link
+                for key, value in attrs
+                if key.lower() == "href" and value and (safe_link := _safe_email_link(value))
+            ),
+            None,
+        )
+        self._link_stack.append((href, len(self.parts)))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or not self._link_stack:
+            return
+        href, start_index = self._link_stack.pop()
+        if not href:
+            return
+        label = " ".join(self.parts[start_index:]).strip()
+        if not any(existing_href == href for _, existing_href in self.links):
+            self.links.append((label, href))
 
     def handle_data(self, data: str) -> None:
         text = data.strip()
         if text:
             self.parts.append(text)
+
+
+def _safe_email_link(value: str) -> str | None:
+    candidate = value.strip()
+    if not candidate or len(candidate) > 8192 or "\\" in candidate:
+        return None
+    if any(character.isspace() or ord(character) < 32 for character in candidate):
+        return None
+    try:
+        parsed = urlsplit(candidate)
+        _ = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        return None
+    return candidate
 
 
 def _fernet(settings: Settings) -> Fernet:
@@ -1626,8 +1677,6 @@ def message_body(message: dict[str, Any]) -> str:
             None,
         )
     )
-    if plain:
-        return plain.strip()
     html = decode_part_data(
         next(
             (part for part in walk_message_parts(payload) if part.get("mimeType") == "text/html"),
@@ -1635,10 +1684,18 @@ def message_body(message: dict[str, Any]) -> str:
         )
     )
     if not html:
-        return ""
+        return plain.strip()
     extractor = _HtmlTextExtractor()
     extractor.feed(html)
-    return "\n".join(extractor.parts)
+    body = plain.strip() or "\n".join(extractor.parts).strip()
+    missing_links = [
+        f"{label}: {href}" if label and label != href else href
+        for label, href in extractor.links
+        if href not in body
+    ]
+    if missing_links:
+        body = "\n".join(part for part in (body, *missing_links) if part).strip()
+    return body
 
 
 def decode_part_data(part: dict[str, Any] | None) -> str:

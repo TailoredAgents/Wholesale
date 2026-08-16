@@ -687,6 +687,24 @@
   white-space: pre-wrap;
 }
 
+.message p a {
+  color: var(--brand-strong);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.message p a:hover {
+  color: var(--brand);
+}
+
+.message p a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .message small {
   color: var(--muted);
   font-size: 10px;

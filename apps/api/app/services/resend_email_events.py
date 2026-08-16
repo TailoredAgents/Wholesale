@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
@@ -32,6 +33,7 @@ from app.models.foundation import (
 )
 from app.services.communication_participants import record_email_participants
 from app.services.document_storage import store_content
+from app.services.email_identity import fallback_email_contact_name, general_email_display_name
 from app.services.inbox import create_general_conversation, update_conversation_activity
 
 LIFECYCLE_STATUSES = {
@@ -75,11 +77,61 @@ class _HtmlTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self._link_stack: list[tuple[str | None, int]] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag.lower() != "a":
+            return
+        href = next(
+            (
+                safe_link
+                for key, value in attrs
+                if key.lower() == "href" and value and (safe_link := _safe_email_link(value))
+            ),
+            None,
+        )
+        self._link_stack.append((href, len(self.parts)))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or not self._link_stack:
+            return
+        href, start_index = self._link_stack.pop()
+        if not href:
+            return
+        label = " ".join(self.parts[start_index:]).strip()
+        if not any(existing_href == href for _, existing_href in self.links):
+            self.links.append((label, href))
 
     def handle_data(self, data: str) -> None:
         normalized = data.strip()
         if normalized:
             self.parts.append(normalized)
+
+
+def _safe_email_link(value: str) -> str | None:
+    candidate = value.strip()
+    if not candidate or len(candidate) > 8192 or "\\" in candidate:
+        return None
+    if any(character.isspace() or ord(character) < 32 for character in candidate):
+        return None
+    try:
+        parsed = urlsplit(candidate)
+        _ = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        return None
+    return candidate
 
 
 def ingest_resend_event(
@@ -1084,11 +1136,14 @@ def ensure_inbound_contact(
         ),
         "",
     )
-    fallback_name = sender.split("@", 1)[0].replace(".", " ").replace("_", " ").title()
+    fallback_name = fallback_email_contact_name(sender)
+    resolved_name = (
+        general_email_display_name(display_name, sender) if display_name else fallback_name
+    )
     contact = Contact(
         organization_id=organization_id,
-        legal_name=(display_name or fallback_name or sender)[:255],
-        preferred_name=(display_name or fallback_name)[:255] or None,
+        legal_name=(resolved_name or sender)[:255],
+        preferred_name=resolved_name[:255] or None,
         contact_type="business_contact",
         assigned_user_id=assigned_user_id,
     )
@@ -1358,15 +1413,22 @@ def string_list(value: object) -> list[str]:
 
 def received_message_body(message: dict[str, Any]) -> str:
     text = optional_string(message.get("text")).strip()
-    if text:
-        return text
     html = optional_string(message.get("html"))
-    if html:
-        parser = _HtmlTextExtractor()
-        parser.feed(html)
-        extracted = "\n".join(parser.parts).strip()
-        if extracted:
-            return extracted
+    if not html:
+        return text or "(Email contained no readable message body.)"
+
+    parser = _HtmlTextExtractor()
+    parser.feed(html)
+    body = text or "\n".join(parser.parts).strip()
+    missing_links = [
+        f"{label}: {href}" if label and label != href else href
+        for label, href in parser.links
+        if href not in body
+    ]
+    if missing_links:
+        body = "\n".join(part for part in (body, *missing_links) if part).strip()
+    if body:
+        return body
     return "(Email contained no readable message body.)"
 
 

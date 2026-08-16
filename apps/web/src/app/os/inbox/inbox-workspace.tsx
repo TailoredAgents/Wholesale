@@ -45,6 +45,7 @@ import {
   MessageAttachment,
   type MessageAttachmentData,
 } from "./message-attachment";
+import { LinkedMessageText } from "./linked-message-text";
 import {
   GeneralEmailActions,
   type LinkableLead,
@@ -1823,7 +1824,7 @@ export function InboxWorkspace({
               <input
                 aria-label="Search conversations"
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search seller or property"
+                placeholder="Search contact, subject, or property"
                 type="search"
                 value={search}
               />
@@ -1985,7 +1986,11 @@ export function InboxWorkspace({
                         <time>{formatDateTime(item.occurred_at)}</time>
                       </div>
                       {item.subject ? <strong>{item.subject}</strong> : null}
-                      {item.body.trim() ? <p>{item.body}</p> : null}
+                      {item.body.trim() ? (
+                        <p>
+                          <LinkedMessageText text={item.body} />
+                        </p>
+                      ) : null}
                       {item.attachments.length > 0 ? (
                         <div className={styles.messageAttachments}>
                           {item.attachments.map((attachment) => (

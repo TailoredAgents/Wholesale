@@ -28,10 +28,57 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.email import (
     complete_google_authorization,
     create_google_authorization,
+    message_body,
     sync_email_account,
 )
+from app.services.email_identity import fallback_email_contact_name, general_email_display_name
 
 OWNER_EMAIL = "owner@example.com"
+
+
+def test_general_email_identity_replaces_provider_tokens_but_keeps_personal_names() -> None:
+    assert fallback_email_contact_name("yerihlagfvptasw@mail.upwork.com") == "Upwork"
+    assert (
+        general_email_display_name(
+            "Yerihlagfvptasw",
+            "yerihlagfvptasw@mail.upwork.com",
+        )
+        == "Upwork"
+    )
+    assert general_email_display_name("Austin", "austin@gmail.com") == "Austin"
+
+
+def test_gmail_message_body_preserves_safe_html_link_destination() -> None:
+    plain = "Finish setting up your account."
+    html = (
+        "<p>Finish setting up your account.</p>"
+        '<a href="https://www.upwork.com/verify?token=abc123">Verify email</a>'
+        '<a href="data:text/html,unsafe">Unsafe link</a>'
+    )
+    message = {
+        "payload": {
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {
+                        "data": base64.urlsafe_b64encode(plain.encode()).decode(),
+                    },
+                },
+                {
+                    "mimeType": "text/html",
+                    "body": {
+                        "data": base64.urlsafe_b64encode(html.encode()).decode(),
+                    },
+                },
+            ]
+        }
+    }
+
+    body = message_body(message)
+
+    assert "Finish setting up your account." in body
+    assert "Verify email: https://www.upwork.com/verify?token=abc123" in body
+    assert "data:text/html" not in body
 
 
 class FakeGoogleGmailClient(GoogleGmailClient):

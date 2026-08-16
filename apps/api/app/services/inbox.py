@@ -75,6 +75,7 @@ from app.services.communication_compliance import (
     evaluate_voice_eligibility,
 )
 from app.services.document_storage import read_content
+from app.services.email_identity import general_email_display_name
 from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.mailbox_notifications import (
     MAILBOX_NOTIFICATION_TYPES,
@@ -2222,13 +2223,26 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         )
     )
     metadata = conversation.conversation_metadata or {}
+    contact_display_name = contact.legal_name
+    if conversation.conversation_type == "general":
+        contact_email = db.scalar(
+            select(ContactMethod.normalized_value)
+            .where(
+                ContactMethod.organization_id == conversation.organization_id,
+                ContactMethod.contact_id == contact.id,
+                ContactMethod.method_type == "email",
+            )
+            .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+            .limit(1)
+        )
+        contact_display_name = general_email_display_name(contact.legal_name, contact_email)
     return ConversationRead(
         id=conversation.id,
         conversation_type=conversation.conversation_type,
         lead_id=conversation.lead_id,
         buyer_id=buyer_id,
         contact_id=conversation.contact_id,
-        seller_name=contact.legal_name,
+        seller_name=contact_display_name,
         property_address=(
             property_identity_label(
                 street_address=property_record.street_address,
@@ -2242,7 +2256,7 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
             else (
                 "Buyer relationship"
                 if conversation.conversation_type == "buyer"
-                else "General correspondence"
+                else str(metadata.get("initial_subject") or "General correspondence")
             )
         ),
         assigned_user_id=conversation.assigned_user_id,

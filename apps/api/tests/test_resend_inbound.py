@@ -22,6 +22,7 @@ from app.models.foundation import (
     CommunicationParticipant,
     CommunicationProviderEvent,
     CommunicationRecord,
+    Contact,
     ContactMethod,
     Conversation,
     EmailAttachment,
@@ -37,6 +38,7 @@ from app.services.resend_email_events import (
     finalize_resend_event_claim,
     process_next_resend_event,
     received_email_is_known,
+    received_message_body,
     record_resend_event_failure,
     recover_next_received_email,
 )
@@ -44,6 +46,23 @@ from app.services.resend_email_events import (
 OWNER_EMAIL = "owner@example.com"
 OWNER_HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
 WEBHOOK_SECRET = "whsec_dGVzdC1yZXNlbmQtd2ViaG9vay1zZWNyZXQ="
+
+
+def test_received_message_body_preserves_safe_html_link_destination() -> None:
+    body = received_message_body(
+        {
+            "text": "Finish setting up your account.",
+            "html": (
+                "<p>Finish setting up your account.</p>"
+                '<a href="https://www.upwork.com/verify?token=abc123">Verify email</a>'
+                '<a href="javascript:alert(1)">Unsafe link</a>'
+            ),
+        }
+    )
+
+    assert "Finish setting up your account." in body
+    assert "Verify email: https://www.upwork.com/verify?token=abc123" in body
+    assert "javascript:" not in body
 
 
 @pytest.fixture
@@ -468,7 +487,8 @@ def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
     assert alias_response.status_code == 201, alias_response.text
     message = inbound_message("new-correspondent-1")
     message["to"] = ["austin@stonegatehb.com"]
-    message["from"] = "New Partner <partner@example.net>"
+    message["from"] = "yerihlagfvptasw@mail.upwork.com"
+    message["subject"] = "Verify your Upwork email"
     message["headers"] = {}
     accepted = signed_webhook(
         client,
@@ -478,7 +498,7 @@ def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
             "created_at": datetime.now(UTC).isoformat(),
             "data": {
                 "email_id": "new-correspondent-1",
-                "from": "partner@example.net",
+                "from": "yerihlagfvptasw@mail.upwork.com",
                 "to": ["austin@stonegatehb.com"],
             },
         },
@@ -505,10 +525,13 @@ def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
     assert conversation.lead_id is None
     assert conversation.assigned_user_id == owner.id
     assert str(conversation.source_alias_id) == alias_response.json()["id"]
+    contact = db_session.get(Contact, conversation.contact_id)
+    assert contact is not None
+    assert contact.legal_name == "Upwork"
     contact_method = db_session.scalar(
         select(ContactMethod).where(
             ContactMethod.contact_id == conversation.contact_id,
-            ContactMethod.normalized_value == "partner@example.net",
+            ContactMethod.normalized_value == "yerihlagfvptasw@mail.upwork.com",
         )
     )
     assert contact_method is not None
@@ -519,6 +542,11 @@ def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
     )
     assert communication is not None
     assert communication.conversation_id == conversation.id
+    listed = client.get("/api/v1/inbox/conversations", headers=OWNER_HEADERS)
+    assert listed.status_code == 200
+    item = next(item for item in listed.json()["items"] if item["id"] == str(conversation.id))
+    assert item["seller_name"] == "Upwork"
+    assert item["property_address"] == "Verify your Upwork email"
 
 
 def test_restricted_alias_never_falls_back_to_unrelated_standard_thread(
