@@ -133,7 +133,7 @@ export function MessageAttachment({
         type="button"
       >
         <RefreshCw size={18} aria-hidden="true" />
-        <span>Photo could not load</span>
+        <span>Image could not load</span>
         <small>Try again</small>
       </button>
     );
@@ -143,7 +143,7 @@ export function MessageAttachment({
     return (
       <div className={styles.messageMediaLoading} role="status">
         <LoaderCircle className={styles.attachmentSpinner} size={20} aria-hidden="true" />
-        <span>Loading photo</span>
+        <span>Loading image</span>
       </div>
     );
   }
@@ -158,13 +158,13 @@ export function MessageAttachment({
         title={`Open ${attachment.filename} full size`}
       >
         <Image
-          alt={`Property photo sent by ${senderLabel}`}
+          alt={`Image attachment sent by ${senderLabel}`}
           fill
           sizes="(max-width: 720px) 75vw, 320px"
           src={objectUrl}
           unoptimized
         />
-        <span className={styles.visuallyHidden}>Open photo full size</span>
+        <span className={styles.visuallyHidden}>Open image full size</span>
       </a>
       <figcaption>
         <span>
@@ -177,7 +177,7 @@ export function MessageAttachment({
           type="button"
         >
           <Download size={13} aria-hidden="true" />
-          <span className={styles.visuallyHidden}>Download photo</span>
+          <span className={styles.visuallyHidden}>Download image</span>
         </button>
       </figcaption>
     </figure>

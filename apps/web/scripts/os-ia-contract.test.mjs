@@ -699,6 +699,8 @@ test("Inbox renders private inbound MMS photos inline", () => {
   assert.match(attachment, /URL\.revokeObjectURL/);
   assert.match(attachment, /<Image[\s\S]*unoptimized/);
   assert.match(attachment, /target="_blank"/);
+  assert.match(attachment, /Image attachment sent by/);
+  assert.doesNotMatch(attachment, /Property photo sent by/);
 });
 
 test("Property lead editing stays collapsed until the operator asks to open it", () => {

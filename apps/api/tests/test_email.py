@@ -49,8 +49,9 @@ def test_general_email_identity_replaces_provider_tokens_but_keeps_personal_name
 
 
 def test_gmail_message_body_preserves_safe_html_link_destination() -> None:
-    plain = "Finish setting up your account."
+    plain = "body { background: #fff; }\nFinish setting up your account."
     html = (
+        "<head><style>body { background: #fff; }</style></head>"
         "<p>Finish setting up your account.</p>"
         '<a href="https://www.upwork.com/verify?token=abc123">Verify email</a>'
         '<a href="data:text/html,unsafe">Unsafe link</a>'
@@ -78,6 +79,7 @@ def test_gmail_message_body_preserves_safe_html_link_destination() -> None:
 
     assert "Finish setting up your account." in body
     assert "Verify email: https://www.upwork.com/verify?token=abc123" in body
+    assert "background" not in body
     assert "data:text/html" not in body
 
 

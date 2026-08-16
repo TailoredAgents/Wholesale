@@ -1487,6 +1487,10 @@ def get_conversation_detail(
                         ),
                     )
                     for attachment in attachments_by_communication_id.get(item.id, [])
+                    if not (
+                        attachment.disposition.strip().lower() == "inline"
+                        and bool((attachment.content_id or "").strip())
+                    )
                 ],
             )
         )

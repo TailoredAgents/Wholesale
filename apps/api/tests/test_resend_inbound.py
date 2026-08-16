@@ -66,6 +66,44 @@ def test_received_message_body_preserves_safe_html_link_destination() -> None:
     assert "javascript:" not in body
 
 
+def test_received_message_body_uses_visible_html_instead_of_generated_css_text() -> None:
+    body = received_message_body(
+        {
+            "text": (
+                "body { background-color: #fff; }\n"
+                ".email__verification_button { color: #fff; }\n"
+                "Provider-generated text should not win over visible HTML."
+            ),
+            "html": (
+                "<html><head>"
+                "<title>Hidden email title</title>"
+                "<style>body { background-color: #fff; }</style>"
+                "<script>stealVerificationCode()</script>"
+                "</head><body>"
+                "<h1>Email Address verification</h1>"
+                "<p>Your email verification code is <strong>225963</strong>.</p>"
+                "<noscript>Hidden noscript instructions</noscript>"
+                "<template>Hidden email template</template>"
+                '<a href="https://batchdialer.com/verify?code=225963">Open BatchDialer</a>'
+                '<a href="javascript:alert(1)">Unsafe link</a>'
+                "</body></html>"
+            ),
+        }
+    )
+
+    assert "Email Address verification" in body
+    assert "225963" in body
+    assert "Open BatchDialer: https://batchdialer.com/verify?code=225963" in body
+    assert "background-color" not in body
+    assert "email__verification_button" not in body
+    assert "Provider-generated text" not in body
+    assert "Hidden email title" not in body
+    assert "stealVerificationCode" not in body
+    assert "Hidden noscript" not in body
+    assert "Hidden email template" not in body
+    assert "javascript:" not in body
+
+
 @pytest.fixture
 def resend_inbound_settings(monkeypatch: MonkeyPatch) -> Iterator[Settings]:
     values = {

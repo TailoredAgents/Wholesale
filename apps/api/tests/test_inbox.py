@@ -21,6 +21,7 @@ from app.models.foundation import (
     ConversationAssignmentEvent,
     ConversationContextLink,
     ConversationWatcher,
+    EmailAttachment,
     EmailSenderAlias,
     Lead,
     Organization,
@@ -639,6 +640,55 @@ def test_general_conversation_retains_email_without_a_lead(
         sender_user_id=None,
         source="test",
     )
+    db_session.add_all(
+        [
+            EmailAttachment(
+                organization_id=owner.organization_id,
+                communication_record_id=communication.id,
+                email_account_id=None,
+                email_sender_alias_id=None,
+                provider_message_id="general-inbound-1",
+                provider_attachment_id="embedded-logo-1",
+                filename="logo.png",
+                content_type="image/png",
+                size_bytes=4,
+                content_id="<batch-logo>",
+                disposition="inline",
+                content_data=b"logo",
+                storage_provider="database",
+            ),
+            EmailAttachment(
+                organization_id=owner.organization_id,
+                communication_record_id=communication.id,
+                email_account_id=None,
+                email_sender_alias_id=None,
+                provider_message_id="general-inbound-1",
+                provider_attachment_id="seller-photo-1",
+                filename="seller-photo.jpg",
+                content_type="image/jpeg",
+                size_bytes=5,
+                content_id=None,
+                disposition="attachment",
+                content_data=b"photo",
+                storage_provider="database",
+            ),
+            EmailAttachment(
+                organization_id=owner.organization_id,
+                communication_record_id=communication.id,
+                email_account_id=None,
+                email_sender_alias_id=None,
+                provider_message_id="general-inbound-1",
+                provider_attachment_id="mms-photo-1",
+                filename="mms-photo.jpg",
+                content_type="image/jpeg",
+                size_bytes=3,
+                content_id=None,
+                disposition="inline",
+                content_data=b"mms",
+                storage_provider="database",
+            ),
+        ]
+    )
     update_conversation_activity(
         conversation,
         direction="inbound",
@@ -691,6 +741,20 @@ def test_general_conversation_retains_email_without_a_lead(
     assert [item["subject"] for item in detail["timeline"] if item["channel"] == "email"] == [
         "General company question"
     ]
+    email_item = next(item for item in detail["timeline"] if item["channel"] == "email")
+    assert {attachment["filename"] for attachment in email_item["attachments"]} == {
+        "seller-photo.jpg",
+        "mms-photo.jpg",
+    }
+    assert all(attachment["content_url"] for attachment in email_item["attachments"])
+    seller_photo = next(
+        attachment
+        for attachment in email_item["attachments"]
+        if attachment["filename"] == "seller-photo.jpg"
+    )
+    photo_download = client.get(seller_photo["content_url"], headers=headers)
+    assert photo_download.status_code == 200
+    assert photo_download.content == b"photo"
 
 
 def test_restricted_general_mailbox_is_visible_only_to_owner_or_assigned_team(
