@@ -15,6 +15,7 @@ from app.services.operations import (
     record_worker_heartbeat,
     register_worker,
     resolve_operation_failures,
+    safe_meta_runtime_metadata,
     touch_worker_heartbeat,
 )
 
@@ -50,6 +51,36 @@ def test_worker_heartbeat_reports_healthy_and_stale(db_session: Session) -> None
     stale = get_worker_readiness(db_session, settings(stale_after=60))
 
     assert stale.status == "stale"
+
+
+def test_worker_heartbeat_persists_safe_meta_runtime_readiness(
+    db_session: Session,
+) -> None:
+    sentinel_token = "SENTINEL-WORKER-TOKEN-MUST-NOT-LEAK"
+    runtime_settings = Settings.model_validate(
+        {
+            "MARKETING_CONVERSION_MODE": "live",
+            "META_PIXEL_ID": "2118209559079623",
+            "META_CONVERSIONS_ACCESS_TOKEN": sentinel_token,
+            "META_TEST_EVENT_CODE": "SENTINEL-TEST-CODE-MUST-NOT-LEAK",
+        }
+    )
+    metadata = safe_meta_runtime_metadata(runtime_settings)
+
+    register_worker(db_session, runtime_metadata=metadata)
+    record_worker_heartbeat(db_session)
+    heartbeat = db_session.query(WorkerHeartbeat).one()
+
+    assert heartbeat.worker_metadata is not None
+    assert heartbeat.worker_metadata["marketing_conversion_mode"] == "live"
+    assert heartbeat.worker_metadata["meta_configured"] is True
+    assert heartbeat.worker_metadata["meta_access_token_present"] is True
+    assert heartbeat.worker_metadata["meta_test_mode_enabled"] is True
+    assert len(str(heartbeat.worker_metadata["meta_pixel_id_fingerprint"])) == 10
+    serialized = str(heartbeat.worker_metadata)
+    assert "2118209559079623" not in serialized
+    assert sentinel_token not in serialized
+    assert "SENTINEL-TEST-CODE-MUST-NOT-LEAK" not in serialized
 
 
 def test_operation_failures_are_grouped_and_resolved(db_session: Session) -> None:
@@ -159,9 +190,7 @@ def test_long_bounded_provider_call_does_not_trigger_liveness_stale_window(
 
 
 def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
-    blueprint = (Path(__file__).resolve().parents[3] / "render.yaml").read_text(
-        encoding="utf-8"
-    )
+    blueprint = (Path(__file__).resolve().parents[3] / "render.yaml").read_text(encoding="utf-8")
     api_keys = render_service_environment_keys(blueprint, "oakwell-api")
     worker_keys = render_service_environment_keys(blueprint, "oakwell-worker")
     shared_runtime_keys = {

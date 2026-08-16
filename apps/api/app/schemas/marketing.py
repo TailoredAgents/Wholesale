@@ -46,6 +46,8 @@ class OfflineConversionExportRead(BaseModel):
     next_attempt_at: datetime | None
     exported_at: datetime | None
     provider_request_id: str | None
+    provider_accepted_count: int | None
+    provider_warnings: list[str]
     last_error: str | None
     created_at: datetime
 
@@ -85,6 +87,37 @@ class MarketingProviderReadiness(BaseModel):
     platform: str
     configured: bool
     blockers: list[str]
+    delivery_mode: str | None = None
+    test_mode_enabled: bool | None = None
+    pixel_id_fingerprint: str | None = None
+    access_token_present: bool | None = None
+
+
+class MetaMatchCoverage(BaseModel):
+    event_name: str
+    total: int
+    fbp_count: int
+    fbc_count: int
+    client_ip_count: int
+    client_user_agent_count: int
+    fbp_basis_points: int | None
+    fbc_basis_points: int | None
+    client_ip_basis_points: int | None
+    client_user_agent_basis_points: int | None
+
+
+class MarketingWorkerReadiness(BaseModel):
+    status: str
+    required: bool
+    heartbeat_at: datetime | None
+    consecutive_failures: int
+    current_operation: str | None
+    marketing_conversion_mode: str | None
+    meta_pixel_id_fingerprint: str | None
+    meta_test_mode_enabled: bool | None
+    meta_configured: bool | None
+    meta_configuration_blockers: list[str]
+    meta_access_token_present: bool | None
 
 
 class MarketingMeasurementSummary(BaseModel):
@@ -94,6 +127,10 @@ class MarketingMeasurementSummary(BaseModel):
     policy_version: str
     providers: list[MarketingProviderReadiness]
     event_counts: dict[str, int]
+    worker: MarketingWorkerReadiness
+    meta_match_coverage: list[MetaMatchCoverage]
+    meta_match_coverage_window_days: int
+    oldest_meta_pending_at: datetime | None
 
 
 class MarketingOverview(BaseModel):

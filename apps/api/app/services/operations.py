@@ -20,7 +20,32 @@ class WorkerReadiness:
     current_operation: str | None
 
 
-def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> WorkerHeartbeat:
+def meta_pixel_id_fingerprint(pixel_id: str | None) -> str | None:
+    normalized = (pixel_id or "").strip()
+    if not normalized:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:10]
+
+
+def safe_meta_runtime_metadata(settings: Settings) -> dict[str, object]:
+    """Return operational Meta state without returning IDs, tokens, or test codes."""
+    blockers = list(settings.meta_conversion_configuration_blockers)
+    return {
+        "marketing_conversion_mode": settings.marketing_conversion_mode,
+        "meta_pixel_id_fingerprint": meta_pixel_id_fingerprint(settings.meta_pixel_id),
+        "meta_test_mode_enabled": bool(settings.meta_test_event_code),
+        "meta_configured": not blockers,
+        "meta_configuration_blockers": blockers,
+        "meta_access_token_present": bool(settings.meta_conversions_access_token),
+    }
+
+
+def register_worker(
+    db: Session,
+    service_name: str = COMMUNICATIONS_WORKER,
+    *,
+    runtime_metadata: dict[str, object] | None = None,
+) -> WorkerHeartbeat:
     now = datetime.now(UTC)
     heartbeat = db.scalar(
         select(WorkerHeartbeat).where(WorkerHeartbeat.service_name == service_name)
@@ -40,6 +65,7 @@ def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> W
                 "main_loop_progress_at": now.isoformat(),
                 "current_operation": None,
                 "operation_started_at": None,
+                **(runtime_metadata or {}),
             },
         )
         db.add(heartbeat)
@@ -53,6 +79,7 @@ def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> W
             "main_loop_progress_at": now.isoformat(),
             "current_operation": None,
             "operation_started_at": None,
+            **(runtime_metadata or {}),
         }
     db.commit()
     db.refresh(heartbeat)

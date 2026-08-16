@@ -252,10 +252,13 @@ def test_public_seller_intake_queues_source_independent_staff_alert(
     assert alert.source_type == "website_form"
     assert alert.source_event_id == submission.id
     assert alert.message_body.startswith("New Website House lead:")
-    assert process_next_staff_lead_alert(
-        db_session,
-        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
-    ) == alert.id
+    assert (
+        process_next_staff_lead_alert(
+            db_session,
+            Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
+        )
+        == alert.id
+    )
     db_session.refresh(alert)
     assert alert.status == "simulated"
 
@@ -589,7 +592,7 @@ def test_in_process_rate_limiter_has_a_hard_key_bound() -> None:
     assert limiter.tracked_key_count == 2
 
 
-def test_client_address_trusts_only_the_production_edge_header() -> None:
+def test_client_address_uses_only_platform_resolved_production_peer() -> None:
     scope: Scope = {
         "type": "http",
         "asgi": {"version": "3.0", "spec_version": "2.3"},
@@ -602,6 +605,7 @@ def test_client_address_trusts_only_the_production_edge_header() -> None:
         "root_path": "",
         "headers": [
             (b"cf-connecting-ip", b"203.0.113.25"),
+            (b"cf-ray", b"test-ray-ATL"),
             (b"x-forwarded-for", b"198.51.100.99"),
         ],
         "client": ("10.0.0.5", 12345),
@@ -609,9 +613,17 @@ def test_client_address_trusts_only_the_production_edge_header() -> None:
     }
     request = Request(scope)
     missing_edge_header = Request({**scope, "headers": [(b"x-forwarded-for", b"198.51.100.99")]})
+    public_peer = Request(
+        {
+            **scope,
+            "headers": [(b"x-forwarded-for", b"198.51.100.99")],
+            "client": ("8.8.8.8", 12345),
+        }
+    )
 
-    assert trusted_client_address(request, production=True) == "203.0.113.25"
+    assert trusted_client_address(request, production=True) == "edge-unknown"
     assert trusted_client_address(missing_edge_header, production=True) == "edge-unknown"
+    assert trusted_client_address(public_peer, production=True) == "8.8.8.8"
     assert trusted_client_address(request, production=False) == "10.0.0.5"
 
 
@@ -663,7 +675,11 @@ def test_public_page_view_queues_deduplicated_meta_view_content(
         json={
             "event_type": "page_view",
             "session_id": "session-meta-view",
-            "attribution": {"landing_page": "/contact", "fbclid": "click-123"},
+            "attribution": {
+                "landing_page": "/contact",
+                "fbclid": "click-123",
+                "fbclid_captured_at": "2026-08-04T21:48:07Z",
+            },
             "meta_browser_event": {
                 "event_id": "meta-view-event-123",
                 "event_source_url": "https://www.stonegatehb.com/contact",
@@ -682,6 +698,11 @@ def test_public_page_view_queues_deduplicated_meta_view_content(
     assert export.payload_snapshot["client_ip_address"] == "testclient"
     assert export.payload_snapshot["client_user_agent"] == "pytest-browser"
     assert export.payload_snapshot["fbp"] == "fb.1.1785875287.987654321"
+    assert export.payload_snapshot["fbclid"] == "click-123"
+    assert export.payload_snapshot["click_captured_at"] == "2026-08-04T21:48:07+00:00"
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    assert conversion_event is not None
+    assert conversion_event.fbclid_captured_at is not None
 
 
 def test_public_seller_intake_queues_hashed_meta_lead(
@@ -691,6 +712,12 @@ def test_public_seller_intake_queues_hashed_meta_lead(
     seed_org(db_session)
     client = TestClient(app)
     payload = public_payload()
+    payload["attribution"] = {
+        "landing_page": "/get-a-cash-offer",
+        "utm_source": "meta_ads",
+        "fbclid": "lead-click",
+        "fbclid_captured_at": "2026-08-04T21:48:07Z",
+    }
     payload["meta_browser_event"] = {
         "event_id": "meta-lead-event-123",
         "event_source_url": "https://stonegatehb.com/get-a-cash-offer",
@@ -728,6 +755,77 @@ def test_public_seller_intake_queues_hashed_meta_lead(
     assert meta_event["user_data"]["fbc"] == "fb.1.1785875287.lead-click"
     assert meta_event["user_data"]["fbp"] == "fb.1.1785875287.123456789"
     assert "ph" not in meta_event["user_data"]
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    submission = db_session.scalar(select(LeadFormSubmission))
+    touches = db_session.scalars(select(AttributionTouch)).all()
+    assert conversion_event is not None and conversion_event.fbclid_captured_at is not None
+    assert submission is not None and submission.fbclid_captured_at is not None
+    assert touches and all(touch.fbclid_captured_at is not None for touch in touches)
+
+
+def test_public_attribution_discards_unbound_click_time_without_rejecting_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload["attribution"] = {
+        "landing_page": "/get-a-cash-offer",
+        "fbclid_captured_at": "2026-08-04T21:48:07Z",
+    }
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    submission = db_session.scalar(select(LeadFormSubmission))
+    touches = db_session.scalars(select(AttributionTouch)).all()
+    assert conversion_event is not None and conversion_event.fbclid_captured_at is None
+    assert submission is not None and submission.fbclid_captured_at is None
+    assert touches and all(touch.fbclid_captured_at is None for touch in touches)
+
+
+def test_public_attribution_discards_future_click_time_without_rejecting_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload["attribution"] = {
+        "landing_page": "/get-a-cash-offer",
+        "fbclid": "clock-skew-click",
+        "fbclid_captured_at": "2099-01-01T00:00:00Z",
+    }
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    assert conversion_event is not None
+    assert conversion_event.fbclid == "clock-skew-click"
+    assert conversion_event.fbclid_captured_at is None
+
+
+def test_public_attribution_discards_malformed_click_time_without_rejecting_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload["attribution"] = {
+        "landing_page": "/get-a-cash-offer",
+        "fbclid": "valid-click-with-bad-clock",
+        "fbclid_captured_at": "not-a-date",
+    }
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    assert conversion_event is not None
+    assert conversion_event.fbclid == "valid-click-with-bad-clock"
+    assert conversion_event.fbclid_captured_at is None
 
 
 def test_public_conversion_event_endpoint_records_form_abandonment(

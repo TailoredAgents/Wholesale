@@ -2476,8 +2476,39 @@ export type MarketingOverview = {
       platform: string;
       configured: boolean;
       blockers: string[];
+      delivery_mode: string | null;
+      test_mode_enabled: boolean | null;
+      pixel_id_fingerprint: string | null;
+      access_token_present: boolean | null;
     }>;
     event_counts: Record<string, number>;
+    worker: {
+      status: string;
+      required: boolean;
+      heartbeat_at: string | null;
+      consecutive_failures: number;
+      current_operation: string | null;
+      marketing_conversion_mode: string | null;
+      meta_pixel_id_fingerprint: string | null;
+      meta_test_mode_enabled: boolean | null;
+      meta_configured: boolean | null;
+      meta_configuration_blockers: string[];
+      meta_access_token_present: boolean | null;
+    };
+    meta_match_coverage: Array<{
+      event_name: string;
+      total: number;
+      fbp_count: number;
+      fbc_count: number;
+      client_ip_count: number;
+      client_user_agent_count: number;
+      fbp_basis_points: number | null;
+      fbc_basis_points: number | null;
+      client_ip_basis_points: number | null;
+      client_user_agent_basis_points: number | null;
+    }>;
+    meta_match_coverage_window_days: number;
+    oldest_meta_pending_at: string | null;
   };
   campaigns: Array<{
     source: string;
@@ -2520,6 +2551,8 @@ export type MarketingOverview = {
     next_attempt_at: string | null;
     exported_at: string | null;
     provider_request_id: string | null;
+    provider_accepted_count: number | null;
+    provider_warnings: string[];
     last_error: string | null;
     created_at: string;
   }>;
@@ -4428,10 +4461,54 @@ const emptyMarketingOverview: MarketingOverview = {
     policy_version: "stonegate-marketing-measurement-v1",
     providers: [],
     event_counts: {},
+    worker: {
+      status: "missing",
+      required: false,
+      heartbeat_at: null,
+      consecutive_failures: 0,
+      current_operation: null,
+      marketing_conversion_mode: null,
+      meta_pixel_id_fingerprint: null,
+      meta_test_mode_enabled: null,
+      meta_configured: null,
+      meta_configuration_blockers: [],
+      meta_access_token_present: null,
+    },
+    meta_match_coverage: [],
+    meta_match_coverage_window_days: 30,
+    oldest_meta_pending_at: null,
   },
   campaigns: [],
   offline_exports: [],
 };
+
+function normalizeMarketingOverview(value: MarketingOverview): MarketingOverview {
+  // The API and web services can finish a Render deployment a few minutes apart.
+  // Keep the Marketing workspace usable while an older API response is still live.
+  const measurement = value.measurement ?? emptyMarketingOverview.measurement;
+  return {
+    ...value,
+    measurement: {
+      ...emptyMarketingOverview.measurement,
+      ...measurement,
+      worker: {
+        ...emptyMarketingOverview.measurement.worker,
+        ...(measurement.worker ?? {}),
+      },
+      meta_match_coverage: measurement.meta_match_coverage ?? [],
+      meta_match_coverage_window_days:
+        measurement.meta_match_coverage_window_days ?? 30,
+      oldest_meta_pending_at: measurement.oldest_meta_pending_at ?? null,
+    },
+    offline_exports: (value.offline_exports ?? []).map((item) => ({
+      ...item,
+      provider_accepted_count: item.provider_accepted_count ?? null,
+      provider_warnings: Array.isArray(item.provider_warnings)
+        ? item.provider_warnings
+        : [],
+    })),
+  };
+}
 
 export async function getMarketingOverview(periodDays?: number): Promise<{
   marketing: MarketingOverview;
@@ -4451,7 +4528,10 @@ export async function getMarketingOverview(periodDays?: number): Promise<{
       throw new Error("API returned a non-OK response");
     }
 
-    return { marketing: (await response.json()) as MarketingOverview, apiConnected: true };
+    return {
+      marketing: normalizeMarketingOverview((await response.json()) as MarketingOverview),
+      apiConnected: true,
+    };
   } catch {
     return { marketing: emptyMarketingOverview, apiConnected: false };
   }

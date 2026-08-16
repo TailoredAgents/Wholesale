@@ -68,14 +68,19 @@ class FixedWindowRateLimiter:
 
 
 def trusted_client_address(request: Request, *, production: bool) -> str:
-    """Use only the edge-owned Cloudflare address in production, never caller XFF."""
+    """Resolve an edge-vetted address without ever trusting caller-controlled XFF."""
     if production:
-        cloudflare_address = request.headers.get("cf-connecting-ip", "").strip()
-        if cloudflare_address:
+        # Uvicorn/Render resolves its trusted proxy chain into request.client.
+        # Direct origin callers can forge both XFF and Cloudflare-named headers, so
+        # neither is identity evidence at the application layer.
+        if request.client and request.client.host:
             try:
-                return str(ipaddress.ip_address(cloudflare_address))
+                peer_address = ipaddress.ip_address(request.client.host)
             except ValueError:
                 pass
+            else:
+                if peer_address.is_global:
+                    return str(peer_address)
         return "edge-unknown"
     if request.client and request.client.host:
         return request.client.host[:128]

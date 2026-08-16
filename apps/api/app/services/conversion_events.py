@@ -91,6 +91,7 @@ def record_conversion_event(
         content=attribution.utm_content,
         gclid=attribution.gclid,
         fbclid=attribution.fbclid,
+        fbclid_captured_at=attribution.fbclid_captured_at,
         session_id=session_id,
         experiment_id=experiment_id,
         experiment_variant=assigned_variant,

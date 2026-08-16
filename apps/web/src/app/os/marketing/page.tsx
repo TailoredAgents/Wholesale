@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleDollarSign, Megaphone, UsersRound } from "lucide-react";
 import Link from "next/link";
 
@@ -42,8 +44,27 @@ function date(value: string) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
 }
 
+function dateTime(value: string | null) {
+  if (!value) return "None waiting";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function pixelFingerprint(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized
+    ? createHash("sha256").update(normalized).digest("hex").slice(0, 10)
+    : null;
+}
+
 function percentage(basisPoints: number | null) {
   return basisPoints === null ? "No baseline" : `${(basisPoints / 100).toFixed(1)}%`;
+}
+
+function testMode(value: boolean | null | undefined) {
+  return value === true ? "Active" : value === false ? "Off" : "Unknown";
 }
 
 function vitalValue(metric: string, value: number) {
@@ -94,6 +115,37 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     : 0;
   const funnel = marketing.public_funnel;
   const measurement = marketing.measurement;
+  const metaProvider = measurement.providers.find((provider) => provider.platform === "meta") ?? null;
+  const webPixelFingerprint = pixelFingerprint(process.env.NEXT_PUBLIC_META_PIXEL_ID);
+  const pixelFingerprints = [
+    webPixelFingerprint,
+    metaProvider?.pixel_id_fingerprint ?? null,
+    measurement.worker.meta_pixel_id_fingerprint,
+  ];
+  const pixelAlignment = pixelFingerprints.every(Boolean)
+    ? new Set(pixelFingerprints).size === 1
+      ? "aligned"
+      : "mismatch"
+    : "incomplete";
+  const workerHealthy = measurement.worker.status === "healthy";
+  const metaLive =
+    metaProvider?.configured === true &&
+    metaProvider.delivery_mode === "live" &&
+    measurement.worker.marketing_conversion_mode === "live" &&
+    measurement.worker.meta_configured === true;
+  const apiMetaTestMode = metaProvider?.test_mode_enabled;
+  const workerMetaTestMode = measurement.worker.meta_test_mode_enabled;
+  const metaTestModeLabel = `API ${testMode(apiMetaTestMode)} · Worker ${testMode(workerMetaTestMode)}`;
+  const metaHealthTone =
+    pixelAlignment === "mismatch" || !metaProvider?.configured
+      ? "danger"
+      : pixelAlignment === "incomplete" ||
+          !workerHealthy ||
+          !metaLive ||
+          metaProvider.test_mode_enabled ||
+          measurement.worker.meta_test_mode_enabled
+        ? "warning"
+        : "success";
   const funnelRows = [
     ["Public page views", funnel.page_views],
     ["Address offer starts", funnel.offer_starts],
@@ -197,12 +249,37 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
           {measurement.providers.map((provider) => <article key={provider.platform}><div><strong>{labelize(provider.platform)}</strong><StatusBadge tone={provider.configured ? "success" : "warning"}>{provider.configured ? "Ready" : "Credentials pending"}</StatusBadge></div><p>{provider.configured ? "Provider settings are complete." : provider.blockers.join(", ")}</p></article>)}
         </div>
       </div>
+      <div className={marketingStyles.metaHealthGrid}>
+        <article>
+          <div><strong>Meta delivery health</strong><StatusBadge tone={metaHealthTone}>{metaHealthTone === "success" ? "Ready" : "Review"}</StatusBadge></div>
+          <dl>
+            <div><dt>Worker</dt><dd>{labelize(measurement.worker.status)}</dd></div>
+            <div><dt>Worker heartbeat</dt><dd>{dateTime(measurement.worker.heartbeat_at)}</dd></div>
+            <div><dt>Delivery mode</dt><dd>{labelize(metaProvider?.delivery_mode ?? measurement.mode)}</dd></div>
+            <div><dt>Test mode</dt><dd>{metaTestModeLabel}</dd></div>
+            <div><dt>Dataset alignment</dt><dd>{labelize(pixelAlignment)}</dd></div>
+            <div><dt>Token status</dt><dd>{metaProvider?.access_token_present ? "Present" : "Missing"}</dd></div>
+            <div><dt>Oldest Meta queue item</dt><dd>{dateTime(measurement.oldest_meta_pending_at)}</dd></div>
+            <div><dt>Provider accepted</dt><dd>{measurement.event_counts["meta_web:provider_accepted"] ?? 0} / {measurement.event_counts["meta_web:total"] ?? 0}</dd></div>
+          </dl>
+          <p>Dataset fingerprints — Web {webPixelFingerprint ?? "missing"} · API {metaProvider?.pixel_id_fingerprint ?? "missing"} · Worker {measurement.worker.meta_pixel_id_fingerprint ?? "missing"}</p>
+          {measurement.worker.current_operation ? <p>Worker operation: {labelize(measurement.worker.current_operation)}</p> : null}
+          {metaProvider?.blockers.length ? <p className={marketingStyles.healthWarning}>API blockers: {metaProvider.blockers.join(", ")}</p> : null}
+          {measurement.worker.meta_configuration_blockers.length ? <p className={marketingStyles.healthWarning}>Worker blockers: {measurement.worker.meta_configuration_blockers.join(", ")}</p> : null}
+        </article>
+        <article>
+          <div><strong>Meta match-key coverage</strong><StatusBadge tone="neutral">Last {measurement.meta_match_coverage_window_days} days</StatusBadge></div>
+          <div className={marketingStyles.coverageRows}>
+            {measurement.meta_match_coverage.map((coverage) => <div key={coverage.event_name}><strong>{coverage.event_name === "all" ? "All web events" : labelize(coverage.event_name)}</strong><dl><div><dt>Browser ID</dt><dd>{percentage(coverage.fbp_basis_points)}</dd></div><div><dt>Click ID</dt><dd>{percentage(coverage.fbc_basis_points)}</dd></div><div><dt>Client IP</dt><dd>{percentage(coverage.client_ip_basis_points)}</dd></div><div><dt>User agent</dt><dd>{percentage(coverage.client_user_agent_basis_points)}</dd></div></dl><small>{coverage.total} event{coverage.total === 1 ? "" : "s"}</small></div>)}
+          </div>
+        </article>
+      </div>
     </section>
 
     <section className={styles.section}>
       <div className={styles.sectionHeading}><div><span>Outcome feedback</span><h2>Conversion delivery queue</h2></div><strong>{marketing.offline_exports.length} records</strong></div>
       <div className={marketingStyles.exportLayout}>
-        <div>{marketing.offline_exports.length ? marketing.offline_exports.map((item) => <article key={item.id}><div><strong>{labelize(item.platform)}</strong><StatusBadge tone={deliveryTone(item.status)}>{labelize(item.status)}</StatusBadge></div><dl><div><dt>Outcome</dt><dd>{labelize(item.event_name)}</dd></div><div><dt>Occurred</dt><dd>{date(item.occurred_at)}</dd></div><div><dt>{item.click_id_type.toUpperCase()}</dt><dd>{item.masked_click_id}</dd></div><div><dt>Value</dt><dd>{money(item.value_cents)}</dd></div><div><dt>Attempts</dt><dd>{item.attempt_count}</dd></div><div><dt>Source</dt><dd>{labelize(item.source_record_type)}</dd></div></dl>{item.lead_id ? <Link href={`/os/leads/${item.lead_id}`}>Open attributed lead</Link> : null}{item.last_error ? <p>{item.last_error}</p> : null}</article>) : <p className={styles.empty}>No conversion events have been prepared.</p>}</div>
+        <div>{marketing.offline_exports.length ? marketing.offline_exports.map((item) => <article key={item.id}><div><strong>{labelize(item.platform)}</strong><StatusBadge tone={deliveryTone(item.status)}>{labelize(item.status)}</StatusBadge></div><dl><div><dt>Outcome</dt><dd>{labelize(item.event_name)}</dd></div><div><dt>Occurred</dt><dd>{date(item.occurred_at)}</dd></div><div><dt>{item.click_id_type.toUpperCase()}</dt><dd>{item.masked_click_id}</dd></div><div><dt>Value</dt><dd>{money(item.value_cents)}</dd></div><div><dt>Attempts</dt><dd>{item.attempt_count}</dd></div><div><dt>Provider accepted</dt><dd>{item.provider_accepted_count ?? "Not reported"}</dd></div><div><dt>Source</dt><dd>{labelize(item.source_record_type)}</dd></div><div><dt>Provider request</dt><dd>{item.provider_request_id ?? "Not reported"}</dd></div></dl>{item.lead_id ? <Link href={`/os/leads/${item.lead_id}`}>Open attributed lead</Link> : null}{item.provider_warnings.map((warning, warningIndex) => <p className={marketingStyles.providerWarning} key={`${item.id}-warning-${warningIndex}`}>{warning}</p>)}{item.last_error ? <p>{item.last_error}</p> : null}</article>) : <p className={styles.empty}>No conversion events have been prepared.</p>}</div>
         <aside><h3>Queue controls</h3><p>Prepare qualified leads, appointments, signed contracts, and funded deals when they can be tied to a platform click. Delivery remains off until provider credentials and live mode are configured.</p>{canExport ? <OfflineExportButton deliveryEnabled={measurement.mode !== "disabled"} /> : <StatusBadge tone="warning">Your role cannot manage the queue</StatusBadge>}</aside>
       </div>
     </section>

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Script from "next/script";
+import { buildMetaPixelBootstrap } from "./lib/meta-pixel-bootstrap";
 import { siteConfig } from "./site-config";
 import { WebVitalsReporter } from "./web-vitals-reporter";
 import { MetaPixel } from "./meta-pixel";
@@ -23,6 +25,10 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
+const metaPixelBootstrap = buildMetaPixelBootstrap(
+  process.env.NEXT_PUBLIC_META_PIXEL_ID,
+);
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -31,6 +37,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        {metaPixelBootstrap ? (
+          <Script id="stonegate-meta-pixel-bootstrap" strategy="beforeInteractive">
+            {metaPixelBootstrap}
+          </Script>
+        ) : null}
         {children}
         <MetaPixel />
         <WebVitalsReporter />

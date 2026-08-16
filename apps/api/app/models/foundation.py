@@ -1290,6 +1290,9 @@ class LeadFormSubmission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
     landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    fbclid_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -1317,6 +1320,9 @@ class AttributionTouch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fbclid_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
@@ -1414,6 +1420,9 @@ class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fbclid_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     session_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     experiment_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("marketing_experiments.id"), nullable=True, index=True

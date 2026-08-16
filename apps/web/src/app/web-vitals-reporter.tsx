@@ -5,6 +5,7 @@ import { useReportWebVitals } from "next/web-vitals";
 import { useCallback, useMemo } from "react";
 
 import { recordConversionEvent } from "./lib/conversion-events";
+import { isPublicTrackingPath } from "./lib/public-tracking-policy";
 
 const publicMetricNames = new Set(["LCP", "INP", "CLS"]);
 
@@ -17,9 +18,7 @@ export function WebVitalsReporter() {
   const reportMetric = useCallback(
     (metric: { name: string; value: number; rating?: string; navigationType?: string }) => {
       if (
-        pathname.startsWith("/os") ||
-        pathname.startsWith("/sign-in") ||
-        pathname.startsWith("/sign-up") ||
+        !isPublicTrackingPath(pathname) ||
         !publicMetricNames.has(metric.name)
       ) {
         return;

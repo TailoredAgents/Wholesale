@@ -3,13 +3,13 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
-import { trackMetaPixelEvent } from "./lib/conversion-events";
+import { trackMetaPageNavigation } from "./lib/conversion-events";
 
 export function MetaPixel() {
   const pathname = usePathname();
 
   useEffect(() => {
-    trackMetaPixelEvent("PageView");
+    trackMetaPageNavigation(pathname);
   }, [pathname]);
 
   return null;

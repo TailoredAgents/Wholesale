@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
@@ -31,6 +32,7 @@ from app.models.foundation import (
     RevenueRecord,
     StaffLeadAlert,
     Transaction,
+    WorkerHeartbeat,
 )
 from app.schemas.marketing import (
     MarketingCampaignPerformance,
@@ -38,9 +40,16 @@ from app.schemas.marketing import (
     MarketingOverview,
     MarketingProviderReadiness,
     MarketingSummary,
+    MarketingWorkerReadiness,
+    MetaMatchCoverage,
     OfflineConversionExportRead,
     PublicFunnelSummary,
     WebVitalSummary,
+)
+from app.services.operations import (
+    COMMUNICATIONS_WORKER,
+    get_worker_readiness,
+    meta_pixel_id_fingerprint,
 )
 
 ATTRIBUTION_MODEL = "last_eligible_platform_click"
@@ -48,6 +57,7 @@ MEASUREMENT_POLICY_VERSION = "stonegate-marketing-measurement-v1"
 CONSENT_BASIS = "privacy_notice_first_party_measurement"
 META_WEB_ATTRIBUTION_MODEL = "meta_browser_server_deduplicated_v1"
 META_WEB_CONSENT_BASIS = "website_contact_and_measurement_notice_v1"
+META_MATCH_COVERAGE_WINDOW_DAYS = 30
 QUALIFIED_STAGES = {
     "qualified",
     "appointment_scheduled",
@@ -127,6 +137,8 @@ def enqueue_meta_web_conversion(
         "client_user_agent": event.user_agent,
         "fbc": fbc,
         "fbp": fbp,
+        "fbclid": event.fbclid,
+        "click_captured_at": utc_isoformat(event.fbclid_captured_at),
         "email_hashes": [sha256(normalized_email)] if normalized_email else [],
         "phone_hashes": [sha256(normalized_phone)] if normalized_phone else [],
         "external_id_hash": sha256(external_id) if external_id else None,
@@ -619,7 +631,10 @@ def build_payload_snapshot(
         "policy_version": MEASUREMENT_POLICY_VERSION,
         "event_name": outcome.event_name,
         "occurred_at": outcome.occurred_at.isoformat(),
-        "click_captured_at": click_event.created_at.isoformat(),
+        # Do not manufacture a historical click time from event creation. Existing
+        # records remain nullable because only the browser knows the original click.
+        "click_captured_at": utc_isoformat(click_event.fbclid_captured_at),
+        "fbclid": click_event.fbclid,
         "landing_page": absolute_landing_page(
             click_event.landing_page,
             website_base_url=website_base_url,
@@ -709,6 +724,7 @@ def process_next_marketing_conversion(
                 result = delivery_client.deliver(export)
             except ConversionDeliveryError as exc:
                 export.provider_response = exc.response
+                export.provider_request_id = exc.request_id or export.provider_request_id
                 export.last_error = str(exc)[:1000]
                 if export.attempt_count >= settings.marketing_conversion_max_attempts:
                     export.status = "exhausted"
@@ -1004,6 +1020,8 @@ def offline_export_to_read(export: OfflineConversionExport) -> OfflineConversion
         next_attempt_at=export.next_attempt_at,
         exported_at=export.exported_at,
         provider_request_id=export.provider_request_id,
+        provider_accepted_count=provider_accepted_count(export.provider_response),
+        provider_warnings=provider_warnings(export.provider_response),
         last_error=export.last_error,
         created_at=export.created_at,
     )
@@ -1043,6 +1061,30 @@ def get_measurement_summary(
         )
         .group_by(StaffLeadAlert.status)
     ).all()
+    meta_web_exports = db.scalars(
+        select(OfflineConversionExport).where(
+            OfflineConversionExport.organization_id == principal.organization_id,
+            OfflineConversionExport.platform == "meta",
+            OfflineConversionExport.attribution_model == META_WEB_ATTRIBUTION_MODEL,
+            OfflineConversionExport.created_at
+            >= datetime.now(UTC) - timedelta(days=META_MATCH_COVERAGE_WINDOW_DAYS),
+        )
+    ).all()
+    meta_accepted = sum(
+        1 for export in meta_web_exports if provider_accepted_count(export.provider_response) == 1
+    )
+    oldest_meta_pending_at = db.scalar(
+        select(func.min(OfflineConversionExport.created_at)).where(
+            OfflineConversionExport.organization_id == principal.organization_id,
+            OfflineConversionExport.platform == "meta",
+            OfflineConversionExport.status.in_({"pending", "retry"}),
+        )
+    )
+    worker_readiness = get_worker_readiness(db, settings)
+    heartbeat = db.scalar(
+        select(WorkerHeartbeat).where(WorkerHeartbeat.service_name == COMMUNICATIONS_WORKER)
+    )
+    worker_metadata = heartbeat.worker_metadata if heartbeat and heartbeat.worker_metadata else {}
     event_counts = {
         "total": sum(int(count) for _, count in status_rows),
         **{str(status): int(count) for status, count in status_rows},
@@ -1051,7 +1093,10 @@ def get_measurement_summary(
         **{f"meta_leads:{status}": int(count) for status, count in meta_lead_rows},
         "staff_alerts:total": sum(int(count) for _, count in staff_alert_rows),
         **{f"staff_alerts:{status}": int(count) for status, count in staff_alert_rows},
+        "meta_web:total": len(meta_web_exports),
+        "meta_web:provider_accepted": meta_accepted,
     }
+    meta_blockers = list(settings.meta_conversion_configuration_blockers)
     return MarketingMeasurementSummary(
         mode=settings.marketing_conversion_mode,
         attribution_model=ATTRIBUTION_MODEL,
@@ -1065,8 +1110,12 @@ def get_measurement_summary(
             ),
             MarketingProviderReadiness(
                 platform="meta",
-                configured=not settings.meta_conversion_configuration_blockers,
-                blockers=list(settings.meta_conversion_configuration_blockers),
+                configured=not meta_blockers,
+                blockers=meta_blockers,
+                delivery_mode=settings.marketing_conversion_mode,
+                test_mode_enabled=bool(settings.meta_test_event_code),
+                pixel_id_fingerprint=meta_pixel_id_fingerprint(settings.meta_pixel_id),
+                access_token_present=bool(settings.meta_conversions_access_token),
             ),
             MarketingProviderReadiness(
                 platform="zapier_facebook_leads",
@@ -1085,7 +1134,148 @@ def get_measurement_summary(
             ),
         ],
         event_counts=event_counts,
+        worker=MarketingWorkerReadiness(
+            status=worker_readiness.status,
+            required=worker_readiness.required,
+            heartbeat_at=worker_readiness.heartbeat_at,
+            consecutive_failures=worker_readiness.consecutive_failures,
+            current_operation=worker_readiness.current_operation,
+            marketing_conversion_mode=string_or_none(
+                worker_metadata.get("marketing_conversion_mode")
+            ),
+            meta_pixel_id_fingerprint=string_or_none(
+                worker_metadata.get("meta_pixel_id_fingerprint")
+            ),
+            meta_test_mode_enabled=bool_or_none(worker_metadata.get("meta_test_mode_enabled")),
+            meta_configured=bool_or_none(worker_metadata.get("meta_configured")),
+            meta_configuration_blockers=string_list(
+                worker_metadata.get("meta_configuration_blockers")
+            ),
+            meta_access_token_present=bool_or_none(
+                worker_metadata.get("meta_access_token_present")
+            ),
+        ),
+        meta_match_coverage=build_meta_match_coverage(meta_web_exports),
+        meta_match_coverage_window_days=META_MATCH_COVERAGE_WINDOW_DAYS,
+        oldest_meta_pending_at=oldest_meta_pending_at,
     )
+
+
+def build_meta_match_coverage(
+    exports: Sequence[OfflineConversionExport],
+) -> list[MetaMatchCoverage]:
+    groups = [
+        ("all", exports),
+        *[
+            (event_name, [export for export in exports if export.event_name == event_name])
+            for event_name in ("ViewContent", "Lead")
+        ],
+    ]
+    result: list[MetaMatchCoverage] = []
+    for event_name, group in groups:
+        total = len(group)
+        fbp_count = count_snapshot_value(group, "fbp")
+        fbc_count = sum(1 for export in group if export_snapshot_has_fbc(export))
+        client_ip_count = sum(1 for export in group if export_snapshot_has_client_ip(export))
+        client_user_agent_count = count_snapshot_value(group, "client_user_agent")
+        result.append(
+            MetaMatchCoverage(
+                event_name=event_name,
+                total=total,
+                fbp_count=fbp_count,
+                fbc_count=fbc_count,
+                client_ip_count=client_ip_count,
+                client_user_agent_count=client_user_agent_count,
+                fbp_basis_points=coverage_basis_points(fbp_count, total),
+                fbc_basis_points=coverage_basis_points(fbc_count, total),
+                client_ip_basis_points=coverage_basis_points(client_ip_count, total),
+                client_user_agent_basis_points=coverage_basis_points(
+                    client_user_agent_count, total
+                ),
+            )
+        )
+    return result
+
+
+def count_snapshot_value(exports: Sequence[OfflineConversionExport], key: str) -> int:
+    return sum(
+        1
+        for export in exports
+        if isinstance(export.payload_snapshot.get(key), str)
+        and str(export.payload_snapshot[key]).strip()
+    )
+
+
+def export_snapshot_has_fbc(export: OfflineConversionExport) -> bool:
+    snapshot = export.payload_snapshot
+    if isinstance(snapshot.get("fbc"), str) and str(snapshot["fbc"]).strip():
+        return True
+    return bool(
+        isinstance(snapshot.get("fbclid"), str)
+        and str(snapshot["fbclid"]).strip()
+        and isinstance(snapshot.get("click_captured_at"), str)
+        and str(snapshot["click_captured_at"]).strip()
+    )
+
+
+def export_snapshot_has_client_ip(export: OfflineConversionExport) -> bool:
+    value = export.payload_snapshot.get("client_ip_address")
+    return bool(
+        isinstance(value, str)
+        and value.strip()
+        and value.strip().lower() not in {"unknown", "edge-unknown", "testclient"}
+    )
+
+
+def coverage_basis_points(count: int, total: int) -> int | None:
+    return round(count / total * 10000) if total else None
+
+
+def provider_accepted_count(response: dict[str, object] | None) -> int | None:
+    if not isinstance(response, dict):
+        return None
+    value = response.get("events_received")
+    return value if type(value) is int else None
+
+
+def provider_warnings(response: dict[str, object] | None) -> list[str]:
+    if not isinstance(response, dict):
+        return []
+    messages = response.get("messages")
+    if not isinstance(messages, list):
+        return []
+    warnings: list[str] = []
+    for item in messages[:10]:
+        if isinstance(item, dict):
+            message = item.get("message") or item.get("description")
+            code = item.get("code")
+            if isinstance(message, str) and message.strip():
+                prefix = f"{code}: " if isinstance(code, (str, int)) else ""
+                warnings.append(f"{prefix}{message.strip()}"[:300])
+        elif isinstance(item, str) and item.strip():
+            warnings.append(item.strip()[:300])
+    return warnings
+
+
+def string_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def bool_or_none(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)][:20]
+
+
+def utc_isoformat(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return normalized.isoformat()
 
 
 def normalize_email(value: str) -> str:

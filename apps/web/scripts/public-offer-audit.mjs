@@ -753,6 +753,32 @@ async function auditJourney(browser, viewport) {
   if (state.submissions.at(-1)?.sms_consent !== false) {
     record(viewport.name, "sms-consent-payload", "An unchecked SMS box did not submit false.");
   }
+  const failedMetaEventId = state.submissions.at(-1)?.meta_browser_event?.event_id;
+  const storedPendingMetaEvent = await page.evaluate(() =>
+    JSON.parse(
+      sessionStorage.getItem("stonegate_cash_offer_pending_meta_lead_v1") ?? "null",
+    ),
+  );
+  if (!failedMetaEventId || storedPendingMetaEvent?.event_id !== failedMetaEventId) {
+    record(
+      viewport.name,
+      "meta-lead-persistence",
+      "The failed submission did not persist its Meta event ID for a reload-safe retry.",
+    );
+  }
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator("#name").waitFor({ timeout: 8_000 });
+  if (
+    (await page.locator("#name").inputValue()) !== "Jane Seller" ||
+    (await page.locator("#phone").inputValue()) !== "404-555-0100"
+  ) {
+    record(
+      viewport.name,
+      "submission-recovery",
+      "A reload after failed submission did not restore the seller's draft.",
+    );
+  }
   await page.locator("#sms_consent").check();
   await page.waitForTimeout(20);
   const storedDraft = await page.evaluate(() => JSON.parse(sessionStorage.getItem("stonegate_cash_offer_draft_v1") ?? "{}"));
@@ -785,6 +811,28 @@ async function auditJourney(browser, viewport) {
   }
 
   if (state.submissions.length !== 2) record(viewport.name, "submission-count", state.submissions.length);
+  const failedMetaEvent = state.submissions.at(-2)?.meta_browser_event;
+  const retriedMetaEvent = state.submissions.at(-1)?.meta_browser_event;
+  if (
+    !failedMetaEvent?.event_id ||
+    failedMetaEvent.event_id !== retriedMetaEvent?.event_id
+  ) {
+    record(
+      viewport.name,
+      "meta-lead-retry",
+      "A retried seller submission did not preserve its original Meta event ID.",
+    );
+  }
+  const pendingAfterSuccess = await page.evaluate(() =>
+    sessionStorage.getItem("stonegate_cash_offer_pending_meta_lead_v1"),
+  );
+  if (pendingAfterSuccess !== null) {
+    record(
+      viewport.name,
+      "meta-lead-persistence",
+      "The confirmed submission did not clear its pending Meta event ID.",
+    );
+  }
   const payload = state.submissions.at(-1);
   for (const [key, expected] of Object.entries({
     property_state: "GA",

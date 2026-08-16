@@ -172,6 +172,7 @@ def create_public_seller_lead(
         lead_id=lead.id,
         landing_page=payload.attribution.landing_page,
         referrer=payload.attribution.referrer,
+        fbclid_captured_at=payload.attribution.fbclid_captured_at,
         ip_address=ip_address,
         user_agent=user_agent,
         raw_payload={
@@ -731,6 +732,7 @@ def create_attribution_touch(
         content=attribution.utm_content,
         gclid=attribution.gclid,
         fbclid=attribution.fbclid,
+        fbclid_captured_at=attribution.fbclid_captured_at,
         landing_page=attribution.landing_page,
         referrer=attribution.referrer,
     )

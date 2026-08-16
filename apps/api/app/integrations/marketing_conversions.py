@@ -1,6 +1,5 @@
-from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -28,9 +27,16 @@ class ConversionDeliveryResult:
 
 
 class ConversionDeliveryError(RuntimeError):
-    def __init__(self, message: str, *, response: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        response: dict[str, Any] | None = None,
+        request_id: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.response = response
+        self.request_id = request_id
 
 
 class MarketingConversionClient:
@@ -103,20 +109,42 @@ class MarketingConversionClient:
             f"{self.settings.meta_pixel_id}/events"
         )
         payload = build_meta_payload(export, self.settings)
+        response: httpx.Response | None = None
         try:
             response = self.client.post(
                 url,
-                params={"access_token": self.settings.meta_conversions_access_token},
+                # Keep credentials out of the URL so httpx errors, reverse-proxy logs,
+                # and provider request IDs can never capture the access token.
+                headers={
+                    "Authorization": (f"Bearer {self.settings.meta_conversions_access_token}")
+                },
                 json=payload,
             )
             response.raise_for_status()
             body = sanitize_response(response.json())
         except (httpx.HTTPError, TypeError, ValueError) as exc:
-            response_body = response_json(getattr(exc, "response", None))
+            exception_response = getattr(exc, "response", None)
+            response_body = with_meta_delivery_metadata(
+                response_json(exception_response if exception_response is not None else response)
+                or {},
+                test_mode_enabled=bool(self.settings.meta_test_event_code),
+            )
             raise ConversionDeliveryError(
                 provider_error_message("Meta Conversions API", exc, response_body),
                 response=response_body,
+                request_id=string_value(response_body.get("fbtrace_id")),
             ) from exc
+        body = with_meta_delivery_metadata(
+            body,
+            test_mode_enabled=bool(self.settings.meta_test_event_code),
+        )
+        accepted_count = body.get("events_received")
+        if type(accepted_count) is not int or accepted_count != 1:
+            raise ConversionDeliveryError(
+                "Meta Conversions API did not confirm acceptance of exactly one event.",
+                response=body,
+                request_id=string_value(body.get("fbtrace_id")),
+            )
         return ConversionDeliveryResult(
             request_id=string_value(body.get("fbtrace_id")),
             response=body,
@@ -201,18 +229,20 @@ def build_meta_payload(
     fbp = snapshot.get("fbp")
     if isinstance(fbp, str) and fbp:
         user_data["fbp"] = fbp
-    if export.click_id_type == "fbclid":
-        click_timestamp = export.occurred_at
-        captured_at = snapshot.get("click_captured_at")
-        if isinstance(captured_at, str):
-            with suppress(ValueError):
-                click_timestamp = datetime.fromisoformat(captured_at)
+    fbclid = snapshot.get("fbclid")
+    if not isinstance(fbclid, str) or not fbclid.strip():
+        fbclid = export.click_id if export.click_id_type == "fbclid" else None
+    click_timestamp = original_click_timestamp(
+        snapshot.get("click_captured_at"),
+        occurred_at=export.occurred_at,
+    )
+    if isinstance(fbclid, str) and fbclid and click_timestamp is not None:
         user_data.setdefault(
             "fbc",
             (
-                export.click_id
-                if export.click_id.startswith("fb.")
-                else f"fb.1.{int(click_timestamp.timestamp())}.{export.click_id}"
+                fbclid
+                if fbclid.startswith("fb.")
+                else f"fb.1.{int(click_timestamp.timestamp() * 1000)}.{fbclid}"
             ),
         )
     event: dict[str, Any] = {
@@ -251,12 +281,28 @@ def response_json(response: httpx.Response | None) -> dict[str, Any] | None:
     return sanitized
 
 
+def with_meta_delivery_metadata(
+    body: dict[str, Any],
+    *,
+    test_mode_enabled: bool,
+) -> dict[str, Any]:
+    accepted_count = body.get("events_received")
+    messages = body.get("messages")
+    body["stonegate_delivery"] = {
+        "accepted_count": accepted_count if type(accepted_count) is int else None,
+        "warning_count": len(messages) if isinstance(messages, list) else 0,
+        "test_mode_enabled": test_mode_enabled,
+    }
+    return body
+
+
 def sanitize_response(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {"detail": str(value)[:500]}
     sanitized: dict[str, Any] = {}
     for key, item in value.items():
-        if key.lower() in {"access_token", "token", "authorization"}:
+        normalized_key = "".join(character for character in key.lower() if character.isalnum())
+        if "token" in normalized_key or normalized_key == "authorization":
             continue
         if isinstance(item, dict):
             sanitized[key] = sanitize_response(item)
@@ -284,7 +330,39 @@ def provider_error_message(
         detail = detail.get("message") or detail.get("status")
     if not detail and response:
         detail = response.get("detail")
-    return f"{provider} delivery failed: {str(detail or exc)[:700]}"
+    if not detail:
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+            detail = f"HTTP {exc.response.status_code}"
+        elif isinstance(exc, httpx.RequestError):
+            detail = type(exc).__name__
+        else:
+            detail = type(exc).__name__
+    return f"{provider} delivery failed: {str(detail)[:700]}"
+
+
+def original_click_timestamp(
+    value: object,
+    *,
+    occurred_at: datetime,
+) -> datetime | None:
+    """Return only a plausible, timezone-aware original click time."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    normalized = parsed.astimezone(UTC)
+    normalized_occurrence = (
+        occurred_at.replace(tzinfo=UTC)
+        if occurred_at.tzinfo is None
+        else occurred_at.astimezone(UTC)
+    )
+    if normalized > normalized_occurrence + timedelta(minutes=5):
+        return None
+    return normalized
 
 
 def string_value(value: Any) -> str | None:

@@ -54,7 +54,26 @@
 .providerRows article > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .providerRows article strong { font-size: 11px; }
 .providerRows article p { margin: 7px 0 0; color: var(--sg-color-text-muted); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
+.metaHealthGrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); border-top: 1px solid var(--sg-color-border); }
+.metaHealthGrid > article { padding: 14px; min-width: 0; }
+.metaHealthGrid > article:first-child { border-right: 1px solid var(--sg-color-border); }
+.metaHealthGrid > article > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.metaHealthGrid > article > div:first-child > strong { font-size: 11px; }
+.metaHealthGrid > article > dl { margin: 12px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.metaHealthGrid > article > dl div { min-width: 0; display: grid; gap: 2px; }
+.metaHealthGrid dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.metaHealthGrid dd { margin: 0; font-size: 10px; font-weight: 750; overflow-wrap: anywhere; }
+.metaHealthGrid > article > p { margin: 7px 0 0; color: var(--sg-color-text-muted); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.metaHealthGrid .healthWarning { color: var(--sg-color-danger); }
+.coverageRows { margin-top: 12px; display: grid; }
+.coverageRows > div { padding: 9px 0; border-bottom: 1px solid var(--sg-color-border-soft); }
+.coverageRows > div:last-child { border-bottom: 0; }
+.coverageRows > div > strong { font-size: 10px; }
+.coverageRows dl { margin: 7px 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.coverageRows dl div { display: grid; gap: 2px; }
+.coverageRows small { display: block; margin-top: 5px; color: var(--sg-color-text-muted); font-size: 8px; }
+.exportLayout .providerWarning { color: var(--sg-color-warning-strong, #8a5a00); }
 @media (max-width: 900px) { .exceptionRows > a { grid-template-columns: 1fr 20px; } .exceptionRows dl { grid-column: 1 / -1; grid-row: 2; } .exportLayout { grid-template-columns: 1fr; } .exportLayout > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
 @media (max-width: 900px) { .funnelLayout { grid-template-columns: 1fr; } .funnelRows { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
-@media (max-width: 900px) { .measurementGrid { grid-template-columns: 1fr; } .measurementPolicy { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
-@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } .vitalGrid { grid-template-columns: 1fr; } .vitalGrid article { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .measurementPolicy dl { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .measurementGrid, .metaHealthGrid { grid-template-columns: 1fr; } .measurementPolicy, .metaHealthGrid > article:first-child { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } .vitalGrid { grid-template-columns: 1fr; } .vitalGrid article { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .measurementPolicy dl, .metaHealthGrid > article > dl { grid-template-columns: 1fr 1fr; } .coverageRows dl { grid-template-columns: 1fr 1fr; } }

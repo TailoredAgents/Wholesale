@@ -795,3 +795,20 @@ test("Voice line settings make 24/7 staff ringing the visible default", () => {
   assert.equal([...voiceSettings.matchAll(/name="coverage_timezone"/g)].length, 2);
   assert.match(voiceSettings, /24\/7 staff ringing is always on/);
 });
+
+test("Marketing exposes safe Meta delivery health without rendering credentials", () => {
+  const page = readFileSync(resolve(osSourceRoot, "marketing/page.tsx"), "utf8");
+  const api = readFileSync(resolve(applicationSourceRoot, "app/lib/api.ts"), "utf8");
+
+  assert.match(page, /Meta delivery health/);
+  assert.match(page, /Meta match-key coverage/);
+  assert.match(page, /Dataset alignment/);
+  assert.match(page, /API \$\{testMode\(apiMetaTestMode\)\} · Worker/);
+  assert.match(page, /provider_accepted_count/);
+  assert.match(page, /provider_warnings/);
+  assert.match(api, /meta_pixel_id_fingerprint/);
+  assert.match(api, /oldest_meta_pending_at/);
+  assert.match(api, /normalizeMarketingOverview/);
+  assert.doesNotMatch(page, /META_CONVERSIONS_ACCESS_TOKEN/);
+  assert.doesNotMatch(page, /META_TEST_EVENT_CODE/);
+});

@@ -35,6 +35,7 @@ from app.services.operations import (
     record_worker_heartbeat,
     register_worker,
     resolve_operation_failures,
+    safe_meta_runtime_metadata,
     touch_worker_heartbeat,
 )
 from app.services.property_intelligence import (
@@ -101,8 +102,9 @@ def run_heartbeat(stop_event: threading.Event, settings: Settings) -> None:
 
 def run_worker(stop_event: threading.Event) -> None:
     settings = get_settings()
+    meta_runtime_metadata = safe_meta_runtime_metadata(settings)
     with SessionLocal() as db:
-        register_worker(db)
+        register_worker(db, runtime_metadata=meta_runtime_metadata)
         _recipients, staff_alert_recipients = eligible_staff_alert_recipients(db)
         (
             _inbound_recipients,
@@ -114,6 +116,14 @@ def run_worker(stop_event: threading.Event) -> None:
         service=COMMUNICATIONS_WORKER,
         transcription_enabled=settings.call_transcription_enabled,
         poll_seconds=settings.call_transcription_poll_seconds,
+        marketing_conversion_mode=meta_runtime_metadata["marketing_conversion_mode"],
+        meta_conversion_configured=meta_runtime_metadata["meta_configured"],
+        meta_conversion_configuration_blockers=(
+            meta_runtime_metadata["meta_configuration_blockers"]
+        ),
+        meta_pixel_id_fingerprint=meta_runtime_metadata["meta_pixel_id_fingerprint"],
+        meta_access_token_present=meta_runtime_metadata["meta_access_token_present"],
+        meta_test_mode_enabled=meta_runtime_metadata["meta_test_mode_enabled"],
         staff_lead_alert_sms_mode=settings.staff_lead_alert_sms_mode,
         staff_lead_alert_configured=not staff_alert_blockers,
         staff_lead_alert_configuration_blockers=staff_alert_blockers,
@@ -124,9 +134,7 @@ def run_worker(stop_event: threading.Event) -> None:
         staff_inbound_message_alert_active_opted_in_recipients=(
             inbound_message_alert_recipients.active_opted_in
         ),
-        staff_inbound_message_alert_ready_recipients=(
-            inbound_message_alert_recipients.ready
-        ),
+        staff_inbound_message_alert_ready_recipients=(inbound_message_alert_recipients.ready),
         staff_inbound_message_alert_recipients_missing_phone=(
             inbound_message_alert_recipients.missing_phone
         ),

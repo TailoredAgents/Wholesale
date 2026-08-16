@@ -35,6 +35,7 @@ const consentWording =
   "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
 const draftStorageKey = "stonegate_cash_offer_draft_v1";
 const confirmationStorageKey = "stonegate_cash_offer_confirmation_v1";
+const pendingMetaLeadStorageKey = "stonegate_cash_offer_pending_meta_lead_v1";
 const storageLifetimeMs = 24 * 60 * 60 * 1000;
 
 const steps = [
@@ -149,6 +150,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   const completedSteps = useRef(new Set<number>());
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const experimentContextRef = useRef<ConversionExperimentContext | null>(null);
+  const pendingMetaLeadEventIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeStepRef.current = activeStep;
@@ -166,6 +168,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       const preferredAddress = initialAddress || queryAddress;
       const savedConfirmation = parseStoredValue<Confirmation>(confirmationStorageKey);
       if (savedConfirmation) {
+        clearPendingMetaLeadEvent();
         setConfirmation(savedConfirmation);
         hasSubmitted.current = true;
         setHasRestoredDraft(true);
@@ -176,6 +179,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         draftStorageKey,
       );
       if (draft) {
+        pendingMetaLeadEventIdRef.current = restorePendingMetaLeadEventId();
         const restoredValues = { ...draft.values } as Partial<FormValues> & {
           consent_to_contact?: boolean;
           sms_consent?: boolean;
@@ -350,7 +354,11 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     });
 
     const experiment = experimentContextRef.current;
-    const metaBrowserEvent = createMetaBrowserEvent();
+    const metaBrowserEvent = createMetaBrowserEvent(
+      pendingMetaLeadEventIdRef.current ?? undefined,
+    );
+    pendingMetaLeadEventIdRef.current = metaBrowserEvent.event_id;
+    storePendingMetaLeadEventId(metaBrowserEvent.event_id);
     const payload = {
       property_address: values.property_address.trim(),
       property_city: values.property_city.trim(),
@@ -414,6 +422,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       };
       hasSubmitted.current = true;
       trackMetaPixelEvent("Lead", metaBrowserEvent.event_id);
+      pendingMetaLeadEventIdRef.current = null;
+      clearPendingMetaLeadEvent();
       isSubmitting.current = false;
       setConfirmation(nextConfirmation);
       setSubmitState({ status: "idle", message: "" });
@@ -523,6 +533,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     hasTrackedFormStart.current = false;
     hasTrackedFormAbandon.current = false;
     completedSteps.current.clear();
+    pendingMetaLeadEventIdRef.current = null;
     setValues(initialValues);
     setSmsConsent(false);
     setActiveStep(0);
@@ -534,6 +545,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     try {
       window.sessionStorage.removeItem(draftStorageKey);
       window.sessionStorage.removeItem(confirmationStorageKey);
+      clearPendingMetaLeadEvent();
       window.history.replaceState({}, "", "/get-a-cash-offer");
     } catch {
       // Resetting the visible form is sufficient if browser storage is unavailable.
@@ -1134,6 +1146,35 @@ function storeConfirmation(confirmation: Confirmation) {
       savedAt: Date.parse(confirmation.submittedAt),
     }),
   );
+}
+
+function storePendingMetaLeadEventId(eventId: string) {
+  try {
+    window.sessionStorage.setItem(
+      pendingMetaLeadStorageKey,
+      JSON.stringify({ event_id: eventId, savedAt: Date.now() }),
+    );
+  } catch {
+    // The in-memory identifier still deduplicates retries in this page lifecycle.
+  }
+}
+
+function restorePendingMetaLeadEventId() {
+  try {
+    const pending = parseStoredValue<{ event_id?: string }>(pendingMetaLeadStorageKey);
+    const eventId = pending?.event_id?.trim() ?? "";
+    return eventId.length >= 8 && eventId.length <= 255 ? eventId : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingMetaLeadEvent() {
+  try {
+    window.sessionStorage.removeItem(pendingMetaLeadStorageKey);
+  } catch {
+    // Storage may be unavailable; the caller also clears the in-memory ref.
+  }
 }
 
 function parseStoredValue<T>(key: string): T | null {

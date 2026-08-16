@@ -1,5 +1,7 @@
 "use client";
 
+import { isPublicTrackingPath } from "./public-tracking-policy";
+
 export type ConversionAttribution = {
   landing_page: string;
   referrer: string | null;
@@ -10,6 +12,7 @@ export type ConversionAttribution = {
   utm_content: string | null;
   gclid: string | null;
   fbclid: string | null;
+  fbclid_captured_at: string | null;
 };
 
 export type MetaBrowserEvent = {
@@ -30,6 +33,8 @@ declare global {
   interface Window {
     fbq?: MetaPixelFunction;
     _fbq?: MetaPixelFunction;
+    __stonegateMetaPixelIds?: string[];
+    __stonegateMetaLastPageViewPath?: string;
   }
 }
 
@@ -57,9 +62,19 @@ const conversionSessionKey = "stonegate_conversion_session_id_v2";
 const attributionStorageKey = "stonegate_conversion_attribution_v1";
 const experimentVisitorKey = "stonegate_experiment_visitor_id_v1";
 const experimentAssignmentKey = "stonegate_experiment_assignments_v1";
+const experimentExposureKey = "stonegate_experiment_exposures_v1";
 const experimentRequestTimeoutMs = 2_500;
+const metaBrowserCookieWaitMs = 750;
+const metaBrowserCookiePollMs = 25;
+const metaPixelReadyTimeoutMs = 5_000;
+const metaPixelScriptId = "stonegate-meta-pixel-script";
 let fallbackSessionId: string | null = null;
+let fallbackAttribution: ConversionAttribution | null = null;
 let experimentRequest: Promise<ConversionExperimentContext | null> | null = null;
+let resolvedExperimentContext: ConversionExperimentContext | null = null;
+let metaPixelReadyPromise: Promise<boolean> | null = null;
+const fallbackExperimentExposures = new Set<string>();
+const inFlightExperimentExposures = new Set<string>();
 
 function sanitizeReferrer(value: string) {
   if (!value) return null;
@@ -73,29 +88,126 @@ function sanitizeReferrer(value: string) {
 
 function captureCurrentAttribution(): ConversionAttribution {
   const params = new URLSearchParams(window.location.search);
+  const fbclid = cleanAttributionValue(params.get("fbclid"), 255);
   return {
     landing_page: window.location.pathname.slice(0, 255),
     referrer: sanitizeReferrer(document.referrer),
-    utm_source: params.get("utm_source"),
-    utm_medium: params.get("utm_medium"),
-    utm_campaign: params.get("utm_campaign"),
-    utm_term: params.get("utm_term"),
-    utm_content: params.get("utm_content"),
-    gclid: params.get("gclid"),
-    fbclid: params.get("fbclid"),
+    utm_source: cleanAttributionValue(params.get("utm_source"), 120),
+    utm_medium: cleanAttributionValue(params.get("utm_medium"), 120),
+    utm_campaign: cleanAttributionValue(params.get("utm_campaign"), 255),
+    utm_term: cleanAttributionValue(params.get("utm_term"), 255),
+    utm_content: cleanAttributionValue(params.get("utm_content"), 255),
+    gclid: cleanAttributionValue(params.get("gclid"), 255),
+    fbclid,
+    fbclid_captured_at: fbclid ? new Date().toISOString() : null,
   };
 }
 
-export function getConversionAttribution(): ConversionAttribution {
+function cleanAttributionValue(value: string | null, maxLength: number) {
+  const cleaned = value?.trim();
+  return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function hasCampaignParameters(attribution: ConversionAttribution) {
+  return Boolean(
+    attribution.utm_source ||
+      attribution.utm_medium ||
+      attribution.utm_campaign ||
+      attribution.utm_term ||
+      attribution.utm_content,
+  );
+}
+
+function hasExplicitPlatformClick(attribution: ConversionAttribution) {
+  return Boolean(attribution.gclid || attribution.fbclid);
+}
+
+function recoverMetaClickFromCookie(attribution: ConversionAttribution) {
+  if (attribution.fbclid || attribution.gclid) return attribution;
+  const parsedFbc = parseFbc(readCookie("_fbc"));
+  if (!parsedFbc) return attribution;
+  return {
+    ...attribution,
+    fbclid: parsedFbc.fbclid,
+    fbclid_captured_at: parsedFbc.capturedAt,
+  };
+}
+
+function parseStoredAttribution(value: string | null): ConversionAttribution | null {
+  if (!value) return null;
   try {
-    const stored = window.sessionStorage.getItem(attributionStorageKey);
-    if (stored) return JSON.parse(stored) as ConversionAttribution;
-    const attribution = captureCurrentAttribution();
-    window.sessionStorage.setItem(attributionStorageKey, JSON.stringify(attribution));
-    return attribution;
+    const parsed = JSON.parse(value) as Partial<ConversionAttribution>;
+    if (typeof parsed.landing_page !== "string") return null;
+    const fbclid = cleanAttributionValue(parsed.fbclid ?? null, 255);
+    const capturedAt = parsed.fbclid_captured_at;
+    let validCapturedAt =
+      typeof capturedAt === "string" &&
+      Number.isFinite(Date.parse(capturedAt)) &&
+      Date.parse(capturedAt) <= Date.now() + 5 * 60 * 1000
+        ? capturedAt
+        : null;
+    if (fbclid && !validCapturedAt) {
+      const parsedFbc = parseFbc(readCookie("_fbc"));
+      if (parsedFbc?.fbclid === fbclid) validCapturedAt = parsedFbc.capturedAt;
+    }
+    return {
+      landing_page: parsed.landing_page.slice(0, 255),
+      referrer: typeof parsed.referrer === "string" ? parsed.referrer.slice(0, 500) : null,
+      utm_source: cleanAttributionValue(parsed.utm_source ?? null, 120),
+      utm_medium: cleanAttributionValue(parsed.utm_medium ?? null, 120),
+      utm_campaign: cleanAttributionValue(parsed.utm_campaign ?? null, 255),
+      utm_term: cleanAttributionValue(parsed.utm_term ?? null, 255),
+      utm_content: cleanAttributionValue(parsed.utm_content ?? null, 255),
+      gclid: cleanAttributionValue(parsed.gclid ?? null, 255),
+      fbclid,
+      fbclid_captured_at: validCapturedAt,
+    };
   } catch {
-    return captureCurrentAttribution();
+    return null;
   }
+}
+
+function storeAttribution(attribution: ConversionAttribution) {
+  fallbackAttribution = attribution;
+  try {
+    window.sessionStorage.setItem(attributionStorageKey, JSON.stringify(attribution));
+  } catch {
+    // The in-memory attribution remains stable for this page lifecycle.
+  }
+}
+
+export function getConversionAttribution(): ConversionAttribution {
+  const current = captureCurrentAttribution();
+  let stored = fallbackAttribution;
+  try {
+    stored = parseStoredAttribution(window.sessionStorage.getItem(attributionStorageKey)) ?? stored;
+  } catch {
+    // Privacy-restricted browsers can still use the in-memory attribution.
+  }
+
+  if (!isPublicTrackingPath(window.location.pathname)) return stored ?? current;
+  if (stored && !hasExplicitPlatformClick(current)) {
+    const merged = hasCampaignParameters(current)
+      ? {
+          ...stored,
+          utm_source: current.utm_source,
+          utm_medium: current.utm_medium,
+          utm_campaign: current.utm_campaign,
+          utm_term: current.utm_term,
+          utm_content: current.utm_content,
+        }
+      : stored;
+    const recovered = recoverMetaClickFromCookie(merged);
+    storeAttribution(recovered);
+    return recovered;
+  }
+
+  if (stored?.fbclid && stored.fbclid === current.fbclid && !current.gclid) {
+    current.fbclid_captured_at = stored.fbclid_captured_at ?? current.fbclid_captured_at;
+  }
+  const nextAttribution = recoverMetaClickFromCookie(current);
+  storeAttribution(nextAttribution);
+  return nextAttribution;
 }
 
 export function getConversionSessionId(): string {
@@ -127,12 +239,17 @@ export function getDeviceCategory() {
 }
 
 function readCookie(name: string) {
-  const prefix = `${name}=`;
-  const value = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(prefix));
-  return value ? decodeURIComponent(value.slice(prefix.length)) : null;
+  try {
+    const prefix = `${name}=`;
+    const value = document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(prefix));
+    if (!value) return null;
+    return decodeURIComponent(value.slice(prefix.length));
+  } catch {
+    return null;
+  }
 }
 
 function newEventId() {
@@ -141,25 +258,63 @@ function newEventId() {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function createMetaBrowserEvent(): MetaBrowserEvent {
-  const attribution = getConversionAttribution();
+function cookieFbcMatchesAttribution(fbc: string, fbclid: string) {
+  return parseFbc(fbc)?.fbclid === fbclid;
+}
+
+function parseFbc(fbc: string | null) {
+  if (!fbc) return null;
+  const parts = fbc.split(".");
+  if (parts.length < 4 || parts[0] !== "fb") return null;
+  const capturedAtMs = Number(parts[2]);
+  const fbclid = cleanAttributionValue(parts.slice(3).join("."), 255);
+  if (
+    !fbclid ||
+    !Number.isSafeInteger(capturedAtMs) ||
+    capturedAtMs < 1_000_000_000_000
+  ) {
+    return null;
+  }
+  const capturedAt = new Date(capturedAtMs);
+  if (
+    !Number.isFinite(capturedAt.getTime()) ||
+    capturedAt.getTime() > Date.now() + 5 * 60 * 1000
+  ) {
+    return null;
+  }
+  return { capturedAt: capturedAt.toISOString(), fbclid };
+}
+
+function fallbackFbc(attribution: ConversionAttribution) {
+  if (!attribution.fbclid || !attribution.fbclid_captured_at) return null;
+  const capturedAtMs = Date.parse(attribution.fbclid_captured_at);
+  if (!Number.isFinite(capturedAtMs)) return null;
+  return `fb.1.${Math.floor(capturedAtMs)}.${attribution.fbclid}`;
+}
+
+function resolveFbc(attribution: ConversionAttribution) {
   const storedFbc = readCookie("_fbc");
-  const fbc =
-    storedFbc ??
-    (attribution.fbclid
-      ? `fb.1.${Math.floor(Date.now() / 1000)}.${attribution.fbclid}`
-      : null);
+  if (
+    storedFbc &&
+    (!attribution.fbclid || cookieFbcMatchesAttribution(storedFbc, attribution.fbclid))
+  ) {
+    return storedFbc;
+  }
+  return fallbackFbc(attribution);
+}
+
+export function createMetaBrowserEvent(eventId = newEventId()): MetaBrowserEvent {
+  const attribution = getConversionAttribution();
   return {
-    event_id: newEventId(),
+    event_id: eventId,
     event_source_url: `${window.location.origin}${window.location.pathname}`.slice(0, 500),
-    fbc,
+    fbc: resolveFbc(attribution),
     fbp: readCookie("_fbp"),
   };
 }
 
-export function initializeMetaPixel() {
-  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
-  if (!pixelId || window.fbq) return;
+function ensureMetaPixelQueue() {
+  if (window.fbq) return window.fbq;
   const fbq = function (...args: unknown[]) {
     if (fbq.callMethod) fbq.callMethod(...args);
     else fbq.queue.push(args);
@@ -169,30 +324,136 @@ export function initializeMetaPixel() {
   fbq.version = "2.0";
   window.fbq = fbq;
   window._fbq = fbq;
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = "https://connect.facebook.net/en_US/fbevents.js";
-  document.head.appendChild(script);
-  fbq("init", pixelId);
+  return fbq;
+}
+
+function pixelWasInitialized(fbq: MetaPixelFunction, pixelId: string) {
+  return (
+    window.__stonegateMetaPixelIds?.includes(pixelId) ||
+    (Array.isArray(fbq.queue) &&
+      fbq.queue.some((args) => args[0] === "init" && args[1] === pixelId))
+  );
+}
+
+export function initializeMetaPixel(): Promise<boolean> {
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
+  if (!pixelId || !isPublicTrackingPath(window.location.pathname)) {
+    return Promise.resolve(false);
+  }
+  if (metaPixelReadyPromise) return metaPixelReadyPromise;
+
+  const fbq = ensureMetaPixelQueue();
+  if (!pixelWasInitialized(fbq, pixelId)) {
+    fbq("init", pixelId);
+    window.__stonegateMetaPixelIds = [...(window.__stonegateMetaPixelIds ?? []), pixelId];
+  }
+
+  const existingScript =
+    (document.getElementById(metaPixelScriptId) as HTMLScriptElement | null) ??
+    document.querySelector<HTMLScriptElement>(
+      'script[src="https://connect.facebook.net/en_US/fbevents.js"]',
+    );
+  const script = existingScript ?? document.createElement("script");
+  if (!existingScript) {
+    script.id = metaPixelScriptId;
+    script.async = true;
+    script.src = "https://connect.facebook.net/en_US/fbevents.js";
+  }
+
+  metaPixelReadyPromise = new Promise<boolean>((resolve) => {
+    let settled = false;
+    let readinessTimeout: number | null = null;
+    const settle = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (readinessTimeout !== null) window.clearTimeout(readinessTimeout);
+      resolve(ready);
+    };
+    if (window.fbq?.callMethod || script.dataset.stonegateLoaded === "true") {
+      settle(true);
+      return;
+    }
+    script.addEventListener(
+      "load",
+      () => {
+        script.dataset.stonegateLoaded = "true";
+        settle(true);
+      },
+      { once: true },
+    );
+    script.addEventListener("error", () => settle(false), { once: true });
+    readinessTimeout = window.setTimeout(
+      () => settle(Boolean(window.fbq?.callMethod)),
+      metaPixelReadyTimeoutMs,
+    );
+  });
+
+  if (!existingScript) document.head.appendChild(script);
+  return metaPixelReadyPromise;
 }
 
 export function trackMetaPixelEvent(
   eventName: "PageView" | "ViewContent" | "Lead",
   eventId?: string,
 ) {
-  initializeMetaPixel();
-  if (!window.fbq) return;
+  if (!isPublicTrackingPath(window.location.pathname)) return false;
+  void initializeMetaPixel();
+  if (!window.fbq) return false;
   if (eventId) window.fbq("track", eventName, {}, { eventID: eventId });
   else window.fbq("track", eventName);
+  return true;
+}
+
+export function trackMetaPageNavigation(pathname: string) {
+  if (!isPublicTrackingPath(pathname)) {
+    window.__stonegateMetaLastPageViewPath = undefined;
+    return false;
+  }
+  if (window.__stonegateMetaLastPageViewPath === pathname) return false;
+  window.__stonegateMetaLastPageViewPath = pathname;
+  return trackMetaPixelEvent("PageView");
+}
+
+function refreshMetaBrowserEventCookies(event: MetaBrowserEvent): MetaBrowserEvent {
+  const attribution = getConversionAttribution();
+  return {
+    ...event,
+    fbc: resolveFbc(attribution),
+    fbp: readCookie("_fbp"),
+  };
+}
+
+function wait(delayMs: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+export async function waitForMetaBrowserCookies(
+  event: MetaBrowserEvent,
+  waitMs = metaBrowserCookieWaitMs,
+) {
+  if (!process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()) return refreshMetaBrowserEventCookies(event);
+  void initializeMetaPixel();
+  const deadline = Date.now() + Math.max(0, waitMs);
+  let refreshed = refreshMetaBrowserEventCookies(event);
+  while (!refreshed.fbp && Date.now() < deadline) {
+    await wait(Math.min(metaBrowserCookiePollMs, Math.max(1, deadline - Date.now())));
+    refreshed = refreshMetaBrowserEventCookies(event);
+  }
+  return refreshed;
 }
 
 export async function getConversionExperimentContext(
   apiBaseUrl: string,
 ): Promise<ConversionExperimentContext | null> {
   if (!experimentRequest) {
-    experimentRequest = loadExperimentContext(apiBaseUrl);
+    experimentRequest = loadExperimentContext(apiBaseUrl).then((context) => {
+      resolvedExperimentContext = context;
+      return context;
+    });
   }
-  return experimentRequest;
+  const context = await experimentRequest;
+  if (context) queueExperimentExposure(apiBaseUrl, context);
+  return context;
 }
 
 async function loadExperimentContext(
@@ -290,15 +551,79 @@ function readStoredAssignments(): Record<string, StoredAssignment> {
   }
 }
 
-export async function recordConversionEvent(
+function experimentExposureIdentity(context: ConversionExperimentContext) {
+  return `${getConversionSessionId()}:${context.experiment_key}`;
+}
+
+function wasExperimentExposureSent(exposureIdentity: string) {
+  if (fallbackExperimentExposures.has(exposureIdentity)) return true;
+  try {
+    const raw = window.sessionStorage.getItem(experimentExposureKey);
+    const stored = raw ? (JSON.parse(raw) as unknown) : [];
+    const identities = Array.isArray(stored)
+      ? stored.filter((value): value is string => typeof value === "string")
+      : [];
+    if (identities.includes(exposureIdentity)) {
+      fallbackExperimentExposures.add(exposureIdentity);
+      return true;
+    }
+  } catch {
+    // The in-memory marker still protects this page lifecycle.
+  }
+  return false;
+}
+
+function markExperimentExposureSent(exposureIdentity: string) {
+  fallbackExperimentExposures.add(exposureIdentity);
+  try {
+    const raw = window.sessionStorage.getItem(experimentExposureKey);
+    const stored = raw ? (JSON.parse(raw) as unknown) : [];
+    const identities = Array.isArray(stored)
+      ? stored.filter((value): value is string => typeof value === "string")
+      : [];
+    if (!identities.includes(exposureIdentity)) identities.push(exposureIdentity);
+    window.sessionStorage.setItem(experimentExposureKey, JSON.stringify(identities));
+  } catch {
+    // The successful in-memory marker still prevents another send this lifecycle.
+  }
+}
+
+function queueExperimentExposure(
+  apiBaseUrl: string,
+  context: ConversionExperimentContext,
+) {
+  const exposureIdentity = experimentExposureIdentity(context);
+  if (
+    wasExperimentExposureSent(exposureIdentity) ||
+    inFlightExperimentExposures.has(exposureIdentity)
+  ) {
+    return;
+  }
+  inFlightExperimentExposures.add(exposureIdentity);
+  void postConversionEvent(
+    apiBaseUrl,
+    "experiment_exposure",
+    {
+      surface_key: context.surface_key,
+      cta_label: context.cta_label,
+    },
+    undefined,
+    context,
+  ).then((sent) => {
+    inFlightExperimentExposures.delete(exposureIdentity);
+    if (sent) markExperimentExposureSent(exposureIdentity);
+  });
+}
+
+async function postConversionEvent(
   apiBaseUrl: string,
   eventType: string,
-  metadata?: Record<string, unknown>,
-  metaBrowserEvent?: MetaBrowserEvent,
+  metadata: Record<string, unknown> | undefined,
+  metaBrowserEvent: MetaBrowserEvent | undefined,
+  experiment: ConversionExperimentContext | null,
 ) {
   try {
-    const experiment = await getConversionExperimentContext(apiBaseUrl);
-    await fetch(`${apiBaseUrl}/api/v1/public/conversion-events`, {
+    const response = await fetch(`${apiBaseUrl}/api/v1/public/conversion-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -313,9 +638,30 @@ export async function recordConversionEvent(
       }),
       keepalive: true,
     });
+    return response.ok;
   } catch {
-    // Conversion tracking must never block seller intake.
+    // Conversion measurement must never block seller intake or navigation.
+    return false;
   }
+}
+
+export async function recordConversionEvent(
+  apiBaseUrl: string,
+  eventType: string,
+  metadata?: Record<string, unknown>,
+  metaBrowserEvent?: MetaBrowserEvent,
+) {
+  void getConversionExperimentContext(apiBaseUrl);
+  if (resolvedExperimentContext) {
+    queueExperimentExposure(apiBaseUrl, resolvedExperimentContext);
+  }
+  return postConversionEvent(
+    apiBaseUrl,
+    eventType,
+    metadata,
+    metaBrowserEvent,
+    resolvedExperimentContext,
+  );
 }
 
 
@@ -323,7 +669,9 @@ export async function recordMetaViewContent(
   apiBaseUrl: string,
   metadata?: Record<string, unknown>,
 ) {
+  if (!isPublicTrackingPath(window.location.pathname)) return false;
   const metaBrowserEvent = createMetaBrowserEvent();
   trackMetaPixelEvent("ViewContent", metaBrowserEvent.event_id);
-  await recordConversionEvent(apiBaseUrl, "page_view", metadata, metaBrowserEvent);
+  const serverMetaBrowserEvent = await waitForMetaBrowserCookies(metaBrowserEvent);
+  return recordConversionEvent(apiBaseUrl, "page_view", metadata, serverMetaBrowserEvent);
 }

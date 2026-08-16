@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
 from app.services.communication_compliance import format_e164
@@ -58,6 +58,35 @@ class SellerIntakeAttribution(BaseModel):
     utm_content: str | None = Field(default=None, max_length=255)
     gclid: str | None = Field(default=None, max_length=255)
     fbclid: str | None = Field(default=None, max_length=255)
+    fbclid_captured_at: datetime | None = None
+
+    @field_validator("fbclid_captured_at", mode="before")
+    @classmethod
+    def parse_optional_meta_click_capture(cls, value: object) -> datetime | None:
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    @model_validator(mode="after")
+    def validate_meta_click_capture(self) -> "SellerIntakeAttribution":
+        """Keep a click's original timestamp bound to the click that supplied it."""
+        captured_at = self.fbclid_captured_at
+        if captured_at is None:
+            return self
+        if (
+            not self.fbclid
+            or not self.fbclid.strip()
+            or captured_at.tzinfo is None
+            or captured_at.utcoffset() is None
+            or captured_at.astimezone(UTC) > datetime.now(UTC) + timedelta(minutes=5)
+        ):
+            self.fbclid_captured_at = None
+        return self
 
 
 class MetaBrowserEvent(BaseModel):

@@ -49,14 +49,47 @@ test("standard public pages keep the full navigation shell", () => {
 
 test("successful cash-offer submissions report one deduplicated Meta Lead", () => {
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  assert.match(form, /pendingMetaLeadEventIdRef/);
+  assert.match(
+    form,
+    /createMetaBrowserEvent\(\s*pendingMetaLeadEventIdRef\.current \?\? undefined,?\s*\)/,
+  );
+  assert.match(form, /stonegate_cash_offer_pending_meta_lead_v1/);
+  assert.match(form, /storePendingMetaLeadEventId\(metaBrowserEvent\.event_id\)/);
+  assert.match(form, /restorePendingMetaLeadEventId\(\)/);
   assert.match(
     form,
     /trackMetaPixelEvent\("Lead", metaBrowserEvent\.event_id\)/,
+  );
+  assert.ok(
+    form.indexOf('if (!response.ok)') <
+      form.indexOf('trackMetaPixelEvent("Lead", metaBrowserEvent.event_id)'),
+    "The browser Lead must fire only after the API confirms success.",
   );
   assert.doesNotMatch(
     form,
     /trackMetaPixelEvent\("Contact", metaBrowserEvent\.event_id\)/,
   );
+});
+
+test("the public Meta bootstrap runs before hydration and shares route state", () => {
+  const layout = read("src/app/layout.tsx");
+  const bootstrap = read("src/app/lib/meta-pixel-bootstrap.ts");
+  const conversions = read("src/app/lib/conversion-events.ts");
+  assert.match(layout, /strategy="beforeInteractive"/);
+  assert.match(layout, /buildMetaPixelBootstrap/);
+  assert.match(bootstrap, /nonPublicTrackingRoutePrefixes/);
+  assert.match(bootstrap, /__stonegateMetaLastPageViewPath/);
+  assert.match(bootstrap, /q\("track","PageView"\)/);
+  assert.match(conversions, /window\.__stonegateMetaLastPageViewPath/);
+});
+
+test("public conversion tracking follows route and event identity", () => {
+  const tracker = read("src/app/public-conversion-tracker.tsx");
+  assert.match(tracker, /usePathname\(\)/);
+  assert.match(tracker, /lastRecordedIdentity/);
+  assert.match(tracker, /metadataIdentity/);
+  assert.doesNotMatch(tracker, /hasRecorded/);
 });
 
 test("seller intake does not wait on optional experiment tracking", () => {
