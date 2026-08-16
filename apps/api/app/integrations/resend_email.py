@@ -1,7 +1,7 @@
 import base64
 from email.headerregistry import Address
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import httpx
 
@@ -17,8 +17,36 @@ class ResendEmailError(EmailProviderError):
     pass
 
 
+class ResendAttachmentDownloadUrlError(ResendEmailError):
+    pass
+
+
 class ResendAttachmentTooLargeError(ResendEmailError):
     pass
+
+
+RESEND_ATTACHMENT_DOWNLOAD_HOSTS = frozenset(
+    {
+        "cdn.resend.app",
+        "inbound-cdn.resend.com",
+    }
+)
+
+
+def trusted_resend_attachment_download_url(parsed: ParseResult) -> bool:
+    try:
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == "https"
+        and hostname is not None
+        and hostname.lower() in RESEND_ATTACHMENT_DOWNLOAD_HOSTS
+        and port in {None, 443}
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 class ResendEmailDeliveryProvider(EmailDeliveryProvider):
@@ -127,8 +155,10 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         )
         download_url = str(metadata.get("download_url", "")).strip()
         parsed = urlparse(download_url)
-        if parsed.scheme != "https" or parsed.hostname != "inbound-cdn.resend.com":
-            raise ResendEmailError("Resend returned an invalid attachment download URL.")
+        if not trusted_resend_attachment_download_url(parsed):
+            raise ResendAttachmentDownloadUrlError(
+                "Resend returned an invalid attachment download URL."
+            )
         declared_size = attachment_size(metadata.get("size"))
         if declared_size is not None and declared_size > max_bytes:
             raise ResendAttachmentTooLargeError(

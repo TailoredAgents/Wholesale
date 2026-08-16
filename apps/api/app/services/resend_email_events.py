@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.integrations.resend_email import (
+    ResendAttachmentDownloadUrlError,
     ResendAttachmentTooLargeError,
     ResendEmailDeliveryProvider,
     attachment_size,
@@ -1276,7 +1277,11 @@ def retain_received_attachments(
                 "storage_status": "retained",
                 "provider_expires_at": provider_metadata.get("expires_at"),
             }
-        except (ResendAttachmentTooLargeError, ValueError) as exc:
+        except (
+            ResendAttachmentDownloadUrlError,
+            ResendAttachmentTooLargeError,
+            ValueError,
+        ) as exc:
             record.attachment_metadata = {
                 "storage_status": "rejected",
                 "error": str(exc)[:500],

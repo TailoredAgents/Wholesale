@@ -13,6 +13,7 @@ from svix.webhooks import Webhook
 
 from app.core.config import Settings, get_settings
 from app.integrations.resend_email import (
+    ResendAttachmentDownloadUrlError,
     ResendAttachmentTooLargeError,
     ResendEmailDeliveryProvider,
 )
@@ -240,12 +241,12 @@ def provider_for_messages(messages: dict[str, dict[str, Any]]) -> ResendEmailDel
                     "filename": "seller-document.pdf",
                     "size": 17,
                     "content_type": "application/pdf",
-                    "download_url": ("https://inbound-cdn.resend.com/inbound-1/attachment-1"),
+                    "download_url": ("https://cdn.resend.app/receiving/inbound-1/attachment-1"),
                     "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
                 },
                 request=request,
             )
-        if request.url.host == "inbound-cdn.resend.com":
+        if request.url.host == "cdn.resend.app":
             return httpx.Response(
                 200,
                 content=b"%PDF seller file",
@@ -1097,6 +1098,147 @@ def test_oversize_attachment_is_rejected_but_email_body_is_retained(
     )
     assert event is not None
     assert event.processing_status == "processed"
+
+
+def test_untrusted_attachment_url_is_rejected_but_email_body_is_retained(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-untrusted-attachment-url",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "untrusted-attachment-url-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    message = inbound_message("untrusted-attachment-url-1", with_attachment=True)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/attachments/attachment-1"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "attachment-1",
+                    "size": 17,
+                    "download_url": "https://cdn.resend.app.attacker.example/attachment-1",
+                },
+                request=request,
+            )
+        return httpx.Response(200, json=message, request=request)
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    ) is not None
+
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "untrusted-attachment-url-1"
+        )
+    )
+    assert communication is not None
+    assert communication.body == "Tuesday works for me."
+    attachment = db_session.scalar(
+        select(EmailAttachment).where(
+            EmailAttachment.communication_record_id == communication.id
+        )
+    )
+    assert attachment is not None
+    assert attachment.content_data is None
+    assert attachment.attachment_metadata is not None
+    assert attachment.attachment_metadata["storage_status"] == "rejected"
+    assert "invalid attachment download URL" in attachment.attachment_metadata["error"]
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-untrusted-attachment-url"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "processed"
+
+
+@pytest.mark.parametrize(
+    "download_url",
+    [
+        "https://cdn.resend.app/receiving/message-1/attachment-1?token=signed",
+        "https://inbound-cdn.resend.com/message-1/attachment-1?token=signed",
+    ],
+)
+def test_resend_attachment_download_accepts_exact_resend_https_hosts(
+    download_url: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.resend.com":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "attachment-1",
+                    "size": 4,
+                    "download_url": download_url,
+                },
+                request=request,
+            )
+        return httpx.Response(200, content=b"file", request=request)
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    _metadata, content = provider.download_received_attachment(
+        "message-1",
+        "attachment-1",
+        max_bytes=4,
+    )
+    assert content == b"file"
+
+
+@pytest.mark.parametrize(
+    "download_url",
+    [
+        "http://cdn.resend.app/receiving/message-1/attachment-1",
+        "https://cdn.resend.app.attacker.example/attachment-1",
+        "https://inbound-cdn.resend.com.attacker.example/attachment-1",
+        "https://attacker.example@cdn.resend.app/attachment-1",
+        "https://cdn.resend.app:444/attachment-1",
+    ],
+)
+def test_resend_attachment_download_rejects_untrusted_urls(download_url: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "attachment-1",
+                "size": 4,
+                "download_url": download_url,
+            },
+            request=request,
+        )
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ResendAttachmentDownloadUrlError, match="invalid attachment"):
+        provider.download_received_attachment(
+            "message-1",
+            "attachment-1",
+            max_bytes=4,
+        )
 
 
 @pytest.mark.parametrize(
