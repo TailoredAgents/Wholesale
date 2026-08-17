@@ -52,24 +52,38 @@ test("cash-offer page stays static while preserving address-query restoration", 
   const page = read("src/app/get-a-cash-offer/page.tsx");
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
   const chrome = read("src/app/get-a-cash-offer/offer-page-chrome.tsx");
-  const mobileAction = read("src/app/get-a-cash-offer/offer-page-action-link.tsx");
+  const scrollController = read("src/app/get-a-cash-offer/offer-page-scroll-controller.tsx");
   const footer = read("src/app/public-site-footer.tsx");
   assert.doesNotMatch(page, /searchParams/);
   assert.match(page, /<OfferPageHeader \/>/);
   assert.match(page, /<OfferPageFooter \/>/);
+  assert.match(page, /<OfferPageScrollController \/>/);
   assert.doesNotMatch(page, /PublicSite(?:Header|Footer)/);
   assert.doesNotMatch(chrome, /["']use client["']/);
-  assert.doesNotMatch(chrome, /next\/link|PublicSite(?:Header|Footer)|MobileConversionBar/);
+  assert.doesNotMatch(
+    chrome,
+    /next\/link|PublicSite(?:Header|Footer)|MobileConversionBar|offerMobileBar|Quick seller actions/,
+  );
   assert.match(chrome, /href="\/"/);
   assert.match(chrome, /href="\/privacy-policy"/);
   assert.match(chrome, /href="\/terms"/);
   assert.match(chrome, /placement: "offer_landing_header"/);
   assert.match(chrome, /placement: "offer_landing_footer"/);
-  assert.match(mobileAction, /href="#cash-offer-form"/);
-  assert.match(mobileAction, /entry_point: "mobile_action_bar"/);
+  assert.match(scrollController, /window\.history\.scrollRestoration = "manual"/);
+  assert.match(scrollController, /window\.location\.hash === "#cash-offer-form"/);
+  assert.match(scrollController, /window\.history\.state/);
+  assert.match(scrollController, /window\.location\.pathname/);
+  assert.match(scrollController, /window\.location\.search/);
+  assert.match(scrollController, /window\.scrollTo\(\{ top: 0, left: 0, behavior: "auto" \}\)/);
+  assert.match(scrollController, /window\.addEventListener\("pageshow", handlePageShow\)/);
+  assert.match(scrollController, /event\.persisted/);
   assert.match(form, /window\.location\.search/);
   assert.match(form, /preferredAddress \|\| draft\.values\.property_address/);
+  assert.match(form, /nextUrl\.searchParams\.delete\("address"\)/);
+  assert.match(form, /window\.history\.replaceState\(\s*window\.history\.state/);
+  assert.doesNotMatch(form, /window\.history\.replaceState\(\{\}, "", "\/get-a-cash-offer"\)/);
   assert.doesNotMatch(form, /name="preferred_contact_method"/);
+  assert.match(form, /recordConversionEvent\(apiBaseUrl, "form_start"/);
   assert.match(form, /preferred_contact_method: "phone"/);
   assert.doesNotMatch(form, /Property details may be saved when you continue/);
   assert.match(footer, /!isConversion \? \(\s*<p className=\{styles\.disclosure\}>/);
@@ -207,7 +221,7 @@ test("cash-offer address autocomplete remains optional and mobile-first", () => 
   const styles = read("src/app/get-a-cash-offer/page.module.css");
   assert.match(form, /<PropertyAddressField/);
   assert.match(address, /\/api\/v1\/public\/address-suggestions/);
-  assert.match(address, /Enter address manually/);
+  assert.match(address, /Can.t find it\? Enter manually\./);
   assert.match(address, /role="combobox"/);
   assert.match(address, /role="listbox"/);
   assert.match(address, /activeIndex >= 0 \? activeIndex : 0/);

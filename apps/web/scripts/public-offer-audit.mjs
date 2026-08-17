@@ -157,6 +157,20 @@ async function checkPage(page, viewport, step) {
   if (violations.length) record(viewport, "wcag", { step, violations });
 }
 
+async function waitForOfferScrollController(page) {
+  await page.waitForFunction(
+    () => window.history.scrollRestoration === "manual",
+    undefined,
+    { timeout: 8_000 },
+  );
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
+      }),
+  );
+}
+
 async function checkMobileActionBar(page, viewport, expectedOfferHref, step) {
   const bar = page.getByRole("navigation", { name: "Quick seller actions" });
   const shouldBeVisible = viewport.width <= 720;
@@ -216,6 +230,7 @@ async function checkFocusedControlClearance(page, viewport, locator, step) {
   if (viewport.width > 720) return;
   await locator.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const bar = page.getByRole("navigation", { name: "Quick seller actions" });
+  if (!(await bar.count())) return;
   const [controlBox, barBox] = await Promise.all([locator.boundingBox(), bar.boundingBox()]);
   if (
     controlBox &&
@@ -565,6 +580,22 @@ async function auditJourney(browser, viewport) {
   page.on("pageerror", (error) => browserErrors.push(error.message));
   await installApiStubs(page, state);
 
+  await page.goto(`${baseUrl}/get-a-cash-offer?utm_source=facebook&fbclid=FRESH_AUDIT`, {
+    waitUntil: "networkidle",
+  });
+  await waitForOfferScrollController(page);
+  const freshEntryScrollY = await page.evaluate(() => window.scrollY);
+  if (freshEntryScrollY > 1) {
+    record(viewport.name, "offer-entry", { stage: "fresh", scrollY: freshEntryScrollY });
+  }
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/offer-fresh-${viewport.name}.png`,
+    });
+  }
+  await page.evaluate(() => window.sessionStorage.clear());
+
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await checkPage(page, viewport.name, "homepage");
   await auditPublicProof(page, viewport.name);
@@ -612,20 +643,79 @@ async function auditJourney(browser, viewport) {
   ) {
     record(viewport.name, "offer-clutter", "The conversion footer disclaimer is still visible.");
   }
-  await checkMobileActionBar(
-    page,
-    viewport,
-    "#cash-offer-form",
-    "offer-form",
-  );
-  if (viewport.width <= 720) {
-    await page
-      .getByRole("navigation", { name: "Quick seller actions" })
-      .getByRole("link", { name: "See My Options" })
-      .click();
+  if (
+    await page.getByRole("navigation", { name: "Quick seller actions" }).count()
+  ) {
+    record(viewport.name, "offer-clutter", "The focused offer page still has a fixed action bar.");
   }
+
+  if (viewport.width <= 720) {
+    const offerEntryUrl = new URL(page.url());
+    offerEntryUrl.searchParams.set("utm_source", "facebook");
+    offerEntryUrl.searchParams.set("fbclid", "AUDIT_CLICK");
+    const expectedOfferSearch = offerEntryUrl.search;
+    offerEntryUrl.hash = "cash-offer-form";
+    await page.goto(offerEntryUrl.toString(), { waitUntil: "domcontentloaded" });
+    await waitForOfferScrollController(page);
+    const legacyEntryState = await page.evaluate(() => ({
+      hash: window.location.hash,
+      scrollY: window.scrollY,
+    }));
+    if (legacyEntryState.hash || legacyEntryState.scrollY > 1) {
+      record(viewport.name, "offer-entry", { stage: "legacy-hash", ...legacyEntryState });
+    }
+    if (new URL(page.url()).search !== expectedOfferSearch) {
+      record(viewport.name, "offer-entry", "Legacy hash cleanup discarded attribution parameters.");
+    }
+
+    const addressBox = await page.locator("#property_address").boundingBox();
+    if (!addressBox || addressBox.y < 0 || addressBox.y + addressBox.height > viewport.height) {
+      record(viewport.name, "first-screen-action", {
+        detail: "The address field is not fully visible on the first mobile screen.",
+        addressBox,
+        viewport,
+      });
+    }
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForOfferScrollController(page);
+    const reloadScrollY = await page.evaluate(() => window.scrollY);
+    if (reloadScrollY > 1) {
+      record(viewport.name, "offer-entry", { stage: "reload", scrollY: reloadScrollY });
+    }
+    if (new URL(page.url()).search !== expectedOfferSearch) {
+      record(viewport.name, "offer-entry", "Reloading discarded attribution parameters.");
+    }
+
+    await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    await waitForOfferScrollController(page);
+    const restoredPageScrollY = await page.evaluate(() => window.scrollY);
+    if (restoredPageScrollY > 1) {
+      record(viewport.name, "offer-entry", {
+        stage: "restored-page",
+        scrollY: restoredPageScrollY,
+      });
+    }
+  }
+  await page
+    .waitForFunction(
+      () => document.querySelector("#property_address")?.value === "123 Main St",
+      undefined,
+      { timeout: 8_000 },
+    )
+    .catch(() => undefined);
   if ((await page.locator("#property_address").inputValue()) !== "123 Main St") {
     record(viewport.name, "address-prefill", "Homepage address was not preserved.");
+  }
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/offer-property-${viewport.name}.png`,
+    });
   }
   await page.locator("#property_address").focus();
   const addressOption = page.getByRole("option", { name: "123 Main St, Atlanta, GA 30303" });
@@ -1030,19 +1120,32 @@ async function auditJourney(browser, viewport) {
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByText("Thanks. Stonegate has your property request.").waitFor({ timeout: 8_000 });
+  await page.getByRole("button", { name: /Submit another property/ }).waitFor({ timeout: 8_000 });
   if (state.submissions.length !== 2) record(viewport.name, "durable-confirmation", state.submissions.length);
   await checkPage(page, viewport.name, "confirmation");
   if (screenshotDirectory) {
     await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-confirmation-${viewport.name}.png` });
   }
   await page.getByRole("button", { name: /Submit another property/ }).click();
-  if (!(await page.getByText("Where is the property?").isVisible())) {
+  if (!(await page.getByText("What’s the property address?").isVisible())) {
     record(viewport.name, "reset", "New property reset did not return to step one.");
   }
 
   for (const error of browserErrors) record(viewport.name, "browser-error", error);
   if (!state.events.some((event) => event.event_type === "form_step_complete")) {
     record(viewport.name, "measurement", "Step completion event was not emitted.");
+  }
+  if (!state.events.some((event) => event.event_type === "form_start")) {
+    record(viewport.name, "measurement", "Form-start measurement was not emitted.");
+  }
+  if (
+    !state.events.some(
+      (event) =>
+        event.event_type === "offer_start" &&
+        event.metadata?.entry_point === "homepage_hero",
+    )
+  ) {
+    record(viewport.name, "measurement", "The upstream offer-start measurement was not emitted.");
   }
   if (!state.events.some((event) => event.event_type === "form_validation_error")) {
     record(viewport.name, "measurement", "Validation event was not emitted.");
@@ -1057,18 +1160,6 @@ async function auditJourney(browser, viewport) {
   ) {
     record(viewport.name, "measurement", "Experiment assignment changed within one journey.");
   }
-  if (
-    viewport.width <= 720 &&
-    !state.events.some(
-      (event) =>
-        event.event_type === "offer_start" &&
-        event.metadata?.entry_point === "mobile_action_bar" &&
-        event.metadata?.device_context === "mobile",
-    )
-  ) {
-    record(viewport.name, "measurement", "Mobile offer action metadata was not emitted.");
-  }
-
   await auditServiceAreaPage(page, viewport);
   await auditContactPage(page, viewport);
   await auditAboutPage(page, viewport);

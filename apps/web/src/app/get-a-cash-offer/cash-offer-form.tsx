@@ -35,7 +35,7 @@ const confirmationStorageKey = "stonegate_cash_offer_confirmation_v1";
 const storageLifetimeMs = 24 * 60 * 60 * 1000;
 
 const steps = [
-  { key: "property", label: "Property", title: "Where is the property?" },
+  { key: "property", label: "Property", title: "What’s the property address?" },
   { key: "contact", label: "Contact", title: "How can Stonegate reach you?" },
 ] as const;
 
@@ -677,7 +677,14 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     try {
       window.sessionStorage.removeItem(draftStorageKey);
       window.sessionStorage.removeItem(confirmationStorageKey);
-      window.history.replaceState({}, "", "/get-a-cash-offer");
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("address");
+      nextUrl.hash = "";
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${nextUrl.pathname}${nextUrl.search}`,
+      );
     } catch {
       // Resetting the visible form is sufficient if browser storage is unavailable.
     }
@@ -713,6 +720,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   return (
     <form
       className={styles.form}
+      data-step={step.key}
       id="cash-offer-form"
       noValidate
       onFocusCapture={handleFormStart}

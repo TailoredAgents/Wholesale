@@ -289,7 +289,7 @@ export function PropertyAddressField({
       onFocusCapture={() => setIsAddressEngaged(true)}
     >
       <label className={styles.field} htmlFor="property_address">
-        <span>
+        <span className={styles.addressLabel}>
           <strong>Property address</strong>
           <span className={styles.visuallyHidden}> (required)</span>
         </span>
@@ -379,7 +379,7 @@ export function PropertyAddressField({
         ) : null}
         {!showManualMode && !showAddressDetails ? (
           <button type="button" onClick={showManualEntry}>
-            {selectedLabel ? "Edit address" : "Enter address manually"}
+            {selectedLabel ? "Edit address" : "Can’t find it? Enter manually."}
           </button>
         ) : null}
       </div>

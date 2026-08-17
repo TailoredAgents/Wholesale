@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { PublicConversionTracker } from "../public-conversion-tracker";
 import { CashOfferForm } from "./cash-offer-form";
 import { OfferPageFooter, OfferPageHeader } from "./offer-page-chrome";
+import { OfferPageScrollController } from "./offer-page-scroll-controller";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -16,30 +17,31 @@ export const metadata: Metadata = {
 export default function GetCashOfferPage() {
   return (
     <main className={styles.page}>
+      <OfferPageScrollController />
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
       <OfferPageHeader />
       <section className={styles.hero}>
         <div className={styles.leftRail}>
           <div className={styles.copy}>
             <p className={styles.eyebrow}>No-pressure property review</p>
-            <h1>Let&apos;s find the selling option that fits your situation.</h1>
-            <p>
-              Tell us about your Georgia property. We&apos;ll review it, learn what matters most, and
-              explain the selling options that may fit. No pressure. No obligation.
-            </p>
+            <h1>Find the right way to sell your Georgia property.</h1>
+            <p>Start with the address. We&apos;ll review your options—no pressure or obligation.</p>
           </div>
-          <div className={styles.trustStack}>
+          <ul className={styles.trustStack} role="list">
             {[
-              ["Start as-is", "No repairs, cleaning, or staging are needed."],
-              ["Understand your options", "We explain the potential paths and tradeoffs clearly."],
-              ["You decide", "There is no pressure or obligation to move forward."],
+              ["Sell as-is", "No repairs, cleaning, or staging are needed."],
+              ["No pressure", "We explain the potential paths and tradeoffs clearly."],
+              ["No obligation", "You decide whether you want to move forward."],
             ].map(([title, detail]) => (
-              <p key={title}>
+              <li key={title}>
                 <Check size={18} aria-hidden="true" />
-                <span><strong>{title}</strong>{detail}</span>
-              </p>
+                <span>
+                  <strong>{title}</strong>
+                  <span className={styles.trustDetail}>{detail}</span>
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
         <CashOfferForm />
       </section>

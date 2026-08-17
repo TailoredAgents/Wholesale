@@ -1,10 +1,9 @@
 /* eslint-disable @next/next/no-html-link-for-pages -- Native navigation keeps exit-route data off the conversion landing page. */
 import Image from "next/image";
-import { House, Phone } from "lucide-react";
+import { Phone } from "lucide-react";
 
 import { siteConfig } from "../site-config";
 import { TrackedPhoneLink } from "../tracked-phone-link";
-import { OfferPageActionLink } from "./offer-page-action-link";
 import styles from "./page.module.css";
 
 type OfferPageLogoProps = {
@@ -62,47 +61,27 @@ export function OfferPageHeader() {
 
 export function OfferPageFooter() {
   return (
-    <>
-      <footer className={styles.offerFooter}>
-        <div className={styles.offerFooterIdentity}>
-          <a className={styles.offerFooterBrand} href="/">
-            <OfferPageLogo inverse />
-          </a>
-          <p>Flexible home-selling options for Georgia property owners.</p>
-          <TrackedPhoneLink
-            className={styles.offerFooterPhone}
-            href={siteConfig.phoneHref}
-            metadata={{ placement: "offer_landing_footer" }}
-          >
-            {siteConfig.phoneDisplay}
-          </TrackedPhoneLink>
-        </div>
-        <nav className={styles.offerFooterLegal} aria-label="Legal information">
-          <a href="/privacy-policy">Privacy Policy</a>
-          <a href="/terms">Terms &amp; Conditions</a>
-        </nav>
-        <p className={styles.offerFooterCopyright}>
-          &copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
-        </p>
-      </footer>
-      <nav className={styles.offerMobileBar} aria-label="Quick seller actions">
+    <footer className={styles.offerFooter}>
+      <div className={styles.offerFooterIdentity}>
+        <a className={styles.offerFooterBrand} href="/">
+          <OfferPageLogo inverse />
+        </a>
+        <p>Flexible home-selling options for Georgia property owners.</p>
         <TrackedPhoneLink
-          className={styles.offerMobileCall}
+          className={styles.offerFooterPhone}
           href={siteConfig.phoneHref}
-          metadata={{
-            placement: "mobile_action_bar",
-            device_context: "mobile",
-            source_path: "/get-a-cash-offer",
-          }}
+          metadata={{ placement: "offer_landing_footer" }}
         >
-          <Phone size={18} aria-hidden="true" />
-          Call
+          {siteConfig.phoneDisplay}
         </TrackedPhoneLink>
-        <OfferPageActionLink className={styles.offerMobileAction}>
-          <House size={18} aria-hidden="true" />
-          See My Options
-        </OfferPageActionLink>
+      </div>
+      <nav className={styles.offerFooterLegal} aria-label="Legal information">
+        <a href="/privacy-policy">Privacy Policy</a>
+        <a href="/terms">Terms &amp; Conditions</a>
       </nav>
-    </>
+      <p className={styles.offerFooterCopyright}>
+        &copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
+      </p>
+    </footer>
   );
 }
