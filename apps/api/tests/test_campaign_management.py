@@ -194,6 +194,18 @@ def test_import_cost_and_calling_batch_workflow_without_dnc_evidence_gate(
         },
     )
     assert list_cost_response.status_code == 201, list_cost_response.text
+    dialer_cost_response = client.post(
+        "/api/v1/campaign-management/costs",
+        headers=owner_headers,
+        json={
+            "campaign_id": campaign["id"],
+            "category": "dialer_license",
+            "vendor_name": "BatchDialer",
+            "amount_cents": 11900,
+            "incurred_on": "2026-07-21",
+        },
+    )
+    assert dialer_cost_response.status_code == 201, dialer_cost_response.text
     labor_response = client.post(
         "/api/v1/campaign-management/costs",
         headers=owner_headers,
@@ -234,15 +246,15 @@ def test_import_cost_and_calling_batch_workflow_without_dnc_evidence_gate(
     assert overview_response.status_code == 200, overview_response.text
     overview = overview_response.json()
     quality = overview["quality"][0]
-    assert quality["actual_cost_cents"] == 10700
+    assert quality["actual_cost_cents"] == 22600
     assert quality["imported_prospects"] == 4
     assert quality["callable_prospects"] == 2
     assert quality["blocked_prospects"] == 2
     assert quality["review_required_prospects"] == 0
     assert quality["bad_data_rate_basis_points"] == 1667
     assert quality["duplicate_rate_basis_points"] == 1667
-    assert quality["cost_per_imported_prospect_cents"] == 2675
-    assert quality["cost_per_callable_prospect_cents"] == 5350
+    assert quality["cost_per_imported_prospect_cents"] == 5650
+    assert quality["cost_per_callable_prospect_cents"] == 11300
 
     restricted_response = client.get("/api/v1/campaign-management", headers=va_headers)
     assert restricted_response.status_code == 403

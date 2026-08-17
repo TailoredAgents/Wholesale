@@ -608,6 +608,49 @@ When ready:
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.
 
+## BatchDialer For VA Cold Calling
+
+Use BatchDialer for the raw cold list and daily VA dialing. Use Stonegate after a seller becomes a
+real opportunity. Do not import every no-answer into Leads.
+
+### One-Time Setup
+
+1. In BatchDialer, open **Settings > Integrations > Integration Keys** and create a key named
+   **Stonegate Zapier**. Put that key only into Zapier.
+2. Create an individual BatchDialer **Agent** login for each VA. Do not give a VA the owner/admin
+   login.
+3. Create the required lead sheet and the approved results **Qualified Seller - Follow Up**,
+   **Appointment Set**, **Callback**, **Not Interested**, **Wrong Number**, and **Do Not Call**.
+4. Enable BatchDialer's **Mark As Lead** rule only for the two qualified results. No-answer,
+   voicemail, ordinary callbacks, and non-leads stay in BatchDialer.
+5. In Render, add the BatchDialer Zapier variables listed in
+   [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#batchdialer-va-handoff-through-zapier) to the API and
+   worker without changing any other credential. Leave the integration disabled until testing.
+6. In Zapier, create the three Zaps for **New Lead Created**, **New Calendar Events**, and
+   **New DNC Numbers**. Use the exact field map and HMAC signing step in the setup reference.
+7. Put only approved campaign IDs in `ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS`, switch
+   `ZAPIER_BATCHDIALER_ENABLED=true` on API and worker, and redeploy both services.
+
+### Live Acceptance
+
+1. Use one controlled seller/contact in one pilot campaign.
+2. Select **Qualified Seller - Follow Up** and confirm one Stonegate lead, one staff SMS, property
+   research, AI preparation, Lead Manager work, and BatchDialer attribution.
+3. Replay the Zap and confirm it does not create another lead or alert.
+4. Create one initial appointment and confirm it appears once in Stonegate Calendar.
+5. Apply DNC to the controlled number and confirm Stonegate records the phone suppression.
+6. Verify ordinary calls, no answers, and voicemails did not enter Stonegate.
+7. Start with one VA for 80 hours over four weeks. Record the list, dialer license, phone/usage,
+   and VA labor costs under **Prospecting > Campaigns > Costs**.
+8. Compare completed seller conversations, qualified sellers, held appointments, signed contracts,
+   closed assignments, and net contribution profit against Meta. Do not scale from dial count or
+   provider connection rate alone.
+
+BatchDialer recordings stay in BatchDialer during the first integration phase. Appointment
+creation is initially one-way; later changes are made in Stonegate. Use Zapier Professional or
+higher when the lead polling delay must be close to two minutes; slower polling can delay the
+handoff even when both systems are healthy.
+
 ## Website And Facebook Lead Staff Text Alerts
 
 Facebook lead forms use a different connection from the website Pixel. The Pixel measures site

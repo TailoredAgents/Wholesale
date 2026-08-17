@@ -268,30 +268,29 @@ facts visible so Austin can prepare.
 
 ## VA Caller Daily Procedure
 
-Each VA has an individual login and sees assigned Prospecting work only.
+Each VA has an individual BatchDialer Agent login and sees only assigned dialer campaigns. The
+Stonegate Prospecting workspace is a contingency tool, not a second place to work the same list.
 
 ### Start Of Shift
 
-1. Open **Prospecting**.
-2. Confirm the correct calling batch.
-3. Read the current script and campaign instructions.
-4. Confirm the workspace shows **One-by-one calling**.
-5. Test the approved call method.
-6. Start the assigned record from Stonegate so it locks correctly.
+1. Open BatchDialer with your own Agent login.
+2. Confirm the correct assigned campaign, list, script, lead sheet, and call window.
+3. Test the approved headset and call method.
+4. Confirm the manager has explained the exact **Mark As Lead**, callback, wrong-number, not
+   interested, and DNC results before dialing.
+5. Work the campaign in BatchDialer. Do not also open the same list in Stonegate My Calls.
 
 ### After Every Attempt
 
 Choose the accurate result:
 
-- No answer
-- Voicemail
-- Callback
-- Follow-up
-- Interested
-- Appointment
-- Not interested
-- Wrong number
-- Do not call
+- No answer or voicemail: remain in BatchDialer
+- Callback: schedule in BatchDialer
+- Qualified Seller - Follow Up: **Mark As Lead** and stop dialer retries
+- Appointment Set: **Mark As Lead** and stop dialer retries
+- Not interested: stop redialing the contact
+- Wrong number: stop redialing that number
+- Do not call: apply DNC immediately
 
 Enter useful notes. Do not choose **Interested** merely to improve performance.
 
@@ -300,7 +299,8 @@ Enter useful notes. Do not choose **Interested** merely to improve performance.
 1. Complete the displayed qualification prompts.
 2. Record what the seller actually said.
 3. Confirm the preferred follow-up method and time.
-4. Create the warm handoff.
+4. Complete the required lead sheet and select the approved **Mark As Lead** result. The Zapier
+   handoff creates the Stonegate warm lead; do not manually create a duplicate.
 5. If authorized and appropriate, schedule the appointment.
 6. Confirm the handoff reached the Lead Manager.
 
@@ -309,11 +309,12 @@ own disposition through the allowed workflow.
 
 ### End Of Shift
 
-1. Finish or release the active record.
-2. Confirm every attempt has a disposition.
-3. Confirm callbacks have a dated task.
-4. Report script, number, or list problems to the manager.
-5. Sign out on shared devices.
+1. Finish or release the active BatchDialer record.
+2. Confirm every attempt has a truthful call result.
+3. Confirm callbacks have a dated BatchDialer callback.
+4. Confirm qualified sellers and initial appointments arrived once in Stonegate.
+5. Report script, number, list, Zapier, or handoff problems to the manager.
+6. Sign out on shared devices.
 
 ### VA Must Never
 

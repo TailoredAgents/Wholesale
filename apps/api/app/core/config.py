@@ -535,6 +535,48 @@ class Settings(BaseSettings):
         le=100_000,
         validation_alias="ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT",
     )
+    zapier_batchdialer_enabled: bool = Field(
+        default=False,
+        validation_alias="ZAPIER_BATCHDIALER_ENABLED",
+    )
+    zapier_batchdialer_webhook_secret: str | None = Field(
+        default=None,
+        validation_alias="ZAPIER_BATCHDIALER_WEBHOOK_SECRET",
+    )
+    zapier_batchdialer_allowed_campaign_ids_raw: str = Field(
+        default="",
+        validation_alias="ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS",
+    )
+    zapier_batchdialer_max_payload_bytes: int = Field(
+        default=65_536,
+        ge=4096,
+        le=1_000_000,
+        validation_alias="ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES",
+    )
+    zapier_batchdialer_burst_limit: int = Field(
+        default=60,
+        ge=1,
+        le=1000,
+        validation_alias="ZAPIER_BATCHDIALER_BURST_LIMIT",
+    )
+    zapier_batchdialer_burst_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        validation_alias="ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS",
+    )
+    zapier_batchdialer_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        validation_alias="ZAPIER_BATCHDIALER_MAX_ATTEMPTS",
+    )
+    zapier_batchdialer_retry_base_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=3600,
+        validation_alias="ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS",
+    )
     public_intake_rate_limit_enabled: bool = Field(
         default=False,
         validation_alias="PUBLIC_INTAKE_RATE_LIMIT_ENABLED",
@@ -1103,6 +1145,31 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Production Zapier Facebook lead intake is missing: " + ", ".join(blockers) + "."
             )
+
+    @property
+    def zapier_batchdialer_allowed_campaign_ids(self) -> frozenset[str]:
+        return frozenset(
+            campaign_id.strip()
+            for campaign_id in self.zapier_batchdialer_allowed_campaign_ids_raw.split(",")
+            if campaign_id.strip()
+        )
+
+    @property
+    def zapier_batchdialer_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.zapier_batchdialer_enabled:
+            blockers.append("ZAPIER_BATCHDIALER_ENABLED=true")
+            return tuple(blockers)
+        secret = (self.zapier_batchdialer_webhook_secret or "").strip()
+        if len(secret) < 32:
+            blockers.append("ZAPIER_BATCHDIALER_WEBHOOK_SECRET (at least 32 characters)")
+        if not self.zapier_batchdialer_allowed_campaign_ids:
+            blockers.append("ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS")
+        return tuple(blockers)
+
+    @property
+    def zapier_batchdialer_configured(self) -> bool:
+        return not self.zapier_batchdialer_configuration_blockers
 
     @property
     def facebook_address_enrichment_configuration_blockers(self) -> tuple[str, ...]:

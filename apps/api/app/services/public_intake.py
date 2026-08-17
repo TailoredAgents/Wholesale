@@ -637,11 +637,20 @@ def create_public_seller_lead(
     intake_source: str = "seller_website",
     contact_consent_wording_version: str | None = None,
     contact_consent_wording: str | None = None,
+    contact_consent_channels: frozenset[str] | None = None,
+    sms_consent_wording_version: str | None = None,
+    sms_consent_wording: str | None = None,
     provider_record_id: str | None = None,
     notification_source_label: str = "public website",
 ) -> SellerIntakeResponse:
     if (contact_consent_wording_version is None) != (contact_consent_wording is None):
         raise ValueError("Contact-consent wording and version must be provided together.")
+    if (sms_consent_wording_version is None) != (sms_consent_wording is None):
+        raise ValueError("SMS-consent wording and version must be provided together.")
+    if contact_consent_channels is not None and not contact_consent_channels.issubset(
+        {"phone", "email"}
+    ):
+        raise ValueError("Contact-consent channels may only contain phone or email.")
     resolved_contact_consent_version = (
         contact_consent_wording_version
         if contact_consent_wording_version is not None
@@ -652,8 +661,16 @@ def create_public_seller_lead(
         if contact_consent_wording is not None
         else CONTACT_CONSENT_WORDINGS[payload.consent_wording_version]
     )
-    resolved_sms_consent_version = payload.sms_consent_wording_version
-    resolved_sms_consent_wording = SMS_CONSENT_WORDINGS[resolved_sms_consent_version]
+    resolved_sms_consent_version = (
+        sms_consent_wording_version
+        if sms_consent_wording_version is not None
+        else payload.sms_consent_wording_version
+    )
+    resolved_sms_consent_wording = (
+        sms_consent_wording
+        if sms_consent_wording is not None
+        else SMS_CONSENT_WORDINGS[payload.sms_consent_wording_version]
+    )
     submitted_at = datetime.now(UTC)
     enrichment_token = secrets.token_urlsafe(32)
     enrichment_expires_at = submitted_at + ENRICHMENT_TOKEN_LIFETIME
@@ -778,10 +795,15 @@ def create_public_seller_lead(
     )
     ensure_speed_to_lead_task(db, lead, contact)
 
+    requested_contact_channels = (
+        contact_consent_channels
+        if contact_consent_channels is not None
+        else frozenset({"phone", "email"})
+    )
     contact_channels = []
-    if payload.phone:
+    if payload.phone and "phone" in requested_contact_channels:
         contact_channels.append("phone")
-    if payload.email:
+    if payload.email and "email" in requested_contact_channels:
         contact_channels.append("email")
     for channel in contact_channels:
         db.add(
@@ -806,7 +828,7 @@ def create_public_seller_lead(
                 contact_id=contact.id,
                 channel="sms",
                 status="granted",
-                source="seller_website",
+                source=intake_source,
                 wording_version=resolved_sms_consent_version,
                 wording=resolved_sms_consent_wording,
                 normalized_address=sms_recipient,

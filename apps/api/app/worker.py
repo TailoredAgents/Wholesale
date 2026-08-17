@@ -13,6 +13,7 @@ from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.ai_operations import process_next_ai_operation
+from app.services.batchdialer_zapier import process_next_batchdialer_event
 from app.services.call_intelligence import (
     process_next_call_transcript,
     process_next_pending_call_note_approval,
@@ -57,6 +58,7 @@ logger = structlog.get_logger()
 WorkerOperation = Callable[[Session, Settings], UUID | None]
 
 WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
+    ("batchdialer_zapier", process_next_batchdialer_event),
     ("meta_lead_ads", process_next_meta_lead_event),
     ("staff_lead_alerts", process_next_staff_lead_alert),
     ("twilio_mms_media", process_next_twilio_mms_media),
@@ -124,6 +126,14 @@ def run_worker(stop_event: threading.Event) -> None:
         meta_pixel_id_fingerprint=meta_runtime_metadata["meta_pixel_id_fingerprint"],
         meta_access_token_present=meta_runtime_metadata["meta_access_token_present"],
         meta_test_mode_enabled=meta_runtime_metadata["meta_test_mode_enabled"],
+        batchdialer_zapier_enabled=settings.zapier_batchdialer_enabled,
+        batchdialer_zapier_configured=settings.zapier_batchdialer_configured,
+        batchdialer_zapier_configuration_blockers=list(
+            settings.zapier_batchdialer_configuration_blockers
+        ),
+        batchdialer_zapier_allowed_campaign_count=len(
+            settings.zapier_batchdialer_allowed_campaign_ids
+        ),
         staff_lead_alert_sms_mode=settings.staff_lead_alert_sms_mode,
         staff_lead_alert_configured=not staff_alert_blockers,
         staff_lead_alert_configuration_blockers=staff_alert_blockers,

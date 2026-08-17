@@ -51,6 +51,7 @@ def read_integration_status(
 
     voice_blockers = list(settings.twilio_voice_configuration_blockers)
     call_intelligence_blockers = list(settings.call_intelligence_configuration_blockers)
+    batchdialer_blockers = list(settings.zapier_batchdialer_configuration_blockers)
 
     buyer_blockers = []
     if settings.buyer_data_provider != "dealmachine":
@@ -140,6 +141,14 @@ def read_integration_status(
                     and settings.call_transcription_enabled
                 ),
                 blockers=call_intelligence_blockers,
+            ),
+            _status(
+                key="batchdialer-zapier",
+                name="BatchDialer VA handoff",
+                category="Prospecting",
+                mode="zapier" if settings.zapier_batchdialer_enabled else "disabled",
+                enabled=settings.zapier_batchdialer_enabled,
+                blockers=batchdialer_blockers,
             ),
             _status(
                 key="signwell",

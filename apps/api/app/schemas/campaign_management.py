@@ -264,6 +264,7 @@ class CampaignCostCreate(BaseModel):
         "list_purchase",
         "va_labor",
         "data_enrichment",
+        "dialer_license",
         "phone_number",
         "voice_usage",
         "direct_mail",

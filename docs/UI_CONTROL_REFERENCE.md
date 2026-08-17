@@ -564,7 +564,7 @@ Within My Calls, views are **Work queue**, **Call quality**, **Handoff review** 
 | Due now / Callbacks / Corrections / Scheduled / Waiting / All assigned | Filters the caller's complete assigned shift without changing ownership | Caller sees only assigned records; managers can review the broader operation |
 | Campaign and batch strip | Shows ready, callback, correction, active, and waiting workload plus dialing connection state | Read-only |
 | Assigned seller row | Loads that seller into the three-panel calling context | Disabled for another row while the caller has an active attempt |
-| One-by-one calling | Confirms the caller contacts one assigned owner at a time | External multi-line dialing is intentionally retired |
+| One-by-one calling | Confirms this Stonegate contingency workflow contacts one assigned owner at a time | BatchDialer is the separate production VA workspace; do not work the same list in both systems |
 | Ranked phone and email methods | Shows all validated imported contact methods in source rank order | Based on imported contact evidence |
 | Prior attempt details | Expands notes, callback commitment, and structured qualification answers | Read-only history |
 | Assigned priority row | Selects the current assigned prospect | Caller sees assigned work only |

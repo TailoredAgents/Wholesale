@@ -808,6 +808,160 @@ current maximum credit use. Acceptance must compare estimated and actual credits
 result quality, multi-select field mapping, DNC-safe contact suggestion, scoring, candidate review,
 import, duplicates, and cost before recurring dependence.
 
+## BatchDialer VA Handoff Through Zapier
+
+BatchDialer is the VA cold-calling workspace; Stonegate is the system of record after a seller is
+qualified. The first production connection deliberately uses BatchDialer's supported Zapier app
+instead of assuming a private provider API. The intake URL is:
+
+`POST https://api.stonegatehb.com/api/v1/webhooks/zapier/batchdialer`
+
+### Variables
+
+Keep the integration disabled until the mapping and signature have passed a controlled test. Add
+the following to both the Render API and worker services where the Blueprint requests them:
+
+- `ZAPIER_BATCHDIALER_ENABLED=false`, then `true` for acceptance
+- `ZAPIER_BATCHDIALER_WEBHOOK_SECRET`: a private random secret generated and stored by the owner
+- `ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS`: comma-separated BatchDialer campaign IDs approved to
+  create Stonegate events
+- `ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES`
+- `ZAPIER_BATCHDIALER_BURST_LIMIT`
+- `ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS`
+- `ZAPIER_BATCHDIALER_MAX_ATTEMPTS`
+- `ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS`
+
+Do not paste the BatchDialer integration key or Stonegate webhook secret into chat, source code,
+documentation, or screenshots. The BatchDialer integration key belongs only in Zapier. The
+Stonegate webhook secret belongs only in Render and the private signing step in Zapier.
+
+### BatchDialer Configuration
+
+1. In BatchDialer, open **Settings > Integrations > Integration Keys**, add a key named
+   **Stonegate Zapier**, and connect the BatchDialer Zapier app.
+2. Give each VA an individual **Agent** login and only the campaign access needed for their work.
+3. Build one required lead sheet with owner verification, full property address, motivation,
+   timeline, condition, occupancy, asking price, mortgage or lien context, best callback time,
+   authorized follow-up channels, appointment, and notes.
+4. Configure these call results:
+   - **Qualified Seller - Follow Up**: **Mark As Lead** and **Do Not Redial Contact**.
+   - **Appointment Set**: **Mark As Lead** and **Do Not Redial Contact**.
+   - **Callback**: schedule the callback; mark as lead only when the seller is also qualified.
+   - **Not Interested**: stop redialing the contact.
+   - **Do Not Call**: add DNC.
+   - **Wrong Number**: stop redialing that number.
+   - **No Answer/Voicemail**: remain inside the BatchDialer cadence.
+
+Only **New Lead Created** is allowed to create a Stonegate seller lead. Do not also create leads
+from **New Call Disposition Events**, because one qualified call could then create two handoffs.
+
+### Canonical Event Body
+
+Every Zap sends one flat JSON object. Common fields are:
+
+| Stonegate field | Requirement | Meaning |
+| --- | --- | --- |
+| `event_id` | Required | Stable unique BatchDialer/Zap event identity used for replay safety |
+| `event_type` | Required | `lead.created`, `calendar.created`, or `dnc.added` |
+| `occurred_at` | Required | Provider event time with timezone |
+| `campaign_id` | Required | Must appear in the Render campaign allowlist |
+| `campaign_name` | Optional | Human-readable campaign name |
+| `provider_contact_id` | Required | Stable BatchDialer contact identity |
+| `provider_call_id` | Optional | Originating call identity |
+| `provider_recording_id` | Optional | Reference only; it does not prove recording access |
+| `provider_agent_id` | Optional | Stable VA/agent identity |
+| `va_name`, `va_email` | Optional | Human-readable VA attribution |
+| `related_lead_event_id` | Recommended after lead | Links appointment or DNC to the accepted lead event |
+
+If a BatchDialer trigger does not expose a separate event ID, construct a deterministic value in
+the Code step from the event type, provider contact/appointment ID, and provider-created timestamp.
+Never use a newly generated random UUID: Zapier retries must reproduce the same `event_id` so
+Stonegate can recognize the replay.
+
+For `lead.created`, also send:
+
+- `full_name`, `phone`, and optional `email`
+- `property_address`, `property_city`, `property_state`, and `property_zip_code` for houses
+- optional land APN/county/state where a street address does not exist
+- lead-sheet qualification fields and notes when the provider exposes them
+- `disposition=interested` or `disposition=appointment_set`
+- `follow_up_permission` as one of `phone`, `email`, `sms`, `phone_and_email`, `phone_and_sms`,
+  `email_and_sms`, or `phone_email_and_sms`
+
+`follow_up_permission` is required and must describe what the seller actually authorized. Values
+containing `sms` are the only ones that create seller SMS permission in Stonegate.
+
+For `calendar.created`, send `provider_appointment_id`, `appointment_start_at`, optional end time,
+meeting type, location, notes, and owner email. Link it with `related_lead_event_id`; otherwise the
+worker falls back to `provider_contact_id`. This is an initial one-way appointment handoff. Manage
+later reschedules and cancellations in Stonegate until an update/cancel provider event is proven.
+
+For `dnc.added`, send the phone and optional `dnc_reason`, preferably linked with
+`related_lead_event_id`. Stonegate records a phone suppression and revokes matching phone/SMS
+permission; it does not erase the audit history.
+
+### HMAC Signing In Zapier
+
+The request must include `X-Stonegate-BatchDialer-Signature`. Its value is the lowercase
+HMAC-SHA256 of the exact raw JSON body using `ZAPIER_BATCHDIALER_WEBHOOK_SECRET`. Stonegate accepts
+either the 64-character hex digest or `sha256=` followed by that digest.
+
+Use **Code by Zapier** immediately before **Webhooks by Zapier > Custom Request**. Build the final
+object, stringify it once, and sign that same string:
+
+```javascript
+const crypto = require("crypto");
+const body = JSON.stringify({
+  event_id: inputData.event_id,
+  event_type: inputData.event_type,
+  occurred_at: inputData.occurred_at,
+  campaign_id: inputData.campaign_id,
+  provider_contact_id: inputData.provider_contact_id,
+  full_name: inputData.full_name,
+  phone: inputData.phone,
+  property_address: inputData.property_address,
+  property_city: inputData.property_city,
+  property_state: inputData.property_state,
+  property_zip_code: inputData.property_zip_code,
+  disposition: inputData.disposition,
+  follow_up_permission: inputData.follow_up_permission,
+});
+const signature = crypto
+  .createHmac("sha256", inputData.webhook_secret)
+  .update(body, "utf8")
+  .digest("hex");
+return { body, signature };
+```
+
+In the Custom Request action, send the Code step's `body` as the unmodified raw request body with
+`Content-Type: application/json`, and set `X-Stonegate-BatchDialer-Signature` to the Code step's
+`signature`. Do not rebuild or unflatten the JSON in the webhook step; changing the bytes after
+signing causes an invalid-signature response. Add optional fields to the object only after they
+appear in an actual BatchDialer trigger sample.
+
+### Three Zaps And Acceptance
+
+1. **New Lead Created -> `lead.created`**: the only lead-creation Zap.
+2. **New Calendar Events -> `calendar.created`**: creates one initial appointment associated with
+   the prior provider lead/contact.
+3. **New DNC Numbers -> `dnc.added`**: records the suppression; never creates a lead.
+
+The lead and calendar Zaps may arrive out of order. Stonegate safely retries the calendar event
+and automatically revives it when the matching lead event arrives, even if the earlier retries had
+already exhausted. A DNC event must always include the exact phone number being suppressed.
+
+Run one controlled qualified call first and inspect the trigger's **Data out** before mapping
+optional fields. Then confirm:
+
+- a supported allowed-campaign event is accepted and later processed;
+- the seller appears once in **Leads** with source **BatchDialer**, VA/campaign attribution,
+  property research, normal Lead Manager work, and a staff new-lead SMS;
+- replaying the same `event_id` creates nothing new;
+- a disallowed campaign, invalid signature, oversized body, and unsupported event type are rejected;
+- an initial appointment appears once and a DNC event suppresses the matching phone;
+- no-answer, voicemail, and ordinary callback activity remains in BatchDialer;
+- recordings remain playable in BatchDialer and are not promised in Stonegate v1.
+
 ## Marketing Conversion Delivery
 
 Variables include:

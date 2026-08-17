@@ -466,7 +466,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Refreshes match existing people, contact methods, properties, and source IDs without resetting
   prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
 - Prospecting cohorts preserve source, list type, market, script, date range, and call window for
-  one-by-one calling.
+  both BatchDialer campaigns and Stonegate's one-by-one contingency workflow.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 - The selected campaign, local section, and deep-link context are preserved with `campaign`,
@@ -484,9 +484,11 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
   commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
   guidance.
-- All VA prospecting is labeled **One-by-one calling**.
-- Current prospect calls open through the device `tel:` handler and the VA records the result in
-  Stonegate. External multi-line and predictive dialing are intentionally retired.
+- This workspace is Stonegate's one-by-one contingency workflow. Its calls open through the
+  device `tel:` handler and the VA records the result directly in Stonegate.
+- Production VA volume is worked in BatchDialer after acceptance. Raw cold records, no answers,
+  voicemails, and routine retries stay there. Only provider-qualified leads, initial appointments,
+  and DNC signals cross into Stonegate through the authenticated Zapier intake.
 
 **Leads (`/os/leads`)**
 
@@ -686,28 +688,35 @@ redirect to their new owners.
 
 1. An owner or manager defines a market and territory.
 2. A campaign records channel, source, dates, budget, and ownership.
-3. Campaign expenses record lists, enrichment, software, ads, mail, and VA labor.
+3. Campaign expenses record lists, enrichment, dialer licenses, phone numbers, usage, software,
+   ads, mail, and VA labor.
 4. A comparison cohort records source, list type, market, script, calling window, date range, and
-   one-by-one calling method.
+   calling method.
 5. A CSV is validated with a saved mapping before import.
 6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
-7. Valid prospects enter a cohort-linked calling batch and are assigned to an active staff member
-   with cold calling enabled.
+7. For the BatchDialer path, the approved export is loaded into its matching external campaign and
+   assigned to an individual VA seat. For contingency work, valid prospects can instead enter a
+   Stonegate cohort-linked calling batch.
 
 ### 8.2 Prospecting
 
-1. A non-manager caller sees only assigned callable prospect records.
-2. The approved script and qualification fields guide the call.
-3. Every attempt records outcome, notes, callback, script evidence, cohort, calling method, answer
-   class, right-party evidence, interest, permission, and governing timestamps.
+1. A non-manager caller sees only the BatchDialer campaigns assigned to that individual agent
+   login. Stonegate's My Calls workspace remains available for controlled contingency work.
+2. The approved script and required lead sheet guide each connected call.
+3. BatchDialer retains ordinary attempts, callbacks, recordings, and call-center activity. The
+   qualified handoff preserves the originating campaign, VA, disposition, notes, seller facts,
+   and provider identifiers in Stonegate.
 4. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
-5. An interested seller creates a structured handoff.
+5. Only a truthful call result configured with BatchDialer's **Mark As Lead** rule creates a
+   structured Stonegate handoff. A separate initial-calendar trigger and DNC trigger do not create
+   duplicate leads.
 6. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
 
 ### 8.3 Warm Handoff And Lead Creation
 
-1. A submitted handoff converts the prospect into a CRM lead without losing campaign attribution.
+1. An authenticated, idempotent BatchDialer handoff creates or updates one CRM lead without losing
+   campaign attribution. Replayed Zapier deliveries do not create another seller.
 2. Contact, property, conversation, qualification answers, attempts, and appointment context are
    preserved.
 3. The lead is assigned to acquisitions; owners can become watchers.

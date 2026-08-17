@@ -798,10 +798,11 @@ Open **Prospecting > Campaigns**. The selected campaign owns every action in:
 9. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
 10. Select **Import reviewed file**. Existing matches receive new source/contact evidence without
     losing prior activity.
-11. Record list, labor, phone-number, and voice costs in **Costs**, linked to the cohort when
-    applicable.
-12. Open **Assignments** and create a calling batch using the same cohort and import.
-13. Assign the batch to a VA or another active staff member with **Cold calling** enabled.
+11. Record list, VA labor, BatchDialer license, phone-number, and usage costs in **Costs**, linked
+    to the cohort when applicable.
+12. Export the approved callable list to its matching BatchDialer campaign. Use **Assignments** to
+    create a Stonegate calling batch only when the one-by-one contingency workflow is needed.
+13. Give each VA an individual BatchDialer Agent login and only the campaigns they should work.
 
 The contact-export preset uses **Company Name** for trusts and companies, then falls back to
 **First Name + Last Name** for individuals. It retains up to five ranked phone numbers and four
@@ -823,7 +824,44 @@ blocked.
 
 ## 3. Prospecting
 
-Open **Prospecting**. Managers first see **Campaigns** and may switch to **My Calls**. Caller-only
+### BatchDialer VA Prospecting
+
+BatchDialer is the normal workspace for high-volume VA cold calling. Stonegate becomes the source
+of truth when the owner is genuinely interested, an initial appointment is created, or the owner
+requests no more calls. Do not copy every dial, voicemail, or no-answer into Stonegate.
+
+### Work A BatchDialer Campaign
+
+1. Sign in with your own BatchDialer Agent login. Never share an Owner, Admin, or another VA's
+   account.
+2. Open only the campaign assigned by the manager and read its current script and lead sheet.
+3. Confirm the property and right party before recording seller facts.
+4. Select the truthful call result after every call:
+   - **Qualified Seller - Follow Up**: use only when the seller is interested and agrees Stonegate
+     may follow up. This result must have **Mark As Lead** and **Do Not Redial Contact** enabled.
+   - **Appointment Set**: use when an actual time is agreed. This result must have **Mark As Lead**
+     and **Do Not Redial Contact** enabled.
+   - **Callback**: schedule the callback in BatchDialer. Do not mark it as a Stonegate lead unless
+     the seller is also qualified and has agreed to follow-up.
+   - **Not Interested**: stop redialing the contact.
+   - **Do Not Call**: apply DNC immediately.
+   - **Wrong Number**: stop redialing that number.
+   - **No Answer** or **Voicemail**: leave it in the BatchDialer cadence.
+5. For a qualified seller, complete owner verification, property address, motivation, timeline,
+   condition, occupancy, asking price, mortgage or lien context, best callback time, appointment,
+   and clear notes before saving the result.
+6. Confirm the qualified seller appears once in **Stonegate > Leads** and that the staff lead alert
+   is sent. Do not submit the same seller again merely because Zapier is still polling.
+
+The initial appointment can flow into Stonegate, but later reschedules and cancellations are
+managed in Stonegate unless a later connector explicitly supports those changes. BatchDialer call
+recordings remain in BatchDialer during this first integration phase; a recording should not be
+assumed available to Stonegate AI until the provider exposes and we verify a stable recording URL.
+
+### Stonegate One-By-One Contingency Prospecting
+
+Use this only when BatchDialer is unavailable or a manager intentionally assigns a controlled
+one-by-one batch. Open **Prospecting**. Managers first see **Campaigns** and may switch to **My Calls**. Caller-only
 accounts open **My Calls** directly and do not receive campaign-management controls. My Calls
 contains:
 

@@ -31,6 +31,7 @@ def test_integration_status_is_secret_free(
         "resend",
         "twilio-sms",
         "twilio-voice",
+        "batchdialer-zapier",
         "signwell",
         "dealmachine",
         "land-property-research",

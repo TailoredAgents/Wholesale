@@ -1,6 +1,6 @@
 # Stonegate Phone And VA Dialer Roadmap
 
-Last updated: August 1, 2026
+Last updated: August 17, 2026
 
 ## Decision
 
@@ -27,6 +27,33 @@ warm-lead history.
   contracts, dispositions, accounting, and AI assistance.
 - Raw cold-call activity does not overwhelm the CRM. Only warm handoffs and the reporting facts
   needed to measure campaigns cross into Stonegate.
+
+## ROI Pilot Decision
+
+BatchDialer is likely to produce a lower cost per completed seller conversation than paid social,
+but that does not prove a higher return on investment. A cold caller adds linear labor, list,
+dialer, management, and compliance costs, while Meta can scale without another caller seat.
+
+Stonegate's first Meta sample was $229.01 for two reported website leads, or $114.51 each. That
+sample is too small for a channel decision, and the Meta **Lead** event now represents an
+address-stage lead rather than a completed contact. The channels must therefore be compared at
+completed contact, signed contract, closed assignment, and net contribution profit—not provider
+lead counts.
+
+The initial benchmark is one VA for 80 hours over four weeks while Meta remains active. At a
+$12/hour VA rate, one Starter dialer seat, and an existing PropStream list, the core pilot is about
+$1,156 before management and compliance overhead; a $79 provider list would make it about $1,235.
+At Stonegate's very early Meta economics, the pilot only needs roughly one contract every one to
+two months to be competitive. If Meta improves to about $50 per completed contact and closes five
+percent of those contacts, cold calling must produce more than about 1.24 contracts per month to
+win. These are planning scenarios, not promised provider results.
+
+Track the same funnel for every source:
+
+`records or visits -> valid contacts -> completed seller conversations -> qualified sellers -> held appointments -> signed contracts -> closed assignments -> net contribution profit`
+
+Do not scale a VA because dials, provider connections, or appointments look high. Scale only after
+closed-deal economics and call-quality reviews support it.
 
 ## Existing Foundation To Reuse
 
@@ -203,23 +230,31 @@ using Stonegate's unified timeline architecture.
 
 ### PH6. BatchDialer Provider Connection
 
+Status: authenticated Zapier intake is implemented in code; account configuration and live payload
+acceptance remain.
+
 - Obtain BatchDialer seats for active VAs only.
-- Confirm the account's available API, webhook, Zapier, recording, and disposition capabilities
-  before implementing a deep connector.
-- Add a Stonegate provider connection with health status and encrypted credentials only for the
-  capabilities actually available.
+- Use BatchDialer's supported Zapier app for the first production handoff. Do not assume or store a
+  private BatchDialer API contract.
+- Keep the BatchDialer integration key in Zapier and the Stonegate webhook secret in Zapier and
+  Render. Never place either credential in source control, screenshots, or chat.
 - Map Stonegate campaigns, cohorts, employees, and external BatchDialer identifiers.
-- Start with webhook or Zapier handoff if the account does not expose stable public API endpoints.
+- Archive bounded raw provider events before processing so a real account sample can be inspected,
+  replayed safely, and mapped without guessing.
 
 Exit criteria: Stonegate can identify the originating BatchDialer campaign and VA without copying
 all cold-call records into the CRM.
 
 ### PH7. PropStream And VA Calling Workflow
 
+Status: operating procedure is documented; one live VA campaign remains.
+
 - Create the campaign shell and cost assumptions in Stonegate.
 - Push or import the PropStream list into BatchDialer.
 - Assign each VA an individual BatchDialer login and campaign access.
-- Configure scripts and final dispositions, including Interested and Appointment Set.
+- Configure **Qualified Seller - Follow Up** and **Appointment Set** with **Mark As Lead** and
+  **Do Not Redial Contact**. Configure callback, not-interested, wrong-number, and DNC results with
+  their specific stop or scheduling rules.
 - Keep raw cold prospects, no answers, and routine retries in BatchDialer.
 - Define how inbound callbacks to dialer numbers return to the assigned VA queue.
 
@@ -228,7 +263,11 @@ restricted company data.
 
 ### PH8. Idempotent Warm Handoff
 
-- Receive only Interested and Appointment Set results from BatchDialer.
+Status: durable lead, initial-calendar, and DNC event intake is implemented in code; exact field
+mapping and live replay acceptance remain.
+
+- Use **New Lead Created** as the only lead-creation trigger. Receive **New Calendar Events** and
+  **New DNC Numbers** separately; neither may create another lead.
 - Match or create the Stonegate prospect using external record ID, normalized phone, and property
   address.
 - Preserve seller/property facts, VA identity, campaign, disposition, qualification, notes,
@@ -243,10 +282,11 @@ conversations.
 
 ### PH9. Recording, AI, And Reporting
 
-- Retrieve or link BatchDialer recordings for accepted warm leads when provider access permits.
+- Keep recordings in BatchDialer during v1. Retrieve or link accepted warm-lead recordings only
+  after a real account response proves a stable, authorized recording URL.
 - Transcribe accepted calls and run the existing Prospecting and Lead Manager Copilots.
-- Auto-populate only empty qualification fields from transcript evidence with an audit trail;
-  require human approval for narrative notes, appointments, tasks, and consequential CRM actions.
+- When recording access is later proven, auto-populate evidence-backed call notes and empty
+  qualification fields with an audit trail; retain human control over consequential CRM actions.
 - Report calls, contacts, interested sellers, accepted warm leads, appointments, contracts, and
   cost by VA, list, campaign, and cohort.
 - Reconcile BatchDialer seats, numbers, list costs, and VA hours against Stonegate campaign costs.
@@ -282,3 +322,7 @@ two competing communication histories.
 - [Twilio Voice webhooks](https://www.twilio.com/docs/usage/webhooks/voice-webhooks)
 - [Twilio A2P multiple-use-case guidance](https://help.twilio.com/articles/4403014741403-I-have-multiple-messaging-use-cases-How-should-I-register-my-use-cases-for-A2P-10DLC)
 - [BatchDialer current plans and integration claims](https://batchdialer.com/pricing)
+- [BatchDialer CRM integration through Zapier](https://help.getbatch.co/en/articles/9792916-how-to-integrate-your-crm-using-zapier)
+- [BatchDialer call-result behavior](https://help.getbatch.co/en/articles/9792697-understanding-call-results)
+- [FTC telemarketing compliance guide](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
+- [Upwork typical freelancer rates](https://www.upwork.com/resources/upwork-hourly-rates)

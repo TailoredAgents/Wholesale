@@ -298,6 +298,22 @@ services:
         value: 60
       - key: ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT
         value: 250
+      - key: ZAPIER_BATCHDIALER_ENABLED
+        value: false
+      - key: ZAPIER_BATCHDIALER_WEBHOOK_SECRET
+        sync: false
+      - key: ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS
+        sync: false
+      - key: ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES
+        value: 65536
+      - key: ZAPIER_BATCHDIALER_BURST_LIMIT
+        value: 60
+      - key: ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS
+        value: 60
+      - key: ZAPIER_BATCHDIALER_MAX_ATTEMPTS
+        value: 5
+      - key: ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS
+        value: 30
       - key: PUBLIC_INTAKE_RATE_LIMIT_ENABLED
         value: true
       - key: PUBLIC_INTAKE_RATE_LIMIT_REQUESTS
@@ -551,6 +567,22 @@ services:
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
         value: 65536
+      - key: ZAPIER_BATCHDIALER_ENABLED
+        value: false
+      - key: ZAPIER_BATCHDIALER_WEBHOOK_SECRET
+        sync: false
+      - key: ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS
+        sync: false
+      - key: ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES
+        value: 65536
+      - key: ZAPIER_BATCHDIALER_BURST_LIMIT
+        value: 60
+      - key: ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS
+        value: 60
+      - key: ZAPIER_BATCHDIALER_MAX_ATTEMPTS
+        value: 5
+      - key: ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS
+        value: 30
       - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS

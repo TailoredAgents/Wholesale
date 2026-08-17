@@ -89,3 +89,4 @@ def trusted_client_address(request: Request, *, production: bool) -> str:
 
 public_intake_rate_limiter = FixedWindowRateLimiter()
 zapier_lead_rate_limiter = FixedWindowRateLimiter()
+zapier_batchdialer_rate_limiter = FixedWindowRateLimiter()
