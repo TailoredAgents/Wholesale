@@ -6,6 +6,166 @@
   color: #17221c;
 }
 
+.offerHeader {
+  position: relative;
+  z-index: 50;
+  min-height: 68px;
+  border-bottom: 1px solid #dfe4e0;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.offerHeaderInner {
+  width: min(1240px, calc(100% - 48px));
+  min-height: 68px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.offerHeaderBrand,
+.offerFooterBrand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.offerHeaderBrand {
+  color: #12231b;
+}
+
+.offerHeaderPhone {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #1d5a3d;
+  white-space: nowrap;
+}
+
+.offerHeaderPhoneLabel {
+  color: #536159;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.offerHeaderPhone strong {
+  font-size: 15px;
+}
+
+.offerHeaderPhone:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.offerLogo {
+  --offer-logo-size: 42px;
+  --offer-logo-title: #173428;
+  --offer-logo-subtitle: #875b16;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.offerLogoMark {
+  width: var(--offer-logo-size);
+  height: var(--offer-logo-size);
+  flex: 0 0 var(--offer-logo-size);
+  object-fit: contain;
+}
+
+.offerLogoWordmark {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  line-height: 1;
+}
+
+.offerLogoWordmark strong {
+  color: var(--offer-logo-title);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.offerLogoWordmark span {
+  color: var(--offer-logo-subtitle);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.offerLogoInverse {
+  --offer-logo-title: #ffffff;
+  --offer-logo-subtitle: #d7b45f;
+}
+
+.offerFooter {
+  width: 100%;
+  margin-top: auto;
+  padding: 36px max(24px, calc((100% - 1240px) / 2)) 28px;
+  border-top: 1px solid #d6ddd8;
+  background: #12231b;
+  color: #c8d2cc;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  align-items: end;
+  gap: 32px 64px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.offerFooterBrand {
+  color: #ffffff;
+}
+
+.offerFooterIdentity > p {
+  max-width: 330px;
+  margin-top: 12px;
+}
+
+.offerFooterPhone {
+  display: inline-block;
+  margin-top: 14px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.offerFooterPhone:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.offerFooterLegal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 22px;
+  color: #ffffff;
+  font-weight: 750;
+}
+
+.offerFooterLegal a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.offerFooterCopyright {
+  grid-column: 1 / -1;
+  color: #8fa097;
+}
+
+.offerMobileBar {
+  display: none;
+}
+
 .hero {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -939,6 +1099,70 @@
   }
 }
 
+@media (max-width: 720px) {
+  .offerFooter {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .offerFooterLegal {
+    justify-content: flex-start;
+  }
+
+  .offerFooterCopyright {
+    grid-column: auto;
+  }
+
+  .offerMobileBar {
+    position: fixed;
+    z-index: 45;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: calc(68px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 8px;
+    padding: 8px max(12px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    border-top: 1px solid #cfd8d2;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 -12px 28px rgba(17, 35, 26, 0.14);
+  }
+
+  .offerMobileBar a {
+    min-width: 0;
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 850;
+  }
+
+  .offerMobileCall {
+    border: 1px solid #b9c7be;
+    background: #ffffff;
+    color: #1d5a3d;
+  }
+
+  .offerMobileAction {
+    border: 1px solid #1d5a3d;
+    background: #1d5a3d;
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(29, 90, 61, 0.18);
+  }
+
+  .offerMobileCall:hover,
+  .offerMobileAction:hover {
+    filter: brightness(0.96);
+  }
+}
+
 @media (max-width: 640px) {
   .hero {
     padding: 38px 18px 56px;
@@ -1023,6 +1247,43 @@
   .enrichmentActions .textButton,
   .enrichmentActions .nextButton {
     width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .offerHeaderInner {
+    width: calc(100% - 24px);
+    gap: 12px;
+  }
+
+  .offerHeaderBrand strong {
+    font-size: 16px;
+  }
+
+  .offerHeaderPhoneLabel {
+    display: none;
+  }
+
+  .offerHeaderPhone strong {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .offerHeaderBrand strong {
+    font-size: 14px;
+  }
+
+  .offerHeaderBrand .offerLogoWordmark > span {
+    display: none;
+  }
+
+  .offerHeaderPhone {
+    gap: 4px;
+  }
+
+  .offerHeaderPhone strong {
+    font-size: 12px;
   }
 }
 

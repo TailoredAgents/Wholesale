@@ -31,10 +31,22 @@ test("Clerk middleware runs only for authentication and protected workspaces", (
 test("cash-offer page stays static while preserving address-query restoration", () => {
   const page = read("src/app/get-a-cash-offer/page.tsx");
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const chrome = read("src/app/get-a-cash-offer/offer-page-chrome.tsx");
+  const mobileAction = read("src/app/get-a-cash-offer/offer-page-action-link.tsx");
   const footer = read("src/app/public-site-footer.tsx");
   assert.doesNotMatch(page, /searchParams/);
-  assert.match(page, /<PublicSiteHeader variant="conversion" \/>/);
-  assert.match(page, /<PublicSiteFooter variant="conversion" \/>/);
+  assert.match(page, /<OfferPageHeader \/>/);
+  assert.match(page, /<OfferPageFooter \/>/);
+  assert.doesNotMatch(page, /PublicSite(?:Header|Footer)/);
+  assert.doesNotMatch(chrome, /["']use client["']/);
+  assert.doesNotMatch(chrome, /next\/link|PublicSite(?:Header|Footer)|MobileConversionBar/);
+  assert.match(chrome, /href="\/"/);
+  assert.match(chrome, /href="\/privacy-policy"/);
+  assert.match(chrome, /href="\/terms"/);
+  assert.match(chrome, /placement: "offer_landing_header"/);
+  assert.match(chrome, /placement: "offer_landing_footer"/);
+  assert.match(mobileAction, /href="#cash-offer-form"/);
+  assert.match(mobileAction, /entry_point: "mobile_action_bar"/);
   assert.match(form, /window\.location\.search/);
   assert.match(form, /preferredAddress \|\| draft\.values\.property_address/);
   assert.doesNotMatch(form, /name="preferred_contact_method"/);
@@ -116,6 +128,7 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
 
 test("cash-offer seller timeline is optional post-submit enrichment", () => {
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const confirmation = read("src/app/get-a-cash-offer/cash-offer-confirmation.tsx");
   const enrichmentStart = form.indexOf("async function handleEnrichmentSubmit(");
   const enrichmentEnd = form.indexOf("function startAnotherProperty()", enrichmentStart);
   const enrichmentImplementation = form.slice(enrichmentStart, enrichmentEnd);
@@ -127,9 +140,14 @@ test("cash-offer seller timeline is optional post-submit enrichment", () => {
   assert.ok(stepOneStart >= 0 && stepOneEnd > stepOneStart);
   assert.doesNotMatch(stepOneMarkup, /desired_timeline/);
   assert.match(enrichmentImplementation, /desired_timeline:\s*values\.desired_timeline \|\| null/);
-  assert.match(form, /label="When might you ideally like to sell\?"/);
-  assert.match(form, /name="desired_timeline" hint="Optional"/);
-  assert.doesNotMatch(form, /name="desired_timeline"[^>]*required/);
+  assert.match(form, /import\("\.\/cash-offer-confirmation"\)/);
+  assert.match(form, /const CashOfferConfirmation = dynamic\(/);
+  assert.match(form, /if \(confirmation\) \{\s*return \(\s*<CashOfferConfirmation/);
+  assert.doesNotMatch(form, /function EnrichmentForm/);
+  assert.match(confirmation, /function EnrichmentForm/);
+  assert.match(confirmation, /label="When might you ideally like to sell\?"/);
+  assert.match(confirmation, /name="desired_timeline"/);
+  assert.doesNotMatch(confirmation, /name="desired_timeline"[^>]*required/);
 });
 
 test("the public Meta bootstrap runs before hydration and shares route state", () => {

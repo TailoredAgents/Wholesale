@@ -1,15 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  CircleCheck,
-  ClipboardPenLine,
-  Mail,
-  RotateCcw,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 
 import {
@@ -23,14 +16,17 @@ import {
   trackMetaPixelEvent,
   waitForMetaBrowserCookies,
 } from "../lib/conversion-events";
-import { siteConfig } from "../site-config";
-import { TrackedEmailLink } from "../tracked-email-link";
-import { TrackedPhoneLink } from "../tracked-phone-link";
 import styles from "./page.module.css";
 import {
   PropertyAddressField,
   type PropertyAddressValue,
 } from "./property-address-field";
+
+const loadCashOfferConfirmation = () => import("./cash-offer-confirmation");
+const CashOfferConfirmation = dynamic(
+  () => loadCashOfferConfirmation().then((module) => module.CashOfferConfirmation),
+  { loading: ConfirmationLoadingState },
+);
 
 const consentWording =
   "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
@@ -43,7 +39,7 @@ const steps = [
   { key: "contact", label: "Contact", title: "How can Stonegate reach you?" },
 ] as const;
 
-type FormValues = {
+export type FormValues = {
   property_address: string;
   property_city: string;
   property_state: string;
@@ -62,18 +58,18 @@ type FormValues = {
   company_website: string;
 };
 
-type FieldName = keyof FormValues;
-type FieldErrors = Partial<Record<FieldName, string>>;
+export type FieldName = keyof FormValues;
+export type FieldErrors = Partial<Record<FieldName, string>>;
 type SubmitState =
   | { status: "idle"; message: string }
   | { status: "submitting"; message: string }
   | { status: "error"; message: string };
-type EnrichmentState =
+export type EnrichmentState =
   | { status: "idle"; message: string }
   | { status: "submitting"; message: string }
   | { status: "success"; message: string }
   | { status: "error"; message: string };
-type Confirmation = {
+export type Confirmation = {
   message: string;
   reference: string;
   matchedExistingLead: boolean;
@@ -110,22 +106,6 @@ const initialValues: FormValues = {
   email: "",
   company_website: "",
 };
-
-const conditionOptions = [
-  ["move_in_ready", "Move-in ready", "Only routine maintenance"],
-  ["minor_repairs", "Minor repairs", "Cosmetic updates or small fixes"],
-  ["major_repairs", "Major repairs", "Several systems or rooms need work"],
-  ["full_renovation", "Full renovation", "Extensive work is likely"],
-  ["not_sure", "Not sure", "Stonegate can review it with you"],
-] as const;
-
-const occupancyOptions = [
-  ["owner_occupied", "Owner occupied"],
-  ["tenant_occupied", "Tenant occupied"],
-  ["vacant", "Vacant"],
-  ["inherited_estate", "Inherited or estate"],
-  ["other", "Other"],
-] as const;
 
 type CashOfferFormProps = {
   initialAddress?: string;
@@ -490,6 +470,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
 
     setSubmitState({ status: "submitting", message: "Sending your request..." });
     isSubmitting.current = true;
+    void loadCashOfferConfirmation().catch(() => undefined);
     void recordConversionEvent(apiBaseUrl, "form_submit_attempt", {
       form: "cash_offer",
       completed_steps: steps.length,
@@ -704,87 +685,23 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   }
 
   if (confirmation) {
-    const canEnrich =
-      Boolean(confirmation.enrichmentToken) &&
-      !confirmation.enriched;
     return (
-      <section className={styles.confirmation} id="cash-offer-form">
-        <div className={styles.confirmationStatus} role="status" aria-live="polite">
-          <CircleCheck size={34} aria-hidden="true" />
-          <p className={styles.eyebrow}>Request received</p>
-          <h2>Thanks. Stonegate has your property request.</h2>
-          <p>{confirmation.message}</p>
-          <p className={styles.reference}>
-            Request reference: <strong>{confirmation.reference}</strong>
-          </p>
-          {confirmation.matchedExistingLead ? (
-            <p className={styles.existingNotice}>
-              We matched this request to your existing property record and kept the updated details
-              together instead of creating a duplicate lead.
-            </p>
-          ) : null}
-        </div>
-
-        <div className={styles.nextSteps}>
-          <div><strong>1. Review</strong><span>We check the property and local market.</span></div>
-          <div><strong>2. Understand</strong><span>A real person contacts you to learn what matters most.</span></div>
-          <div><strong>3. Compare</strong><span>We explain the available paths so you can decide.</span></div>
-        </div>
-
-        {canEnrich ? (
-          <div className={styles.enrichmentBand}>
-            {!isEnrichmentOpen ? (
-              <>
-                <div>
-                  <ClipboardPenLine size={22} aria-hidden="true" />
-                  <span>
-                    <strong>Optional: help us prepare</strong>
-                    Add condition, timing, or price details now. Your request is already submitted.
-                  </span>
-                </div>
-                <button className={styles.secondaryButton} type="button" onClick={openEnrichment}>
-                  Add property details
-                </button>
-              </>
-            ) : (
-              <EnrichmentForm
-                values={values}
-                errors={errors}
-                state={enrichmentState}
-                updateValue={updateValue}
-                onSubmit={handleEnrichmentSubmit}
-                onSkip={() => {
-                  setIsEnrichmentOpen(false);
-                  setErrors({});
-                  setEnrichmentState({ status: "idle", message: "" });
-                }}
-              />
-            )}
-          </div>
-        ) : null}
-
-        {enrichmentState.status === "success" ? (
-          <p className={styles.enrichmentSuccess} role="status">
-            <Check size={16} aria-hidden="true" /> {enrichmentState.message}
-          </p>
-        ) : null}
-
-        <div className={styles.confirmationActions}>
-          <TrackedPhoneLink className={styles.secondaryButton} href={siteConfig.phoneHref}>
-            Call Stonegate
-          </TrackedPhoneLink>
-          <TrackedEmailLink
-            className={styles.secondaryButton}
-            href={`${siteConfig.publicEmailHref}?subject=Property%20inquiry%20${confirmation.reference}`}
-            metadata={{ placement: "offer_confirmation" }}
-          >
-            <Mail size={16} aria-hidden="true" /> Email Stonegate
-          </TrackedEmailLink>
-          <button className={styles.textButton} type="button" onClick={startAnotherProperty}>
-            <RotateCcw size={16} aria-hidden="true" /> Submit another property
-          </button>
-        </div>
-      </section>
+      <CashOfferConfirmation
+        confirmation={confirmation}
+        values={values}
+        errors={errors}
+        enrichmentState={enrichmentState}
+        isEnrichmentOpen={isEnrichmentOpen}
+        onOpenEnrichment={openEnrichment}
+        onUpdateValue={updateValue}
+        onSubmitEnrichment={handleEnrichmentSubmit}
+        onSkipEnrichment={() => {
+          setIsEnrichmentOpen(false);
+          setErrors({});
+          setEnrichmentState({ status: "idle", message: "" });
+        }}
+        onStartAnotherProperty={startAnotherProperty}
+      />
     );
   }
 
@@ -1000,182 +917,15 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   );
 }
 
-function EnrichmentForm({
-  values,
-  errors,
-  state,
-  updateValue,
-  onSubmit,
-  onSkip,
-}: {
-  values: FormValues;
-  errors: FieldErrors;
-  state: EnrichmentState;
-  updateValue: <Name extends FieldName>(name: Name, value: FormValues[Name]) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onSkip: () => void;
-}) {
+function ConfirmationLoadingState() {
   return (
-    <form className={styles.enrichmentForm} noValidate onSubmit={onSubmit}>
-      <div className={styles.enrichmentHeading}>
-        <span>
-          <strong>Help us prepare for the first conversation</strong>
-          Everything below is optional. Add only what you already know.
-        </span>
+    <section className={styles.confirmation} id="cash-offer-form" aria-busy="true">
+      <div className={styles.confirmationStatus} role="status" aria-live="polite">
+        <p className={styles.eyebrow}>Request received</p>
+        <h2>Thanks. Stonegate has your property request.</h2>
+        <p>Preparing your confirmation...</p>
       </div>
-
-      <Field label="When might you ideally like to sell?" name="desired_timeline" hint="Optional">
-        <select
-          id="desired_timeline"
-          name="desired_timeline"
-          value={values.desired_timeline}
-          onChange={(event) => updateValue("desired_timeline", event.target.value)}
-        >
-          <option value="">Select if you have a timeline in mind</option>
-          <option value="asap">As soon as possible</option>
-          <option value="within_30_days">Within 30 days</option>
-          <option value="within_one_to_three_months">Within one to three months</option>
-          <option value="within_three_to_six_months">Within three to six months</option>
-          <option value="exploring">I am only exploring my options</option>
-        </select>
-      </Field>
-
-      <Field label="Property type" name="property_type" hint="Optional">
-        <select
-          id="property_type"
-          name="property_type"
-          value={values.property_type}
-          onChange={(event) => updateValue("property_type", event.target.value)}
-        >
-          <option value="">Select if known</option>
-          <option value="single_family">Single-family house</option>
-          <option value="townhouse">Townhouse</option>
-          <option value="condo">Condo</option>
-          <option value="multi_family">Multi-family property</option>
-          <option value="mobile_manufactured">Mobile or manufactured home</option>
-          <option value="land">Land</option>
-          <option value="other">Other</option>
-        </select>
-      </Field>
-
-      <div className={styles.gridTwo}>
-        <Field label="Current condition" name="property_condition" hint="Optional">
-          <select
-            id="property_condition"
-            name="property_condition"
-            value={values.property_condition}
-            onChange={(event) => updateValue("property_condition", event.target.value)}
-          >
-            <option value="">Select if known</option>
-            {conditionOptions.map(([value, label]) => (
-              <option value={value} key={value}>{label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Occupancy" name="occupancy_status" hint="Optional">
-          <select
-            id="occupancy_status"
-            name="occupancy_status"
-            value={values.occupancy_status}
-            onChange={(event) => updateValue("occupancy_status", event.target.value)}
-          >
-            <option value="">Select if known</option>
-            {occupancyOptions.map(([value, label]) => (
-              <option value={value} key={value}>{label}</option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <Field label="Main reason for considering a sale" name="reason_for_selling" hint="Optional">
-        <select
-          id="reason_for_selling"
-          name="reason_for_selling"
-          value={values.reason_for_selling}
-          onChange={(event) => updateValue("reason_for_selling", event.target.value)}
-        >
-          <option value="">Select if you would like</option>
-          <option value="inherited_property">Inherited property</option>
-          <option value="repairs_or_condition">Repairs or condition</option>
-          <option value="relocation">Relocation</option>
-          <option value="landlord_or_tenants">Landlord or tenant situation</option>
-          <option value="financial_change">Financial change</option>
-          <option value="vacant_property">Vacant property</option>
-          <option value="other">Other</option>
-          <option value="just_exploring">Just exploring</option>
-        </select>
-      </Field>
-
-      <div className={styles.gridTwo}>
-        <Field
-          label="Price you would like to consider"
-          name="asking_price"
-          hint="Optional"
-          error={errors.asking_price}
-        >
-          <div className={styles.moneyInput}>
-            <span aria-hidden="true">$</span>
-            <input
-              id="asking_price"
-              name="asking_price"
-              inputMode="numeric"
-              value={values.asking_price}
-              onChange={(event) => updateValue("asking_price", event.target.value)}
-              aria-invalid={Boolean(errors.asking_price)}
-              aria-describedby={errors.asking_price ? "asking_price-error" : undefined}
-              placeholder="200,000"
-            />
-          </div>
-        </Field>
-        <Field
-          label="Estimated mortgage balance"
-          name="mortgage_balance"
-          hint="Optional"
-          error={errors.mortgage_balance}
-        >
-          <div className={styles.moneyInput}>
-            <span aria-hidden="true">$</span>
-            <input
-              id="mortgage_balance"
-              name="mortgage_balance"
-              inputMode="numeric"
-              value={values.mortgage_balance}
-              onChange={(event) => updateValue("mortgage_balance", event.target.value)}
-              aria-invalid={Boolean(errors.mortgage_balance)}
-              aria-describedby={errors.mortgage_balance ? "mortgage_balance-error" : undefined}
-              placeholder="90,000"
-            />
-          </div>
-        </Field>
-      </div>
-
-      <Field label="Repairs, access, ownership, or timing details" name="comments" hint="Optional">
-        <textarea
-          id="comments"
-          name="comments"
-          rows={4}
-          maxLength={1000}
-          value={values.comments}
-          onChange={(event) => updateValue("comments", event.target.value)}
-          placeholder="Share only what would help us understand the property or your situation."
-        />
-      </Field>
-      <p className={styles.characterCount}>{values.comments.length} / 1000</p>
-
-      {state.status === "error" ? (
-        <p className={styles.error} role="alert">{state.message}</p>
-      ) : null}
-      <div className={styles.enrichmentActions}>
-        <button className={styles.textButton} type="button" onClick={onSkip}>Skip for now</button>
-        <button
-          className={styles.nextButton}
-          disabled={state.status === "submitting"}
-          type="submit"
-        >
-          {state.status === "submitting" ? "Saving details..." : "Save property details"}
-        </button>
-      </div>
-    </form>
+    </section>
   );
 }
 

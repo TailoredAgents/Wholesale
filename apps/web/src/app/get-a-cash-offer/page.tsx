@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { Check } from "lucide-react";
 
 import { PublicConversionTracker } from "../public-conversion-tracker";
-import { PublicSiteFooter } from "../public-site-footer";
-import { PublicSiteHeader } from "../public-site-header";
 import { CashOfferForm } from "./cash-offer-form";
+import { OfferPageFooter, OfferPageHeader } from "./offer-page-chrome";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -18,7 +17,7 @@ export default function GetCashOfferPage() {
   return (
     <main className={styles.page}>
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
-      <PublicSiteHeader variant="conversion" />
+      <OfferPageHeader />
       <section className={styles.hero}>
         <div className={styles.leftRail}>
           <div className={styles.copy}>
@@ -44,7 +43,7 @@ export default function GetCashOfferPage() {
         </div>
         <CashOfferForm />
       </section>
-      <PublicSiteFooter variant="conversion" />
+      <OfferPageFooter />
     </main>
   );
 }
