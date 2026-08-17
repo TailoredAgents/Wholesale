@@ -1,13 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { MessageSquareText, PhoneCall, ShieldAlert, ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import styles from "./sms-permission-control.module.css";
 
-export type SmsPermissionRecord = {
+type PermissionChannel = "phone" | "sms";
+type PermissionStatus = "granted" | "revoked";
+
+export type ContactPermissionRecord = {
   id: string;
   channel: string;
   status: string;
@@ -20,7 +23,7 @@ export type SmsPermissionRecord = {
 };
 
 type LeadConsentResponse = {
-  consent_records: SmsPermissionRecord[];
+  consent_records: ContactPermissionRecord[];
   contact_methods?: Array<{
     method_type: string;
     value: string;
@@ -30,22 +33,27 @@ type LeadConsentResponse = {
 
 type SmsPermissionControlProps = {
   leadId: string;
-  initialRecords?: SmsPermissionRecord[];
+  initialRecords?: ContactPermissionRecord[];
   canManage?: boolean;
+  canManagePhone?: boolean;
+  canManageSms?: boolean;
   disabled?: boolean;
   fallbackConsentStatus?: string;
+  fallbackPhoneConsentStatus?: string;
   isSuppressed?: boolean;
+  isPhoneSuppressed?: boolean;
   onSaved?: () => void | Promise<void>;
   phoneNumber?: string | null;
 };
 
 const sourceOptions = [
-  ["phone_call", "Phone call"],
+  ["phone_call", "Phone conversation"],
   ["in_person", "In person"],
-  ["facebook", "Facebook opt-in or message with explicit SMS permission"],
-  ["inbound_sms", "Explicit permission by text"],
+  ["facebook", "Facebook form or conversation"],
+  ["inbound_sms", "Text conversation"],
+  ["website_form", "Website form"],
   ["written_form", "Written form"],
-  ["other", "Other documented source"],
+  ["other", "Other confirmed source"],
 ] as const;
 
 function labelize(value: string) {
@@ -75,9 +83,13 @@ export function SmsPermissionControl({
   leadId,
   initialRecords,
   canManage = true,
+  canManagePhone,
+  canManageSms,
   disabled = false,
   fallbackConsentStatus,
+  fallbackPhoneConsentStatus,
   isSuppressed = false,
+  isPhoneSuppressed = false,
   onSaved,
   phoneNumber,
 }: SmsPermissionControlProps) {
@@ -86,9 +98,13 @@ export function SmsPermissionControl({
   return (
     <SmsPermissionControlContent
       canManage={canManage}
+      canManagePhone={canManagePhone}
+      canManageSms={canManageSms}
       disabled={disabled}
       fallbackConsentStatus={fallbackConsentStatus}
+      fallbackPhoneConsentStatus={fallbackPhoneConsentStatus}
       initialRecords={initialRecords}
+      isPhoneSuppressed={isPhoneSuppressed}
       isSuppressed={isSuppressed}
       key={contentKey}
       leadId={leadId}
@@ -102,17 +118,26 @@ function SmsPermissionControlContent({
   leadId,
   initialRecords,
   canManage = true,
+  canManagePhone,
+  canManageSms,
   disabled = false,
   fallbackConsentStatus,
+  fallbackPhoneConsentStatus,
   isSuppressed = false,
+  isPhoneSuppressed = false,
   onSaved,
   phoneNumber,
 }: SmsPermissionControlProps) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [loadedRecords, setLoadedRecords] = useState<SmsPermissionRecord[]>([]);
+  const [loadedRecords, setLoadedRecords] = useState<ContactPermissionRecord[]>([]);
   const [loadedPhoneNumber, setLoadedPhoneNumber] = useState<string | null>(null);
-  const [savedRecords, setSavedRecords] = useState<SmsPermissionRecord[] | null>(null);
+  const [savedRecords, setSavedRecords] = useState<ContactPermissionRecord[] | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<PermissionChannel>(
+    canManagePhone === false && canManageSms !== false ? "sms" : "phone",
+  );
+  const [selectedStatus, setSelectedStatus] = useState<PermissionStatus>("granted");
+  const [selectedSource, setSelectedSource] = useState("phone_call");
   const [loading, setLoading] = useState(initialRecords === undefined);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -138,7 +163,7 @@ function SmsPermissionControlContent({
           headers: await authHeaders(getToken, devUserEmail),
           cache: "no-store",
         });
-        if (!response.ok) throw new Error("SMS permission could not be loaded.");
+        if (!response.ok) throw new Error("Contact permissions could not be loaded.");
         const payload = (await response.json()) as LeadConsentResponse;
         if (active) {
           setLoadedRecords(payload.consent_records);
@@ -152,7 +177,11 @@ function SmsPermissionControlContent({
         }
       } catch (caught) {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "SMS permission could not be loaded.");
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "Contact permissions could not be loaded.",
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -167,38 +196,59 @@ function SmsPermissionControlContent({
   const records = savedRecords ?? initialRecords ?? loadedRecords;
   const currentPhoneNumber = phoneNumber ?? loadedPhoneNumber;
   const normalizedCurrentNumber = normalizeUsPhone(currentPhoneNumber);
-  const smsRecords = records.filter((record) => record.channel === "sms");
-  const hasSmsRecords = smsRecords.length > 0;
-  const latest =
-    smsRecords.find(
-      (record) =>
-        !record.normalized_address || record.normalized_address === normalizedCurrentNumber,
-    ) ?? null;
-  const recordMatchesCurrentNumber = Boolean(latest);
-  const currentStatus =
-    fallbackConsentStatus ?? (recordMatchesCurrentNumber ? latest?.status : undefined) ?? "missing";
-  const isPermissioned = currentStatus === "granted" && !isSuppressed;
+  const mayManagePhone = canManagePhone ?? canManage;
+  const mayManageSms = canManageSms ?? canManage;
+
+  function permissionState(
+    channel: PermissionChannel,
+    fallbackStatus: string | undefined,
+    suppressed: boolean,
+  ) {
+    const channelRecords = records.filter((record) => record.channel === channel);
+    const latest =
+      channelRecords.find(
+        (record) =>
+          !record.normalized_address || record.normalized_address === normalizedCurrentNumber,
+      ) ?? null;
+    const status = fallbackStatus ?? latest?.status ?? "missing";
+    return {
+      latest,
+      status,
+      isPermissioned: status === "granted" && !suppressed,
+      isSuppressed: suppressed,
+      hasMismatchedRecord: channelRecords.length > 0 && !latest,
+    };
+  }
+
+  const phonePermission = permissionState(
+    "phone",
+    fallbackPhoneConsentStatus,
+    isPhoneSuppressed,
+  );
+  const smsPermission = permissionState("sms", fallbackConsentStatus, isSuppressed);
   const isCarrierRevoked =
     isSuppressed ||
-    (recordMatchesCurrentNumber &&
-      latest?.status === "revoked" &&
-      latest.source === "twilio_advanced_opt_out");
+    (smsPermission.latest?.status === "revoked" &&
+      smsPermission.latest.source === "twilio_advanced_opt_out");
+  const editableChannels = [
+    ...(mayManagePhone && !disabled ? (["phone"] as const) : []),
+    ...(mayManageSms && !disabled && !isCarrierRevoked ? (["sms"] as const) : []),
+  ];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const formData = new FormData(form);
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}/sms-permission`, {
+      const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}/contact-permission`, {
         method: "PATCH",
         headers: await authHeaders(getToken, devUserEmail, true),
         body: JSON.stringify({
-          status: String(formData.get("status") ?? "revoked"),
-          source: String(formData.get("source") ?? "other"),
-          evidence_note: String(formData.get("evidence_note") ?? "").trim(),
+          channel: selectedChannel,
+          status: selectedStatus,
+          source: selectedSource,
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -209,89 +259,134 @@ function SmsPermissionControlContent({
         throw new Error(
           payload && "detail" in payload && payload.detail
             ? payload.detail
-            : "SMS permission could not be saved.",
+            : "Contact permission could not be saved.",
         );
       }
       setSavedRecords((payload as LeadConsentResponse).consent_records);
-      setMessage("SMS permission updated.");
+      setMessage(`${selectedChannel === "phone" ? "Call" : "SMS"} permission updated.`);
       form.closest("details")?.removeAttribute("open");
       router.refresh();
       await onSaved?.();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "SMS permission could not be saved.");
+      setError(
+        caught instanceof Error ? caught.message : "Contact permission could not be saved.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  function statusDetail(
+    channel: PermissionChannel,
+    permission: ReturnType<typeof permissionState>,
+  ) {
+    if (loading) return "Checking permission history…";
+    if (permission.isSuppressed) {
+      return channel === "sms" ? "Seller replied STOP" : "Phone number is suppressed";
+    }
+    if (permission.latest) {
+      return `${labelize(permission.latest.source)} · ${formatDate(permission.latest.created_at)}`;
+    }
+    if (permission.hasMismatchedRecord) {
+      return `No ${channel === "sms" ? "SMS" : "call"} permission for the current number`;
+    }
+    return `No ${channel === "sms" ? "SMS" : "call"} permission recorded`;
+  }
+
   return (
     <div className={styles.control}>
-      <div className={isPermissioned ? styles.permissioned : styles.notPermissioned}>
-        {isPermissioned ? (
-          <ShieldCheck aria-hidden="true" size={15} />
-        ) : (
-          <ShieldAlert aria-hidden="true" size={15} />
-        )}
-        <span>
-          <strong>
-            SMS permission: {isPermissioned ? "Permissioned" : "Not permissioned"}
-          </strong>
-          <small>
-            {loading
-              ? "Checking permission history…"
-              : isCarrierRevoked
-                ? "Seller replied STOP"
-                : latest?.status === currentStatus
-                  ? `${labelize(latest.source)} · ${formatDate(latest.created_at)}`
-                  : currentStatus === "missing"
-                    ? hasSmsRecords && !recordMatchesCurrentNumber
-                      ? "No SMS permission is recorded for the current number"
-                      : "No SMS permission has been recorded"
-                    : `Recorded status: ${labelize(currentStatus)}`}
-          </small>
-          {currentPhoneNumber ? <small>Number: {currentPhoneNumber}</small> : null}
-        </span>
+      <div className={styles.permissionGrid}>
+        <div
+          className={phonePermission.isPermissioned ? styles.permissioned : styles.notPermissioned}
+        >
+          {phonePermission.isPermissioned ? (
+            <ShieldCheck aria-hidden="true" size={15} />
+          ) : (
+            <ShieldAlert aria-hidden="true" size={15} />
+          )}
+          <span>
+            <strong>
+              Call permission: {phonePermission.isPermissioned ? "Permissioned" : "Not permissioned"}
+            </strong>
+            <small>{statusDetail("phone", phonePermission)}</small>
+          </span>
+          <PhoneCall aria-hidden="true" className={styles.channelIcon} size={14} />
+        </div>
+        <div className={smsPermission.isPermissioned ? styles.permissioned : styles.notPermissioned}>
+          {smsPermission.isPermissioned ? (
+            <ShieldCheck aria-hidden="true" size={15} />
+          ) : (
+            <ShieldAlert aria-hidden="true" size={15} />
+          )}
+          <span>
+            <strong>
+              SMS permission: {smsPermission.isPermissioned ? "Permissioned" : "Not permissioned"}
+            </strong>
+            <small>{statusDetail("sms", smsPermission)}</small>
+          </span>
+          <MessageSquareText aria-hidden="true" className={styles.channelIcon} size={14} />
+        </div>
       </div>
+      {currentPhoneNumber ? <p className={styles.numberNotice}>Number: {currentPhoneNumber}</p> : null}
       {isCarrierRevoked ? (
-        <p className={styles.stopNotice}>Locked until the seller texts START from this number.</p>
+        <p className={styles.stopNotice}>SMS is locked until the seller texts START from this number.</p>
       ) : null}
-      {canManage && !disabled && !isCarrierRevoked ? (
+      {editableChannels.length > 0 ? (
         <details className={styles.editor}>
-          <summary>Edit SMS permission</summary>
+          <summary>Edit call or SMS permission</summary>
           <form onSubmit={handleSubmit}>
             <label>
+              <span>Permission type</span>
+              <select
+                name="channel"
+                onChange={(event) => {
+                  setSelectedChannel(event.target.value as PermissionChannel);
+                  setSelectedStatus("granted");
+                  setMessage("");
+                  setError("");
+                }}
+                value={selectedChannel}
+              >
+                {editableChannels.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {channel === "phone" ? "Phone calls" : "Text messages (SMS)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span>Status</span>
-              <select defaultValue={isPermissioned ? "granted" : "revoked"} name="status">
-                <option value="granted">Permissioned</option>
+              <select
+                name="status"
+                onChange={(event) => setSelectedStatus(event.target.value as PermissionStatus)}
+                value={selectedStatus}
+              >
+                <option
+                  disabled={selectedChannel === "phone" && phonePermission.isSuppressed}
+                  value="granted"
+                >
+                  Permissioned
+                </option>
                 <option value="revoked">Not permissioned</option>
               </select>
             </label>
             <label>
-              <span>Where was this decision confirmed?</span>
-              <select defaultValue="phone_call" name="source">
+              <span>Where was this confirmed?</span>
+              <select
+                name="source"
+                onChange={(event) => setSelectedSource(event.target.value)}
+                value={selectedSource}
+              >
                 {sourceOptions.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </label>
-            {currentPhoneNumber ? (
-              <p className={styles.numberNotice}>
-                This entry applies to the current primary number: {currentPhoneNumber}
-              </p>
-            ) : null}
-            <label>
-              <span>Evidence note</span>
-              <textarea
-                maxLength={500}
-                minLength={3}
-                name="evidence_note"
-                placeholder="Example: Seller said we may text during today's intake call."
-                required
-                rows={3}
-              />
-            </label>
+            <p className={styles.auditNotice}>
+              Stonegate records who changed this permission, when it changed, and the source selected above.
+            </p>
             <button disabled={saving} type="submit">
-              {saving ? "Saving…" : "Save SMS permission"}
+              {saving ? "Saving…" : `Save ${selectedChannel === "phone" ? "call" : "SMS"} permission`}
             </button>
           </form>
         </details>

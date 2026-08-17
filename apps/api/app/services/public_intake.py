@@ -704,6 +704,7 @@ def create_public_seller_lead(
                 source=intake_source,
                 wording_version=resolved_contact_consent_version,
                 wording=resolved_contact_consent_wording,
+                normalized_address=(format_e164(payload.phone) if channel == "phone" else None),
                 captured_ip=ip_address,
                 user_agent=user_agent,
             )

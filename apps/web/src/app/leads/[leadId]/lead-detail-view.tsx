@@ -140,9 +140,11 @@ function SectionHeader({ title, meta }: { title: string; meta?: string }) {
 }
 
 function ContactPanel({
+  canManagePhonePermission,
   canManageSmsPermission,
   lead,
 }: {
+  canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
   lead: LeadDetail;
 }) {
@@ -169,9 +171,14 @@ function ContactPanel({
         <div><dt>Temperature</dt><dd>{labelize(lead.lead_temperature)}</dd></div>
       </dl>
       <SmsPermissionControl
-        canManage={canManageSmsPermission}
+        canManagePhone={canManagePhonePermission}
+        canManageSms={canManageSmsPermission}
         disabled={Boolean(lead.archived_at)}
+        fallbackConsentStatus={lead.sms_eligibility.consent_status}
+        fallbackPhoneConsentStatus={lead.voice_eligibility.consent_status}
         initialRecords={lead.consent_records}
+        isPhoneSuppressed={lead.voice_eligibility.is_suppressed}
+        isSuppressed={lead.sms_eligibility.is_suppressed}
         leadId={lead.id}
         phoneNumber={
           lead.contact_methods.find(
@@ -320,10 +327,12 @@ function InternalNotesPanel({ lead }: { lead: LeadDetail }) {
 
 function OverviewTab({
   activeAppointment,
+  canManagePhonePermission,
   canManageSmsPermission,
   lead,
 }: {
   activeAppointment: LeadDetail["appointments"][number] | undefined;
+  canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
   lead: LeadDetail;
 }) {
@@ -339,7 +348,11 @@ function OverviewTab({
         <RecentActivityPanel lead={lead} />
       </div>
       <aside className={styles.sideColumn}>
-        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
+        <ContactPanel
+          canManagePhonePermission={canManagePhonePermission}
+          canManageSmsPermission={canManageSmsPermission}
+          lead={lead}
+        />
         <PropertyPanel lead={lead} />
         <section className={styles.sectionPanel}>
           <SectionHeader title="Record controls" />
@@ -380,9 +393,11 @@ function OverviewTab({
 }
 
 function CommunicationsTab({
+  canManagePhonePermission,
   canManageSmsPermission,
   lead,
 }: {
+  canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
   lead: LeadDetail;
 }) {
@@ -419,7 +434,11 @@ function CommunicationsTab({
         </div>
       </section>
       <aside className={styles.sideColumn}>
-        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
+        <ContactPanel
+          canManagePhonePermission={canManagePhonePermission}
+          canManageSmsPermission={canManageSmsPermission}
+          lead={lead}
+        />
         <section className={styles.sectionPanel}>
           <SectionHeader title="Communication actions" />
           <ActionDisclosure label="Log call, text, or email">
@@ -740,25 +759,33 @@ function HistoryTab({ lead }: { lead: LeadDetail }) {
 }
 
 function ActivityTab({
+  canManagePhonePermission,
   canManageSmsPermission,
   lead,
 }: {
+  canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
   lead: LeadDetail;
 }) {
   return (
     <div className={styles.activityWorkspace}>
-      <CommunicationsTab canManageSmsPermission={canManageSmsPermission} lead={lead} />
+      <CommunicationsTab
+        canManagePhonePermission={canManagePhonePermission}
+        canManageSmsPermission={canManageSmsPermission}
+        lead={lead}
+      />
       <HistoryTab lead={lead} />
     </div>
   );
 }
 
 function PropertyTab({
+  canManagePhonePermission,
   canManageSmsPermission,
   lead,
   editLeadOpen,
 }: {
+  canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
   lead: LeadDetail;
   editLeadOpen: boolean;
@@ -788,7 +815,11 @@ function PropertyTab({
         </details>
       </div>
       <aside className={styles.sideColumn}>
-        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
+        <ContactPanel
+          canManagePhonePermission={canManagePhonePermission}
+          canManageSmsPermission={canManageSmsPermission}
+          lead={lead}
+        />
         <QualificationPanel lead={lead} />
       </aside>
     </div>
@@ -1182,7 +1213,11 @@ function ArchivedLeadRecord({ lead }: { lead: LeadDetail }) {
           <ReadOnlyBuyerOffersPanel lead={lead} />
         </div>
         <aside className={styles.sideColumn}>
-          <ContactPanel canManageSmsPermission={false} lead={lead} />
+          <ContactPanel
+            canManagePhonePermission={false}
+            canManageSmsPermission={false}
+            lead={lead}
+          />
           <ReadOnlyPropertyPanel lead={lead} />
           <section className={styles.sectionPanel}>
             <SectionHeader title="Record history" meta="Read only" />
@@ -1232,6 +1267,12 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
     profile?.permissions.includes("leads:edit") ||
       profile?.permissions.includes("communications:send_sms") ||
       (profile?.permissions.includes("communications:send_assigned_sms") &&
+        lead.assigned_user_id === profile.user_id),
+  );
+  const canManagePhonePermission = Boolean(
+    profile?.permissions.includes("leads:edit") ||
+      profile?.permissions.includes("communications:place_calls") ||
+      (profile?.permissions.includes("communications:place_assigned_calls") &&
         lead.assigned_user_id === profile.user_id),
   );
   const lastContact = lead.communications[0]?.occurred_at ?? null;
@@ -1361,18 +1402,21 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
             {activeTab === "summary" ? (
               <OverviewTab
                 activeAppointment={activeAppointment}
+                canManagePhonePermission={canManagePhonePermission}
                 canManageSmsPermission={canManageSmsPermission}
                 lead={lead}
               />
             ) : null}
             {activeTab === "activity" ? (
               <ActivityTab
+                canManagePhonePermission={canManagePhonePermission}
                 canManageSmsPermission={canManageSmsPermission}
                 lead={lead}
               />
             ) : null}
             {activeTab === "property" ? (
               <PropertyTab
+                canManagePhonePermission={canManagePhonePermission}
                 canManageSmsPermission={canManageSmsPermission}
                 editLeadOpen={editLeadOpen}
                 lead={lead}

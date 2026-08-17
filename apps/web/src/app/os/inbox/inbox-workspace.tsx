@@ -1368,6 +1368,11 @@ export function InboxWorkspace({
     me?.permissions.includes("communications:send_sms") ||
     (me?.permissions.includes("communications:send_assigned_sms") &&
       detail?.assigned_user_id === me.user_id);
+  const canManagePhonePermission =
+    me?.permissions.includes("leads:edit") ||
+    me?.permissions.includes("communications:place_calls") ||
+    (me?.permissions.includes("communications:place_assigned_calls") &&
+      detail?.assigned_user_id === me.user_id);
   const canUseEmail =
     me?.permissions.includes("communications:send_email") ||
     me?.permissions.includes("communications:send_assigned_email");
@@ -2613,10 +2618,13 @@ export function InboxWorkspace({
                 </div>
                 {detail.lead_id ? (
                   <SmsPermissionControl
-                    canManage={Boolean(canManageSmsPermission)}
+                    canManagePhone={Boolean(canManagePhonePermission)}
+                    canManageSms={Boolean(canManageSmsPermission)}
                     fallbackConsentStatus={detail.sms_eligibility.consent_status}
+                    fallbackPhoneConsentStatus={detail.voice_eligibility.consent_status}
+                    isPhoneSuppressed={detail.voice_eligibility.is_suppressed}
                     isSuppressed={detail.sms_eligibility.is_suppressed}
-                    key={`${detail.lead_id}:${detail.sms_eligibility.consent_status}:${Number(detail.sms_eligibility.is_suppressed)}:${detail.last_activity_at ?? "initial"}`}
+                    key={`${detail.lead_id}:${detail.sms_eligibility.consent_status}:${detail.voice_eligibility.consent_status}:${Number(detail.sms_eligibility.is_suppressed)}:${Number(detail.voice_eligibility.is_suppressed)}:${detail.last_activity_at ?? "initial"}`}
                     leadId={detail.lead_id}
                     onSaved={() => loadDetail(detail.id)}
                     phoneNumber={primaryPhone?.value ?? detail.sms_eligibility.recipient}
@@ -2643,26 +2651,28 @@ export function InboxWorkspace({
                     </span>
                   </div>
                 )}
-                <div
-                  className={
-                    detail.voice_eligibility.can_call
-                      ? styles.contactVoiceReady
-                      : styles.contactVoiceBlocked
-                  }
-                >
-                  {detail.voice_eligibility.can_call ? (
-                    <PhoneCall size={14} aria-hidden="true" />
-                  ) : (
-                    <ShieldAlert size={14} aria-hidden="true" />
-                  )}
-                  <span>
-                    {detail.voice_eligibility.can_call
-                      ? "Voice eligible"
-                      : detail.voice_eligibility.is_suppressed
-                        ? "Calling suppressed"
-                        : `Phone permission ${labelize(detail.voice_eligibility.consent_status)}`}
-                  </span>
-                </div>
+                {!detail.lead_id ? (
+                  <div
+                    className={
+                      detail.voice_eligibility.can_call
+                        ? styles.contactVoiceReady
+                        : styles.contactVoiceBlocked
+                    }
+                  >
+                    {detail.voice_eligibility.can_call ? (
+                      <PhoneCall size={14} aria-hidden="true" />
+                    ) : (
+                      <ShieldAlert size={14} aria-hidden="true" />
+                    )}
+                    <span>
+                      {detail.voice_eligibility.can_call
+                        ? "Voice eligible"
+                        : detail.voice_eligibility.is_suppressed
+                          ? "Calling suppressed"
+                          : `Phone permission ${labelize(detail.voice_eligibility.consent_status)}`}
+                    </span>
+                  </div>
+                ) : null}
               </section>
 
               {detail.conversation_type === "general" ? (

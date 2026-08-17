@@ -3,6 +3,11 @@
   gap: 8px;
 }
 
+.permissionGrid {
+  display: grid;
+  gap: 6px;
+}
+
 .permissioned,
 .notPermissioned {
   display: flex;
@@ -29,6 +34,12 @@
 .notPermissioned svg {
   flex: 0 0 auto;
   margin-top: 1px;
+}
+
+.permissioned .channelIcon,
+.notPermissioned .channelIcon {
+  margin-left: auto;
+  opacity: 0.68;
 }
 
 .permissioned span,
@@ -79,8 +90,7 @@
   font-weight: 800;
 }
 
-.editor select,
-.editor textarea {
+.editor select {
   width: 100%;
   border: 1px solid #c9d2cd;
   border-radius: 6px;
@@ -93,12 +103,6 @@
 .editor select {
   min-height: 36px;
   padding: 6px 8px;
-}
-
-.editor textarea {
-  min-height: 66px;
-  padding: 8px;
-  resize: vertical;
 }
 
 .editor button {
@@ -120,6 +124,7 @@
 
 .success,
 .error,
+.auditNotice,
 .numberNotice,
 .stopNotice {
   margin: 0;
@@ -128,6 +133,10 @@
 }
 
 .numberNotice {
+  color: #536159;
+}
+
+.auditNotice {
   color: #536159;
 }
 

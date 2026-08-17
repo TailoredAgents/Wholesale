@@ -21,6 +21,7 @@ from app.schemas.approvals import (
     OfferNegotiationPlanRead,
 )
 from app.schemas.leads import (
+    ContactPermissionUpdate,
     LeadAppointmentCreate,
     LeadAppointmentUpdate,
     LeadBuyerOfferCreate,
@@ -78,6 +79,7 @@ from app.services.leads import (
     preview_lead_market_value,
     reopen_lead,
     restore_lead,
+    update_lead_contact_permission,
     update_lead_sms_permission,
     update_lead_staff_details,
     update_lead_stage,
@@ -133,6 +135,13 @@ sms_permission_dependency = require_any_permission(
     PermissionKeys.EDIT_LEADS,
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
+)
+contact_permission_dependency = require_any_permission(
+    PermissionKeys.EDIT_LEADS,
+    PermissionKeys.SEND_SMS,
+    PermissionKeys.SEND_ASSIGNED_SMS,
+    PermissionKeys.PLACE_CALLS,
+    PermissionKeys.PLACE_ASSIGNED_CALLS,
 )
 
 
@@ -210,6 +219,29 @@ def record_lead_sms_permission(
 ) -> LeadDetail:
     try:
         lead = update_lead_sms_permission(db, principal, lead_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.patch("/{lead_id}/contact-permission")
+def record_lead_contact_permission(
+    lead_id: UUID,
+    payload: ContactPermissionUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(contact_permission_dependency)],
+) -> LeadDetail:
+    try:
+        lead = update_lead_contact_permission(db, principal, lead_id, payload)
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:

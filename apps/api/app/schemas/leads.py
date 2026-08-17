@@ -159,7 +159,27 @@ class ConsentRecordRead(BaseModel):
     created_at: datetime
 
 
-class SmsPermissionUpdate(BaseModel):
+class LeadSmsEligibilityRead(BaseModel):
+    can_send: bool
+    recipient: str | None
+    consent_status: str
+    is_suppressed: bool
+    provider_configured: bool
+    within_allowed_hours: bool
+    blockers: list[str]
+
+
+class LeadVoiceEligibilityRead(BaseModel):
+    can_call: bool
+    recipient: str | None
+    consent_status: str
+    is_suppressed: bool
+    provider_configured: bool
+    within_allowed_hours: bool
+    blockers: list[str]
+
+
+class PermissionUpdateBase(BaseModel):
     status: Literal["granted", "revoked"]
     source: Literal[
         "phone_call",
@@ -170,12 +190,22 @@ class SmsPermissionUpdate(BaseModel):
         "written_form",
         "other",
     ]
-    evidence_note: str = Field(min_length=3, max_length=500)
+    evidence_note: str | None = Field(default=None, min_length=3, max_length=500)
 
     @field_validator("evidence_note", mode="before")
     @classmethod
     def strip_evidence_note(cls, value: object) -> object:
-        return value.strip() if isinstance(value, str) else value
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+
+class SmsPermissionUpdate(PermissionUpdateBase):
+    pass
+
+
+class ContactPermissionUpdate(PermissionUpdateBase):
+    channel: Literal["phone", "sms"]
 
 
 class AttributionTouchRead(BaseModel):
@@ -929,6 +959,8 @@ class LeadDetail(LeadRead):
     contact_methods: list[ContactMethodRead]
     assignable_users: list[LeadAssignableUserRead]
     consent_records: list[ConsentRecordRead]
+    sms_eligibility: LeadSmsEligibilityRead
+    voice_eligibility: LeadVoiceEligibilityRead
     attribution_touches: list[AttributionTouchRead]
     open_tasks: list[LeadTaskRead]
     communications: list[CommunicationRecordRead]

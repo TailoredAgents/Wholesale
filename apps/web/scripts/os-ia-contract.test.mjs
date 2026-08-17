@@ -545,6 +545,29 @@ test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {
   assert.match(inbox, /window\.clearTimeout\(timer\)/);
 });
 
+test("Lead contact permission control manages calls and SMS without a typed note", () => {
+  const control = readFileSync(
+    resolve(osSourceRoot, "_components/sms-permission-control.tsx"),
+    "utf8",
+  );
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const leadDetail = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+
+  assert.match(control, /\/contact-permission/);
+  assert.match(control, /Phone calls/);
+  assert.match(control, /Text messages \(SMS\)/);
+  assert.match(control, /Call permission:/);
+  assert.match(control, /SMS permission:/);
+  assert.doesNotMatch(control, /name="evidence_note"/);
+  assert.match(inbox, /fallbackPhoneConsentStatus=\{detail\.voice_eligibility\.consent_status\}/);
+  assert.match(inbox, /fallbackConsentStatus=\{detail\.sms_eligibility\.consent_status\}/);
+  assert.match(leadDetail, /canManagePhone=\{canManagePhonePermission\}/);
+  assert.match(leadDetail, /canManageSms=\{canManageSmsPermission\}/);
+});
+
 test("Inbox call intelligence includes a safely derived completed-note quick read", () => {
   const quickRead = loadTypeScriptModule(
     resolve(osSourceRoot, "inbox/call-quick-read.ts"),

@@ -1471,6 +1471,24 @@ export type LeadDetail = LeadListItem & {
     captured_ip: string | null;
     created_at: string;
   }>;
+  sms_eligibility: {
+    can_send: boolean;
+    recipient: string | null;
+    consent_status: string;
+    is_suppressed: boolean;
+    provider_configured: boolean;
+    within_allowed_hours: boolean;
+    blockers: string[];
+  };
+  voice_eligibility: {
+    can_call: boolean;
+    recipient: string | null;
+    consent_status: string;
+    is_suppressed: boolean;
+    provider_configured: boolean;
+    within_allowed_hours: boolean;
+    blockers: string[];
+  };
   attribution_touches: Array<{
     touch_type: string;
     source: string | null;

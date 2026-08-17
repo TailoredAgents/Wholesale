@@ -24,6 +24,7 @@ from app.models.foundation import (
     CallRecording,
     CallTranscript,
     CommunicationProviderEvent,
+    ConsentRecord,
     Contact,
     Conversation,
     Lead,
@@ -809,6 +810,50 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     call_intent = db_session.get(VoiceCallIntent, UUID(str(intent["id"])))
     assert call_intent is not None
     assert call_intent.status == "started"
+
+
+def test_manual_call_permission_unblocks_the_real_outbound_call_flow(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    phone_consent = db_session.scalar(
+        select(ConsentRecord).where(
+            ConsentRecord.contact_id == conversation.contact_id,
+            ConsentRecord.channel == "phone",
+        )
+    )
+    assert phone_consent is not None
+    db_session.delete(phone_consent)
+    db_session.commit()
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    blocked = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json={"idempotency_key": "manual-permission-blocked-0001"},
+    )
+
+    assert blocked.status_code == 422
+    assert "Recorded phone contact permission is required" in blocked.text
+    assert conversation.lead_id is not None
+
+    permission = client.patch(
+        f"/api/v1/leads/{conversation.lead_id}/contact-permission",
+        headers=headers,
+        json={"channel": "phone", "status": "granted", "source": "phone_call"},
+    )
+    ready = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json={"idempotency_key": "manual-permission-ready-0001"},
+    )
+
+    assert permission.status_code == 200, permission.text
+    assert ready.status_code == 201, ready.text
+    assert ready.json()["recipient"] == SELLER_NUMBER
 
 
 def test_forwarded_outbound_call_rings_staff_then_connects_seller(

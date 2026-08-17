@@ -99,6 +99,7 @@ from app.schemas.leads import (
     CommunicationRecordRead,
     ConsentRecordRead,
     ContactMethodRead,
+    ContactPermissionUpdate,
     DashboardSummary,
     LeadAiReadySummary,
     LeadAppointmentCreate,
@@ -121,11 +122,13 @@ from app.schemas.leads import (
     LeadRead,
     LeadReopenRead,
     LeadReopenRequest,
+    LeadSmsEligibilityRead,
     LeadStaffUpdate,
     LeadStageUpdate,
     LeadTaskRead,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    LeadVoiceEligibilityRead,
     MarketAnalysisCompRead,
     MarketComparableRead,
     PipelineStageCount,
@@ -146,7 +149,11 @@ from app.schemas.leads import (
     UnderwritingVersionRead,
     UnderwritingVersionRepairSnapshot,
 )
-from app.services.communication_compliance import format_e164
+from app.services.communication_compliance import (
+    evaluate_sms_eligibility,
+    evaluate_voice_eligibility,
+    format_e164,
+)
 from app.services.inbox import (
     add_automatic_owner_watchers,
     ensure_primary_conversation,
@@ -603,6 +610,11 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
     if lead is None:
         return None
     base = lead_to_read(db, lead)
+    contact = db.get(Contact, lead.contact_id)
+    if contact is None:
+        raise RuntimeError("lead is missing its seller contact")
+    sms_eligibility = evaluate_sms_eligibility(db, contact)
+    voice_eligibility = evaluate_voice_eligibility(db, contact)
     contact_methods = db.scalars(
         select(ContactMethod)
         .where(
@@ -805,6 +817,24 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             )
             for record in consent_records
         ],
+        sms_eligibility=LeadSmsEligibilityRead(
+            can_send=sms_eligibility.can_send,
+            recipient=sms_eligibility.recipient,
+            consent_status=sms_eligibility.consent_status,
+            is_suppressed=sms_eligibility.is_suppressed,
+            provider_configured=sms_eligibility.provider_configured,
+            within_allowed_hours=sms_eligibility.within_allowed_hours,
+            blockers=list(sms_eligibility.blockers),
+        ),
+        voice_eligibility=LeadVoiceEligibilityRead(
+            can_call=voice_eligibility.can_call,
+            recipient=voice_eligibility.recipient,
+            consent_status=voice_eligibility.consent_status,
+            is_suppressed=voice_eligibility.is_suppressed,
+            provider_configured=voice_eligibility.provider_configured,
+            within_allowed_hours=voice_eligibility.within_allowed_hours,
+            blockers=list(voice_eligibility.blockers),
+        ),
         attribution_touches=[
             AttributionTouchRead(
                 touch_type=touch.touch_type,
@@ -3113,11 +3143,11 @@ def create_lead_buyer_offer(
     return get_lead_detail(db, principal, lead_id)
 
 
-SMS_PERMISSION_SOURCE_LABELS = {
+CONTACT_PERMISSION_SOURCE_LABELS = {
     "phone_call": "phone call",
     "in_person": "in-person conversation",
-    "facebook": "Facebook message or form with explicit SMS permission",
-    "inbound_sms": "seller text explicitly granting or withdrawing SMS permission",
+    "facebook": "Facebook message or form",
+    "inbound_sms": "seller text",
     "website_form": "website form",
     "written_form": "written form",
     "other": "other documented source",
@@ -3130,6 +3160,38 @@ def update_lead_sms_permission(
     lead_id: UUID,
     payload: SmsPermissionUpdate,
 ) -> LeadDetail | None:
+    return _update_lead_contact_permission(
+        db,
+        principal,
+        lead_id,
+        channel="sms",
+        payload=payload,
+    )
+
+
+def update_lead_contact_permission(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: ContactPermissionUpdate,
+) -> LeadDetail | None:
+    return _update_lead_contact_permission(
+        db,
+        principal,
+        lead_id,
+        channel=payload.channel,
+        payload=payload,
+    )
+
+
+def _update_lead_contact_permission(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    *,
+    channel: str,
+    payload: SmsPermissionUpdate | ContactPermissionUpdate,
+) -> LeadDetail | None:
     lead = get_scoped_lead(
         db,
         principal,
@@ -3140,13 +3202,27 @@ def update_lead_sms_permission(
     if lead is None:
         return None
     require_lead_open_for_work(lead)
+    global_channel_permission = (
+        PermissionKeys.SEND_SMS
+        if channel == "sms"
+        else PermissionKeys.PLACE_CALLS
+    )
+    assigned_channel_permission = (
+        PermissionKeys.SEND_ASSIGNED_SMS
+        if channel == "sms"
+        else PermissionKeys.PLACE_ASSIGNED_CALLS
+    )
     has_global_authority = (
         PermissionKeys.EDIT_LEADS in principal.permission_keys
-        or PermissionKeys.SEND_SMS in principal.permission_keys
+        or global_channel_permission in principal.permission_keys
     )
-    if not has_global_authority and lead.assigned_user_id != principal.user_id:
+    has_assigned_authority = (
+        assigned_channel_permission in principal.permission_keys
+        and lead.assigned_user_id == principal.user_id
+    )
+    if not has_global_authority and not has_assigned_authority:
         raise PermissionError(
-            "Assigned SMS permission may only be recorded on a lead assigned to you."
+            f"Assigned {channel} permission may only be recorded on a lead assigned to you."
         )
     contact = db.get(Contact, lead.contact_id)
     if contact is None:
@@ -3162,13 +3238,19 @@ def update_lead_sms_permission(
     )
     recipient = format_e164(phone_method.value) if phone_method is not None else None
     if payload.status == "granted" and recipient is None:
-        raise ValueError("Add a valid seller phone number before recording SMS permission.")
+        raise ValueError(
+            f"Add a valid seller phone number before recording {permission_channel_label(channel)}."
+        )
 
     active_suppression = (
         db.scalar(
             select(SuppressionRecord).where(
                 SuppressionRecord.organization_id == principal.organization_id,
-                SuppressionRecord.channel == "sms",
+                (
+                    SuppressionRecord.channel == "sms"
+                    if channel == "sms"
+                    else SuppressionRecord.channel.in_(("phone", "all"))
+                ),
                 SuppressionRecord.normalized_address == recipient,
                 SuppressionRecord.status == "active",
             )
@@ -3176,34 +3258,40 @@ def update_lead_sms_permission(
         if recipient is not None
         else None
     )
-    if active_suppression is not None:
+    if channel == "sms" and active_suppression is not None:
         raise ValueError(
             "The seller replied STOP. This status is locked until the seller sends START."
         )
+    if channel == "phone" and active_suppression is not None and payload.status == "granted":
+        raise ValueError("This number is suppressed from phone calls and cannot be permissioned.")
 
     latest = db.scalar(
         select(ConsentRecord)
         .where(
             ConsentRecord.organization_id == principal.organization_id,
             ConsentRecord.contact_id == contact.id,
-            ConsentRecord.channel == "sms",
+            ConsentRecord.channel == channel,
         )
         .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
     )
-    source_label = SMS_PERMISSION_SOURCE_LABELS[payload.source]
+    source_label = CONTACT_PERMISSION_SOURCE_LABELS[payload.source]
     permission_label = "granted" if payload.status == "granted" else "not granted"
+    channel_label = permission_channel_label(channel)
+    number_label = "SMS number" if channel == "sms" else "Phone number"
     wording = (
-        f"Stonegate staff documented SMS permission as {permission_label} from {source_label}. "
-        f"SMS number: {recipient or 'not available'}. Evidence: {payload.evidence_note}"
+        f"Stonegate staff documented {channel_label} as {permission_label} from {source_label}. "
+        f"{number_label}: {recipient or 'not available'}."
     )
+    if payload.evidence_note:
+        wording = f"{wording} Note: {payload.evidence_note}"
     captured_at = datetime.now(UTC)
     record = ConsentRecord(
         organization_id=principal.organization_id,
         contact_id=contact.id,
-        channel="sms",
+        channel=channel,
         status=payload.status,
         source=payload.source,
-        wording_version="staff-documented-sms-v1",
+        wording_version=f"staff-documented-{channel}-v1",
         wording=wording,
         normalized_address=recipient,
         captured_ip=None,
@@ -3219,8 +3307,8 @@ def update_lead_sms_permission(
             actor_user_id=principal.user_id,
             entity_type="lead",
             entity_id=lead.id,
-            event_type="lead.sms_permission_updated",
-            summary=f"SMS permission recorded as {permission_label} from {source_label}.",
+            event_type=f"lead.{channel}_permission_updated",
+            summary=f"{channel_label.title()} recorded as {permission_label} from {source_label}.",
         )
     )
     db.add(
@@ -3228,7 +3316,7 @@ def update_lead_sms_permission(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
             actor_type="user",
-            action="lead.sms_permission_update",
+            action=f"lead.{channel}_permission_update",
             entity_type="lead",
             entity_id=lead.id,
             previous_value=(
@@ -3249,11 +3337,15 @@ def update_lead_sms_permission(
                 "wording_version": record.wording_version,
                 "evidence_note": payload.evidence_note,
             },
-            reason="Staff documented seller SMS permission",
+            reason=f"Staff documented seller {channel_label}",
         )
     )
     db.commit()
     return get_lead_detail(db, principal, lead_id)
+
+
+def permission_channel_label(channel: str) -> str:
+    return "SMS permission" if channel == "sms" else "phone contact permission"
 
 
 def update_lead_staff_details(

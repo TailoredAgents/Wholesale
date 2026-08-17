@@ -1175,6 +1175,8 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
 
     consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
     assert {consent.channel for consent in consents} == {"email", "phone"}
+    phone_consent = next(consent for consent in consents if consent.channel == "phone")
+    assert phone_consent.normalized_address == "+14045551212"
     assert all(consent.status == "granted" for consent in consents)
     assert all(consent.captured_ip == "testclient" for consent in consents)
     assert all(consent.wording_version == "seller-contact-web-v3" for consent in consents)
