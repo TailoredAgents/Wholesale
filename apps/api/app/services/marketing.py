@@ -57,6 +57,8 @@ MEASUREMENT_POLICY_VERSION = "stonegate-marketing-measurement-v1"
 CONSENT_BASIS = "privacy_notice_first_party_measurement"
 META_WEB_ATTRIBUTION_MODEL = "meta_browser_server_deduplicated_v1"
 META_WEB_CONSENT_BASIS = "website_contact_and_measurement_notice_v1"
+META_WEB_ENRICHABLE_EXPORT_STATUSES = frozenset({"pending", "retry", "blocked"})
+META_BROWSER_CLICK_ID_STORAGE_LENGTH = 255
 META_MATCH_COVERAGE_WINDOW_DAYS = 30
 QUALIFIED_STAGES = {
     "qualified",
@@ -158,7 +160,11 @@ def enqueue_meta_web_conversion(
         occurred_at=occurred_at or datetime.now(UTC),
         attribution_model=META_WEB_ATTRIBUTION_MODEL,
         consent_basis=META_WEB_CONSENT_BASIS,
-        click_id=fbc or fbp or "",
+        # The JSON snapshot is the provider payload of record and retains the
+        # complete opaque Meta envelope. ``click_id`` predates the browser SDK
+        # and remains a bounded operational preview because its DB column is
+        # intentionally limited to 255 characters.
+        click_id=meta_browser_click_id_preview(fbc=fbc, fbp=fbp),
         click_id_type="meta_browser",
         value_cents=None,
         currency="USD",
@@ -173,6 +179,85 @@ def enqueue_meta_web_conversion(
     db.add(export)
     db.flush()
     return export
+
+
+def enrich_meta_web_conversion_identifiers(
+    export: OfflineConversionExport,
+    *,
+    fbc: str | None,
+    fbp: str | None,
+    fbclid: str | None,
+    click_captured_at: datetime | None,
+) -> bool:
+    """Add newly recovered Meta identifiers before a conversion is final.
+
+    Address capture may arrive before Meta's in-app browser bridge finishes
+    recovering ``fbc``. A same-event retry is allowed to fill identifiers that
+    were absent from the queued payload, but final provider evidence is never
+    rewritten after delivery, simulation, or exhaustion.
+    """
+    if not can_enrich_meta_web_conversion_identifiers(export):
+        return False
+
+    snapshot = dict(export.payload_snapshot)
+    changed = False
+    additions: tuple[tuple[str, object | None], ...] = (
+        ("fbc", non_empty_string(fbc)),
+        ("fbp", non_empty_string(fbp)),
+    )
+    for key, incoming in additions:
+        if incoming is None or snapshot_has_non_empty_value(snapshot, key):
+            continue
+        snapshot[key] = incoming
+        changed = True
+
+    incoming_fbclid = non_empty_string(fbclid)
+    persisted_fbclid = non_empty_string(snapshot.get("fbclid"))
+    if persisted_fbclid is None and incoming_fbclid is not None:
+        snapshot["fbclid"] = incoming_fbclid
+        persisted_fbclid = incoming_fbclid
+        changed = True
+    incoming_click_captured_at = utc_isoformat(click_captured_at)
+    if (
+        incoming_click_captured_at is not None
+        and incoming_fbclid is not None
+        and persisted_fbclid == incoming_fbclid
+        and not snapshot_has_non_empty_value(snapshot, "click_captured_at")
+    ):
+        snapshot["click_captured_at"] = incoming_click_captured_at
+        changed = True
+
+    if not changed:
+        return False
+
+    export.payload_snapshot = snapshot
+    export.payload_hash = payload_hash(snapshot)
+    preferred_fbc = non_empty_string(snapshot.get("fbc"))
+    preferred_fbp = non_empty_string(snapshot.get("fbp"))
+    export.click_id = meta_browser_click_id_preview(
+        fbc=preferred_fbc,
+        fbp=preferred_fbp,
+    )
+    return True
+
+
+def can_enrich_meta_web_conversion_identifiers(export: OfflineConversionExport) -> bool:
+    return export.platform == "meta" and export.status in META_WEB_ENRICHABLE_EXPORT_STATUSES
+
+
+def meta_browser_click_id_preview(*, fbc: str | None, fbp: str | None) -> str:
+    """Return the bounded legacy-column preview without truncating CAPI data."""
+    value = non_empty_string(fbc) or non_empty_string(fbp) or ""
+    return value[:META_BROWSER_CLICK_ID_STORAGE_LENGTH]
+
+
+def snapshot_has_non_empty_value(snapshot: dict[str, object], key: str) -> bool:
+    value = snapshot.get(key)
+    return bool(value.strip()) if isinstance(value, str) else value is not None
+
+
+def non_empty_string(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def enqueue_meta_schedule_conversion(

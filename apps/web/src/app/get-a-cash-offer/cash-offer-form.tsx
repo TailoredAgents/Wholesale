@@ -12,6 +12,7 @@ import {
   getConversionExperimentContext,
   getConversionSessionId,
   getDeviceCategory,
+  prepareMetaBrowserParameters,
   recordConversionEvent,
   trackMetaPixelEvent,
   waitForMetaBrowserCookies,
@@ -263,23 +264,26 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             meta_browser_event: metaBrowserEvent,
           }),
         });
-      const initialAddressCaptureRequest = sendAddressCapture(initialMetaBrowserEvent);
       const strongestMetaBrowserEventPromise = waitForMetaBrowserCookies(
         initialMetaBrowserEvent,
       );
 
       try {
-        // Persist immediately with every identifier already available. Cookie polling continues
-        // in parallel and is used by the retry/browser event without delaying this request.
+        // The UI advances immediately while this bounded background wait gives Meta's official
+        // collector time to recover an in-app click ID before the server export is queued.
+        let strongestMetaBrowserEvent =
+          options.retryWithEnrichedCookies === false
+            ? initialMetaBrowserEvent
+            : await strongestMetaBrowserEventPromise;
         let response: Response | null = null;
         try {
-          response = await initialAddressCaptureRequest;
+          response = await sendAddressCapture(strongestMetaBrowserEvent);
         } catch {
           // A single enriched retry below recovers a transient or interrupted first request.
         }
 
         if (!response?.ok && options.retryWithEnrichedCookies !== false) {
-          const strongestMetaBrowserEvent = await strongestMetaBrowserEventPromise;
+          strongestMetaBrowserEvent = await strongestMetaBrowserEventPromise;
           try {
             response = await sendAddressCapture(strongestMetaBrowserEvent);
           } catch {
@@ -290,7 +294,21 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         if (intakeAttemptIdRef.current !== intakeAttemptId) return;
 
         confirmedAddressCaptureSignatureRef.current = signature;
-        const strongestMetaBrowserEvent = await strongestMetaBrowserEventPromise;
+        // If Meta's in-app bridge finishes after the bounded first wait, submit one
+        // idempotent enrichment request. The API only fills missing identifiers while
+        // the export is still pending/retryable and never rewrites delivered evidence.
+        void prepareMetaBrowserParameters()
+          .then(() => {
+            const lateMetaBrowserEvent = createMetaBrowserEvent(
+              strongestMetaBrowserEvent.event_id,
+            );
+            const gainedIdentifier =
+              (!strongestMetaBrowserEvent.fbc && lateMetaBrowserEvent.fbc) ||
+              (!strongestMetaBrowserEvent.fbp && lateMetaBrowserEvent.fbp);
+            if (!gainedIdentifier) return undefined;
+            return sendAddressCapture(lateMetaBrowserEvent).then(() => undefined);
+          })
+          .catch(() => undefined);
         if (!addressMetaLeadTrackedRef.current) {
           addressMetaLeadTrackedRef.current = trackMetaPixelEvent(
             "Lead",
@@ -423,6 +441,12 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       });
     }
     if (activeStep === 0) {
+      if (!addressMetaLeadTrackedRef.current) {
+        addressMetaLeadTrackedRef.current = trackMetaPixelEvent(
+          "Lead",
+          addressLeadEventId(intakeAttemptIdRef.current),
+        );
+      }
       void captureAddressOnlyLead(values);
     }
     moveToStep(Math.min(activeStep + 1, steps.length - 1));

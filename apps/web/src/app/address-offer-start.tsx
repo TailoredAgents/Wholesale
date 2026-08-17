@@ -4,6 +4,7 @@ import { ArrowRight, MapPin } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  getConversionAttribution,
   getConversionExperimentContext,
   recordConversionEvent,
 } from "./lib/conversion-events";
@@ -13,6 +14,16 @@ type AddressOfferStartProps = {
   compact?: boolean;
   inputId?: string;
 };
+
+const attributionHandoffKeys = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "gclid",
+  "fbclid",
+] as const;
 
 export function AddressOfferStart({ compact = false, inputId }: AddressOfferStartProps) {
   const apiBaseUrl = useMemo(
@@ -37,7 +48,8 @@ export function AddressOfferStart({ compact = false, inputId }: AddressOfferStar
       action="/get-a-cash-offer"
       className={`${styles.form} ${compact ? styles.compact : ""}`}
       method="get"
-      onSubmit={() => {
+      onSubmit={(event) => {
+        appendCurrentAttribution(event.currentTarget);
         window.sessionStorage.removeItem("stonegate_cash_offer_draft_v1");
         window.sessionStorage.removeItem("stonegate_cash_offer_confirmation_v1");
         void recordConversionEvent(apiBaseUrl, "offer_start", {
@@ -63,4 +75,17 @@ export function AddressOfferStart({ compact = false, inputId }: AddressOfferStar
       <p>No obligation. No SMS consent required to request an offer.</p>
     </form>
   );
+}
+
+function appendCurrentAttribution(form: HTMLFormElement) {
+  const attribution = getConversionAttribution();
+  for (const key of attributionHandoffKeys) {
+    const value = attribution[key];
+    if (!value || form.elements.namedItem(key)) continue;
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = value;
+    form.appendChild(input);
+  }
 }

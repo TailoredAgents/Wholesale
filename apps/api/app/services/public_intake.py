@@ -49,7 +49,13 @@ from app.services.communication_compliance import format_e164
 from app.services.conversion_events import record_conversion_event, with_meta_browser_metadata
 from app.services.inbox import ensure_primary_conversation
 from app.services.lead_manager import ensure_inbound_case
-from app.services.marketing import enqueue_meta_web_conversion, payload_hash, sha256
+from app.services.marketing import (
+    can_enrich_meta_web_conversion_identifiers,
+    enqueue_meta_web_conversion,
+    enrich_meta_web_conversion_identifiers,
+    payload_hash,
+    sha256,
+)
 from app.services.property_identity import (
     find_property_by_identity,
     normalized_address_key_or_none,
@@ -178,15 +184,44 @@ def ensure_address_lead_conversion(
     """Persist the address-stage event once, regardless of request arrival order."""
     event_id = address_lead_event_id(intake_attempt_id)
     existing_export = db.scalar(
-        select(OfflineConversionExport).where(
+        select(OfflineConversionExport)
+        .where(
             OfflineConversionExport.organization_id == organization.id,
             OfflineConversionExport.platform == "meta",
             OfflineConversionExport.event_key == event_id,
         )
+        .with_for_update()
     )
     if existing_export is not None:
         if existing_export.event_name != "Lead" or existing_export.lead_id != lead.id:
             raise RuntimeError("Address-lead conversion identity is already in use.")
+        if can_enrich_meta_web_conversion_identifiers(existing_export):
+            enrich_meta_web_conversion_identifiers(
+                existing_export,
+                fbc=meta_browser_event.fbc,
+                fbp=meta_browser_event.fbp,
+                fbclid=attribution.fbclid,
+                click_captured_at=attribution.fbclid_captured_at,
+            )
+            conversion_event = (
+                db.get(ConversionEvent, existing_export.conversion_event_id)
+                if existing_export.conversion_event_id is not None
+                else None
+            )
+            if conversion_event is None:
+                conversion_event = find_conversion_event_by_meta_id(
+                    db,
+                    organization_id=organization.id,
+                    lead_id=lead.id,
+                    event_type="address_capture",
+                    event_id=event_id,
+                )
+            if conversion_event is not None:
+                enrich_address_conversion_event_identifiers(
+                    conversion_event,
+                    attribution=attribution,
+                    meta_browser_event=meta_browser_event,
+                )
         return False
 
     conversion_event = find_conversion_event_by_meta_id(
@@ -228,6 +263,54 @@ def ensure_address_lead_conversion(
         external_id=f"{organization.id}:{lead.id}",
     )
     return True
+
+
+def enrich_address_conversion_event_identifiers(
+    event: ConversionEvent,
+    *,
+    attribution: SellerIntakeAttribution,
+    meta_browser_event: MetaBrowserEvent,
+) -> bool:
+    """Fill missing identifier evidence on a still-mutable address event."""
+    changed = False
+    incoming_fbclid = (
+        attribution.fbclid.strip()
+        if attribution.fbclid and attribution.fbclid.strip()
+        else None
+    )
+    persisted_fbclid = event.fbclid.strip() if event.fbclid and event.fbclid.strip() else None
+    if persisted_fbclid is None and incoming_fbclid is not None:
+        event.fbclid = incoming_fbclid
+        persisted_fbclid = incoming_fbclid
+        changed = True
+    if (
+        event.fbclid_captured_at is None
+        and attribution.fbclid_captured_at is not None
+        and incoming_fbclid is not None
+        and persisted_fbclid == incoming_fbclid
+    ):
+        event.fbclid_captured_at = attribution.fbclid_captured_at
+        changed = True
+
+    metadata = dict(event.event_metadata or {})
+    browser_metadata_value = metadata.get("meta_browser_event")
+    browser_metadata = (
+        dict(browser_metadata_value) if isinstance(browser_metadata_value, dict) else {}
+    )
+    for key, incoming in (
+        ("event_id", meta_browser_event.event_id),
+        ("event_source_url", meta_browser_event.event_source_url),
+        ("fbc", meta_browser_event.fbc),
+        ("fbp", meta_browser_event.fbp),
+    ):
+        existing = browser_metadata.get(key)
+        if incoming and not (isinstance(existing, str) and existing.strip()):
+            browser_metadata[key] = incoming
+            changed = True
+    if changed:
+        metadata["meta_browser_event"] = browser_metadata
+        event.event_metadata = metadata
+    return changed
 
 
 def ensure_contact_conversion(
@@ -1284,7 +1367,7 @@ def reassign_address_capture_attempt(
         if conversion_event is None and export.conversion_event_id is not None:
             conversion_event = db.get(ConversionEvent, export.conversion_event_id)
         export.lead_id = surviving_lead.id
-        if export.status not in {"delivered", "simulated"}:
+        if can_enrich_meta_web_conversion_identifiers(export):
             snapshot = dict(export.payload_snapshot)
             snapshot["external_id_hash"] = sha256(f"{organization.id}:{surviving_lead.id}")
             export.payload_snapshot = snapshot

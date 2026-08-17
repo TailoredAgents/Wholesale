@@ -101,7 +101,11 @@ test("cash-offer stages use distinct deduplicated Meta Lead and Contact events",
   const captureStart = form.indexOf("const captureAddressOnlyLead = useCallback(");
   const captureEnd = form.indexOf("useEffect(() => {", captureStart);
   const captureImplementation = form.slice(captureStart, captureEnd);
+  const handleNextStart = form.indexOf("function handleNext()");
+  const handleNextEnd = form.indexOf("function handleBack()", handleNextStart);
+  const handleNextImplementation = form.slice(handleNextStart, handleNextEnd);
   assert.ok(captureStart >= 0 && captureEnd > captureStart);
+  assert.ok(handleNextStart >= 0 && handleNextEnd > handleNextStart);
   assert.match(form, /`stonegate-lead-\$\{intakeAttemptId\}`/);
   assert.match(form, /`stonegate-contact-\$\{intakeAttemptId\}`/);
   assert.match(form, /waitForMetaBrowserCookies\(/);
@@ -111,10 +115,11 @@ test("cash-offer stages use distinct deduplicated Meta Lead and Contact events",
   assert.match(form, /trackMetaPixelEvent\(metaPixelEventName, metaBrowserEvent\.event_id\)/);
   assert.doesNotMatch(form, /pendingMeta(?:Lead|Contact)EventIdRef/);
   assert.ok(
-    captureImplementation.indexOf('if (!response?.ok) throw new Error(') <
-      captureImplementation.indexOf('addressMetaLeadTrackedRef.current = trackMetaPixelEvent('),
-    "The address browser Lead must fire only after the address API confirms success.",
+    handleNextImplementation.indexOf("addressMetaLeadTrackedRef.current = trackMetaPixelEvent(") <
+      handleNextImplementation.indexOf("void captureAddressOnlyLead(values)"),
+    "The address browser Lead must fire on the valid Step 1 action, before CRM latency.",
   );
+  assert.match(captureImplementation, /strongestMetaBrowserEvent\.event_id/);
 });
 
 test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocking", () => {
@@ -136,17 +141,15 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
     "Address capture should start before Step 2 while navigation remains nonblocking.",
   );
   assert.ok(
-    captureImplementation.indexOf("sendAddressCapture(initialMetaBrowserEvent)") <
-      captureImplementation.indexOf("waitForMetaBrowserCookies("),
-    "The first persistence request must start before Meta cookie polling begins.",
-  );
-  assert.ok(
-    captureImplementation.indexOf("await initialAddressCaptureRequest") <
-      captureImplementation.indexOf("await strongestMetaBrowserEventPromise"),
-    "The first persistence request must start before waiting for Meta browser cookies.",
+    captureImplementation.indexOf("await strongestMetaBrowserEventPromise") <
+      captureImplementation.indexOf("sendAddressCapture(strongestMetaBrowserEvent)"),
+    "The background Step 1 capture should include Meta's strongest available identifiers.",
   );
   assert.match(form, /confirmedAddressCaptureSignatureRef/);
   assert.match(form, /addressCaptureInFlightRef/);
+  assert.match(captureImplementation, /void prepareMetaBrowserParameters\(\)/);
+  assert.match(captureImplementation, /const gainedIdentifier =/);
+  assert.match(captureImplementation, /sendAddressCapture\(lateMetaBrowserEvent\)/);
   assert.match(form, /retryIfInFlight:\s*true/);
   assert.match(form, /retryWithEnrichedCookies:\s*false/);
   assert.doesNotMatch(
@@ -158,6 +161,28 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
   assert.match(form, /window\.addEventListener\("beforeunload", handlePageExit\)/);
   assert.match(form, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
   assert.doesNotMatch(form, /formPrivacy|Property details may be saved when you continue/);
+});
+
+test("public address entry preserves paid-click attribution during the offer-page handoff", () => {
+  const entry = read("src/app/address-offer-start.tsx");
+  assert.match(entry, /getConversionAttribution/);
+  for (const key of [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
+    "gclid",
+    "fbclid",
+  ]) {
+    assert.match(entry, new RegExp(`"${key}"`));
+  }
+  assert.match(entry, /appendCurrentAttribution\(event\.currentTarget\)/);
+  assert.match(entry, /document\.createElement\("input"\)/);
+  assert.match(entry, /input\.type = "hidden"/);
+  assert.match(entry, /input\.name = key/);
+  assert.match(entry, /form\.appendChild\(input\)/);
+  assert.doesNotMatch(entry, /name="fbc"|name="fbp"/);
 });
 
 test("cash-offer seller timeline is optional post-submit enrichment", () => {

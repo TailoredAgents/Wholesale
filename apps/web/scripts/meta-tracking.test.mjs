@@ -23,15 +23,24 @@ function createStorage() {
   };
 }
 
-function createRuntime({ pathname = "/", search = "", pixelId = "2118209559079623" } = {}) {
+function createRuntime({
+  pathname = "/",
+  search = "",
+  pixelId = "2118209559079623",
+  parameterBuilder,
+} = {}) {
   const appendedScripts = [];
   const elementsById = new Map();
+  const parameterBuilderCalls = [];
   let cookie = "";
   let randomId = 0;
   const location = {
     origin: "https://www.stonegatehb.com",
     pathname,
     search,
+    get href() {
+      return `${this.origin}${this.pathname}${this.search}`;
+    },
   };
   const document = {
     referrer: "https://www.facebook.com/",
@@ -104,11 +113,20 @@ function createRuntime({ pathname = "/", search = "", pixelId = "211820955907962
     setTimeout,
     window,
   });
-  return {
+  const runtime = {
     appendedScripts,
     context,
     document,
     location,
+    metaParameterBuilder: {
+      async processAndCollectAllParams(...args) {
+        parameterBuilderCalls.push(args);
+        return parameterBuilder?.processAndCollectAllParams
+          ? parameterBuilder.processAndCollectAllParams(...args)
+          : {};
+      },
+    },
+    parameterBuilderCalls,
     setCookie(value) {
       cookie = value;
     },
@@ -117,6 +135,7 @@ function createRuntime({ pathname = "/", search = "", pixelId = "211820955907962
     },
     window,
   };
+  return runtime;
 }
 
 function resolveTypeScriptModule(fromPath, specifier) {
@@ -140,6 +159,9 @@ function loadTypeScriptModule(relativePath, runtime, cache = new Map()) {
     fileName: absolutePath,
   }).outputText;
   const localRequire = (specifier) => {
+    if (specifier === "meta-capi-param-builder-clientjs") {
+      return runtime.metaParameterBuilder;
+    }
     if (!specifier.startsWith(".")) throw new Error(`Unexpected import: ${specifier}`);
     const importedPath = resolveTypeScriptModule(absolutePath, specifier);
     return loadTypeScriptModule(importedPath, runtime, cache);
@@ -275,6 +297,87 @@ test("Meta Pixel initialization is idempotent and PageView fires once per public
     queued.filter((entry) => entry[0] === "track" && entry[1] === "PageView").length,
     3,
   );
+});
+
+test("Meta Parameter Builder is lazy, receives the current URL, and is not given an IP callback", async () => {
+  const runtime = createRuntime({
+    pathname: "/get-a-cash-offer",
+    search: "?fbclid=PAID_CLICK&utm_source=facebook",
+    parameterBuilder: {
+      async processAndCollectAllParams() {
+        return {};
+      },
+    },
+  });
+  const tracking = loadTracking(runtime);
+
+  assert.equal(runtime.parameterBuilderCalls.length, 0, "the collector must not be statically loaded");
+  assert.equal(await tracking.prepareMetaBrowserParameters(), true);
+  assert.equal(runtime.parameterBuilderCalls.length, 1);
+  assert.deepEqual(Array.from(runtime.parameterBuilderCalls[0]), [
+    "https://www.stonegatehb.com/get-a-cash-offer?fbclid=PAID_CLICK&utm_source=facebook",
+  ]);
+});
+
+test("Meta Parameter Builder recovers an in-app click ID and keeps its SDK appendix opaque", async () => {
+  const capturedAtMs = Date.now() - 100;
+  const fbc = `fb.1.${capturedAtMs}.IN_APP_CLICK.Bg`;
+  const fbp = `fb.1.${capturedAtMs}.browser-id`;
+  let runtime;
+  runtime = createRuntime({
+    pathname: "/get-a-cash-offer",
+    search: "?gclid=COINCIDENTAL_GOOGLE_CLICK",
+    parameterBuilder: {
+      async processAndCollectAllParams() {
+        runtime.setCookie(`_fbc=${fbc}; _fbp=${fbp}`);
+        return { _fbc: fbc, _fbp: fbp };
+      },
+    },
+  });
+  const tracking = loadTracking(runtime);
+  const initial = tracking.createMetaBrowserEvent("in-app-event");
+
+  const enriched = await tracking.waitForMetaBrowserCookies(initial, 100);
+
+  assert.equal(enriched.fbc, fbc, "the full official cookie must be sent to Meta");
+  assert.equal(enriched.fbp, fbp);
+  assert.equal(tracking.getConversionAttribution().fbclid, "IN_APP_CLICK");
+  assert.equal(tracking.getConversionAttribution().gclid, "COINCIDENTAL_GOOGLE_CLICK");
+  assert.equal(
+    tracking.getConversionAttribution().fbclid_captured_at,
+    new Date(capturedAtMs).toISOString(),
+  );
+  assert.equal(runtime.parameterBuilderCalls[0].length, 1, "no external IP collector was supplied");
+});
+
+test("tracking never creates fbc when Meta supplies no click identifier", async () => {
+  const runtime = createRuntime({ pathname: "/get-a-cash-offer" });
+  const tracking = loadTracking(runtime);
+
+  assert.equal(await tracking.prepareMetaBrowserParameters(), true);
+  assert.equal(tracking.createMetaBrowserEvent("direct-event").fbc, null);
+});
+
+test("Meta cookie enrichment stops at its bounded deadline when the in-app bridge stalls", async () => {
+  const runtime = createRuntime({
+    pathname: "/get-a-cash-offer",
+    parameterBuilder: {
+      processAndCollectAllParams() {
+        return new Promise(() => {});
+      },
+    },
+  });
+  const tracking = loadTracking(runtime);
+  const startedAt = Date.now();
+  const waiting = tracking.waitForMetaBrowserCookies(
+    tracking.createMetaBrowserEvent("bounded-event"),
+    20,
+  );
+  runtime.appendedScripts[0].dispatch("load");
+
+  const event = await waiting;
+  assert.equal(event.fbc, null);
+  assert.ok(Date.now() - startedAt < 250, "a stalled bridge must not block conversion delivery");
 });
 
 test("fbc uses the active click's original millisecond timestamp instead of a stale cookie", () => {

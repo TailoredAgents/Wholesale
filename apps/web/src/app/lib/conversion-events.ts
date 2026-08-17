@@ -22,6 +22,17 @@ export type MetaBrowserEvent = {
   fbp: string | null;
 };
 
+type MetaParameterBuilder = {
+  processAndCollectAllParams: (
+    url?: string | null,
+    getIpFn?: (() => string | Promise<string>) | null,
+  ) => Promise<Record<string, string>>;
+};
+
+type MetaParameterBuilderModule = Partial<MetaParameterBuilder> & {
+  default?: Partial<MetaParameterBuilder>;
+};
+
 type MetaPixelFunction = ((...args: unknown[]) => void) & {
   callMethod?: (...args: unknown[]) => void;
   queue: unknown[][];
@@ -73,6 +84,8 @@ let fallbackAttribution: ConversionAttribution | null = null;
 let experimentRequest: Promise<ConversionExperimentContext | null> | null = null;
 let resolvedExperimentContext: ConversionExperimentContext | null = null;
 let metaPixelReadyPromise: Promise<boolean> | null = null;
+let metaParameterCollectionPromise: Promise<boolean> | null = null;
+let metaParameterCollectionUrl: string | null = null;
 const fallbackExperimentExposures = new Set<string>();
 const inFlightExperimentExposures = new Set<string>();
 
@@ -123,7 +136,7 @@ function hasExplicitPlatformClick(attribution: ConversionAttribution) {
 }
 
 function recoverMetaClickFromCookie(attribution: ConversionAttribution) {
-  if (attribution.fbclid || attribution.gclid) return attribution;
+  if (attribution.fbclid) return attribution;
   const parsedFbc = parseFbc(readCookie("_fbc"));
   if (!parsedFbc) return attribution;
   return {
@@ -252,6 +265,48 @@ function readCookie(name: string) {
   }
 }
 
+function resolveMetaParameterBuilder(
+  imported: MetaParameterBuilderModule,
+): MetaParameterBuilder | null {
+  const candidate =
+    typeof imported.processAndCollectAllParams === "function"
+      ? imported
+      : imported.default;
+  return typeof candidate?.processAndCollectAllParams === "function"
+    ? (candidate as MetaParameterBuilder)
+    : null;
+}
+
+export function prepareMetaBrowserParameters(): Promise<boolean> {
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
+  if (
+    typeof window === "undefined" ||
+    !pixelId ||
+    !isPublicTrackingPath(window.location.pathname)
+  ) {
+    return Promise.resolve(false);
+  }
+  const currentUrl = window.location.href;
+  if (
+    metaParameterCollectionPromise &&
+    metaParameterCollectionUrl === currentUrl
+  ) {
+    return metaParameterCollectionPromise;
+  }
+  metaParameterCollectionUrl = currentUrl;
+  metaParameterCollectionPromise = import("meta-capi-param-builder-clientjs")
+    .then(async (imported) => {
+      const builder = resolveMetaParameterBuilder(imported);
+      if (!builder) return false;
+      // The API already receives the trusted request IP. Omitting getIpFn avoids
+      // an extra third-party request while still enabling in-app click-ID recovery.
+      await builder.processAndCollectAllParams(currentUrl);
+      return true;
+    })
+    .catch(() => false);
+  return metaParameterCollectionPromise;
+}
+
 function newEventId() {
   return typeof window.crypto.randomUUID === "function"
     ? window.crypto.randomUUID()
@@ -265,9 +320,10 @@ function cookieFbcMatchesAttribution(fbc: string, fbclid: string) {
 function parseFbc(fbc: string | null) {
   if (!fbc) return null;
   const parts = fbc.split(".");
-  if (parts.length < 4 || parts[0] !== "fb") return null;
+  if ((parts.length !== 4 && parts.length !== 5) || parts[0] !== "fb") return null;
   const capturedAtMs = Number(parts[2]);
-  const fbclid = cleanAttributionValue(parts.slice(3).join("."), 255);
+  // Parameter Builder appends a fifth SDK token. It is not part of fbclid.
+  const fbclid = cleanAttributionValue(parts[3], 255);
   if (
     !fbclid ||
     !Number.isSafeInteger(capturedAtMs) ||
@@ -340,6 +396,7 @@ export function initializeMetaPixel(): Promise<boolean> {
   if (!pixelId || !isPublicTrackingPath(window.location.pathname)) {
     return Promise.resolve(false);
   }
+  void prepareMetaBrowserParameters();
   if (metaPixelReadyPromise) return metaPixelReadyPromise;
 
   const fbq = ensureMetaPixelQueue();
@@ -432,8 +489,14 @@ export async function waitForMetaBrowserCookies(
   waitMs = metaBrowserCookieWaitMs,
 ) {
   if (!process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim()) return refreshMetaBrowserEventCookies(event);
-  void initializeMetaPixel();
   const deadline = Date.now() + Math.max(0, waitMs);
+  const parameterCollection = prepareMetaBrowserParameters();
+  void initializeMetaPixel();
+  if (waitMs > 0) {
+    await Promise.race([parameterCollection, wait(Math.max(1, waitMs))]);
+  } else {
+    void parameterCollection;
+  }
   let refreshed = refreshMetaBrowserEventCookies(event);
   while (!refreshed.fbp && Date.now() < deadline) {
     await wait(Math.min(metaBrowserCookiePollMs, Math.max(1, deadline - Date.now())));

@@ -244,6 +244,197 @@ def test_address_capture_is_idempotent_and_does_not_merge_separate_attempts(
     assert first_lead is not None and first_lead.desired_timeline is None
 
 
+@pytest.mark.parametrize("extended_identifier", ["fbc", "fbp"])
+def test_address_capture_retains_extended_meta_browser_identifier_in_capi_payload(
+    db_session: Session,
+    api_db_override: None,
+    extended_identifier: str,
+) -> None:
+    seed_org(db_session)
+    payload = address_capture_payload()
+    browser_event = payload["meta_browser_event"]
+    assert isinstance(browser_event, dict)
+    extended_value = f"fb.1.1785875287.{('extended-click-' * 60)}sdk-appendix"
+    if extended_identifier == "fbc":
+        browser_event["fbc"] = extended_value
+    else:
+        browser_event["fbc"] = None
+        browser_event["fbp"] = extended_value
+
+    response = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=payload,
+    )
+
+    assert response.status_code == 201, response.text
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    assert export.payload_snapshot[extended_identifier] == extended_value
+    assert export.click_id == extended_value[:255]
+    assert len(export.click_id) == 255
+    meta_event = build_meta_payload(export, Settings())["data"][0]
+    assert meta_event["user_data"][extended_identifier] == extended_value
+
+
+@pytest.mark.parametrize("mutable_status", ["pending", "retry", "blocked"])
+def test_address_capture_retry_enriches_missing_meta_identifiers_before_delivery(
+    db_session: Session,
+    api_db_override: None,
+    mutable_status: str,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    initial_payload = address_capture_payload(attempt_id=attempt_id)
+    initial_attribution = initial_payload["attribution"]
+    initial_browser_event = initial_payload["meta_browser_event"]
+    assert isinstance(initial_attribution, dict)
+    assert isinstance(initial_browser_event, dict)
+    initial_attribution.pop("fbclid")
+    initial_browser_event["fbc"] = None
+    original_fbp = str(initial_browser_event["fbp"])
+    first = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=initial_payload,
+    )
+    assert first.status_code == 201, first.text
+    export = db_session.scalar(select(OfflineConversionExport))
+    event = db_session.scalar(select(ConversionEvent))
+    assert export is not None and event is not None
+    original_hash = export.payload_hash
+    export.status = mutable_status
+    db_session.commit()
+
+    extended_fbc = f"fb.1.1785875287.{('recovered-click-' * 60)}sdk-appendix"
+    retry_payload = address_capture_payload(attempt_id=attempt_id)
+    retry_attribution = retry_payload["attribution"]
+    retry_browser_event = retry_payload["meta_browser_event"]
+    assert isinstance(retry_attribution, dict)
+    assert isinstance(retry_browser_event, dict)
+    retry_attribution["fbclid"] = "recovered-click-id"
+    retry_attribution["fbclid_captured_at"] = "2026-08-01T18:10:00Z"
+    retry_browser_event["fbc"] = extended_fbc
+    retry_browser_event["fbp"] = "fb.1.1785875287.later-fbp-must-not-replace-first"
+
+    retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=retry_payload,
+    )
+
+    assert retry.status_code == 201, retry.text
+    db_session.refresh(export)
+    db_session.refresh(event)
+    assert export.status == mutable_status
+    assert export.payload_snapshot["fbc"] == extended_fbc
+    assert export.payload_snapshot["fbp"] == original_fbp
+    assert export.payload_snapshot["fbclid"] == "recovered-click-id"
+    assert export.payload_snapshot["click_captured_at"] == "2026-08-01T18:10:00+00:00"
+    assert export.click_id == extended_fbc[:255]
+    assert export.payload_hash != original_hash
+    assert event.fbclid == "recovered-click-id"
+    assert event.fbclid_captured_at is not None
+    browser_metadata = (event.event_metadata or {}).get("meta_browser_event")
+    assert isinstance(browser_metadata, dict)
+    assert browser_metadata["fbc"] == extended_fbc
+    assert browser_metadata["fbp"] == original_fbp
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 1
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(OfflineConversionExport)) or 0) == 1
+    )
+
+
+def test_address_capture_retry_does_not_bind_timestamp_to_a_different_fbclid(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    first = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert first.status_code == 201, first.text
+    export = db_session.scalar(select(OfflineConversionExport))
+    event = db_session.scalar(select(ConversionEvent))
+    assert export is not None and event is not None
+    assert export.payload_snapshot["fbclid"] == "test-fbclid"
+    assert export.payload_snapshot["click_captured_at"] is None
+
+    retry_payload = address_capture_payload(attempt_id=attempt_id)
+    retry_attribution = retry_payload["attribution"]
+    assert isinstance(retry_attribution, dict)
+    retry_attribution["fbclid"] = "different-click-id"
+    retry_attribution["fbclid_captured_at"] = "2026-08-01T18:10:00Z"
+    retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=retry_payload,
+    )
+
+    assert retry.status_code == 201, retry.text
+    db_session.refresh(export)
+    db_session.refresh(event)
+    assert export.payload_snapshot["fbclid"] == "test-fbclid"
+    assert export.payload_snapshot["click_captured_at"] is None
+    assert event.fbclid == "test-fbclid"
+    assert event.fbclid_captured_at is None
+
+
+@pytest.mark.parametrize("final_status", ["delivered", "simulated", "exhausted"])
+def test_address_capture_retry_does_not_rewrite_final_meta_evidence(
+    db_session: Session,
+    api_db_override: None,
+    final_status: str,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    initial_payload = address_capture_payload(attempt_id=attempt_id)
+    initial_attribution = initial_payload["attribution"]
+    initial_browser_event = initial_payload["meta_browser_event"]
+    assert isinstance(initial_attribution, dict)
+    assert isinstance(initial_browser_event, dict)
+    initial_attribution.pop("fbclid")
+    initial_browser_event["fbc"] = None
+    first = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=initial_payload,
+    )
+    assert first.status_code == 201, first.text
+    export = db_session.scalar(select(OfflineConversionExport))
+    event = db_session.scalar(select(ConversionEvent))
+    assert export is not None and event is not None
+    export.status = final_status
+    db_session.commit()
+    original_snapshot = dict(export.payload_snapshot)
+    original_hash = export.payload_hash
+    original_click_id = export.click_id
+    original_event_metadata = dict(event.event_metadata or {})
+
+    retry_payload = address_capture_payload(attempt_id=attempt_id)
+    retry_attribution = retry_payload["attribution"]
+    retry_browser_event = retry_payload["meta_browser_event"]
+    assert isinstance(retry_attribution, dict)
+    assert isinstance(retry_browser_event, dict)
+    retry_attribution["fbclid_captured_at"] = "2026-08-01T18:10:00Z"
+    retry_browser_event["fbc"] = f"fb.1.1785875287.{('late-click-' * 80)}sdk-appendix"
+    retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=retry_payload,
+    )
+
+    assert retry.status_code == 201, retry.text
+    db_session.refresh(export)
+    db_session.refresh(event)
+    assert export.status == final_status
+    assert export.payload_snapshot == original_snapshot
+    assert export.payload_hash == original_hash
+    assert export.click_id == original_click_id
+    assert event.fbclid is None
+    assert event.fbclid_captured_at is None
+    assert event.event_metadata == original_event_metadata
+
+
 def test_website_funnel_queues_one_labeled_sms_per_stage_and_recipient(
     db_session: Session,
     api_db_override: None,

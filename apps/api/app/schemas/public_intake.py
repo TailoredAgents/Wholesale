@@ -93,8 +93,11 @@ class SellerIntakeAttribution(BaseModel):
 class MetaBrowserEvent(BaseModel):
     event_id: str = Field(min_length=8, max_length=255)
     event_source_url: str = Field(min_length=1, max_length=500)
-    fbc: str | None = Field(default=None, max_length=255)
-    fbp: str | None = Field(default=None, max_length=255)
+    # Meta's parameter-builder SDK can append extended-browser properties to
+    # these cookie envelopes. Keep enough room for the opaque SDK value instead
+    # of assuming the legacy four-segment cookie always fits in 255 characters.
+    fbc: str | None = Field(default=None, max_length=2048)
+    fbp: str | None = Field(default=None, max_length=2048)
 
 
 class ConversionEventCreate(BaseModel):
