@@ -726,13 +726,6 @@
   color: #1d5a3d;
 }
 
-.formPrivacy {
-  color: #6c7871;
-  font-size: 10px;
-  line-height: 1.45;
-  text-align: center;
-}
-
 .error,
 .submitting {
   padding: 11px 13px;
@@ -1000,7 +993,6 @@
   }
 
   .consentDisclosure,
-  .formPrivacy,
   .smsConsent {
     font-size: 12px;
   }

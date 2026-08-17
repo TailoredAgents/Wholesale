@@ -31,6 +31,7 @@ test("Clerk middleware runs only for authentication and protected workspaces", (
 test("cash-offer page stays static while preserving address-query restoration", () => {
   const page = read("src/app/get-a-cash-offer/page.tsx");
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const footer = read("src/app/public-site-footer.tsx");
   assert.doesNotMatch(page, /searchParams/);
   assert.match(page, /<PublicSiteHeader variant="conversion" \/>/);
   assert.match(page, /<PublicSiteFooter variant="conversion" \/>/);
@@ -38,6 +39,8 @@ test("cash-offer page stays static while preserving address-query restoration", 
   assert.match(form, /preferredAddress \|\| draft\.values\.property_address/);
   assert.doesNotMatch(form, /name="preferred_contact_method"/);
   assert.match(form, /preferred_contact_method: "phone"/);
+  assert.doesNotMatch(form, /Property details may be saved when you continue/);
+  assert.match(footer, /!isConversion \? \(\s*<p className=\{styles\.disclosure\}>/);
 });
 
 test("standard public pages keep the full navigation shell", () => {
@@ -108,12 +111,7 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
   assert.match(form, /window\.addEventListener\("pagehide", handlePageExit\)/);
   assert.match(form, /window\.addEventListener\("beforeunload", handlePageExit\)/);
   assert.match(form, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
-  assert.match(form, /Property details may be saved when you continue/);
-  assert.ok(
-    form.indexOf("Property details may be saved when you continue") <
-      form.indexOf("<div className={styles.formActions}>"),
-    "The Step 1 property-saving notice must precede Continue in DOM and reading order.",
-  );
+  assert.doesNotMatch(form, /formPrivacy|Property details may be saved when you continue/);
 });
 
 test("cash-offer seller timeline is optional post-submit enrichment", () => {

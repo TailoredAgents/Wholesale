@@ -15,6 +15,10 @@ const contactConsentWording =
   "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
 const smsConsentWording =
   "By checking this optional box, I agree to receive recurring automated text messages from Stonegate Home Buyers about my property inquiry, appointments, and possible selling options at the number provided. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. See our Terms & Conditions and Privacy Policy.";
+const addressSavingDisclosure =
+  "Property details may be saved when you continue, even if you do not finish the form. We may use them to identify the property, maintain inquiry records, research the property owner, and measure form performance.";
+const directOfferDisclosure =
+  "Stonegate Home Buyers is a real estate investment company, not a brokerage or appraisal service. A direct cash offer may be below potential retail market value in exchange for an as-is sale and fewer listing steps. Any purchase remains subject to written contract terms, title review, and property verification.";
 
 if (screenshotDirectory) mkdirSync(screenshotDirectory, { recursive: true });
 
@@ -370,6 +374,15 @@ async function auditAboutPage(page, viewport) {
   await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "about-page");
   await auditTeamIdentity(page, viewport.name, route);
 
+  if (
+    !(await page
+      .locator("footer")
+      .getByText(directOfferDisclosure, { exact: true })
+      .isVisible())
+  ) {
+    record(viewport.name, "public-footer", "Standard pages lost the direct-offer disclosure.");
+  }
+
   if ((await page.title()) !== "About Stonegate Home Buyers | Georgia") {
     record(viewport.name, "metadata", { route, title: await page.title() });
   }
@@ -587,6 +600,17 @@ async function auditJourney(browser, viewport) {
     if ((await legalLink.count()) !== 1 || (await legalLink.getAttribute("href")) !== href) {
       record(viewport.name, "offer-shell", `The focused offer page is missing ${name}.`);
     }
+  }
+  if (await page.getByText(addressSavingDisclosure, { exact: true }).count()) {
+    record(viewport.name, "offer-clutter", "The Step 1 address-saving disclaimer is still visible.");
+  }
+  if (
+    await page
+      .locator("footer")
+      .getByText(directOfferDisclosure, { exact: true })
+      .count()
+  ) {
+    record(viewport.name, "offer-clutter", "The conversion footer disclaimer is still visible.");
   }
   await checkMobileActionBar(
     page,

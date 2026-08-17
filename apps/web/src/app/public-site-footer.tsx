@@ -63,7 +63,9 @@ export function PublicSiteFooter({ variant = "standard" }: PublicSiteFooterProps
             </nav>
           </div>
         )}
-        <p className={styles.disclosure}>{directOfferDisclosure}</p>
+        {!isConversion ? (
+          <p className={styles.disclosure}>{directOfferDisclosure}</p>
+        ) : null}
         <p className={styles.copyright}>
           &copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
         </p>

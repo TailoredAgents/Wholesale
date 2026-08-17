@@ -973,14 +973,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         </fieldset>
       ) : null}
 
-      {activeStep === 0 ? (
-        <p className={styles.formPrivacy}>
-          Property details may be saved when you continue, even if you do not finish the form. We
-          may use them to identify the property, maintain inquiry records, research the property
-          owner, and measure form performance.
-        </p>
-      ) : null}
-
       <div className={styles.formActions}>
         {activeStep > 0 ? (
           <button className={styles.backButton} type="button" onClick={handleBack}>
