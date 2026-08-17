@@ -1,14 +1,13 @@
-import * as Sentry from "@sentry/nextjs";
+import {
+  initializeClientMonitoring,
+  loadSentryClient,
+} from "./app/lib/sentry-client-loader";
 
-const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+initializeClientMonitoring();
 
-Sentry.init({
-  dsn,
-  enabled: Boolean(dsn),
-  environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
-  tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.05"),
-  sendDefaultPii: false,
-});
-
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export function onRouterTransitionStart(url: string, navigationType: string) {
+  void loadSentryClient().then((Sentry) => {
+    Sentry?.captureRouterTransitionStart(url, navigationType);
+  });
+}
 

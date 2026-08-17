@@ -20,6 +20,26 @@ test("public routes do not load the staff authentication provider", () => {
   }
 });
 
+test("the offer landing page defers Sentry without losing early error capture", () => {
+  const instrumentation = read("src/instrumentation-client.ts");
+  const loader = read("src/app/lib/sentry-client-loader.ts");
+  const globalError = read("src/app/global-error.tsx");
+
+  assert.doesNotMatch(instrumentation, /import \* as Sentry from ["']@sentry\/nextjs["']/);
+  assert.doesNotMatch(globalError, /import \* as Sentry from ["']@sentry\/nextjs["']/);
+  assert.match(instrumentation, /initializeClientMonitoring\(\)/);
+  assert.match(instrumentation, /loadSentryClient\(\)/);
+  assert.match(loader, /window\.location\.pathname === offerLandingPath/);
+  assert.match(loader, /import\(["']@sentry\/nextjs["']\)/);
+  assert.match(loader, /tracesSampleRate: isDeferredOfferSession\s*\? 0/);
+  assert.match(loader, /["']pointerdown["']/);
+  assert.match(loader, /["']keydown["']/);
+  assert.match(loader, /["']input["']/);
+  assert.match(loader, /window\.addEventListener\(["']error["']/);
+  assert.match(loader, /window\.addEventListener\(["']unhandledrejection["']/);
+  assert.match(globalError, /captureSentryException\(error\)/);
+});
+
 test("Clerk middleware runs only for authentication and protected workspaces", () => {
   const proxy = read("src/proxy.ts");
   assert.doesNotMatch(proxy, /\(\?!_next/);
