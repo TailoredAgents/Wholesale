@@ -252,7 +252,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         snapshot.property_city.trim().toLowerCase(),
         snapshot.property_state.trim().toUpperCase(),
         snapshot.property_postal_code.trim(),
-        snapshot.desired_timeline,
       ]);
       if (confirmedAddressCaptureSignatureRef.current === signature) return;
 
@@ -275,7 +274,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             property_city: snapshot.property_city.trim(),
             property_state: snapshot.property_state.trim().toUpperCase(),
             property_postal_code: snapshot.property_postal_code.trim(),
-            desired_timeline: snapshot.desired_timeline,
             company_website: snapshot.company_website,
             conversion_session_id: getConversionSessionId(),
             experiment_key: experiment?.experiment_key ?? null,
@@ -515,7 +513,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       email: values.email.trim() || null,
       preferred_contact_method: "phone",
       reason_for_selling: null,
-      desired_timeline: values.desired_timeline,
+      desired_timeline: null,
       asking_price: null,
       mortgage_balance: null,
       comments: null,
@@ -607,7 +605,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       form: "cash_offer",
       request_reference: confirmation?.reference,
     });
-    window.requestAnimationFrame(() => document.getElementById("property_type")?.focus());
+    window.requestAnimationFrame(() => document.getElementById("desired_timeline")?.focus());
   }
 
   async function handleEnrichmentSubmit(event: FormEvent<HTMLFormElement>) {
@@ -640,6 +638,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
           property_condition: values.property_condition || null,
           occupancy_status: values.occupancy_status || null,
           reason_for_selling: values.reason_for_selling || null,
+          desired_timeline: values.desired_timeline || null,
           asking_price: values.asking_price.trim() || null,
           mortgage_balance: values.mortgage_balance.trim() || null,
           comments: values.comments.trim() || null,
@@ -896,31 +895,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             onChange={updateAddress}
             onStart={handleFormStart}
           />
-          <Field
-            label="When would you ideally like to sell?"
-            name="desired_timeline"
-            error={errors.desired_timeline}
-            required
-          >
-            <select
-              id="desired_timeline"
-              name="desired_timeline"
-              required
-              value={values.desired_timeline}
-              onChange={(event) => updateValue("desired_timeline", event.target.value)}
-              aria-invalid={Boolean(errors.desired_timeline)}
-              aria-describedby={
-                errors.desired_timeline ? "desired_timeline-error" : undefined
-              }
-            >
-              <option value="">Select your preferred timeline</option>
-              <option value="asap">As soon as possible</option>
-              <option value="within_30_days">Within 30 days</option>
-              <option value="within_one_to_three_months">Within one to three months</option>
-              <option value="within_three_to_six_months">Within three to six months</option>
-              <option value="exploring">I am only exploring my options</option>
-            </select>
-          </Field>
         </fieldset>
       ) : null}
 
@@ -1057,6 +1031,22 @@ function EnrichmentForm({
           Everything below is optional. Add only what you already know.
         </span>
       </div>
+
+      <Field label="When might you ideally like to sell?" name="desired_timeline" hint="Optional">
+        <select
+          id="desired_timeline"
+          name="desired_timeline"
+          value={values.desired_timeline}
+          onChange={(event) => updateValue("desired_timeline", event.target.value)}
+        >
+          <option value="">Select if you have a timeline in mind</option>
+          <option value="asap">As soon as possible</option>
+          <option value="within_30_days">Within 30 days</option>
+          <option value="within_one_to_three_months">Within one to three months</option>
+          <option value="within_three_to_six_months">Within three to six months</option>
+          <option value="exploring">I am only exploring my options</option>
+        </select>
+      </Field>
 
       <Field label="Property type" name="property_type" hint="Optional">
         <select
@@ -1238,9 +1228,6 @@ function validateStep(step: number, values: FormValues): FieldErrors {
     if (!/^\d{5}(?:-\d{4})?$/.test(values.property_postal_code.trim())) {
       errors.property_postal_code = "Enter a valid 5-digit ZIP code.";
     }
-    if (!values.desired_timeline) {
-      errors.desired_timeline = "Select when you would ideally like to sell.";
-    }
   }
   if (step === 1) {
     if (!values.name.trim()) errors.name = "Enter your name.";
@@ -1276,6 +1263,7 @@ function hasOptionalDetails(values: FormValues) {
     values.property_condition,
     values.occupancy_status,
     values.reason_for_selling,
+    values.desired_timeline,
     values.asking_price,
     values.mortgage_balance,
     values.comments,
@@ -1288,7 +1276,7 @@ function containsNumber(value: string) {
 
 function stepDescription(key: (typeof steps)[number]["key"]) {
   if (key === "property") {
-    return "Complete these details so we can identify the property and local market.";
+    return "Enter the address so we can identify the property and local market.";
   }
   return "Enter your name and phone number. Email and text-message permission are optional.";
 }

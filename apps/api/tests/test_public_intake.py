@@ -94,7 +94,6 @@ def address_capture_payload(*, attempt_id: str | None = None) -> dict[str, objec
         "property_city": "Atlanta",
         "property_state": "ga",
         "property_postal_code": "30303",
-        "desired_timeline": "within_30_days",
         "conversion_session_id": "session-intake-123",
         "device_category": "mobile",
         "attribution": {
@@ -115,6 +114,7 @@ def address_capture_payload(*, attempt_id: str | None = None) -> dict[str, objec
 
 def completed_website_payload(attempt_id: str) -> dict[str, object]:
     payload = public_payload()
+    payload.pop("desired_timeline")
     payload["intake_attempt_id"] = attempt_id
     payload["meta_browser_event"] = {
         "event_id": f"stonegate-contact-{attempt_id}",
@@ -153,7 +153,7 @@ def test_address_capture_creates_cold_crm_lead_without_contact_automation(
     assert lead.source == "facebook_ads"
     assert lead.stage_key == "new"
     assert lead.lead_temperature == "cold"
-    assert lead.desired_timeline == "within_30_days"
+    assert lead.desired_timeline is None
     assert lead.qualification_context == {
         "website_intake_status": "address_only",
         "contact_details_status": "missing",
@@ -194,11 +194,9 @@ def test_address_capture_is_idempotent_and_does_not_merge_separate_attempts(
         "/api/v1/public/seller-leads/address-capture",
         json=address_capture_payload(attempt_id=attempt_id),
     )
-    retry_payload = address_capture_payload(attempt_id=attempt_id)
-    retry_payload["desired_timeline"] = "exploring"
     retry = client.post(
         "/api/v1/public/seller-leads/address-capture",
-        json=retry_payload,
+        json=address_capture_payload(attempt_id=attempt_id),
     )
     separate = client.post(
         "/api/v1/public/seller-leads/address-capture",
@@ -219,7 +217,125 @@ def test_address_capture_is_idempotent_and_does_not_merge_separate_attempts(
     )
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
     first_lead = db_session.get(Lead, uuid.UUID(first.json()["lead_id"]))
-    assert first_lead is not None and first_lead.desired_timeline == "exploring"
+    assert first_lead is not None and first_lead.desired_timeline is None
+
+
+def test_address_capture_accepts_legacy_timeline_during_rolling_deploy(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = address_capture_payload()
+    payload["desired_timeline"] = "within_30_days"
+
+    response = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=payload,
+    )
+
+    assert response.status_code == 201, response.text
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    assert lead.desired_timeline == "within_30_days"
+
+
+def test_new_address_retry_preserves_legacy_timeline_for_duplicate_cleanup(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    existing = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert existing.status_code == 201, existing.text
+
+    attempt_id = str(uuid.uuid4())
+    legacy_capture_payload = address_capture_payload(attempt_id=attempt_id)
+    legacy_capture_payload["desired_timeline"] = "within_30_days"
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=legacy_capture_payload,
+    )
+    assert capture.status_code == 201, capture.text
+    placeholder_lead_id = uuid.UUID(capture.json()["lead_id"])
+    placeholder_contact_id = uuid.UUID(capture.json()["contact_id"])
+
+    new_client_retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert new_client_retry.status_code == 201, new_client_retry.text
+    submission = db_session.scalar(
+        select(LeadFormSubmission).where(
+            LeadFormSubmission.intake_attempt_id == uuid.UUID(attempt_id)
+        )
+    )
+    placeholder_lead = db_session.get(Lead, placeholder_lead_id)
+    assert submission is not None
+    assert placeholder_lead is not None
+    assert placeholder_lead.desired_timeline == "within_30_days"
+    assert submission.raw_payload["desired_timeline"] == "within_30_days"
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["lead_id"] == existing.json()["lead_id"]
+    assert completed.json()["matched_existing_lead"] is True
+    assert db_session.get(Lead, placeholder_lead_id) is None
+    assert db_session.get(Contact, placeholder_contact_id) is None
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+
+
+def test_new_address_retry_does_not_hide_staff_timeline_change_from_cleanup_guard(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    existing = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert existing.status_code == 201, existing.text
+
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    placeholder_lead_id = uuid.UUID(capture.json()["lead_id"])
+    placeholder_contact_id = uuid.UUID(capture.json()["contact_id"])
+    placeholder_lead = db_session.get(Lead, placeholder_lead_id)
+    assert placeholder_lead is not None
+    placeholder_lead.desired_timeline = "asap"
+    db_session.commit()
+
+    retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert retry.status_code == 201, retry.text
+    submission = db_session.scalar(
+        select(LeadFormSubmission).where(
+            LeadFormSubmission.intake_attempt_id == uuid.UUID(attempt_id)
+        )
+    )
+    assert submission is not None
+    assert submission.raw_payload["desired_timeline"] is None
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["lead_id"] == existing.json()["lead_id"]
+    assert completed.json()["matched_existing_lead"] is True
+    preserved_lead = db_session.get(Lead, placeholder_lead_id)
+    assert preserved_lead is not None
+    assert preserved_lead.desired_timeline == "asap"
+    assert db_session.get(Contact, placeholder_contact_id) is not None
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 2
 
 
 @pytest.mark.parametrize("invalid_event", ["missing", "wrong"])
@@ -294,6 +410,7 @@ def test_completed_contact_step_promotes_same_address_capture_exactly_once(
     assert contact.legal_name == "Sam Seller"
     assert lead.source == "google_ppc"
     assert lead.lead_temperature is None
+    assert lead.desired_timeline is None
     assert lead.qualification_context["website_intake_status"] == "completed"
     assert lead.qualification_context["contact_details_status"] == "provided"
     assert "prospecting_status" not in lead.qualification_context
@@ -384,6 +501,50 @@ def test_completed_contact_step_promotes_same_address_capture_exactly_once(
         )
     }
     assert counts_after_late_capture == counts_before_retry
+
+
+def test_optional_enrichment_adds_timeline_after_contact_completion(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    assert completed.status_code == 201, completed.text
+    lead = db_session.get(Lead, uuid.UUID(completed.json()["lead_id"]))
+    assert lead is not None
+    assert lead.desired_timeline is None
+
+    enriched = client.post(
+        "/api/v1/public/seller-leads/enrichment",
+        json={
+            "enrichment_token": completed.json()["enrichment_token"],
+            "desired_timeline": "within_30_days",
+        },
+    )
+
+    assert enriched.status_code == 200, enriched.text
+    assert enriched.json()["lead_id"] == completed.json()["lead_id"]
+    db_session.refresh(lead)
+    assert lead.desired_timeline == "within_30_days"
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert submission is not None
+    assert submission.raw_payload["desired_timeline"] == "within_30_days"
+    enrichment_event = db_session.scalar(
+        select(ConversionEvent).where(ConversionEvent.event_type == "form_enrichment_submit")
+    )
+    assert enrichment_event is not None
+    assert enrichment_event.event_metadata == {"fields_added": ["desired_timeline"]}
 
 
 def test_contact_step_arriving_first_creates_both_meta_events_and_late_capture_is_noop(

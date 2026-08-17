@@ -257,8 +257,8 @@ Role-specific default routes include:
 
 ### 6.2 Seller Intake
 
-The first visible step requires a complete property address and desired selling timeline. Selecting
-**Continue** captures those values under a browser-generated `intake_attempt_id` and creates a cold
+The first visible step requires only a complete property address. Selecting **Continue** captures
+that address under a browser-generated `intake_attempt_id` and creates a cold
 address-only CRM lead. The record has a placeholder contact, no contact methods or consent, and the
 canonical `qualification_context.website_intake_status="address_only"` marker. Staff sees it in
 **Leads > Address Only** with **Skip trace needed**.
@@ -274,9 +274,9 @@ authorization, and offers a separate unchecked recurring automated SMS choice. S
 promotes the same contact, property, lead, and form-submission record to
 `website_intake_status="completed"`; it does not create a second lead. Normal conversation,
 property-research, AI, speed-to-lead, notification, and staff-alert workflows start only at this
-point. The confirmation then offers an unnumbered optional section for condition, occupancy,
-asking-price, mortgage, repairs, and seller context. A random 24-hour token adds those answers to the
-same lead without exposing CRM access.
+point. The confirmation then offers an unnumbered optional section for desired selling timeline,
+condition, occupancy, asking price, mortgage, repairs, and seller context. None of those details is
+required. A random 24-hour token adds those answers to the same lead without exposing CRM access.
 
 At mobile widths, every public page also provides fixed **Call** and **See My Options** actions. Their
 conversion events include the mobile placement and source route. This bar belongs to the public
@@ -362,7 +362,7 @@ clicks, and Core Web Vitals. Marketing reports address leads, contact-completed 
 address-to-contact rate, and separate cost figures so a raw address capture is never confused with
 a contactable seller. Public event intake does not grant OS access.
 
-Meta uses `Lead` for the valid address-and-timeline stage and `Contact` for the completed name,
+Meta uses `Lead` for the valid complete-address stage and `Contact` for the completed name,
 required-phone, optional-email, and consent stage. Each browser/server pair shares a deterministic
 event ID for deduplication. The post-confirmation optional enrichment section has no Meta event.
 

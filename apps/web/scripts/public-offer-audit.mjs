@@ -613,7 +613,7 @@ async function auditJourney(browser, viewport) {
   await page.getByRole("button", { name: "Edit address" }).click();
   const propertyFieldSemantics = await page.evaluate(() =>
     Object.fromEntries(
-      ["property_address", "property_city", "property_state", "property_postal_code", "desired_timeline"].map(
+      ["property_address", "property_city", "property_state", "property_postal_code"].map(
         (id) => {
           const control = document.getElementById(id);
           return [
@@ -632,7 +632,6 @@ async function auditJourney(browser, viewport) {
     property_city: "section-property address-level2",
     property_state: "section-property address-level1",
     property_postal_code: "section-property postal-code",
-    desired_timeline: null,
   };
   for (const [field, autocomplete] of Object.entries(expectedPropertyAutocomplete)) {
     if (
@@ -662,13 +661,9 @@ async function auditJourney(browser, viewport) {
   if (!(await page.locator("#property_city-error").isVisible())) {
     record(viewport.name, "validation", "Property step did not expose field errors.");
   }
-  if (!(await page.locator("#desired_timeline-error").isVisible())) {
-    record(viewport.name, "validation", "Property step did not require a seller timeline.");
-  }
   await page.locator("#property_city").fill("Atlanta");
   await page.locator("#property_state").fill("GA");
   await page.locator("#property_postal_code").fill("30303");
-  await page.locator("#desired_timeline").selectOption("within_30_days");
   await page.getByRole("button", { name: /Continue/ }).click();
   await page.waitForTimeout(900);
   if (state.addressCaptures.length !== 1) {
@@ -683,8 +678,7 @@ async function auditJourney(browser, viewport) {
     initialAddressCapture.property_address !== "123 Main St" ||
     initialAddressCapture.property_city !== "Atlanta" ||
     initialAddressCapture.property_state !== "GA" ||
-    initialAddressCapture.property_postal_code !== "30303" ||
-    initialAddressCapture.desired_timeline !== "within_30_days"
+    initialAddressCapture.property_postal_code !== "30303"
   ) {
     record(viewport.name, "address-capture-payload", initialAddressCapture ?? null);
   }
@@ -694,6 +688,7 @@ async function auditJourney(browser, viewport) {
     "email",
     "consent_to_contact",
     "sms_consent",
+    "desired_timeline",
   ]) {
     if (forbidden in (initialAddressCapture ?? {})) {
       record(viewport.name, "address-capture-payload", `Step 1 included ${forbidden}.`);
@@ -929,7 +924,7 @@ async function auditJourney(browser, viewport) {
     property_condition: null,
     occupancy_status: null,
     reason_for_selling: null,
-    desired_timeline: "within_30_days",
+    desired_timeline: null,
     asking_price: null,
     mortgage_balance: null,
     preferred_contact_method: "phone",
@@ -960,6 +955,18 @@ async function auditJourney(browser, viewport) {
   }
 
   await page.getByRole("button", { name: "Add property details" }).click();
+  const enrichmentTimeline = page.locator("#desired_timeline");
+  if (
+    (await enrichmentTimeline.count()) !== 1 ||
+    (await enrichmentTimeline.getAttribute("required")) !== null
+  ) {
+    record(
+      viewport.name,
+      "optional-enrichment",
+      "The seller timeline was not presented as one optional post-submit field.",
+    );
+  }
+  await enrichmentTimeline.selectOption("within_30_days");
   await page.locator("#property_type").selectOption("single_family");
   await page.locator("#property_condition").selectOption("major_repairs");
   await page.locator("#occupancy_status").selectOption("vacant");
@@ -985,6 +992,7 @@ async function auditJourney(browser, viewport) {
     property_condition: "major_repairs",
     occupancy_status: "vacant",
     reason_for_selling: "repairs_or_condition",
+    desired_timeline: "within_30_days",
     asking_price: "200,000",
     mortgage_balance: "90,000",
   })) {

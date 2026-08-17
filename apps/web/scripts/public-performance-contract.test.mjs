@@ -100,6 +100,11 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
   assert.match(form, /addressCaptureInFlightRef/);
   assert.match(form, /retryIfInFlight:\s*true/);
   assert.match(form, /retryWithEnrichedCookies:\s*false/);
+  assert.doesNotMatch(
+    captureImplementation,
+    /desired_timeline/,
+    "Step 1 must persist only the property address, without requiring seller timing.",
+  );
   assert.match(form, /window\.addEventListener\("pagehide", handlePageExit\)/);
   assert.match(form, /window\.addEventListener\("beforeunload", handlePageExit\)/);
   assert.match(form, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
@@ -109,6 +114,24 @@ test("cash-offer Step 1 saves an idempotent address-only CRM lead without blocki
       form.indexOf("<div className={styles.formActions}>"),
     "The Step 1 property-saving notice must precede Continue in DOM and reading order.",
   );
+});
+
+test("cash-offer seller timeline is optional post-submit enrichment", () => {
+  const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const enrichmentStart = form.indexOf("async function handleEnrichmentSubmit(");
+  const enrichmentEnd = form.indexOf("function startAnotherProperty()", enrichmentStart);
+  const enrichmentImplementation = form.slice(enrichmentStart, enrichmentEnd);
+  const stepOneStart = form.indexOf("{activeStep === 0 ? (");
+  const stepOneEnd = form.indexOf("{activeStep === 1 ? (", stepOneStart);
+  const stepOneMarkup = form.slice(stepOneStart, stepOneEnd);
+
+  assert.ok(enrichmentStart >= 0 && enrichmentEnd > enrichmentStart);
+  assert.ok(stepOneStart >= 0 && stepOneEnd > stepOneStart);
+  assert.doesNotMatch(stepOneMarkup, /desired_timeline/);
+  assert.match(enrichmentImplementation, /desired_timeline:\s*values\.desired_timeline \|\| null/);
+  assert.match(form, /label="When might you ideally like to sell\?"/);
+  assert.match(form, /name="desired_timeline" hint="Optional"/);
+  assert.doesNotMatch(form, /name="desired_timeline"[^>]*required/);
 });
 
 test("the public Meta bootstrap runs before hydration and shares route state", () => {

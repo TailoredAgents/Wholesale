@@ -140,9 +140,8 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | City | Identifies the property city during manual entry | Required |
 | State | Preserves the property's actual two-letter state instead of assuming Georgia | Required during manual entry |
 | ZIP code | Supports market, duplicate, and property matching during manual entry | Required; five digits or ZIP+4 |
-| Desired selling timeline | Records when the seller would ideally like to sell | Required |
 
-After the complete address and timeline pass validation, **Continue** sends the address capture while
+After the complete address passes validation, **Continue** sends the address capture while
 the seller advances to Contact. The saved record appears in **Leads > Address Only** as cold and
 **Skip trace needed**. It has no contact permission and starts no automated research, conversation,
 follow-up, staff alert, or seller contact. Staff must check DNC status manually before cold outreach.
@@ -176,6 +175,7 @@ change staff-reviewed information.
 
 | Field or control | Purpose and accepted value | Requirement |
 | --- | --- | --- |
+| Desired selling timeline | Records when the seller would ideally like to sell | Optional |
 | Property type | Single-family, townhouse, condo, multi-family, manufactured, land, or other | Optional |
 | Current condition | Move-in ready, minor repairs, major repairs, full renovation, or not sure | Optional |
 | Occupancy | Owner occupied, tenant occupied, vacant, inherited/estate, or other | Optional |

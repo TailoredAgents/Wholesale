@@ -829,7 +829,7 @@ The direct Meta integration combines the browser Pixel with server-side Conversi
 
 Implemented events are `PageView` from the Pixel; deduplicated browser/server `ViewContent`,
 `Lead`, and `Contact`; and server-side `QualifiedLead` and `Schedule` from later CRM outcomes. In
-the public seller funnel, `Lead` means the visitor completed the valid address-and-timeline step.
+the public seller funnel, `Lead` means the visitor completed the valid complete-address step.
 `Contact` means the visitor then supplied a name and required phone number and submitted the contact
 step. The unnumbered optional property-details section after confirmation does not send another Meta
 event.
@@ -866,7 +866,7 @@ events.
 
 The public **See My Selling Options** form has two visible stages and one unnumbered optional stage:
 
-- Completing a valid property address and desired timeline and selecting **Continue** sends
+- Completing a valid property address and selecting **Continue** sends
   `POST /api/v1/public/seller-leads/address-capture`. It creates a cold address-only CRM lead, an
   address-stage conversion record, and a deduplicated Meta `Lead`. RealEstateAPI autocomplete may
   fill street, city, state, and ZIP, but manual entry remains available and provider-independent.
@@ -879,9 +879,9 @@ The public **See My Selling Options** form has two visible stages and one unnumb
   consent choices promotes the same CRM record to a completed seller inquiry. It sends the
   deduplicated Meta `Contact` event and only then starts normal property research, AI work,
   conversation, speed-to-lead, notification, and staff-SMS-alert workflows.
-- The optional property-details section shown after confirmation writes condition, occupancy,
-  motivation, price, mortgage, repairs, and comments to the same lead. It is not a numbered funnel
-  step and does not send a Meta event.
+- The optional property-details section shown after confirmation writes desired timeline, condition,
+  occupancy, motivation, price, mortgage, repairs, and comments to the same lead. None of those
+  details is required. It is not a numbered funnel step and does not send a Meta event.
 
 One browser-generated `intake_attempt_id` identifies the property journey. Database locking and the
 organization-scoped unique attempt constraint make Step 1 retries idempotent, make Step 2 promote

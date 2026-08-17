@@ -330,7 +330,15 @@ def capture_public_seller_address(
             property_record = resolve_address_capture_property(db, organization, payload)
             lead.property_id = property_record.id
             lead.desired_timeline = payload.desired_timeline or lead.desired_timeline
-            existing.raw_payload = address_capture_raw_payload(payload)
+            refreshed_raw_payload = address_capture_raw_payload(payload)
+            # During a rolling deploy, an older Step 1 may already have saved a
+            # timeline. A retry from the new address-only client preserves that
+            # original submission evidence without copying any later staff edit.
+            if payload.desired_timeline is None:
+                refreshed_raw_payload["desired_timeline"] = existing.raw_payload.get(
+                    "desired_timeline"
+                )
+            existing.raw_payload = refreshed_raw_payload
             existing.landing_page = existing.landing_page or payload.attribution.landing_page
             existing.referrer = existing.referrer or payload.attribution.referrer
             existing.fbclid_captured_at = (

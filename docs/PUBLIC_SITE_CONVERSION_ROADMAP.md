@@ -19,7 +19,7 @@ The public site already provides:
 
 - a Georgia-specific address-first homepage offer
 - a two-step selling-options inquiry with optional post-submission property details
-- a cold address-only CRM capture and Meta `Lead` after valid Property completion, followed by
+- a cold address-only CRM capture and Meta `Lead` after a complete address is accepted, followed by
   promotion of the same record and Meta `Contact` after Contact completion
 - passive phone/email authorization on submission with a separate optional SMS checkbox
 - draft recovery, deterministic attempt deduplication, race-safe promotion, and submission recovery
@@ -72,17 +72,16 @@ Status: **Implemented**. Branded production verification follows the Render depl
 ### Work
 
 - Reduce the initial journey to Property, Contact, and Confirmation.
-- Create a cold address-only CRM lead as soon as a complete address and desired timeline pass Step 1
-  validation and the seller selects **Continue**.
+- Create a cold address-only CRM lead as soon as a complete address passes Step 1 validation and the
+  seller selects **Continue**.
 - Keep address-only records in **Leads > Address Only** as **Skip trace needed**. Do not start
   contact, property research, AI preparation, conversations, speed-to-lead work, or staff alerts at
   this stage. Require staff to check DNC status manually before cold outreach; do not imply that the
   system performs the check automatically.
 - Promote the same lead when Step 2 supplies name, required phone, optional email, and consent
   evidence. Start normal completed-inquiry workflows only after that promotion.
-- Keep the seller's desired timeline in the initial property step, and move condition, occupancy,
-  repairs, mortgage, motivation, and comments into an optional
-  post-submission enrichment step.
+- Move the seller's desired timeline, condition, occupancy, repairs, mortgage, motivation, and
+  comments into an optional post-submission enrichment step. None of those details is required.
 - Keep that enrichment section unnumbered and exclude it from Meta conversion events.
 - Issue a random, 24-hour, one-purpose enrichment token whose hash is stored with the intake
   submission; the token can add optional context to that lead but cannot read or edit other data.
@@ -100,8 +99,8 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ### Exit Criteria
 
-- A valid address and timeline create one cold address-only lead and a Meta `Lead` without requiring
-  contact details.
+- A valid complete address creates one cold address-only lead and a Meta `Lead` without requiring
+  contact details or a selling timeline.
 - Valid contact completion promotes the same lead and sends Meta `Contact` without creating a
   duplicate CRM record.
 - Optional enrichment remains connected to the same lead, is visually unnumbered, and sends no Meta

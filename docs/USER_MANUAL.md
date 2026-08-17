@@ -683,7 +683,7 @@ The normal deal path and its completion evidence are:
 
 | Stage | Primary workspace | The stage is complete when |
 | --- | --- | --- |
-| Address-only website capture | Public form, Leads > Address Only | A complete property address and timeline exist as a cold record awaiting research and a manual DNC check; this is not yet a contactable seller inquiry |
+| Address-only website capture | Public form, Leads > Address Only | A complete property address exists as a cold record awaiting research and a manual DNC check; this is not yet a contactable seller inquiry |
 | Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
 | Warm handoff | Prospecting, Lead Queue | The Lead Manager accepted a sufficiently documented handoff |
 | Qualification | Lead Queue, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
@@ -703,16 +703,16 @@ evidence in this table exists.
 The seller starts from **See My Selling Options** on the public site, then requests a review of the
 selling options that may fit the property and situation.
 
-The visible Property step collects:
+The visible Property step collects only the complete property address:
 
-- One property-address search and the required selling timeline first. Selecting a suggested
-  property fills city, state, and ZIP automatically; **Enter address manually** remains available
-  when a suggestion is missing, incorrect, or temporarily unavailable. City, state, and ZIP also
-  appear as the seller engages the address control so browser-saved addresses can fill the complete
-  address instead of only the street.
+- One property-address search. Selecting a suggested property fills city, state, and ZIP
+  automatically; **Enter address manually** remains available when a suggestion is missing,
+  incorrect, or temporarily unavailable. City, state, and ZIP also appear as the seller engages the
+  address control so browser-saved addresses can fill the complete address instead of only the
+  street.
 
-When those values pass validation and the seller selects **Continue**, Stonegate creates or reuses a
-cold address-only CRM lead and records Meta `Lead`. It appears under **Leads > Address Only** with
+When the complete address passes validation and the seller selects **Continue**, Stonegate creates
+or reuses a cold address-only CRM lead and records Meta `Lead`. It appears under **Leads > Address Only** with
 **Skip trace needed**, even if the visitor leaves before supplying contact details. This stage has no
 seller name, phone, email, or permission to contact. It does not start property research, AI
 preparation, a conversation, speed-to-lead work, staff notifications, lead-alert texts, or automated
@@ -746,10 +746,10 @@ When the seller selects **Request My Options Review**:
    queues.
 9. The browser and server send one deduplicated Meta `Contact` event.
 
-The confirmation offers an unnumbered optional section for property type, condition, occupancy,
-seller situation, asking price, mortgage balance, repairs, and comments. A 24-hour one-purpose token
-adds those answers to the same lead. This optional save creates internal evidence but does not send
-another Meta event.
+The confirmation offers an unnumbered optional section for desired selling timeline, property type,
+condition, occupancy, seller situation, asking price, mortgage balance, repairs, and comments. None
+of those details is required. A 24-hour one-purpose token adds those answers to the same lead. This
+optional save creates internal evidence but does not send another Meta event.
 
 One intake-attempt ID follows the browser's property journey. Retrying Step 1 returns or updates the
 same address-only record; retrying the completed contact submission returns the same completed lead.
@@ -2202,7 +2202,7 @@ queue is working but Stonegate has not activated that provider. `Blocked` means 
 missing, `Retry` means another attempt is scheduled, and `Exhausted` requires an owner to review
 the provider error before retrying operationally.
 
-For Meta website measurement, `Lead` is the valid address-and-timeline capture and `Contact` is the
+For Meta website measurement, `Lead` is the valid complete-address capture and `Contact` is the
 completed name/required-phone/optional-email submission. The two events have separate deterministic
 IDs, with browser and server copies deduplicated inside each event. Optional post-confirmation
 details do not create another Meta event.

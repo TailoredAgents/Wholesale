@@ -133,7 +133,9 @@ class WebsiteSellerAddressCaptureCreate(BaseModel):
     property_city: str = Field(min_length=1, max_length=120)
     property_state: str = Field(default="GA", pattern=r"^[A-Za-z]{2}$")
     property_postal_code: str = Field(pattern=r"^\d{5}(?:-\d{4})?$")
-    desired_timeline: str = Field(min_length=1, max_length=120)
+    # Kept optional for rolling compatibility with the earlier Step 1 payload. New
+    # website journeys collect timeline only in post-submit enrichment.
+    desired_timeline: str | None = Field(default=None, min_length=1, max_length=120)
     company_website: str | None = Field(default=None, max_length=255)
     conversion_session_id: str | None = Field(default=None, max_length=120)
     experiment_key: str | None = Field(default=None, max_length=80)
