@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -111,6 +112,7 @@ def enqueue_meta_web_conversion(
     fbp: str | None,
     email: str | None = None,
     phone: str | None = None,
+    full_name: str | None = None,
     external_id: str | None = None,
     occurred_at: datetime | None = None,
 ) -> OfflineConversionExport | None:
@@ -129,6 +131,7 @@ def enqueue_meta_web_conversion(
     settings = get_settings()
     normalized_email = normalize_email(email) if email else ""
     normalized_phone = normalize_phone(phone) if phone else ""
+    first_name, last_name = split_meta_person_name(full_name)
     snapshot: dict[str, object] = {
         "policy_version": MEASUREMENT_POLICY_VERSION,
         "event_name": event_name,
@@ -145,6 +148,8 @@ def enqueue_meta_web_conversion(
         "click_captured_at": utc_isoformat(event.fbclid_captured_at),
         "email_hashes": [sha256(normalized_email)] if normalized_email else [],
         "phone_hashes": [sha256(normalized_phone)] if normalized_phone else [],
+        "first_name_hashes": [sha256(first_name)] if first_name else [],
+        "last_name_hashes": [sha256(last_name)] if last_name else [],
         "external_id_hash": sha256(external_id) if external_id else None,
     }
     export = OfflineConversionExport(
@@ -1448,6 +1453,21 @@ def normalize_phone(value: str) -> str:
     if len(digits) == 10:
         digits = f"1{digits}"
     return f"+{digits}" if 10 < len(digits) <= 15 else ""
+
+
+def normalize_meta_name(value: str) -> str:
+    """Normalize a name component to Meta's lowercase, unpunctuated matching form."""
+    ascii_value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z]", "", ascii_value.lower())
+
+
+def split_meta_person_name(value: str | None) -> tuple[str, str]:
+    parts = value.strip().split() if value and value.strip() else []
+    if not parts:
+        return "", ""
+    first_name = normalize_meta_name(parts[0])
+    last_name = normalize_meta_name(parts[-1]) if len(parts) > 1 else ""
+    return first_name, last_name
 
 
 def sha256(value: str) -> str:

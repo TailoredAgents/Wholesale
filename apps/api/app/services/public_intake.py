@@ -322,6 +322,7 @@ def ensure_contact_conversion(
     meta_browser_event: MetaBrowserEvent,
     event_name: Literal["Lead", "Contact"],
     email: str | None,
+    full_name: str,
     ip_address: str | None,
     user_agent: str | None,
     session_id: str | None,
@@ -371,6 +372,9 @@ def ensure_contact_conversion(
             device_category=device_category,
             metadata=with_meta_browser_metadata(event_metadata, meta_browser_event),
         )
+    # Keep the submitted phone number inside Stonegate. The current public privacy
+    # promise permits advertising identifiers such as hashed email, but explicitly
+    # excludes mobile phone information from marketing-platform disclosure.
     enqueue_meta_web_conversion(
         db,
         event=conversion_event,
@@ -380,6 +384,7 @@ def ensure_contact_conversion(
         fbc=meta_browser_event.fbc,
         fbp=meta_browser_event.fbp,
         email=email,
+        full_name=full_name,
         external_id=f"{organization.id}:{lead.id}",
         occurred_at=occurred_at,
     )
@@ -716,6 +721,7 @@ def create_public_seller_lead(
                 meta_browser_event=payload.meta_browser_event,
                 event_name="Contact" if website_funnel_event else "Lead",
                 email=str(payload.email) if payload.email else None,
+                full_name=payload.name,
                 ip_address=ip_address,
                 user_agent=user_agent,
                 session_id=payload.conversion_session_id,
@@ -939,6 +945,7 @@ def create_public_seller_lead(
             meta_browser_event=payload.meta_browser_event,
             event_name="Contact" if website_funnel_event else "Lead",
             email=str(payload.email) if payload.email else None,
+            full_name=payload.name,
             ip_address=ip_address,
             user_agent=user_agent,
             session_id=payload.conversion_session_id,

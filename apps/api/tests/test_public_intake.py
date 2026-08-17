@@ -834,6 +834,35 @@ def test_completed_contact_step_promotes_same_address_capture_exactly_once(
         ("Lead", f"stonegate-lead-{attempt_id}"),
         ("Contact", f"stonegate-contact-{attempt_id}"),
     }
+    contact_export = next(export for export in exports if export.event_name == "Contact")
+    assert contact_export.payload_snapshot["email_hashes"] == [
+        hashlib.sha256(b"sam@example.com").hexdigest()
+    ]
+    assert contact_export.payload_snapshot["first_name_hashes"] == [
+        hashlib.sha256(b"sam").hexdigest()
+    ]
+    assert contact_export.payload_snapshot["last_name_hashes"] == [
+        hashlib.sha256(b"seller").hexdigest()
+    ]
+    assert contact_export.payload_snapshot["phone_hashes"] == []
+    assert "Sam Seller" not in str(contact_export.payload_snapshot)
+    assert "4045551212" not in str(contact_export.payload_snapshot)
+    contact_meta_event = build_meta_payload(contact_export, Settings())["data"][0]
+    assert contact_meta_event["event_name"] == "Contact"
+    assert contact_meta_event["event_id"] == f"stonegate-contact-{attempt_id}"
+    assert contact_meta_event["user_data"]["em"]
+    assert contact_meta_event["user_data"]["fn"] == [
+        hashlib.sha256(b"sam").hexdigest()
+    ]
+    assert contact_meta_event["user_data"]["ln"] == [
+        hashlib.sha256(b"seller").hexdigest()
+    ]
+    assert contact_meta_event["user_data"]["external_id"]
+    assert contact_meta_event["user_data"]["client_ip_address"]
+    assert contact_meta_event["user_data"]["client_user_agent"]
+    assert contact_meta_event["user_data"]["fbc"] == "fb.1.1785875287.test-fbclid"
+    assert contact_meta_event["user_data"]["fbp"] == "fb.1.1785875287.123456789"
+    assert "ph" not in contact_meta_event["user_data"]
 
     counts_before_retry = {
         model.__tablename__: int(db_session.scalar(select(func.count()).select_from(model)) or 0)
@@ -2073,6 +2102,12 @@ def test_public_seller_intake_queues_hashed_meta_lead(
     assert export.lead_id is not None
     assert export.payload_snapshot["email_hashes"]
     assert export.payload_snapshot["phone_hashes"] == []
+    assert export.payload_snapshot["first_name_hashes"] == [
+        hashlib.sha256(b"sam").hexdigest()
+    ]
+    assert export.payload_snapshot["last_name_hashes"] == [
+        hashlib.sha256(b"seller").hexdigest()
+    ]
     assert export.payload_snapshot["external_id_hash"]
     assert "sam@example.com" not in str(export.payload_snapshot)
     assert "4045551212" not in str(export.payload_snapshot)
@@ -2083,6 +2118,8 @@ def test_public_seller_intake_queues_hashed_meta_lead(
     assert meta_event["action_source"] == "website"
     assert meta_event["event_source_url"].endswith("/get-a-cash-offer")
     assert meta_event["user_data"]["em"]
+    assert meta_event["user_data"]["fn"] == [hashlib.sha256(b"sam").hexdigest()]
+    assert meta_event["user_data"]["ln"] == [hashlib.sha256(b"seller").hexdigest()]
     assert meta_event["user_data"]["external_id"]
     assert meta_event["user_data"]["client_ip_address"] == "testclient"
     assert meta_event["user_data"]["client_user_agent"] == "pytest-browser"

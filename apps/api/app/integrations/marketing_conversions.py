@@ -211,9 +211,16 @@ def build_meta_payload(
 ) -> dict[str, Any]:
     snapshot = export.payload_snapshot
     user_data: dict[str, Any] = {}
-    email_hashes = [value for value in snapshot.get("email_hashes", []) if isinstance(value, str)]
-    if email_hashes:
-        user_data["em"] = email_hashes
+    for snapshot_key, meta_key in (
+        ("email_hashes", "em"),
+        ("first_name_hashes", "fn"),
+        ("last_name_hashes", "ln"),
+    ):
+        hashes = [
+            value for value in snapshot.get(snapshot_key, []) if isinstance(value, str)
+        ]
+        if hashes:
+            user_data[meta_key] = hashes
     external_id_hash = snapshot.get("external_id_hash")
     if isinstance(external_id_hash, str):
         user_data["external_id"] = [external_id_hash]
