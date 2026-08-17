@@ -74,12 +74,14 @@ Status: **Implemented**. Branded production verification follows the Render depl
 - Reduce the initial journey to Property, Contact, and Confirmation.
 - Create a cold address-only CRM lead as soon as a complete address passes Step 1 validation and the
   seller selects **Continue**.
-- Keep address-only records in **Leads > Address Only** as **Skip trace needed**. Do not start
-  contact, property research, AI preparation, conversations, speed-to-lead work, or staff alerts at
-  this stage. Require staff to check DNC status manually before cold outreach; do not imply that the
-  system performs the check automatically.
+- Keep address-only records in **Leads > Address Only** as **Skip trace needed**. Send each eligible
+  employee one internal SMS labeled **Stage 1 filled** with the address and contact-details-pending
+  status. Do not start seller contact, property research, AI preparation, conversations, or
+  speed-to-lead work at this stage. Require staff to check DNC status manually before cold outreach;
+  do not imply that the system performs the check automatically.
 - Promote the same lead when Step 2 supplies name, required phone, optional email, and consent
-  evidence. Start normal completed-inquiry workflows only after that promotion.
+  evidence. Send a separate deduplicated employee SMS labeled **Stage 2 filled**, then start the
+  normal completed-inquiry workflows.
 - Move the seller's desired timeline, condition, occupancy, repairs, mortgage, motivation, and
   comments into an optional post-submission enrichment step. None of those details is required.
 - Keep that enrichment section unnumbered and exclude it from Meta conversion events.
@@ -106,8 +108,9 @@ Status: **Implemented**. Branded production verification follows the Render depl
 - Optional enrichment remains connected to the same lead, is visually unnumbered, and sends no Meta
   event.
 - Existing phone/email, optional SMS, and conversion evidence remains intact.
-- Address-only records do not create operational automation, and the UI clearly directs staff to
-  manually check DNC status before cold outreach.
+- Address-only records create only the informational Stage 1 employee alert; they do not create
+  seller-facing or lead-management automation, and the UI clearly directs staff to manually check
+  DNC status before cold outreach.
 - Retry and concurrent-order tests prove deterministic identity and no completed-to-address-only
   downgrade.
 - Automated desktop and mobile submission and recovery tests pass.

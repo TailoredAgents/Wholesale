@@ -714,9 +714,10 @@ The visible Property step collects only the complete property address:
 When the complete address passes validation and the seller selects **Continue**, Stonegate creates
 or reuses a cold address-only CRM lead and records Meta `Lead`. It appears under **Leads > Address Only** with
 **Skip trace needed**, even if the visitor leaves before supplying contact details. This stage has no
-seller name, phone, email, or permission to contact. It does not start property research, AI
-preparation, a conversation, speed-to-lead work, staff notifications, lead-alert texts, or automated
-seller outreach.
+seller name, phone, email, or permission to contact. Each eligible employee receives an internal
+**Stage 1 filled** text with the address and a contact-details-pending warning. The record does not
+start property research, AI preparation, a conversation, speed-to-lead work, general staff
+notifications, or automated seller outreach.
 
 Treat an address-only record as a cold research opportunity, not as a warm inbound seller. Research
 or skip trace the owner, then check DNC status manually before any cold call or text. Stonegate does
@@ -741,7 +742,8 @@ When the seller selects **Request My Options Review**:
    conversation.
 5. Consent and attribution are retained even when the submission matches an existing lead.
 6. Property research, AI preparation, and speed-to-lead work start.
-7. Each active staff member with **Text new leads** enabled is queued one SMS alert.
+7. Each active staff member with **Text new leads** enabled is queued a separate **Stage 2 filled**
+   SMS alert containing the seller contact and property address.
 8. Staff sees the completed lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard
    queues.
 9. The browser and server send one deduplicated Meta `Contact` event.
@@ -760,9 +762,10 @@ Address suggestions use the existing RealEstateAPI configuration and are intenti
 Autocomplete failure never disables **Continue** or submission; the seller can enter the complete
 address manually, and Stonegate stores the actual state supplied or selected.
 
-The staff alert in step 7 is an internal operational message to an employee who separately enabled
-that preference. It is unaffected by the website's seller-facing SMS choice and does not create
-seller SMS consent.
+The Stage 1 and Stage 2 texts are internal operational messages to employees who separately enabled
+that preference. They are unaffected by the website's seller-facing SMS choice and do not create
+seller SMS consent. Retrying either form request does not send the corresponding employee text
+again.
 
 Use the public form to test seller intake with your own controlled information. Do not repeatedly
 submit a real seller to diagnose an internal visibility problem.

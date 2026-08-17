@@ -625,8 +625,11 @@ normal CRM intake. No Meta developer app or Graph API token is required.
    address matched confidently.
 5. Under **Settings > Communications**, save each alert recipient's cellphone and enable
    **Text new leads**.
-6. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
-   alert per enabled employee using a controlled test lead.
+6. For the website form, confirm the employee receives **Stage 1 filled** after the address step and
+   **Stage 2 filled** after contact completion. For a Facebook instant form, confirm one completed
+   lead alert. Browser and worker retries must not duplicate any of these messages.
+7. Activate staff texts only after the Twilio campaign/use case is approved. Confirm delivery and
+   Twilio callbacks using controlled information.
 
 Enable **Text inbound messages** separately for employees who should receive a personal-cellphone
 alert when a seller or buyer texts a Stonegate number. Stonegate alerts the assigned conversation

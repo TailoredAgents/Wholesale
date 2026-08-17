@@ -144,7 +144,9 @@ administration is in Settings. My Setup remains available to every signed-in emp
 After the complete address passes validation, **Continue** sends the address capture while
 the seller advances to Contact. The saved record appears in **Leads > Address Only** as cold and
 **Skip trace needed**. It has no contact permission and starts no automated research, conversation,
-follow-up, staff alert, or seller contact. Staff must check DNC status manually before cold outreach.
+follow-up, or seller contact. Eligible employees receive one **Stage 1 filled** SMS containing the
+address and contact-details-pending status. Staff must check DNC status manually before cold
+outreach.
 
 ### Contact Step
 
@@ -155,7 +157,7 @@ follow-up, staff alert, or seller contact. Staff must check DNC status manually 
 | Email | Additional contact method | Optional; must be valid when entered |
 | Contact authorization disclosure | Explains that submitting authorizes phone or email follow-up about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
 | Optional SMS consent | Separately records recurring automated SMS consent and the `seller-sms-web-v3` wording version | Unchecked initially, never required, and never saved in the browser draft |
-| **Request My Options Review** | Promotes the same address-only record into a contact-completed seller inquiry, adds phone/email authorization evidence and optional SMS consent evidence, and sends the Meta `Contact` event | Disabled while sending; validation or API errors leave answers on screen |
+| **Request My Options Review** | Promotes the same address-only record into a contact-completed seller inquiry, adds phone/email authorization evidence and optional SMS consent evidence, sends the Meta `Contact` event, and queues the separate **Stage 2 filled** employee SMS | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
@@ -165,7 +167,8 @@ the request matched an existing record means Stonegate updated one history inste
 duplicate.
 
 This seller-facing SMS choice does not change internal **Text new leads** alerts. Those alerts are
-operational messages sent only to employees who separately enabled the staff preference.
+operational messages sent only to employees who separately enabled the staff preference. Form
+retries are deduplicated independently for Stage 1 and Stage 2.
 
 ### Optional Property Details
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -11,6 +12,7 @@ from app.models.foundation import (
     AuditEvent,
     CommunicationRecord,
     Contact,
+    ContactMethod,
     Conversation,
     Lead,
     LeadFormSubmission,
@@ -30,6 +32,9 @@ from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES
 logger = structlog.get_logger()
 STAFF_ALERT_RECOVERY_WINDOW = timedelta(hours=24)
 OWNER_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
+WEBSITE_STAGE_1_ALERT_SOURCE_TYPE = "website_form_stage_1"
+WEBSITE_STAGE_2_ALERT_SOURCE_TYPE = "website_form"
+WEBSITE_STAGE_ALERT_FLOW_VERSION = "website-staged-alerts-v1"
 
 
 @dataclass(frozen=True)
@@ -101,6 +106,7 @@ def queue_staff_lead_alerts_for_lead(
     source_label: str,
     source_entity_type: str,
     meta_lead_event_id: UUID | None = None,
+    message_body: str | None = None,
 ) -> int:
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
@@ -140,7 +146,8 @@ def queue_staff_lead_alerts_for_lead(
                 lead_id=lead.id,
                 recipient_user_id=recipient.id,
                 recipient_phone=phone,
-                message_body=(
+                message_body=message_body
+                or (
                     f"New {source_label} {asset_label} lead: {contact_name}, {market}. "
                     f"Open Stonegate: https://www.stonegatehb.com/os/leads/{lead.id}"
                 ),
@@ -202,6 +209,105 @@ def queue_staff_lead_alerts_for_lead(
         )
     db.flush()
     return created
+
+
+def queue_website_stage_lead_alerts(
+    db: Session,
+    *,
+    lead: Lead,
+    submission: LeadFormSubmission,
+    stage: Literal[1, 2],
+) -> int:
+    """Queue one durable, idempotent website-stage SMS per eligible employee."""
+    property_record = db.get(Property, lead.property_id)
+    property_address = format_property_address(property_record)
+    if stage == 1:
+        source_type = WEBSITE_STAGE_1_ALERT_SOURCE_TYPE
+        message_body = (
+            f"Stonegate Stage 1 filled: {property_address}. Address only; no contact details "
+            "or permission yet. "
+            "https://www.stonegatehb.com/os/leads?view=address_only"
+        )
+    else:
+        source_type = WEBSITE_STAGE_2_ALERT_SOURCE_TYPE
+        contact = db.get(Contact, lead.contact_id)
+        contact_name = (
+            " ".join(contact.legal_name.split())[:100]
+            if contact is not None and contact.legal_name.strip()
+            else "Seller"
+        )
+        submitted_phone = (submission.raw_payload or {}).get("phone")
+        if not isinstance(submitted_phone, str) or not submitted_phone.strip():
+            phone_method = db.scalar(
+                select(ContactMethod)
+                .where(
+                    ContactMethod.organization_id == lead.organization_id,
+                    ContactMethod.contact_id == lead.contact_id,
+                    ContactMethod.method_type == "phone",
+                )
+                .order_by(
+                    ContactMethod.is_primary.desc(),
+                    ContactMethod.created_at.desc(),
+                    ContactMethod.id,
+                )
+            )
+            stored_phone = (
+                phone_method.normalized_value or phone_method.value
+                if phone_method is not None
+                else None
+            )
+        else:
+            stored_phone = submitted_phone
+        phone = format_e164(stored_phone or "") or stored_phone or "phone unavailable"
+        message_body = (
+            f"Stonegate Stage 2 filled: {contact_name}, {phone}, {property_address}. "
+            f"Contact details received. https://www.stonegatehb.com/os/leads/{lead.id}"
+        )
+    # A rolling deploy may encounter an older pending website alert with the same
+    # durable Stage 2 identity. Refresh only unsent snapshots; never rewrite the
+    # evidence for a message that already left Stonegate.
+    for existing_alert in db.scalars(
+        select(StaffLeadAlert).where(
+            StaffLeadAlert.organization_id == lead.organization_id,
+            StaffLeadAlert.source_type == source_type,
+            StaffLeadAlert.source_event_id == submission.id,
+            StaffLeadAlert.status.in_({"pending", "retry", "blocked"}),
+        )
+    ):
+        existing_alert.message_body = message_body
+    return queue_staff_lead_alerts_for_lead(
+        db,
+        lead=lead,
+        source_type=source_type,
+        source_event_id=submission.id,
+        source_label=f"Website Stage {stage}",
+        source_entity_type="lead_form_submission",
+        message_body=message_body,
+    )
+
+
+def format_property_address(property_record: Property | None) -> str:
+    if property_record is None:
+        return "address unavailable"
+    city_state_zip = " ".join(
+        compact_sms_value(part, 20)
+        for part in (property_record.state, property_record.postal_code)
+        if part
+    )
+    locality = ", ".join(
+        part
+        for part in (compact_sms_value(property_record.city, 80), city_state_zip)
+        if part
+    )
+    return ", ".join(
+        part
+        for part in (compact_sms_value(property_record.street_address, 140), locality)
+        if part
+    ) or "address unavailable"
+
+
+def compact_sms_value(value: str | None, limit: int) -> str:
+    return " ".join((value or "").split())[:limit]
 
 
 def queue_staff_inbound_sms_alert(
@@ -480,7 +586,7 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
     if not recipient_ids_by_organization:
         return 0
 
-    completed_at = func.coalesce(
+    intake_activity_at = func.coalesce(
         LeadFormSubmission.completed_at,
         LeadFormSubmission.created_at,
     )
@@ -488,10 +594,10 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
         db.scalars(
             select(LeadFormSubmission)
             .where(
-                LeadFormSubmission.completion_status == "completed",
-                completed_at >= datetime.now(UTC) - STAFF_ALERT_RECOVERY_WINDOW,
+                LeadFormSubmission.completion_status.in_({"address_only", "completed"}),
+                intake_activity_at >= datetime.now(UTC) - STAFF_ALERT_RECOVERY_WINDOW,
             )
-            .order_by(completed_at, LeadFormSubmission.id)
+            .order_by(intake_activity_at, LeadFormSubmission.id)
             .limit(250)
         ).all()
     )
@@ -499,43 +605,68 @@ def recover_recent_unalerted_website_lead(db: Session) -> int:
         raw_payload = submission.raw_payload or {}
         if raw_payload.get("_intake_source") != "seller_website":
             continue
-        if raw_payload.get("_matched_existing_lead") is not False:
-            continue
+        if submission.completion_status == "address_only":
+            if raw_payload.get("_staff_alert_flow_version") != WEBSITE_STAGE_ALERT_FLOW_VERSION:
+                continue
+            stages: tuple[Literal[1, 2], ...] = (1,)
+        else:
+            # Legacy website submissions without an attempt ID only represented a
+            # new lead when this flag was false. Attempt-aware submissions represent
+            # renewed seller intent even when they resolve to an existing CRM lead.
+            if (
+                submission.intake_attempt_id is None
+                and raw_payload.get("_matched_existing_lead") is not False
+            ):
+                continue
+            stages = (
+                (1, 2)
+                if raw_payload.get("_staff_alert_flow_version")
+                == WEBSITE_STAGE_ALERT_FLOW_VERSION
+                and submission.intake_attempt_id is not None
+                else (2,)
+            )
         recipient_ids = recipient_ids_by_organization.get(submission.organization_id, set())
         if not recipient_ids:
-            continue
-        existing_recipient_ids = set(
-            db.scalars(
-                select(StaffLeadAlert.recipient_user_id).where(
-                    StaffLeadAlert.organization_id == submission.organization_id,
-                    StaffLeadAlert.source_type == "website_form",
-                    StaffLeadAlert.source_event_id == submission.id,
-                    StaffLeadAlert.recipient_user_id.in_(recipient_ids),
-                )
-            ).all()
-        )
-        if recipient_ids <= existing_recipient_ids:
             continue
         lead = db.get(Lead, submission.lead_id)
         if lead is None or lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES:
             continue
-        created = queue_staff_lead_alerts_for_lead(
-            db,
-            lead=lead,
-            source_type="website_form",
-            source_event_id=submission.id,
-            source_label="Website",
-            source_entity_type="lead_form_submission",
-        )
-        if created:
-            db.commit()
-            logger.warning(
-                "staff_lead_alert_missing_rows_recovered",
-                source_type="website_form",
-                source_event_id=str(submission.id),
-                lead_id=str(lead.id),
-                alerts_created=created,
-                recovery_window_hours=int(STAFF_ALERT_RECOVERY_WINDOW.total_seconds() // 3600),
+        for stage in stages:
+            source_type = (
+                WEBSITE_STAGE_1_ALERT_SOURCE_TYPE
+                if stage == 1
+                else WEBSITE_STAGE_2_ALERT_SOURCE_TYPE
             )
-            return created
+            existing_recipient_ids = set(
+                db.scalars(
+                    select(StaffLeadAlert.recipient_user_id).where(
+                        StaffLeadAlert.organization_id == submission.organization_id,
+                        StaffLeadAlert.source_type == source_type,
+                        StaffLeadAlert.source_event_id == submission.id,
+                        StaffLeadAlert.recipient_user_id.in_(recipient_ids),
+                    )
+                ).all()
+            )
+            if recipient_ids <= existing_recipient_ids:
+                continue
+            created = queue_website_stage_lead_alerts(
+                db,
+                lead=lead,
+                submission=submission,
+                stage=stage,
+            )
+            if created:
+                db.commit()
+                logger.warning(
+                    "staff_lead_alert_missing_rows_recovered",
+                    source_type=source_type,
+                    website_stage=stage,
+                    source_event_id=str(submission.id),
+                    lead_id=str(lead.id),
+                    alerts_created=created,
+                    recovery_window_hours=int(
+                        STAFF_ALERT_RECOVERY_WINDOW.total_seconds() // 3600
+                    ),
+                )
+                return created
     return 0

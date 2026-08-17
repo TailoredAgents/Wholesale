@@ -11,7 +11,9 @@ from starlette.requests import Request
 from starlette.types import Message, Scope
 
 from app.core.config import Settings, get_settings
+from app.integrations.communications import OutboundMessageRequest, OutboundMessageResult
 from app.integrations.marketing_conversions import build_meta_payload
+from app.integrations.twilio_messaging import TwilioMessagingError
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -42,6 +44,19 @@ from app.services.request_rate_limit import (
     read_bounded_request_body,
     trusted_client_address,
 )
+
+
+class FailingStaffAlertProvider:
+    provider_name = "twilio"
+
+    def send(
+        self,
+        request: OutboundMessageRequest,
+        *,
+        dry_run: bool = True,
+    ) -> OutboundMessageResult:
+        del request, dry_run
+        raise TwilioMessagingError("Temporary Stage 1 delivery failure.")
 
 
 def public_payload() -> dict[str, object]:
@@ -84,6 +99,15 @@ def seed_org(db_session: Session) -> None:
         admin_email="owner@example.com",
         admin_name="Owner",
     )
+
+
+def enable_owner_lead_alerts(db_session: Session) -> User:
+    owner = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+    return owner
 
 
 def address_capture_payload(*, attempt_id: str | None = None) -> dict[str, object]:
@@ -218,6 +242,187 @@ def test_address_capture_is_idempotent_and_does_not_merge_separate_attempts(
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
     first_lead = db_session.get(Lead, uuid.UUID(first.json()["lead_id"]))
     assert first_lead is not None and first_lead.desired_timeline is None
+
+
+def test_website_funnel_queues_one_labeled_sms_per_stage_and_recipient(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    enable_owner_lead_alerts(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    address_payload = address_capture_payload(attempt_id=attempt_id)
+
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_payload,
+    )
+
+    assert capture.status_code == 201, capture.text
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert submission is not None
+    stage_1 = db_session.scalar(
+        select(StaffLeadAlert).where(
+            StaffLeadAlert.source_type == "website_form_stage_1"
+        )
+    )
+    assert stage_1 is not None
+    assert stage_1.source_event_id == submission.id
+    assert stage_1.message_body.startswith(
+        "Stonegate Stage 1 filled: 55 Auburn Ave, Atlanta, GA 30303."
+    )
+    assert "Address only; no contact details or permission yet." in stage_1.message_body
+    assert "?view=address_only" in stage_1.message_body
+    assert "Sam Seller" not in stage_1.message_body
+    assert "4045551212" not in stage_1.message_body
+
+    capture_retry = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_payload,
+    )
+    assert capture_retry.status_code == 201, capture_retry.text
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    alerts = db_session.scalars(select(StaffLeadAlert).order_by(StaffLeadAlert.source_type)).all()
+    assert len(alerts) == 2
+    assert {alert.source_event_id for alert in alerts} == {submission.id}
+    assert {alert.source_type for alert in alerts} == {
+        "website_form_stage_1",
+        "website_form",
+    }
+    stage_2 = next(alert for alert in alerts if alert.source_type == "website_form")
+    assert stage_2.message_body.startswith("Stonegate Stage 2 filled: Sam Seller, +14045551212")
+    assert "Contact details received." in stage_2.message_body
+    assert f"/os/leads/{completed.json()['lead_id']}" in stage_2.message_body
+
+    completed_retry = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    late_capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_payload,
+    )
+    assert completed_retry.status_code == 201, completed_retry.text
+    assert late_capture.status_code == 201, late_capture.text
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 2
+
+    settings = Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"})
+    assert process_next_staff_lead_alert(db_session, settings) == stage_1.id
+    assert process_next_staff_lead_alert(db_session, settings) == stage_2.id
+    db_session.refresh(stage_1)
+    db_session.refresh(stage_2)
+    assert stage_1.status == stage_2.status == "simulated"
+
+
+def test_stage_2_waits_while_stage_1_delivery_is_retrying(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    enable_owner_lead_alerts(db_session)
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    assert completed.status_code == 201, completed.text
+    settings = Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"})
+    stage_1 = db_session.scalar(
+        select(StaffLeadAlert).where(
+            StaffLeadAlert.source_type == "website_form_stage_1"
+        )
+    )
+    stage_2 = db_session.scalar(
+        select(StaffLeadAlert).where(StaffLeadAlert.source_type == "website_form")
+    )
+    assert stage_1 is not None and stage_2 is not None
+
+    failed_id = process_next_staff_lead_alert(
+        db_session,
+        settings,
+        FailingStaffAlertProvider(),
+    )
+
+    assert failed_id == stage_1.id
+    db_session.refresh(stage_1)
+    db_session.refresh(stage_2)
+    assert stage_1.status == "retry"
+    assert stage_1.next_attempt_at is not None
+    assert stage_2.status == "pending"
+    assert process_next_staff_lead_alert(db_session, settings) is None
+
+    stage_1.next_attempt_at = None
+    db_session.commit()
+    assert process_next_staff_lead_alert(db_session, settings) == stage_1.id
+    assert process_next_staff_lead_alert(db_session, settings) == stage_2.id
+    db_session.refresh(stage_1)
+    db_session.refresh(stage_2)
+    assert stage_1.status == stage_2.status == "simulated"
+
+
+def test_each_eligible_employee_receives_each_stage_exactly_once(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    owner = enable_owner_lead_alerts(db_session)
+    second_recipient = User(
+        organization_id=owner.organization_id,
+        email="second-recipient@example.com",
+        display_name="Second Recipient",
+        is_active=True,
+        voice_forwarding_number="+14045550124",
+        lead_alert_sms_enabled=False,
+    )
+    db_session.add(second_recipient)
+    db_session.commit()
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+    second_recipient.lead_alert_sms_enabled = True
+    db_session.commit()
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    retry = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    assert retry.status_code == 201, retry.text
+    alerts = db_session.scalars(select(StaffLeadAlert)).all()
+    assert len(alerts) == 4
+    assert {
+        (alert.recipient_user_id, alert.source_type)
+        for alert in alerts
+    } == {
+        (owner.id, "website_form_stage_1"),
+        (owner.id, "website_form"),
+        (second_recipient.id, "website_form_stage_1"),
+        (second_recipient.id, "website_form"),
+    }
 
 
 def test_address_capture_accepts_legacy_timeline_during_rolling_deploy(
@@ -552,6 +757,7 @@ def test_contact_step_arriving_first_creates_both_meta_events_and_late_capture_i
     api_db_override: None,
 ) -> None:
     seed_org(db_session)
+    enable_owner_lead_alerts(db_session)
     client = TestClient(app)
     attempt_id = str(uuid.uuid4())
     payload = completed_website_payload(attempt_id)
@@ -564,6 +770,14 @@ def test_contact_step_arriving_first_creates_both_meta_events_and_late_capture_i
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
+    alerts = db_session.scalars(select(StaffLeadAlert)).all()
+    assert len(alerts) == 2
+    assert {alert.source_type for alert in alerts} == {
+        "website_form_stage_1",
+        "website_form",
+    }
+    assert any("Stage 1 filled" in alert.message_body for alert in alerts)
+    assert any("Stage 2 filled" in alert.message_body for alert in alerts)
     exports = db_session.scalars(select(OfflineConversionExport)).all()
     assert {(export.event_name, export.event_key) for export in exports} == {
         ("Lead", f"stonegate-lead-{attempt_id}"),
@@ -855,6 +1069,53 @@ def test_address_capture_promotion_merges_into_existing_active_person_property_l
     assert counts_after_retry == counts_before_retry
 
 
+def test_stage_alerts_survive_address_placeholder_merge_without_a_dead_link(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    existing = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert existing.status_code == 201, existing.text
+    enable_owner_lead_alerts(db_session)
+    attempt_id = str(uuid.uuid4())
+
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    placeholder_lead_id = uuid.UUID(capture.json()["lead_id"])
+    stage_1 = db_session.scalar(
+        select(StaffLeadAlert).where(
+            StaffLeadAlert.source_type == "website_form_stage_1"
+        )
+    )
+    assert stage_1 is not None
+    assert stage_1.lead_id == placeholder_lead_id
+    assert str(placeholder_lead_id) not in stage_1.message_body
+
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+
+    assert completed.status_code == 201, completed.text
+    surviving_lead_id = uuid.UUID(existing.json()["lead_id"])
+    assert completed.json()["lead_id"] == existing.json()["lead_id"]
+    assert completed.json()["matched_existing_lead"] is True
+    assert db_session.get(Lead, placeholder_lead_id) is None
+    alerts = db_session.scalars(select(StaffLeadAlert)).all()
+    assert len(alerts) == 2
+    assert {alert.lead_id for alert in alerts} == {surviving_lead_id}
+    assert {alert.source_type for alert in alerts} == {
+        "website_form_stage_1",
+        "website_form",
+    }
+    stage_2 = next(alert for alert in alerts if alert.source_type == "website_form")
+    assert f"/os/leads/{surviving_lead_id}" in stage_2.message_body
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -1090,6 +1351,83 @@ def test_staff_alert_worker_recovers_recent_unalerted_website_lead(
     assert alert.source_type == "website_form"
     assert alert.meta_lead_event_id is None
     assert alert.status == "simulated"
+
+
+def test_staff_alert_worker_recovers_stage_1_while_address_is_still_incomplete(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    owner = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.lead_alert_sms_enabled = False
+    db_session.commit()
+    capture = TestClient(app).post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(),
+    )
+    assert capture.status_code == 201, capture.text
+    assert db_session.scalar(select(StaffLeadAlert)) is None
+
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+    alert_id = process_next_staff_lead_alert(
+        db_session,
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
+    )
+
+    alert = db_session.get(StaffLeadAlert, alert_id)
+    assert alert is not None
+    assert alert.source_type == "website_form_stage_1"
+    assert "Stage 1 filled" in alert.message_body
+    assert alert.status == "simulated"
+
+
+def test_staff_alert_recovery_backfills_both_stages_in_order_after_completion(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    owner = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.lead_alert_sms_enabled = False
+    db_session.commit()
+    client = TestClient(app)
+    attempt_id = str(uuid.uuid4())
+    capture = client.post(
+        "/api/v1/public/seller-leads/address-capture",
+        json=address_capture_payload(attempt_id=attempt_id),
+    )
+    completed = client.post(
+        "/api/v1/public/seller-leads",
+        json=completed_website_payload(attempt_id),
+    )
+    assert capture.status_code == 201, capture.text
+    assert completed.status_code == 201, completed.text
+    assert db_session.scalar(select(StaffLeadAlert)) is None
+
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+    stage_1_id = process_next_staff_lead_alert(
+        db_session,
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
+    )
+    stage_2_id = process_next_staff_lead_alert(
+        db_session,
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
+    )
+
+    stage_1 = db_session.get(StaffLeadAlert, stage_1_id)
+    stage_2 = db_session.get(StaffLeadAlert, stage_2_id)
+    assert stage_1 is not None and stage_2 is not None
+    assert stage_1.source_type == "website_form_stage_1"
+    assert stage_2.source_type == "website_form"
+    assert "Stage 1 filled" in stage_1.message_body
+    assert "Stage 2 filled" in stage_2.message_body
+    assert stage_1.status == stage_2.status == "simulated"
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 2
 
 
 def test_public_land_intake_preserves_asset_and_parcel_identity(

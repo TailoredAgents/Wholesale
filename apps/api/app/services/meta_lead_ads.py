@@ -5,8 +5,8 @@ from uuid import UUID
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import and_, false, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case, exists, false, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.auth import Principal
 from app.core.config import Settings
@@ -42,6 +42,8 @@ from app.services.property_validation import (
 )
 from app.services.public_intake import create_public_seller_lead, get_default_organization
 from app.services.staff_lead_alerts import (
+    WEBSITE_STAGE_1_ALERT_SOURCE_TYPE,
+    WEBSITE_STAGE_2_ALERT_SOURCE_TYPE,
     eligible_staff_alert_recipients,
     queue_staff_lead_alerts_for_lead,
     recover_recent_unalerted_website_lead,
@@ -560,6 +562,16 @@ def process_next_staff_lead_alert(
     recover_recent_unalerted_meta_lead(db)
     now = datetime.now(UTC)
     configured = not settings.staff_lead_alert_configuration_blockers
+    stage_1_alert = aliased(StaffLeadAlert)
+    unresolved_stage_1 = exists(
+        select(stage_1_alert.id).where(
+            stage_1_alert.organization_id == StaffLeadAlert.organization_id,
+            stage_1_alert.source_type == WEBSITE_STAGE_1_ALERT_SOURCE_TYPE,
+            stage_1_alert.source_event_id == StaffLeadAlert.source_event_id,
+            stage_1_alert.recipient_user_id == StaffLeadAlert.recipient_user_id,
+            stage_1_alert.status.in_({"pending", "retry", "blocked"}),
+        )
+    )
     alert = db.scalar(
         select(StaffLeadAlert)
         .where(
@@ -568,8 +580,16 @@ def process_next_staff_lead_alert(
                 StaffLeadAlert.status == "blocked" if configured else false(),
             ),
             or_(StaffLeadAlert.next_attempt_at.is_(None), StaffLeadAlert.next_attempt_at <= now),
+            or_(
+                StaffLeadAlert.source_type != WEBSITE_STAGE_2_ALERT_SOURCE_TYPE,
+                ~unresolved_stage_1,
+            ),
         )
-        .order_by(StaffLeadAlert.created_at)
+        .order_by(
+            StaffLeadAlert.created_at,
+            case((StaffLeadAlert.source_type == WEBSITE_STAGE_1_ALERT_SOURCE_TYPE, 0), else_=1),
+            StaffLeadAlert.id,
+        )
         .with_for_update(skip_locked=True)
     )
     if alert is None:

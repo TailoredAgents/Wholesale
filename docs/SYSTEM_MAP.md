@@ -263,18 +263,20 @@ address-only CRM lead. The record has a placeholder contact, no contact methods 
 canonical `qualification_context.website_intake_status="address_only"` marker. Staff sees it in
 **Leads > Address Only** with **Skip trace needed**.
 
-Address-only capture is evidence and prospect-research work, not a completed seller inquiry. It does
-not create a conversation, speed-to-lead task, property-research job, AI lead-preparation job, staff
-notification, internal lead-alert SMS, or seller-contact automation. Stonegate may research/skip
-trace the owner, but staff must manually check DNC status before any cold outreach; the intake path
-does not perform an automatic DNC check.
+Address-only capture is evidence and prospect-research work, not a completed seller inquiry. It
+queues one internal SMS per eligible employee labeled **Stage 1 filled**, with the address and a
+clear contact-details-pending warning. It does not create a conversation, speed-to-lead task,
+property-research job, AI lead-preparation job, general staff notification, or seller-contact
+automation. Stonegate may research/skip trace the owner, but staff must manually check DNC status
+before any cold outreach; the intake path does not perform an automatic DNC check.
 
 The second visible step requires name and phone, accepts optional email, displays passive phone/email
 authorization, and offers a separate unchecked recurring automated SMS choice. Submitting it
 promotes the same contact, property, lead, and form-submission record to
 `website_intake_status="completed"`; it does not create a second lead. Normal conversation,
-property-research, AI, speed-to-lead, notification, and staff-alert workflows start only at this
-point. The confirmation then offers an unnumbered optional section for desired selling timeline,
+property-research, AI, speed-to-lead, and notification workflows start only at this point. A second
+deduplicated employee SMS labeled **Stage 2 filled** includes the completed seller contact. The
+confirmation then offers an unnumbered optional section for desired selling timeline,
 condition, occupancy, asking price, mortgage, repairs, and seller context. None of those details is
 required. A random 24-hour token adds those answers to the same lead without exposing CRM access.
 
@@ -314,6 +316,7 @@ The address stage creates or reuses:
 - incomplete form-submission evidence
 - attribution touches
 - the first-party `address_capture` event and Meta `Lead`
+- one durable `website_form_stage_1` internal employee SMS per eligible recipient
 
 The contact stage promotes that same record and adds or starts:
 
@@ -321,7 +324,8 @@ The contact stage promotes that same record and adds or starts:
 - phone/email and optional SMS consent evidence
 - completed form-submission evidence
 - the first-party `contact_complete` event and Meta `Contact`
-- speed-to-lead, staff alerts, AI preparation, and property research
+- one durable `website_form` Stage 2 employee SMS per eligible recipient
+- speed-to-lead, AI preparation, and property research
 - a shared conversation and initial ownership context
 
 The intake attempt ID, row locking, and an organization-scoped unique constraint make address-stage
@@ -342,7 +346,9 @@ and user agent. The checkbox is never required, selected by default, persisted i
 or inferred from general permission to contact.
 
 Internal new-lead SMS alerts are a separate operational use case sent only to employees who enabled
-the staff alert preference; the seller-facing checkbox does not control those alerts.
+the staff alert preference; the seller-facing checkbox does not control those alerts. The address
+stage and completed-contact stage use separate durable identities, so each recipient gets at most
+one Stage 1 text and one Stage 2 text even when the browser or worker retries.
 
 The seller record Contact panel and Inbox right sidebar show the latest SMS state as
 **Permissioned** or **Not permissioned**. Authorized staff can append a grant or revocation when

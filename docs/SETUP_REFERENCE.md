@@ -871,14 +871,15 @@ The public **See My Selling Options** form has two visible stages and one unnumb
   address-stage conversion record, and a deduplicated Meta `Lead`. RealEstateAPI autocomplete may
   fill street, city, state, and ZIP, but manual entry remains available and provider-independent.
 - The address-only record has no seller contact channel or contact authorization. It appears in
-  **Leads > Address Only** as **Skip trace needed** and does not start AI preparation, property
-  research, a conversation, speed-to-lead work, staff alerts, or seller contact automation. Staff
-  must research/skip trace the owner and check DNC status manually before any cold outreach; the
-  system does not perform that DNC check automatically.
+  **Leads > Address Only** as **Skip trace needed** and queues an internal employee SMS labeled
+  **Stage 1 filled**. It does not start AI preparation, property research, a conversation,
+  speed-to-lead work, or seller contact automation. Staff must research/skip trace the owner and
+  check DNC status manually before any cold outreach; the system does not perform that DNC check
+  automatically.
 - Submitting the visible Contact step with name, required phone, optional email, and the displayed
   consent choices promotes the same CRM record to a completed seller inquiry. It sends the
-  deduplicated Meta `Contact` event and only then starts normal property research, AI work,
-  conversation, speed-to-lead, notification, and staff-SMS-alert workflows.
+  deduplicated Meta `Contact` event and a separate employee SMS labeled **Stage 2 filled**, then
+  starts normal property research, AI work, conversation, speed-to-lead, and notification workflows.
 - The optional property-details section shown after confirmation writes desired timeline, condition,
   occupancy, motivation, price, mortgage, repairs, and comments to the same lead. None of those
   details is required. It is not a numbered funnel step and does not send a Meta event.
@@ -918,10 +919,13 @@ legitimate Zap replay does not consume another accepted-lead slot.
 
 The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
 address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
-Completed website contact submissions and completed Facebook intake create source-tagged alerts for
-every active user who has a valid cellphone and **Text new leads** enabled. Address-only website
-captures intentionally do not. The worker also recovers a recent completed website submission when
-a recipient was not alert-ready at intake, without sending duplicates.
+Website address capture, website contact completion, and completed Facebook intake create
+source-tagged alerts for every active user who has a valid cellphone and **Text new leads** enabled.
+Website messages say **Stage 1 filled** and **Stage 2 filled** respectively. Their separate durable
+source identities prevent duplicates, and Stage 1 uses the stable Address Only queue link because a
+temporary placeholder can later merge into an existing lead. Within the recovery window, the
+worker backfills a missing recipient in Stage 1-then-Stage 2 order without sending duplicates.
+Stage 2 also waits while the same recipient's Stage 1 delivery is retrying.
 
 The endpoint is:
 

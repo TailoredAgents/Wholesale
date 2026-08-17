@@ -28,6 +28,7 @@ from app.models.foundation import (
     Property,
     Role,
     RoleAssignment,
+    StaffLeadAlert,
     User,
 )
 from app.schemas.public_intake import (
@@ -55,7 +56,12 @@ from app.services.property_identity import (
     refresh_property_identity_keys,
 )
 from app.services.property_intelligence import enqueue_property_research
-from app.services.staff_lead_alerts import queue_staff_lead_alerts_for_lead
+from app.services.staff_lead_alerts import (
+    WEBSITE_STAGE_1_ALERT_SOURCE_TYPE,
+    WEBSITE_STAGE_ALERT_FLOW_VERSION,
+    queue_staff_lead_alerts_for_lead,
+    queue_website_stage_lead_alerts,
+)
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -483,6 +489,13 @@ def capture_public_seller_address(
         )
     )
     try:
+        db.flush()
+        queue_website_stage_lead_alerts(
+            db,
+            lead=lead,
+            submission=submission,
+            stage=1,
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -557,10 +570,11 @@ def create_public_seller_lead(
     enrichment_token = secrets.token_urlsafe(32)
     enrichment_expires_at = submitted_at + ENRICHMENT_TOKEN_LIFETIME
     organization = get_default_organization(db)
+    website_stage_flow = (
+        intake_source == "seller_website" and payload.intake_attempt_id is not None
+    )
     website_funnel_event = (
-        intake_source == "seller_website"
-        and payload.intake_attempt_id is not None
-        and payload.meta_browser_event is not None
+        website_stage_flow and payload.meta_browser_event is not None
     )
     attribution = (
         resolve_website_attribution(payload.attribution)
@@ -716,6 +730,11 @@ def create_public_seller_lead(
         "_provider_record_id": provider_record_id,
         "_matched_existing_lead": matched_existing_lead,
         "_promoted_address_capture": promoted_address_capture,
+        **(
+            {"_staff_alert_flow_version": WEBSITE_STAGE_ALERT_FLOW_VERSION}
+            if website_stage_flow
+            else {}
+        ),
     }
     if resolution.partial_submission is not None:
         submission = resolution.partial_submission
@@ -750,7 +769,23 @@ def create_public_seller_lead(
         )
         db.add(submission)
     db.flush()
-    if intake_source == "seller_website" and not matched_existing_lead:
+    if website_stage_flow:
+        # Re-evaluate Stage 1 at contact completion so a newly eligible employee
+        # still receives both ordered stage alerts. The durable source key makes
+        # this a no-op for recipients who already received or queued Stage 1.
+        queue_website_stage_lead_alerts(
+            db,
+            lead=lead,
+            submission=submission,
+            stage=1,
+        )
+        queue_website_stage_lead_alerts(
+            db,
+            lead=lead,
+            submission=submission,
+            stage=2,
+        )
+    elif intake_source == "seller_website" and not matched_existing_lead:
         queue_staff_lead_alerts_for_lead(
             db,
             lead=lead,
@@ -1111,6 +1146,7 @@ def address_capture_raw_payload(payload: WebsiteSellerAddressCaptureCreate) -> d
         "_intake_source": "seller_website",
         "_intake_status": ADDRESS_ONLY_INTAKE_STATUS,
         "_matched_existing_lead": None,
+        "_staff_alert_flow_version": WEBSITE_STAGE_ALERT_FLOW_VERSION,
     }
 
 
@@ -1344,7 +1380,11 @@ def can_discard_address_only_placeholder(
             ActivityEvent.entity_id == lead.id,
         )
     ).all()
-    if any(event.event_type != "lead.public_address_captured" for event in activities):
+    if any(
+        event.event_type
+        not in {"lead.public_address_captured", "lead.staff_sms_alert_not_queued"}
+        for event in activities
+    ):
         return False
     audits = db.scalars(
         select(AuditEvent).where(
@@ -1353,6 +1393,17 @@ def can_discard_address_only_placeholder(
         )
     ).all()
     if any(event.action != "lead.public_address_capture" for event in audits):
+        return False
+    staff_alerts = db.scalars(
+        select(StaffLeadAlert).where(StaffLeadAlert.lead_id == lead.id)
+    ).all()
+    if any(
+        alert.source_type != WEBSITE_STAGE_1_ALERT_SOURCE_TYPE
+        or alert.source_event_id != submission.id
+        or alert.meta_lead_event_id is not None
+        or alert.conversation_id is not None
+        for alert in staff_alerts
+    ):
         return False
     if has_foreign_key_references(
         db,
@@ -1363,6 +1414,7 @@ def can_discard_address_only_placeholder(
             "conversion_events",
             "lead_form_submissions",
             "offline_conversion_exports",
+            "staff_lead_alerts",
         },
     ):
         return False
@@ -1409,6 +1461,8 @@ def discard_address_only_placeholder(
 ) -> None:
     for touch in db.scalars(select(AttributionTouch).where(AttributionTouch.lead_id == lead.id)):
         touch.lead_id = surviving_lead.id
+    for alert in db.scalars(select(StaffLeadAlert).where(StaffLeadAlert.lead_id == lead.id)):
+        alert.lead_id = surviving_lead.id
     for activity in db.scalars(
         select(ActivityEvent).where(
             ActivityEvent.entity_type == "lead",
