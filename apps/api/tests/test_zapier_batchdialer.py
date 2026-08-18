@@ -309,7 +309,7 @@ def test_batchdialer_calendar_creates_one_initial_appointment_and_stores_result(
     client = TestClient(app)
     assert signed_post(client, lead_payload()).status_code == 202
     process_next_batchdialer_event(db_session, batchdialer_settings)
-    calendar_payload = {
+    calendar_payload: dict[str, object] = {
         "event_id": "batch-event-calendar-001",
         "event_type": "calendar.created",
         "occurred_at": "2026-08-17T14:35:00-04:00",
@@ -345,6 +345,59 @@ def test_batchdialer_calendar_creates_one_initial_appointment_and_stores_result(
     process_next_batchdialer_event(db_session, batchdialer_settings)
 
     assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 1
+
+
+def test_batchdialer_calendar_recovers_owner_email_mismatch_with_lead_owner(
+    db_session: Session,
+    api_db_override: None,
+    batchdialer_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session)
+    client = TestClient(app)
+    assert signed_post(client, lead_payload()).status_code == 202
+    lead_event_id = process_next_batchdialer_event(db_session, batchdialer_settings)
+    lead_event = db_session.get(ProspectingProviderEvent, lead_event_id)
+    assert lead_event is not None
+    lead = db_session.get(Lead, UUID(lead_event.payload["_stonegate"]["lead_id"]))
+    assert lead is not None and lead.assigned_user_id == owner.id
+
+    calendar_payload: dict[str, object] = {
+        "event_id": "batch-event-calendar-owner-mismatch",
+        "event_type": "calendar.created",
+        "occurred_at": "2026-08-17T14:35:00-04:00",
+        "campaign_id": CAMPAIGN_ID,
+        "provider_contact_id": "batch-contact-001",
+        "related_lead_event_id": "batch-event-lead-001",
+        "provider_appointment_id": "batch-appointment-owner-mismatch",
+        "appointment_start_at": "2026-08-19T10:00:00-04:00",
+        "appointment_owner_email": "dialer-agent@stonegatehb.com",
+    }
+    assert signed_post(client, calendar_payload).status_code == 202
+    calendar_event = db_session.scalar(
+        select(ProspectingProviderEvent).where(
+            ProspectingProviderEvent.external_event_id
+            == "batch-event-calendar-owner-mismatch"
+        )
+    )
+    assert calendar_event is not None
+
+    # Reproduce an event quarantined by the former hard email-match requirement.
+    calendar_event.processing_status = "needs_review"
+    calendar_event.error_message = "Appointment owner email does not match an active user."
+    db_session.commit()
+
+    recovered_event_id = process_next_batchdialer_event(db_session, batchdialer_settings)
+    db_session.refresh(calendar_event)
+    appointment = db_session.scalar(
+        select(Appointment).where(
+            Appointment.external_calendar_id == "batch-appointment-owner-mismatch"
+        )
+    )
+
+    assert recovered_event_id == calendar_event.id
+    assert calendar_event.processing_status == "processed"
+    assert appointment is not None
+    assert appointment.owner_user_id == owner.id
 
 
 def test_batchdialer_lead_revives_calendar_that_arrived_and_exhausted_first(

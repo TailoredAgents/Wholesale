@@ -50,6 +50,9 @@ ACTIVE_APPOINTMENT_STATUSES = {"scheduled", "rescheduled", "confirmed"}
 CALENDAR_LEAD_MISSING_ERROR = "Calendar event is waiting for its matching BatchDialer lead."
 EXPLICIT_LEAD_MISSING_ERROR = "The explicitly linked BatchDialer lead event has not arrived yet."
 LEAD_PROCESSING_PENDING_ERROR = "Related BatchDialer lead has not finished processing."
+APPOINTMENT_OWNER_EMAIL_MISMATCH_ERROR = (
+    "Appointment owner email does not match an active user."
+)
 CALENDAR_DEPENDENCY_ERRORS = frozenset(
     {
         CALENDAR_LEAD_MISSING_ERROR,
@@ -138,6 +141,14 @@ def process_next_batchdialer_event(db: Session, settings: Settings) -> UUID | No
                 (
                     (ProspectingProviderEvent.processing_status == "processing")
                     & (ProspectingProviderEvent.updated_at <= stale_cutoff)
+                ),
+                (
+                    (ProspectingProviderEvent.processing_status == "needs_review")
+                    & (ProspectingProviderEvent.event_type == "calendar.created")
+                    & (
+                        ProspectingProviderEvent.error_message
+                        == APPOINTMENT_OWNER_EMAIL_MISMATCH_ERROR
+                    )
                 ),
             ),
         )
@@ -334,7 +345,7 @@ def process_batchdialer_calendar(
         lead_id=lead.id,
         contact_id=lead.contact_id,
         property_id=lead.property_id,
-        owner_user_id=owner.id if owner is not None else lead.assigned_user_id,
+        owner_user_id=owner.id if owner is not None else None,
         appointment_type=payload.appointment_type or "acquisition_consultation",
         status="scheduled",
         scheduled_start_at=payload.appointment_start_at,
@@ -848,8 +859,11 @@ def resolve_appointment_owner(
     lead: Lead,
     payload: ZapierBatchDialerEventCreate,
 ) -> User | None:
+    assigned_owner = db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
+    if assigned_owner is not None and not assigned_owner.is_active:
+        assigned_owner = None
     if payload.appointment_owner_email is None:
-        return db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
+        return assigned_owner
     owner = db.scalar(
         select(User).where(
             User.organization_id == lead.organization_id,
@@ -858,7 +872,13 @@ def resolve_appointment_owner(
         )
     )
     if owner is None:
-        raise BatchDialerNeedsReview("Appointment owner email does not match an active user.")
+        logger.warning(
+            "batchdialer_appointment_owner_fallback",
+            lead_id=str(lead.id),
+            requested_owner_email=str(payload.appointment_owner_email),
+            fallback_owner_user_id=(str(assigned_owner.id) if assigned_owner is not None else None),
+        )
+        return assigned_owner
     return owner
 
 
