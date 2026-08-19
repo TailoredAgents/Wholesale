@@ -67,7 +67,11 @@ from app.schemas.voice import (
     VoiceRecordingRead,
     VoiceSessionRead,
 )
-from app.services.call_intelligence import enqueue_call_transcript
+from app.services.call_evidence_scope import get_authorized_recording
+from app.services.call_intelligence import (
+    enqueue_call_transcript,
+    enqueue_eligible_prospecting_call_transcript,
+)
 from app.services.communication_compliance import (
     evaluate_voice_eligibility,
     format_e164,
@@ -1319,6 +1323,7 @@ def process_voice_recording(
         recording.status = recording_status
         recording.duration_seconds = parse_int(payload.get("RecordingDuration"))
         recording.channel_count = parse_int(payload.get("RecordingChannels"))
+        recording.consent_status = call.recording_consent_status
         if recording_status == "completed":
             recording.recorded_at = completed_at
             recording.retention_expires_at = recording.retention_expires_at or retention_expires_at
@@ -1336,6 +1341,12 @@ def process_voice_recording(
             payload,
             signature_verified=signature_verified,
             signature=signature,
+        )
+        db.flush()
+        enqueue_eligible_prospecting_call_transcript(
+            db,
+            recording,
+            model_name=settings.openai_transcription_model,
         )
         db.commit()
         return processing_status
@@ -1400,19 +1411,7 @@ def get_scoped_recording(
     principal: Principal,
     recording_id: UUID,
 ) -> CallRecording | None:
-    filters = [
-        CallRecording.id == recording_id,
-        CallRecording.organization_id == principal.organization_id,
-    ]
-    if PermissionKeys.VIEW_CONVERSATIONS not in principal.permission_keys:
-        filters.append(Conversation.assigned_user_id == principal.user_id)
-    recording = db.scalar(
-        select(CallRecording)
-        .join(CallRecord, CallRecord.id == CallRecording.call_record_id)
-        .join(Conversation, Conversation.id == CallRecord.conversation_id)
-        .where(*filters)
-    )
-    return recording
+    return get_authorized_recording(db, principal, recording_id)
 
 
 def get_scoped_transcript(

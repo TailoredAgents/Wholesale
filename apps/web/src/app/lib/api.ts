@@ -795,6 +795,109 @@ export type ProspectingAttempt = {
   quality_score_basis_points: number | null;
 };
 
+export type ProspectingCallNoteEvidence = {
+  field: string;
+  segment_index: number;
+  start_seconds: number;
+  supporting_text: string;
+};
+
+export type ProspectingStructuredCallNotes = {
+  summary: string;
+  motivation: string | null;
+  timeline: string | null;
+  property_condition: string | null;
+  occupancy_status: string | null;
+  asking_price: string | null;
+  mortgage_balance: string | null;
+  mortgage_or_title: string | null;
+  repairs: string[];
+  objections: string[];
+  commitments: string[];
+  next_action: string | null;
+  follow_up_at: string | null;
+  appointment_details: string | null;
+  confidence: number;
+  evidence: ProspectingCallNoteEvidence[];
+  parcel_id?: string | null;
+  acreage?: string | null;
+  legal_description?: string | null;
+  access_or_frontage?: string | null;
+  utilities?: string | null;
+  zoning_or_use?: string | null;
+  septic_or_perc?: string | null;
+  taxes_or_hoa?: string | null;
+  terrain_or_environmental_concerns?: string | null;
+};
+
+export type ProspectingVoiceRecording = {
+  id: string;
+  call_record_id: string;
+  status: string;
+  duration_seconds: number | null;
+  channel_count: number | null;
+  consent_status: string;
+  recorded_at: string | null;
+  retention_expires_at: string | null;
+  deleted_at: string | null;
+  deletion_reason: string | null;
+};
+
+export type ProspectingCallTranscript = {
+  id: string;
+  status: string;
+  model_name: string | null;
+  language: string | null;
+  transcript_text: string | null;
+  speaker_segments: Array<{
+    index?: number;
+    speaker?: string;
+    start?: number;
+    end?: number;
+    text?: string;
+  }>;
+  confidence_score: number | null;
+  structured_notes: ProspectingStructuredCallNotes | null;
+  quick_read_summary: string | null;
+  approval_request_id: string | null;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  error_message: string | null;
+};
+
+export type ProspectingAttemptEvidenceStatus =
+  | "unavailable"
+  | "recording_ready"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "exhausted";
+
+export type ProspectingAttemptEvidenceSuggestion = {
+  question_key: string;
+  state: "suggested" | "corroborated" | "conflict";
+  current_value: unknown | null;
+  suggested_value: unknown;
+  evidence: ProspectingCallNoteEvidence[];
+};
+
+export type ProspectingAttemptEvidence = {
+  attempt_id: string;
+  call_record_id: string | null;
+  dial_leg_id: string | null;
+  recording: ProspectingVoiceRecording | null;
+  transcript: ProspectingCallTranscript | null;
+  suggestions: ProspectingAttemptEvidenceSuggestion[];
+  capabilities: {
+    can_play: boolean;
+    can_download_audio: boolean;
+    can_download_transcript: boolean;
+    can_retry: boolean;
+    can_delete: boolean;
+  };
+  evidence_status: ProspectingAttemptEvidenceStatus;
+};
+
 export type ProspectingEntry = {
   id: string;
   batch_id: string;

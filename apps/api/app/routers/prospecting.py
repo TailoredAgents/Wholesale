@@ -14,6 +14,7 @@ from app.schemas.prospecting import (
     ProspectHandoffRead,
     ProspectingAttemptComplete,
     ProspectingBrowserVoiceSessionRead,
+    ProspectingCallEvidenceRead,
     ProspectingCallQualityAnalyzeRead,
     ProspectingCallQualityRead,
     ProspectingCallQualityReviewRequest,
@@ -80,6 +81,7 @@ from app.services.prospecting_dialer import (
     update_company_dialer_switch,
     upsert_dialer_profile,
 )
+from app.services.prospecting_evidence import get_prospecting_call_evidence
 from app.services.prospecting_voice import (
     ProspectingVoiceConfigurationError,
     ProspectingVoiceConflictError,
@@ -96,6 +98,7 @@ work_dependency = require_any_permission(
     PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
 )
 manage_dependency = require_permission(PermissionKeys.MANAGE_ACQUISITION_OPERATIONS)
+recording_dependency = require_permission(PermissionKeys.ACCESS_RECORDINGS)
 
 
 def _mark_sensitive_response_no_store(response: Response) -> None:
@@ -668,6 +671,23 @@ def read_prospecting_attempt_qualification(
     if checklist is None:
         raise HTTPException(status_code=404, detail="Prospecting attempt not found.")
     return checklist
+
+
+@router.get(
+    "/attempts/{attempt_id}/evidence",
+    dependencies=[Depends(recording_dependency)],
+)
+def read_prospecting_attempt_evidence(
+    attempt_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingCallEvidenceRead:
+    _mark_sensitive_response_no_store(response)
+    evidence = get_prospecting_call_evidence(db, principal, attempt_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Prospecting attempt not found.")
+    return evidence
 
 
 @router.put("/attempts/{attempt_id}/qualification/{question_key}")

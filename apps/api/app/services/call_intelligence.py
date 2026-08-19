@@ -2,11 +2,13 @@ import json
 import re
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import and_, exists, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -30,8 +32,17 @@ from app.models.foundation import (
     CallTranscript,
     CommunicationRecord,
     Contact,
+    Conversation,
     Lead,
     Property,
+    Prospect,
+    ProspectHandoff,
+    ProspectingAttempt,
+    ProspectingCallQualityReview,
+    ProspectingDialLeg,
+    ProspectingProviderEvent,
+    ProspectingQualificationResponse,
+    ProspectingScriptVersion,
     Task,
 )
 from app.schemas.voice import (
@@ -47,6 +58,8 @@ from app.services.ai_operations import (
     mark_call_intelligence_ai_work,
     mark_call_intelligence_reviewed,
 )
+from app.services.call_evidence_scope import get_authorized_recording
+from app.services.call_recording_evidence import select_preferred_call_recording
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
     lock_organization_lead,
@@ -119,6 +132,34 @@ class CallIntelligenceError(RuntimeError):
     pass
 
 
+class PermanentCallIntelligenceError(CallIntelligenceError):
+    """A transcript failure that cannot be repaired by retrying the provider."""
+
+
+PROSPECTING_TRANSCRIPT_CONTACT_OUTCOMES = {
+    "callback_requested",
+    "follow_up",
+    "interested",
+    "appointment_set",
+    "not_interested",
+    "do_not_call",
+}
+
+
+@dataclass(frozen=True)
+class ProspectingTranscriptEligibility:
+    state: str
+    reason: str
+    call: CallRecord | None = None
+    attempt: ProspectingAttempt | None = None
+    leg: ProspectingDialLeg | None = None
+    prospect: Prospect | None = None
+
+    @property
+    def eligible(self) -> bool:
+        return self.state == "eligible"
+
+
 def call_notes_model_for_asset(asset_class: object) -> type[StructuredCallNotes]:
     if normalize_asset_class(asset_class) == LAND_ASSET_CLASS:
         return LandStructuredCallNotes
@@ -154,10 +195,179 @@ def resolve_transcript_asset_class(db: Session, transcript: CallTranscript) -> s
     lead = db.get(Lead, call.lead_id) if call is not None and call.lead_id is not None else None
     if lead is not None:
         return normalize_asset_class(lead.asset_class)
+    prospect = (
+        db.get(Prospect, call.prospect_id)
+        if call is not None and call.prospect_id is not None
+        else None
+    )
+    if prospect is not None:
+        return normalize_asset_class(prospect.asset_class)
     return normalize_asset_class(
         (transcript.transcript_metadata or {}).get("asset_class"),
         default=HOUSE_ASSET_CLASS,
     )
+
+
+def prospecting_transcript_eligibility(
+    db: Session,
+    recording: CallRecording,
+) -> ProspectingTranscriptEligibility:
+    """Validate the entire signed cold-call graph before audio can leave Twilio."""
+
+    call = db.get(CallRecord, recording.call_record_id)
+    if call is None or call.organization_id != recording.organization_id:
+        return ProspectingTranscriptEligibility("invalid", "Call record is unavailable.")
+    if recording.deleted_at is not None or recording.status == "deleted":
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "The retained call audio has been deleted.",
+            call=call,
+        )
+    if recording.status != "completed":
+        if recording.status in {"in-progress", "processing", "queued"}:
+            return ProspectingTranscriptEligibility(
+                "pending",
+                "The recording is still being processed.",
+                call=call,
+            )
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "The recording ended without completed media.",
+            call=call,
+        )
+    if not recording.provider_recording_id:
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "The completed recording is missing its provider identity.",
+            call=call,
+        )
+    if recording.consent_status not in {"disclosed", "one_party_consent"}:
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "The completed recording lacks an authorized consent record.",
+            call=call,
+        )
+    if call.prospect_id is None:
+        return ProspectingTranscriptEligibility("eligible", "Warm CRM call.", call=call)
+    if not all((call.prospect_id, call.prospecting_attempt_id, call.prospecting_dial_leg_id)):
+        return ProspectingTranscriptEligibility(
+            "invalid", "Cold-call correlation identifiers are incomplete.", call=call
+        )
+    attempt = db.get(ProspectingAttempt, call.prospecting_attempt_id)
+    leg = db.get(ProspectingDialLeg, call.prospecting_dial_leg_id)
+    prospect = db.get(Prospect, call.prospect_id)
+    if attempt is None or leg is None or prospect is None:
+        return ProspectingTranscriptEligibility(
+            "invalid", "Cold-call graph is incomplete.", call=call
+        )
+    if not all(
+        (
+            call.provider_call_id,
+            attempt.provider_call_id,
+            leg.provider_call_id,
+            attempt.provider_recording_id,
+            leg.provider_recording_id,
+        )
+    ):
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "Cold-call provider correlation is incomplete.",
+            call=call,
+            attempt=attempt,
+            leg=leg,
+            prospect=prospect,
+        )
+    graph_matches = all(
+        (
+            attempt.organization_id == recording.organization_id,
+            leg.organization_id == recording.organization_id,
+            prospect.organization_id == recording.organization_id,
+            attempt.prospect_id == prospect.id,
+            leg.prospect_id == prospect.id,
+            leg.attempt_id == attempt.id,
+            attempt.call_record_id == call.id,
+            leg.call_record_id == call.id,
+            attempt.batch_entry_id == leg.batch_entry_id,
+            attempt.provider_call_id == call.provider_call_id,
+            leg.provider_call_id == call.provider_call_id,
+            attempt.provider_recording_id == recording.provider_recording_id,
+            leg.provider_recording_id == recording.provider_recording_id,
+        )
+    )
+    if not graph_matches:
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "Cold-call graph identifiers conflict.",
+            call=call,
+            attempt=attempt,
+            leg=leg,
+            prospect=prospect,
+        )
+    signed_recording_event = db.scalar(
+        select(ProspectingProviderEvent.id).where(
+            ProspectingProviderEvent.organization_id == recording.organization_id,
+            ProspectingProviderEvent.provider == recording.provider,
+            ProspectingProviderEvent.attempt_id == attempt.id,
+            ProspectingProviderEvent.dial_leg_id == leg.id,
+            ProspectingProviderEvent.provider_recording_id == recording.provider_recording_id,
+            ProspectingProviderEvent.event_type == "recording.completed",
+            ProspectingProviderEvent.signature_verified.is_(True),
+        )
+    )
+    if signed_recording_event is None:
+        return ProspectingTranscriptEligibility(
+            "invalid",
+            "No verified provider recording callback matches the cold-call graph.",
+            call=call,
+            attempt=attempt,
+            leg=leg,
+            prospect=prospect,
+        )
+    if attempt.status != "completed" or leg.completed_at is None:
+        return ProspectingTranscriptEligibility(
+            "pending",
+            "The caller has not completed wrap-up.",
+            call=call,
+            attempt=attempt,
+            leg=leg,
+            prospect=prospect,
+        )
+    if (
+        attempt.contact_made is not True
+        or attempt.outcome not in PROSPECTING_TRANSCRIPT_CONTACT_OUTCOMES
+        or leg.connected_at is None
+        or leg.status != "completed"
+        or attempt.party_classification == "wrong_party"
+        or leg.party_classification == "wrong_party"
+    ):
+        return ProspectingTranscriptEligibility(
+            "ineligible",
+            "Only completed, connected seller conversations are transcribed.",
+            call=call,
+            attempt=attempt,
+            leg=leg,
+            prospect=prospect,
+        )
+    return ProspectingTranscriptEligibility(
+        "eligible",
+        "Completed connected seller conversation.",
+        call=call,
+        attempt=attempt,
+        leg=leg,
+        prospect=prospect,
+    )
+
+
+def enqueue_eligible_prospecting_call_transcript(
+    db: Session,
+    recording: CallRecording,
+    *,
+    model_name: str,
+) -> CallTranscript | None:
+    eligibility = prospecting_transcript_eligibility(db, recording)
+    if not eligibility.eligible:
+        return None
+    return enqueue_call_transcript(db, recording, model_name=model_name)
 
 
 def enqueue_call_transcript(
@@ -191,9 +401,18 @@ def enqueue_call_transcript(
         error_message=None,
         transcript_metadata={"attempts": 0, "human_review_required": False},
     )
-    db.add(transcript)
-    db.flush()
-    return transcript
+    try:
+        with db.begin_nested():
+            db.add(transcript)
+            db.flush()
+        return transcript
+    except IntegrityError:
+        existing = db.scalar(
+            select(CallTranscript).where(CallTranscript.recording_id == recording.id)
+        )
+        if existing is None:
+            raise CallIntelligenceError("The call transcript could not be queued safely.") from None
+        return existing
 
 
 def process_next_call_transcript(
@@ -220,6 +439,33 @@ def process_next_call_transcript(
     transcript: CallTranscript | None = None
     exhausted_legacy_jobs = False
     for item in candidates:
+        item_recording = db.get(CallRecording, item.recording_id)
+        if item_recording is None:
+            item.status = "exhausted"
+            item.error_message = "The call recording is unavailable."
+            item.transcript_metadata = {
+                **(item.transcript_metadata or {}),
+                "permanent_failure": True,
+                "exhausted_at": now.isoformat(),
+                "next_retry_at": None,
+            }
+            exhausted_legacy_jobs = True
+            continue
+        eligibility = prospecting_transcript_eligibility(db, item_recording)
+        if eligibility.state == "pending":
+            continue
+        if eligibility.state in {"invalid", "ineligible"}:
+            item.status = "exhausted"
+            item.error_message = eligibility.reason
+            item.transcript_metadata = {
+                **(item.transcript_metadata or {}),
+                "permanent_failure": True,
+                "eligibility_state": eligibility.state,
+                "exhausted_at": now.isoformat(),
+                "next_retry_at": None,
+            }
+            exhausted_legacy_jobs = True
+            continue
         metadata = item.transcript_metadata or {}
         attempts = int(metadata.get("attempts", 0))
         if attempts >= settings.call_transcription_max_attempts:
@@ -240,25 +486,86 @@ def process_next_call_transcript(
         if transcript is None:
             db.commit()
     if transcript is None:
-        recording = db.scalar(
+        recordings = db.scalars(
             select(CallRecording)
+            .join(CallRecord, CallRecord.id == CallRecording.call_record_id)
+            .outerjoin(
+                ProspectingAttempt,
+                ProspectingAttempt.id == CallRecord.prospecting_attempt_id,
+            )
+            .outerjoin(
+                ProspectingDialLeg,
+                ProspectingDialLeg.id == CallRecord.prospecting_dial_leg_id,
+            )
+            .outerjoin(Prospect, Prospect.id == CallRecord.prospect_id)
             .outerjoin(CallTranscript, CallTranscript.recording_id == CallRecording.id)
             .where(
                 CallRecording.status == "completed",
                 CallRecording.deleted_at.is_(None),
                 CallRecording.provider_recording_id.is_not(None),
+                CallRecording.provider_recording_id != "",
+                CallRecording.consent_status.in_({"disclosed", "one_party_consent"}),
+                CallRecord.organization_id == CallRecording.organization_id,
                 CallTranscript.id.is_(None),
+                or_(
+                    CallRecord.prospect_id.is_(None),
+                    and_(
+                        CallRecord.prospect_id.is_not(None),
+                        Prospect.organization_id == CallRecording.organization_id,
+                        ProspectingAttempt.organization_id == CallRecording.organization_id,
+                        ProspectingDialLeg.organization_id == CallRecording.organization_id,
+                        ProspectingAttempt.status == "completed",
+                        ProspectingAttempt.completed_at.is_not(None),
+                        ProspectingAttempt.contact_made.is_(True),
+                        ProspectingAttempt.party_classification != "wrong_party",
+                        ProspectingAttempt.outcome.in_(PROSPECTING_TRANSCRIPT_CONTACT_OUTCOMES),
+                        ProspectingDialLeg.status == "completed",
+                        ProspectingDialLeg.party_classification != "wrong_party",
+                        ProspectingDialLeg.connected_at.is_not(None),
+                        ProspectingDialLeg.completed_at.is_not(None),
+                        ProspectingDialLeg.attempt_id == ProspectingAttempt.id,
+                        ProspectingDialLeg.prospect_id == CallRecord.prospect_id,
+                        ProspectingAttempt.prospect_id == CallRecord.prospect_id,
+                        ProspectingDialLeg.batch_entry_id == ProspectingAttempt.batch_entry_id,
+                        ProspectingDialLeg.call_record_id == CallRecord.id,
+                        ProspectingAttempt.call_record_id == CallRecord.id,
+                        CallRecord.provider_call_id.is_not(None),
+                        CallRecord.provider_call_id != "",
+                        ProspectingDialLeg.provider_call_id == CallRecord.provider_call_id,
+                        ProspectingAttempt.provider_call_id == CallRecord.provider_call_id,
+                        ProspectingDialLeg.provider_recording_id
+                        == CallRecording.provider_recording_id,
+                        ProspectingAttempt.provider_recording_id
+                        == CallRecording.provider_recording_id,
+                        exists().where(
+                            ProspectingProviderEvent.organization_id
+                            == CallRecording.organization_id,
+                            ProspectingProviderEvent.provider == CallRecording.provider,
+                            ProspectingProviderEvent.attempt_id == ProspectingAttempt.id,
+                            ProspectingProviderEvent.dial_leg_id == ProspectingDialLeg.id,
+                            ProspectingProviderEvent.provider_recording_id
+                            == CallRecording.provider_recording_id,
+                            ProspectingProviderEvent.event_type == "recording.completed",
+                            ProspectingProviderEvent.signature_verified.is_(True),
+                        ),
+                    ),
+                ),
             )
             .order_by(CallRecording.created_at.asc())
-            .limit(1)
-        )
-        if recording is None:
+            .limit(100)
+        ).all()
+        for recording in recordings:
+            eligibility = prospecting_transcript_eligibility(db, recording)
+            if not eligibility.eligible:
+                continue
+            transcript = enqueue_call_transcript(
+                db,
+                recording,
+                model_name=settings.openai_transcription_model,
+            )
+            break
+        if transcript is None:
             return None
-        transcript = enqueue_call_transcript(
-            db,
-            recording,
-            model_name=settings.openai_transcription_model,
-        )
     transcript.status = "processing"
     transcript.error_message = None
     db.commit()
@@ -356,12 +663,27 @@ def process_call_transcript(
         recording = db.get(CallRecording, transcript.recording_id)
         if recording is None or not recording.provider_recording_id:
             raise CallIntelligenceError("The call recording is unavailable.")
+        if recording.organization_id != transcript.organization_id:
+            raise PermanentCallIntelligenceError(
+                "Transcript and recording organization context conflict."
+            )
         call = db.get(CallRecord, recording.call_record_id)
         if call is None:
             raise CallIntelligenceError("The call record is unavailable.")
+        if call.organization_id != transcript.organization_id:
+            raise PermanentCallIntelligenceError(
+                "Transcript and call organization context conflict."
+            )
+        eligibility = prospecting_transcript_eligibility(db, recording)
+        if call.prospect_id is not None and not eligibility.eligible:
+            raise PermanentCallIntelligenceError(eligibility.reason)
         lead = db.get(Lead, call.lead_id) if call.lead_id is not None else None
+        prospect = eligibility.prospect if call.prospect_id is not None else None
+        prospecting_attempt = eligibility.attempt if prospect is not None else None
         asset_class = normalize_asset_class(
-            lead.asset_class if lead is not None else HOUSE_ASSET_CLASS
+            lead.asset_class
+            if lead is not None
+            else (prospect.asset_class if prospect is not None else HOUSE_ASSET_CLASS)
         )
         notes_model = call_notes_model_for_asset(asset_class)
         if lead is not None:
@@ -418,9 +740,15 @@ def process_call_transcript(
         audio_cost: AiCostEstimate | None = None
         transcription_performed = not bool((transcript.transcript_text or "").strip())
         if transcription_performed:
+            if call.prospect_id is not None:
+                eligibility = prospecting_transcript_eligibility(db, recording)
+                if not eligibility.eligible:
+                    raise PermanentCallIntelligenceError(eligibility.reason)
             media = download_twilio_recording(settings, recording.provider_recording_id)
             if len(media.content) > settings.call_transcription_max_audio_bytes:
-                raise CallIntelligenceError("Call recording exceeds OpenAI's 25 MB upload limit.")
+                raise PermanentCallIntelligenceError(
+                    "Call recording exceeds OpenAI's 25 MB upload limit."
+                )
             audio_result = client.create_audio_transcription(
                 model=settings.openai_transcription_model,
                 audio=media.content,
@@ -540,6 +868,16 @@ def process_call_transcript(
             if lead is not None and lead_is_active
             else {}
         )
+        prospecting_suggestions = (
+            apply_prospecting_transcript_suggestions(
+                db,
+                transcript=transcript,
+                attempt=prospecting_attempt,
+                notes=notes,
+            )
+            if prospecting_attempt is not None
+            else []
+        )
         processing_completed_at = datetime.now(UTC)
         transcript.confidence_score = confidence
         transcript.status = "processing" if lead_is_active else "completed"
@@ -553,7 +891,11 @@ def process_call_transcript(
             "notes_model": settings.openai_default_model,
             "human_review_required": False,
             "note_posting_mode": "automatic",
-            "conversation_context": "seller" if lead is not None else "buyer",
+            "conversation_context": (
+                "seller"
+                if lead is not None
+                else ("prospecting_seller" if prospect is not None else "buyer")
+            ),
             "asset_class": asset_class,
             "evidence_coverage_percent": evidence_coverage_percent(notes),
             "crm_auto_populated_at": (
@@ -561,6 +903,10 @@ def process_call_transcript(
             ),
             "crm_auto_populated_values": auto_populated_values,
             "closed_lead_historical_evidence": bool(lead is not None and not lead_is_active),
+            "prospecting_attempt_id": (
+                str(prospecting_attempt.id) if prospecting_attempt is not None else None
+            ),
+            "prospecting_suggestions": prospecting_suggestions,
             "ai_run_id": str(run.id),
         }
         if lead is not None and lead_is_active:
@@ -591,6 +937,12 @@ def process_call_transcript(
                 )
             auto_approve_call_notes(db, transcript, call, lead, notes)
             db.flush()
+        if prospecting_attempt is not None:
+            mark_prospecting_call_quality_transcript_ready(
+                db,
+                attempt=prospecting_attempt,
+                transcript=transcript,
+            )
         run.status = "completed"
         run.output_summary = notes.summary[:4000]
         run.input_tokens = input_tokens
@@ -621,6 +973,12 @@ def process_call_transcript(
                 run_id=run.id,
                 summary=notes.summary,
             )
+        if prospecting_attempt is not None:
+            db.flush()
+            link_accepted_prospecting_evidence_for_attempt(
+                db,
+                prospecting_attempt.id,
+            )
         db.commit()
         db.refresh(transcript)
         return transcript
@@ -638,7 +996,8 @@ def process_call_transcript(
         transcript.status = "failed"
         transcript.error_message = str(exc)[:2000]
         failed_at = datetime.now(UTC)
-        exhausted = attempts >= settings.call_transcription_max_attempts
+        permanent_failure = isinstance(exc, PermanentCallIntelligenceError)
+        exhausted = permanent_failure or attempts >= settings.call_transcription_max_attempts
         retry_delay_seconds = min(30 * (2 ** min(attempts - 1, 5)), 900)
         transcript.transcript_metadata = {
             **(transcript.transcript_metadata or {}),
@@ -650,6 +1009,7 @@ def process_call_transcript(
                 else (failed_at + timedelta(seconds=retry_delay_seconds)).isoformat()
             ),
             "exhausted_at": failed_at.isoformat() if exhausted else None,
+            "permanent_failure": permanent_failure,
         }
         if exhausted:
             transcript.status = "exhausted"
@@ -692,6 +1052,261 @@ def call_transcript_retry_due(
     return retry_at <= (now or datetime.now(UTC))
 
 
+PROSPECTING_QUESTION_NOTE_ALIASES = {
+    "condition": "property_condition",
+    "property_condition": "property_condition",
+    "occupancy": "occupancy_status",
+    "occupancy_status": "occupancy_status",
+    "asking_price": "asking_price",
+    "price": "asking_price",
+    "mortgage": "mortgage_balance",
+    "mortgage_balance": "mortgage_balance",
+    "title": "mortgage_or_title",
+    "mortgage_or_title": "mortgage_or_title",
+    "timeline": "timeline",
+    "motivation": "motivation",
+    **{field: field for field in LAND_QUALIFICATION_FIELDS},
+}
+
+
+def apply_prospecting_transcript_suggestions(
+    db: Session,
+    *,
+    transcript: CallTranscript,
+    attempt: ProspectingAttempt,
+    notes: CallNotes,
+) -> list[dict[str, object]]:
+    """Save transcript-grounded suggestions without replacing caller-entered facts."""
+
+    script = db.get(ProspectingScriptVersion, attempt.script_version_id)
+    if (
+        script is None
+        or script.organization_id != attempt.organization_id
+        or transcript.organization_id != attempt.organization_id
+    ):
+        raise PermanentCallIntelligenceError(
+            "The transcript does not match the attempt's pinned caller script."
+        )
+    questions = {
+        str(item.get("key") or "").strip(): item
+        for item in (script.qualification_questions or [])
+        if isinstance(item, dict) and str(item.get("key") or "").strip()
+    }
+    responses = {
+        item.question_key: item
+        for item in db.scalars(
+            select(ProspectingQualificationResponse)
+            .where(ProspectingQualificationResponse.attempt_id == attempt.id)
+            .with_for_update()
+        ).all()
+    }
+    notes_payload = notes.model_dump(mode="json")
+    evidence_by_field: dict[str, list[dict[str, object]]] = {}
+    for item in notes.evidence:
+        evidence_by_field.setdefault(item.field, []).append(item.model_dump(mode="json"))
+    suggestions: list[dict[str, object]] = []
+    now = datetime.now(UTC)
+    legacy_answers = dict(attempt.qualification_answers or {})
+    for question_key, question in questions.items():
+        note_field = PROSPECTING_QUESTION_NOTE_ALIASES.get(question_key.lower())
+        if note_field is None or note_field not in notes_payload:
+            continue
+        suggested_value = notes_payload.get(note_field)
+        evidence = evidence_by_field.get(note_field, [])
+        if suggested_value in (None, "", []) or not evidence:
+            continue
+        response = responses.get(question_key)
+        suggestion_state = "suggested"
+        legacy_value = legacy_answers.get(question_key)
+        current_value: object | None = (
+            response.answer_value
+            if response is not None and response.answer_value not in (None, "", [])
+            else legacy_value
+        )
+        if response is None:
+            legacy_value_present = legacy_value not in (None, "", [])
+            response = ProspectingQualificationResponse(
+                organization_id=attempt.organization_id,
+                attempt_id=attempt.id,
+                script_version_id=script.id,
+                question_key=question_key,
+                state="answered" if legacy_value_present else "needs_follow_up",
+                answer_value=legacy_value if legacy_value_present else None,
+                source="legacy_completion" if legacy_value_present else "ai_transcript",
+                actor_user_id=attempt.caller_user_id if legacy_value_present else None,
+                is_required=bool(question.get("required_for_handoff")),
+                captured_at=(attempt.completed_at or now) if legacy_value_present else now,
+                transcript_evidence={"items": evidence},
+                response_metadata={
+                    "revision": 1 if legacy_value_present else 0,
+                    "materialized_from_attempt_answers": legacy_value_present,
+                },
+            )
+            db.add(response)
+            responses[question_key] = response
+        human_value_present = current_value not in (None, "", [])
+        if human_value_present:
+            current_normalized = normalized_suggestion_value(current_value)
+            suggested_normalized = normalized_suggestion_value(suggested_value)
+            if current_normalized == suggested_normalized:
+                suggestion_state = "corroborated"
+            else:
+                suggestion_state = "conflict"
+                response.state = "conflict"
+        if response is not None:
+            response.transcript_evidence = {"items": evidence}
+        response.response_metadata = {
+            **dict(response.response_metadata or {}),
+            "ai_suggestion": {
+                "state": suggestion_state,
+                "value": suggested_value,
+                "note_field": note_field,
+                "transcript_id": str(transcript.id),
+                "recorded_at": now.isoformat(),
+            },
+        }
+        suggestions.append(
+            {
+                "question_key": question_key,
+                "state": suggestion_state,
+                "current_value": current_value,
+                "suggested_value": suggested_value,
+                "evidence": evidence,
+            }
+        )
+    return suggestions
+
+
+def normalized_suggestion_value(value: object) -> str:
+    if isinstance(value, str):
+        return " ".join(value.lower().split())
+    return json.dumps(value, sort_keys=True, default=str).lower()
+
+
+def mark_prospecting_call_quality_transcript_ready(
+    db: Session,
+    *,
+    attempt: ProspectingAttempt,
+    transcript: CallTranscript,
+) -> None:
+    review = db.scalar(
+        select(ProspectingCallQualityReview)
+        .where(
+            ProspectingCallQualityReview.organization_id == attempt.organization_id,
+            ProspectingCallQualityReview.attempt_id == attempt.id,
+        )
+        .with_for_update()
+    )
+    if review is None:
+        return
+    review.call_record_id = attempt.call_record_id
+    review.transcript_id = transcript.id
+    if review.status == "awaiting_transcript":
+        review.status = "ready_for_analysis"
+
+
+def link_accepted_prospecting_evidence_for_attempt(
+    db: Session,
+    attempt_id: UUID,
+) -> CommunicationRecord | None:
+    """Link one completed cold-call transcript into the accepted seller timeline."""
+
+    handoff = db.scalar(
+        select(ProspectHandoff).where(ProspectHandoff.attempt_id == attempt_id).with_for_update()
+    )
+    if handoff is None or handoff.status != "accepted":
+        return None
+    attempt = db.get(ProspectingAttempt, attempt_id)
+    if attempt is None or attempt.organization_id != handoff.organization_id:
+        return None
+    call = db.get(CallRecord, attempt.call_record_id) if attempt.call_record_id else None
+    if call is None or call.organization_id != handoff.organization_id:
+        return None
+    recording = select_preferred_call_recording(
+        db,
+        organization_id=handoff.organization_id,
+        call_record_id=call.id,
+    )
+    if recording is None:
+        return None
+    transcript = db.scalar(
+        select(CallTranscript).where(
+            CallTranscript.organization_id == handoff.organization_id,
+            CallTranscript.recording_id == recording.id,
+            CallTranscript.status.in_(("completed", "approved")),
+        )
+    )
+    if transcript is None:
+        return None
+    raw_notes = (transcript.transcript_metadata or {}).get("structured_notes")
+    if not raw_notes:
+        return None
+    lead = db.get(Lead, handoff.lead_id)
+    if lead is None or lead.organization_id != handoff.organization_id:
+        return None
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.organization_id == handoff.organization_id,
+            Conversation.lead_id == lead.id,
+        )
+    )
+    if conversation is None or conversation.contact_id != lead.contact_id:
+        return None
+    provider_message_id = f"prospecting-call-notes:{transcript.id}"
+    existing = db.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.organization_id == handoff.organization_id,
+            CommunicationRecord.provider == "openai_prospecting",
+            CommunicationRecord.provider_message_id == provider_message_id,
+        )
+    )
+    if existing is not None:
+        return existing
+    notes = validate_call_notes_payload_for_asset(raw_notes, lead.asset_class)
+    now = datetime.now(UTC)
+    communication = CommunicationRecord(
+        organization_id=handoff.organization_id,
+        conversation_id=conversation.id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        source_call_record_id=call.id,
+        actor_user_id=attempt.caller_user_id,
+        direction="internal",
+        channel="note",
+        status="logged",
+        provider="openai_prospecting",
+        provider_message_id=provider_message_id,
+        subject="Prospecting call summary",
+        body=format_approved_notes(notes, max_length=4000),
+        occurred_at=(
+            call.ended_at or call.answered_at or call.started_at or transcript.updated_at or now
+        ),
+        external_payload=None,
+        communication_metadata={
+            "source": "prospecting_call_intelligence",
+            "attempt_id": str(attempt.id),
+            "prospect_id": str(attempt.prospect_id),
+            "handoff_id": str(handoff.id),
+            "recording_id": str(recording.id),
+            "transcript_id": str(transcript.id),
+        },
+    )
+    db.add(communication)
+    db.flush()
+    conversation.last_activity_at = now
+    db.add(
+        ActivityEvent(
+            organization_id=handoff.organization_id,
+            actor_user_id=attempt.caller_user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="prospecting.call_intelligence_linked",
+            summary="Prospecting call notes and evidence were linked to the seller record.",
+        )
+    )
+    return communication
+
+
 def retry_call_transcript(
     db: Session,
     principal: Principal,
@@ -700,15 +1315,30 @@ def retry_call_transcript(
     """Queue a failed transcript again after an authorized human requests it."""
 
     transcript = db.scalar(
-        select(CallTranscript).where(
+        select(CallTranscript)
+        .where(
             CallTranscript.id == transcript_id,
             CallTranscript.organization_id == principal.organization_id,
         )
+        .execution_options(populate_existing=True)
+        .with_for_update()
     )
     if transcript is None:
         return None
+    recording = get_authorized_recording(db, principal, transcript.recording_id)
+    if recording is None:
+        return None
     if transcript.status not in {"failed", "exhausted"}:
         raise ValueError("Only a failed call transcript can be retried.")
+    if bool((transcript.transcript_metadata or {}).get("permanent_failure")):
+        raise ValueError("This call transcript has a permanent failure and cannot be retried.")
+    eligibility = prospecting_transcript_eligibility(db, recording)
+    if not eligibility.eligible:
+        raise ValueError(f"This call transcript cannot be retried: {eligibility.reason}")
+    if transcript.status not in {"failed", "exhausted"}:
+        raise ValueError("Only a failed call transcript can be retried.")
+    if bool((transcript.transcript_metadata or {}).get("permanent_failure")):
+        raise ValueError("This call transcript has a permanent failure and cannot be retried.")
     previous_status = transcript.status
     previous_metadata = dict(transcript.transcript_metadata or {})
     previous_attempts = int(previous_metadata.get("attempts", 0))
@@ -1012,13 +1642,20 @@ def build_call_notes_prompt(
     *,
     asset_class: str | None = None,
 ) -> str:
-    contact = db.get(Contact, call.contact_id)
-    lead = db.get(Lead, call.lead_id)
+    contact = db.get(Contact, call.contact_id) if call.contact_id is not None else None
+    lead = db.get(Lead, call.lead_id) if call.lead_id is not None else None
+    prospect = db.get(Prospect, call.prospect_id) if call.prospect_id is not None else None
     property_record = db.get(Property, lead.property_id) if lead else None
     segments = transcript.speaker_segments or []
-    contact_name = contact.preferred_name or contact.legal_name if contact else "Unknown"
+    contact_name = (
+        (contact.preferred_name or contact.legal_name)
+        if contact
+        else (prospect.legal_name if prospect is not None else "Unknown")
+    )
     resolved_asset_class = normalize_asset_class(
-        asset_class if asset_class is not None else (lead.asset_class if lead else None)
+        asset_class
+        if asset_class is not None
+        else (lead.asset_class if lead else (prospect.asset_class if prospect else None))
     )
     property_payload: dict[str, object] | None = (
         {
@@ -1027,17 +1664,35 @@ def build_call_notes_prompt(
             "state": property_record.state,
         }
         if property_record
-        else None
+        else (
+            {
+                "address": prospect.street_address,
+                "city": prospect.city,
+                "state": prospect.state_code,
+                "postal_code": prospect.postal_code,
+            }
+            if prospect is not None
+            else None
+        )
     )
     if property_payload is not None and resolved_asset_class == LAND_ASSET_CLASS:
+        prospect_source = prospect.source_payload or {} if prospect is not None else {}
         property_payload = {
             **property_payload,
-            "parcel_id": property_record.parcel_id if property_record else None,
+            "parcel_id": (
+                property_record.parcel_id
+                if property_record
+                else (
+                    prospect_source.get("parcel_id")
+                    or prospect_source.get("apn")
+                    or prospect_source.get("parcel_number")
+                )
+            ),
         }
     payload: dict[str, object] = {
-        "party_type": "seller" if lead is not None else "buyer",
-        "seller": contact_name if lead is not None else None,
-        "buyer": contact_name if lead is None else None,
+        "party_type": "seller" if lead is not None or prospect is not None else "buyer",
+        "seller": contact_name if lead is not None or prospect is not None else None,
+        "buyer": contact_name if lead is None and prospect is None else None,
         "property": property_payload,
         "call_direction": call.direction,
         "segments": segments,

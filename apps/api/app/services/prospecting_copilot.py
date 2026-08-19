@@ -15,7 +15,6 @@ from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AiAgentDefinition,
     AuditEvent,
-    CallRecording,
     CallTranscript,
     Campaign,
     Prospect,
@@ -48,6 +47,7 @@ from app.schemas.prospecting import (
 )
 from app.services.acquisition_operations import create_notification, prospect_property_metadata
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
+from app.services.call_recording_evidence import select_preferred_call_recording
 
 MANAGER_ROLE_KEYS = {
     "owner",
@@ -636,25 +636,34 @@ def _approved_transcript(
 ) -> CallTranscript | None:
     if attempt.call_record_id is None:
         return None
-    recording = db.scalar(
-        select(CallRecording).where(
-            CallRecording.organization_id == attempt.organization_id,
-            CallRecording.call_record_id == attempt.call_record_id,
-            CallRecording.deleted_at.is_(None),
-            CallRecording.consent_status.in_(("disclosed", "one_party_consent")),
-        )
+    recording = select_preferred_call_recording(
+        db,
+        organization_id=attempt.organization_id,
+        call_record_id=attempt.call_record_id,
     )
-    if recording is None:
+    if (
+        recording is None
+        or recording.deleted_at is not None
+        or recording.status == "deleted"
+        or recording.consent_status not in {"disclosed", "one_party_consent"}
+    ):
         return None
-    return db.scalar(
+    transcript = db.scalar(
         select(CallTranscript)
         .where(
             CallTranscript.organization_id == attempt.organization_id,
             CallTranscript.recording_id == recording.id,
-            CallTranscript.status == "approved",
+            CallTranscript.status.in_(("completed", "approved")),
         )
-        .order_by(CallTranscript.approved_at.desc())
+        .order_by(CallTranscript.updated_at.desc())
     )
+    if transcript is None:
+        return None
+    if transcript.status != "approved" and not (transcript.transcript_metadata or {}).get(
+        "structured_notes"
+    ):
+        return None
+    return transcript
 
 
 def _deterministic_scores(
@@ -872,14 +881,17 @@ def _priority_band(score: int) -> str:
 
 def _property_address(prospect: Prospect) -> str | None:
     parcel_id, county, _ = prospect_property_metadata(prospect)
-    return property_identity_label(
-        street_address=prospect.street_address,
-        city=prospect.city,
-        state=prospect.state_code,
-        postal_code=prospect.postal_code,
-        parcel_id=parcel_id,
-        county=county,
-    ) or None
+    return (
+        property_identity_label(
+            street_address=prospect.street_address,
+            city=prospect.city,
+            state=prospect.state_code,
+            postal_code=prospect.postal_code,
+            parcel_id=parcel_id,
+            county=county,
+        )
+        or None
+    )
 
 
 def _audit(

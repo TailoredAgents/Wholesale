@@ -16,11 +16,13 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ProspectHandoff,
+  ProspectingAttempt,
   ProspectingAttemptCompletionPayload,
   ProspectingCallQuality,
   ProspectingCallQualityOutput,
@@ -51,7 +53,26 @@ import {
   type ProspectingWrapUpReceipt,
   validateProspectingWrapUp,
 } from "./prospecting-wrap-up-state";
+import {
+  INITIAL_EVIDENCE_PRESENTATION,
+  type EvidenceStatusPresentation,
+} from "./prospecting-call-evidence-state";
 import styles from "./prospecting.module.css";
+
+const ProspectingCallEvidence = dynamic(
+  () =>
+    import("./prospecting-call-evidence").then(
+      (module) => module.ProspectingCallEvidence,
+    ),
+  {
+    loading: () => (
+      <p aria-live="polite" className={styles.evidenceLoading} role="status">
+        Loading call evidence...
+      </p>
+    ),
+    ssr: false,
+  },
+);
 
 type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
@@ -113,6 +134,53 @@ function localDateTimeToIso(value: string) {
 function dateToLocalInputValue(value: Date) {
   const localValue = new Date(value.getTime() - value.getTimezoneOffset() * 60 * 1000);
   return localValue.toISOString().slice(0, 16);
+}
+
+function CompletedAttemptHistoryItem({ attempt }: { attempt: ProspectingAttempt }) {
+  const [expanded, setExpanded] = useState(false);
+  const [presentation, setPresentation] = useState<EvidenceStatusPresentation>(
+    INITIAL_EVIDENCE_PRESENTATION,
+  );
+  const updatePresentation = useCallback(
+    (nextPresentation: EvidenceStatusPresentation) => setPresentation(nextPresentation),
+    [],
+  );
+
+  return (
+    <details
+      className={styles.attemptHistoryItem}
+      onToggle={(event) => {
+        if (event.target === event.currentTarget) {
+          setExpanded(event.currentTarget.open);
+        }
+      }}
+    >
+      <summary>
+        <span className={styles.attemptHistoryOutcome}>
+          <strong>{attempt.outcome ? labelize(attempt.outcome) : "Attempt"}</strong>
+          <em data-tone={presentation.tone}>{presentation.label}</em>
+        </span>
+        <span>{formatDateTime(attempt.completed_at)}</span>
+      </summary>
+      <div className={styles.attemptHistoryBody}>
+        {attempt.callback_at ? <p>Callback: {formatDateTime(attempt.callback_at)}</p> : null}
+        {attempt.notes ? <p>{attempt.notes}</p> : null}
+        {Object.entries(attempt.qualification_answers).length ? (
+          <dl>
+            {Object.entries(attempt.qualification_answers).map(([key, answer]) => (
+              <div key={key}><dt>{labelize(key)}</dt><dd>{answer}</dd></div>
+            ))}
+          </dl>
+        ) : null}
+        {expanded ? (
+          <ProspectingCallEvidence
+            attemptId={attempt.id}
+            onPresentationChange={updatePresentation}
+          />
+        ) : null}
+      </div>
+    </details>
+  );
 }
 
 export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverview }) {
@@ -1390,18 +1458,7 @@ function WorkbenchView({
         <div className={styles.attemptHistory}>
           <span>Attempt history</span>
           {entry.attempts.filter((attempt) => attempt.status === "completed").map((attempt) => (
-            <details key={attempt.id}>
-              <summary><strong>{attempt.outcome ? labelize(attempt.outcome) : "Attempt"}</strong><span>{formatDateTime(attempt.completed_at)}</span></summary>
-              {attempt.callback_at ? <p>Callback: {formatDateTime(attempt.callback_at)}</p> : null}
-              {attempt.notes ? <p>{attempt.notes}</p> : null}
-              {Object.entries(attempt.qualification_answers).length ? (
-                <dl>
-                  {Object.entries(attempt.qualification_answers).map(([key, answer]) => (
-                    <div key={key}><dt>{labelize(key)}</dt><dd>{answer}</dd></div>
-                  ))}
-                </dl>
-              ) : null}
-            </details>
+            <CompletedAttemptHistoryItem attempt={attempt} key={attempt.id} />
           ))}
           {!entry.attempts.some((attempt) => attempt.status === "completed") ? <p>No prior attempts.</p> : null}
         </div>

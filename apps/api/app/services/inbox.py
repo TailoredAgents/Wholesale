@@ -445,17 +445,15 @@ def convert_general_conversation_to_lead(
         property_payload.property_type,
         explicit_asset_class=payload.asset_class,
     )
-    property_record, normalized_property_key, normalized_parcel_key = (
-        find_property_by_identity(
-            db,
-            organization_id=principal.organization_id,
-            street_address=property_payload.street_address,
-            city=property_payload.city,
-            state=property_payload.state,
-            postal_code=property_payload.postal_code,
-            parcel_id=property_payload.parcel_id,
-            county=property_payload.county,
-        )
+    property_record, normalized_property_key, normalized_parcel_key = find_property_by_identity(
+        db,
+        organization_id=principal.organization_id,
+        street_address=property_payload.street_address,
+        city=property_payload.city,
+        state=property_payload.state,
+        postal_code=property_payload.postal_code,
+        parcel_id=property_payload.parcel_id,
+        county=property_payload.county,
     )
     if property_record is None:
         property_record = Property(
@@ -465,9 +463,8 @@ def convert_general_conversation_to_lead(
             state=property_payload.state.strip().upper(),
             postal_code=property_payload.postal_code.strip(),
             county=property_payload.county,
-            property_type=property_payload.property_type or (
-                "land" if asset_class == "land" else None
-            ),
+            property_type=property_payload.property_type
+            or ("land" if asset_class == "land" else None),
             parcel_id=property_payload.parcel_id,
             normalized_parcel_key=normalized_parcel_key,
             normalized_address_key=normalized_property_key,
@@ -1003,9 +1000,7 @@ def reactivate_closed_lead_for_inbound(
         management_case.accepted_by_user_id = (
             management_case.accepted_by_user_id or management_case.assigned_user_id
         )
-        management_case.qualification_started_at = (
-            management_case.qualification_started_at or now
-        )
+        management_case.qualification_started_at = management_case.qualification_started_at or now
         management_case.next_action_type = "respond_to_inbound"
         management_case.next_action_due_at = due_at
 
@@ -1323,11 +1318,19 @@ def get_conversation_detail(
         for dispatch in dispatches
         if dispatch.communication_record_id is not None
     }
+    source_call_ids = [
+        item.source_call_record_id
+        for item in communications
+        if item.source_call_record_id is not None
+    ]
     calls = (
         db.scalars(
             select(CallRecord).where(
                 CallRecord.organization_id == principal.organization_id,
-                CallRecord.communication_record_id.in_(communication_ids),
+                or_(
+                    CallRecord.communication_record_id.in_(communication_ids),
+                    CallRecord.id.in_(source_call_ids),
+                ),
             )
         ).all()
         if communication_ids
@@ -1338,7 +1341,8 @@ def get_conversation_detail(
         for call in calls
         if call.communication_record_id is not None
     }
-    call_ids = [call.id for call in calls]
+    calls_by_id = {call.id: call for call in calls}
+    call_ids = list(calls_by_id)
     recordings = (
         db.scalars(
             select(CallRecording)
@@ -1434,7 +1438,11 @@ def get_conversation_detail(
 
     timeline = []
     for item in communications:
-        call = call_by_communication_id.get(item.id)
+        call = call_by_communication_id.get(item.id) or (
+            calls_by_id.get(item.source_call_record_id)
+            if item.source_call_record_id is not None
+            else None
+        )
         timeline_recording = recording_by_call_id.get(call.id) if call is not None else None
         timeline_transcript = (
             transcript_by_recording_id.get(timeline_recording.id)
@@ -2272,9 +2280,7 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         status=conversation.status,
         queue_key=conversation.queue_key,
         priority=conversation.priority,
-        mail_category=(
-            str(metadata["mail_category"]) if metadata.get("mail_category") else None
-        ),
+        mail_category=(str(metadata["mail_category"]) if metadata.get("mail_category") else None),
         merged_into_conversation_id=(
             UUID(str(metadata["merged_into_conversation_id"]))
             if metadata.get("merged_into_conversation_id")

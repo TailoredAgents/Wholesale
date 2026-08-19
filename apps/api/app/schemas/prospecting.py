@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.assets import HOUSE_ASSET_CLASS, AssetClass
 from app.schemas.operations import OperationsUserRead
+from app.schemas.voice import CallNoteEvidence, CallTranscriptRead, VoiceRecordingRead
 
 ProspectingOutcome = Literal[
     "no_answer",
@@ -140,6 +141,40 @@ class ProspectingQualificationChecklistRead(BaseModel):
     required_count: int = Field(ge=0)
     missing_required_keys: list[str]
     complete: bool
+
+
+class ProspectingQualificationSuggestionRead(BaseModel):
+    question_key: str
+    state: Literal["suggested", "corroborated", "conflict"]
+    current_value: Any | None = None
+    suggested_value: Any
+    evidence: list[CallNoteEvidence]
+
+
+class ProspectingCallEvidenceCapabilities(BaseModel):
+    can_play: bool
+    can_download_audio: bool
+    can_download_transcript: bool
+    can_retry: bool
+    can_delete: bool
+
+
+class ProspectingCallEvidenceRead(BaseModel):
+    attempt_id: UUID
+    call_record_id: UUID | None
+    dial_leg_id: UUID | None
+    recording: VoiceRecordingRead | None
+    transcript: CallTranscriptRead | None
+    suggestions: list[ProspectingQualificationSuggestionRead]
+    capabilities: ProspectingCallEvidenceCapabilities
+    evidence_status: Literal[
+        "unavailable",
+        "recording_ready",
+        "processing",
+        "ready",
+        "failed",
+        "exhausted",
+    ]
 
 
 class ProspectingQualificationAutosaveRequest(BaseModel):

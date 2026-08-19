@@ -2468,6 +2468,17 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    source_call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "call_records.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_communication_records_source_call_record_id",
+        ),
+        nullable=True,
+        index=True,
+    )
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     direction: Mapped[str] = mapped_column(String(40), nullable=False)
     channel: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -3006,6 +3017,12 @@ class CallRecording(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class CallTranscript(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "call_transcripts"
+    __table_args__ = (
+        UniqueConstraint(
+            "recording_id",
+            name="uq_call_transcripts_recording",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True

@@ -75,6 +75,7 @@ from app.services.acquisition_operations import (
     prospect_property_metadata,
     upsert_internal_calendar_event,
 )
+from app.services.call_recording_evidence import select_preferred_call_recording
 from app.services.communication_compliance import format_e164
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.lead_lifecycle import require_lead_open_for_work
@@ -889,6 +890,22 @@ def complete_attempt(
     from app.services.prospecting_copilot import ensure_call_quality_review
 
     ensure_call_quality_review(db, principal, attempt, payload.compliance_flags)
+    if attempt.call_record_id is not None:
+        from app.services.call_intelligence import (
+            enqueue_eligible_prospecting_call_transcript,
+        )
+
+        recording = select_preferred_call_recording(
+            db,
+            organization_id=attempt.organization_id,
+            call_record_id=attempt.call_record_id,
+        )
+        if recording is not None:
+            enqueue_eligible_prospecting_call_transcript(
+                db,
+                recording,
+                model_name=get_settings().openai_transcription_model,
+            )
     refresh_batch_status(db, entry.prospect_calling_batch_id)
     db.commit()
     return entry_read(db, entry)
@@ -1050,10 +1067,12 @@ def decide_handoff(
     payload: ProspectHandoffDecision,
 ) -> ProspectHandoffRead | None:
     handoff = db.scalar(
-        select(ProspectHandoff).where(
+        select(ProspectHandoff)
+        .where(
             ProspectHandoff.organization_id == principal.organization_id,
             ProspectHandoff.id == handoff_id,
         )
+        .with_for_update()
     )
     if handoff is None:
         return None
@@ -1191,6 +1210,13 @@ def decide_handoff(
         from app.services.prospecting_copilot import ensure_call_quality_review
 
         ensure_call_quality_review(db, principal, attempt, [])
+        if payload.decision == "accepted":
+            from app.services.call_intelligence import (
+                link_accepted_prospecting_evidence_for_attempt,
+            )
+
+            db.flush()
+            link_accepted_prospecting_evidence_for_attempt(db, attempt.id)
     refresh_batch_status(db, entry.prospect_calling_batch_id)
     db.commit()
     return handoff_read(db, handoff)

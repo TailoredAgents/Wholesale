@@ -594,7 +594,7 @@ The phase table is the progress ledger. Update the status in this file as work s
 | D4 | Browser softphone and single-line call controls | Implemented; inactive pending acceptance |
 | D5 | Per-VA dashboard and live qualification checklist | Implemented; inactive pending D4/D10 acceptance |
 | D6 | Dispositions, cadence, handoff, and appointment automation | Implemented; inactive pending D4/D10 acceptance |
-| D7 | Recording, transcript, AI notes, and evidence continuity | Planned |
+| D7 | Recording, transcript, AI notes, and evidence continuity | Implemented; inactive pending D4/D10 acceptance |
 | D8 | Inbound callbacks, manager controls, and operational health | Planned |
 | D9 | Analytics, quality, cost, and launch readiness | Planned |
 | D10 | Controlled single-line production acceptance | Planned |
@@ -982,6 +982,30 @@ Tests:
 Exit criteria:
 
 - every accepted recorded test call is auditable from cold prospect through warm lead
+
+D7 implementation record:
+
+- completed, connected seller conversations now enqueue exactly one transcript after both the
+  signed recording callback and caller wrap-up are present, regardless of which arrives first;
+  no-answer, voicemail, wrong-party, incomplete, unsigned, deleted, and mismatched call graphs are
+  excluded
+- transcript processing reuses the existing provider-private recording controls, retention and
+  deletion policy, bounded automatic retries, exhaustion state, and authorized manual retry; paid
+  transcription text is checkpointed so a later notes failure does not purchase the transcript a
+  second time
+- the completed-attempt history lazily loads secure recording playback with pause, resume, seek,
+  playback speed, timestamp jumps, and separately authorized audio and transcript downloads
+- AI creates a compact quick read and full structured notes automatically, supports both house and
+  land scripts, records transcript evidence by timestamp, and stores qualification output only as
+  suggested, corroborated, or conflicting evidence without replacing caller-entered answers
+- accepted handoffs create one source-call-linked seller-timeline note in either transcript-first or
+  handoff-first order; the original call time is preserved, the assigned acquisitions user can
+  access the retained evidence, and unrelated callers, roles, and organizations cannot
+- call-quality analysis can use automatically completed prospecting transcripts without adding an
+  approval step, while the native dialer remains disabled pending controlled D4/D10 acceptance
+- focused D7 contracts cover long calls, unavailable provider media, retry/exhaustion/recovery,
+  exactly-once enqueue and timeline linkage, more-than-one-page fallback discovery, house/land
+  evidence conflicts, role and organization isolation, and prior D4-D6 browser regressions
 
 ### D8. Inbound Callbacks, Manager Controls, And Operational Health
 

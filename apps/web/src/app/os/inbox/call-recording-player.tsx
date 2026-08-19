@@ -39,6 +39,7 @@ export type CallRecordingPlayerHandle = {
 
 type CallRecordingPlayerProps = {
   apiBaseUrl: string;
+  canDownload?: boolean;
   getHeaders: () => Promise<Record<string, string>>;
   onError: (message: string) => void;
   recordingId: string;
@@ -47,7 +48,10 @@ type CallRecordingPlayerProps = {
 export const CallRecordingPlayer = forwardRef<
   CallRecordingPlayerHandle,
   CallRecordingPlayerProps
->(function CallRecordingPlayer({ apiBaseUrl, getHeaders, onError, recordingId }, ref) {
+>(function CallRecordingPlayer(
+  { apiBaseUrl, canDownload = true, getHeaders, onError, recordingId },
+  ref,
+) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const objectUrlRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -491,14 +495,16 @@ export const CallRecordingPlayer = forwardRef<
             )}
             {loadState === "loading" ? "Loading audio" : "Play recording"}
           </button>
-          <button
-            disabled={loadState === "loading"}
-            onClick={() => void downloadRecording()}
-            type="button"
-          >
-            <Download size={13} aria-hidden="true" />
-            Download
-          </button>
+          {canDownload ? (
+            <button
+              disabled={loadState === "loading"}
+              onClick={() => void downloadRecording()}
+              type="button"
+            >
+              <Download size={13} aria-hidden="true" />
+              Download
+            </button>
+          ) : null}
           {loadState === "error" ? (
             <button onClick={retryRecording} type="button">
               Retry
@@ -602,14 +608,16 @@ export const CallRecordingPlayer = forwardRef<
               type="range"
               value={muted ? 0 : volume}
             />
-            <button
-              onClick={() => void downloadRecording()}
-              title="Download call audio"
-              type="button"
-            >
-              <Download size={13} aria-hidden="true" />
-              <span className={styles.visuallyHidden}>Download call audio</span>
-            </button>
+            {canDownload ? (
+              <button
+                onClick={() => void downloadRecording()}
+                title="Download call audio"
+                type="button"
+              >
+                <Download size={13} aria-hidden="true" />
+                <span className={styles.visuallyHidden}>Download call audio</span>
+              </button>
+            ) : null}
           </div>
         </div>
       )}

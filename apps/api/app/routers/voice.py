@@ -39,6 +39,7 @@ from app.services.call_intelligence import (
     review_call_transcript,
     transcript_to_read,
 )
+from app.services.call_recording_evidence import recording_audio_available
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.meta_lead_ads import (
     requeue_staff_lead_alerts,
@@ -283,7 +284,7 @@ def read_voice_recording_media(
     recording = get_scoped_recording(db, principal, recording_id)
     if recording is None or not recording.provider_recording_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found.")
-    if recording.status != "completed":
+    if not recording_audio_available(recording):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Recording is not ready.",
@@ -302,6 +303,39 @@ def read_voice_recording_media(
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": f'inline; filename="stonegate-call-{recording.id}.mp3"',
+            "Content-Length": str(len(media.content)),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/recordings/{recording_id}/download")
+def download_voice_recording_media(
+    recording_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_dependency)],
+) -> Response:
+    recording = get_scoped_recording(db, principal, recording_id)
+    if recording is None or not recording.provider_recording_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found.")
+    if not recording_audio_available(recording):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Recording is not ready.",
+        )
+    try:
+        media = download_twilio_recording(get_settings(), recording.provider_recording_id)
+    except TwilioRecordingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    return Response(
+        content=media.content,
+        media_type=media.media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="stonegate-call-{recording.id}.mp3"',
             "Content-Length": str(len(media.content)),
             "X-Content-Type-Options": "nosniff",
         },

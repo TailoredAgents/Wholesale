@@ -362,6 +362,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.SEND_ASSIGNED_EMAIL,
             PermissionKeys.PLACE_ASSIGNED_CALLS,
             PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
+            PermissionKeys.ACCESS_RECORDINGS,
             PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
             PermissionKeys.WORK_ASSIGNED_CALLING_LISTS,
         ),
