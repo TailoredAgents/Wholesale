@@ -593,7 +593,7 @@ The phase table is the progress ledger. Update the status in this file as work s
 | D3 | Dial-session coordinator, queue reservation, and recovery | Implemented |
 | D4 | Browser softphone and single-line call controls | Implemented; inactive pending acceptance |
 | D5 | Per-VA dashboard and live qualification checklist | Implemented; inactive pending D4/D10 acceptance |
-| D6 | Dispositions, cadence, handoff, and appointment automation | Planned |
+| D6 | Dispositions, cadence, handoff, and appointment automation | Implemented; inactive pending D4/D10 acceptance |
 | D7 | Recording, transcript, AI notes, and evidence continuity | Planned |
 | D8 | Inbound callbacks, manager controls, and operational health | Planned |
 | D9 | Analytics, quality, cost, and launch readiness | Planned |
@@ -928,6 +928,34 @@ Tests:
 Exit criteria:
 
 - the native dialer produces the same or stronger CRM handoff guarantees as the BatchDialer bridge
+
+Implementation record (2026-08-19):
+
+- terminal provider evidence now gates seller dispositions; failed or cancelled provider calls use
+  a separate technical-failure action and do not consume seller-facing cadence or manufacture a
+  contact result
+- every native wrap-up uses a stable idempotency key, semantic request digest, caller lease receipt,
+  and row-locked transaction so an identical lost-response replay returns the prior result while a
+  conflicting replay is rejected
+- no-answer and voicemail outcomes use the pinned script's bounded retry delays and maximum seller
+  attempts; technical retries and seller-requested callbacks remain separate queue classes and
+  callback commitments require a future date and time
+- wrong-number handling invalidates and suppresses only the exact dialed number, then immediately
+  reserves the next eligible ranked number when one exists; DNC suppresses the exact E.164 number
+  across the organization and blocks the source prospect
+- Interested creates or reuses one warm CRM lead and one reviewable handoff; Appointment Set also
+  creates one attempt-linked appointment, with the seller-property address persisted as the default
+  location and explicit locations required for phone, video, and office meetings
+- the connected ranked phone becomes the CRM contact's primary phone while the original valid phone
+  remains available as a secondary method
+- the VA wrap-up screen groups seller outcomes, blocks invalid or in-flight wrap-up, gives technical
+  failures their own action, confirms only server-returned automation, preserves exact-payload retry,
+  and keeps manager monitoring read-only
+- focused D6 contracts plus the complete prospecting coordinator, workbench, Voice lifecycle,
+  migration, and BatchDialer bridge regressions cover replay, cadence exhaustion, callbacks,
+  qualification enforcement, appointment uniqueness, ranked fallback, and exact-number suppression
+- the native dialer remains disabled and inactive pending D4/D10 acceptance; the current BatchDialer
+  bridge and its rollback path remain unchanged
 
 ### D7. Recording, Transcript, AI Notes, And Evidence Continuity
 

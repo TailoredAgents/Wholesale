@@ -139,23 +139,23 @@ def apply_outcome_measurement(
     *,
     outcome: str,
     completed_at: datetime,
+    provider_evidence: bool = False,
 ) -> None:
     classification = classify_outcome(outcome)
     attempt.answer_classification = classification.answer
     attempt.party_classification = classification.party
     attempt.interest_classification = classification.interest
     attempt.follow_up_permission = classification.follow_up_permission
-    attempt.classification_source = "manual_outcome"
+    attempt.classification_source = (
+        "provider_plus_manual_outcome" if provider_evidence else "manual_outcome"
+    )
     attempt.dial_started_at = attempt.dial_started_at or attempt.started_at
-    attempt.answered_at = (
-        completed_at if classification.answer in {"machine", "live_person"} else None
-    )
-    attempt.right_party_confirmed_at = (
-        completed_at if classification.party == "right_party" else None
-    )
-    attempt.interest_confirmed_at = (
-        completed_at if classification.interest == "interested" else None
-    )
+    if classification.answer in {"machine", "live_person"}:
+        attempt.answered_at = attempt.answered_at or completed_at
+    if classification.party == "right_party":
+        attempt.right_party_confirmed_at = attempt.right_party_confirmed_at or completed_at
+    if classification.interest == "interested":
+        attempt.interest_confirmed_at = attempt.interest_confirmed_at or completed_at
 
 
 def is_accepted_warm_lead(

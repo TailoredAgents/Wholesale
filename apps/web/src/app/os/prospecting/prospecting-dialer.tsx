@@ -46,6 +46,16 @@ export type ActiveProspectingDialerLease = {
   leaseToken: string;
 };
 
+export type ProspectingDialerRuntime = {
+  sessionState: ProspectingDialSessionSnapshot["session"]["state"] | null;
+  legStatus: ProspectingDialLeg["status"] | null;
+  terminalResult: string | null;
+  providerError: string | null;
+  recipient: string | null;
+  technicalFailure: boolean;
+  wrapUpReady: boolean;
+};
+
 type StoredDialerLease = ActiveProspectingDialerLease & {
   userId: string;
 };
@@ -232,6 +242,7 @@ export function ProspectingDialer({
   onLeaseChange,
   onNativeModeChange,
   onOwnershipChange,
+  onRuntimeChange,
   onWorkspaceRefresh,
 }: {
   currentUserId: string;
@@ -241,6 +252,7 @@ export function ProspectingDialer({
   onLeaseChange: (lease: ActiveProspectingDialerLease | null) => void;
   onNativeModeChange: (available: boolean) => void;
   onOwnershipChange: (leadership: ProspectingDialerLeadership) => void;
+  onRuntimeChange: (runtime: ProspectingDialerRuntime) => void;
   onWorkspaceRefresh: () => void;
 }) {
   const { getToken } = useAuth();
@@ -1144,6 +1156,38 @@ export function ProspectingDialer({
 
   const currentLeg = snapshot?.current_leg ?? null;
   const session = snapshot?.session ?? context?.active_session ?? null;
+  const technicalFailure = Boolean(
+    currentLeg &&
+      (["failed", "cancelled"] as ProspectingDialLeg["status"][]).includes(
+        currentLeg.status,
+      ),
+  );
+
+  useEffect(() => {
+    onRuntimeChange({
+      sessionState: session?.state ?? null,
+      legStatus: currentLeg?.status ?? null,
+      terminalResult: currentLeg?.terminal_result ?? null,
+      providerError: currentLeg?.provider_error_message ?? null,
+      recipient: currentLeg?.recipient ?? null,
+      technicalFailure,
+      wrapUpReady: session?.state === "wrap_up",
+    });
+  }, [currentLeg, onRuntimeChange, session, technicalFailure]);
+
+  useEffect(
+    () => () => {
+      onRuntimeChange({
+        sessionState: null,
+        legStatus: null,
+        terminalResult: null,
+        providerError: null,
+        recipient: null,
+        technicalFailure: false,
+        wrapUpReady: false,
+      });
+    }, [onRuntimeChange],
+  );
   const isLeader = leadership === "leader";
   const ownsSelectedEntry = selectedEntry?.assigned_user_id === currentUserId;
   const featureReady = isNativeDialerFeatureReady(context);

@@ -37,6 +37,7 @@ from app.schemas.prospecting import (
     ProspectingQualificationChecklistRead,
     ProspectingScriptCreate,
     ProspectingScriptRead,
+    ProspectingTechnicalFailureComplete,
     ProspectingVoiceCallControl,
     ProspectingVoiceCallCreate,
     ProspectingVoiceCallRead,
@@ -44,10 +45,12 @@ from app.schemas.prospecting import (
 )
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.prospecting import (
+    ProspectingCompletionConflictError,
     ProspectingQualificationConflictError,
     approve_script,
     autosave_attempt_qualification,
     complete_attempt,
+    complete_technical_failure,
     create_script,
     decide_handoff,
     get_attempt_qualification,
@@ -124,7 +127,14 @@ def _raise_prospecting_voice_error(exc: Exception) -> NoReturn:
 def _raise_prospecting_dialer_error(exc: Exception) -> NoReturn:
     if isinstance(exc, PermissionError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    if isinstance(exc, (ProspectingDialerConflictError, ProspectingQualificationConflictError)):
+    if isinstance(
+        exc,
+        (
+            ProspectingDialerConflictError,
+            ProspectingQualificationConflictError,
+            ProspectingCompletionConflictError,
+        ),
+    ):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if isinstance(exc, ProspectingDialerConfigurationError):
         raise HTTPException(
@@ -603,6 +613,31 @@ def complete_prospecting_attempt(
         entry = complete_attempt(db, principal, attempt_id, payload)
     except (
         PermissionError,
+        ProspectingCompletionConflictError,
+        ProspectingDialerConflictError,
+        ProspectingDialerConfigurationError,
+        ValueError,
+    ) as exc:
+        _raise_prospecting_dialer_error(exc)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Prospecting attempt not found.")
+    return entry
+
+
+@router.post("/attempts/{attempt_id}/technical-failure")
+def complete_prospecting_technical_failure(
+    attempt_id: UUID,
+    payload: ProspectingTechnicalFailureComplete,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingEntryRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        entry = complete_technical_failure(db, principal, attempt_id, payload)
+    except (
+        PermissionError,
+        ProspectingCompletionConflictError,
         ProspectingDialerConflictError,
         ProspectingDialerConfigurationError,
         ValueError,

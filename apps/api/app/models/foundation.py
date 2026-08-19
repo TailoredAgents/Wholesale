@@ -1429,9 +1429,7 @@ class ProspectingProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text(
                 "dial_leg_id IS NOT NULL AND provider_sequence_number IS NOT NULL"
             ),
-            sqlite_where=text(
-                "dial_leg_id IS NOT NULL AND provider_sequence_number IS NOT NULL"
-            ),
+            sqlite_where=text("dial_leg_id IS NOT NULL AND provider_sequence_number IS NOT NULL"),
         ),
         Index(
             "ix_prospecting_provider_events_call_lookup",
@@ -3032,6 +3030,13 @@ class CallTranscript(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class Appointment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "appointments"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "prospecting_attempt_id",
+            name="uq_appointments_org_prospecting_attempt",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -3039,6 +3044,12 @@ class Appointment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    prospecting_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_attempts.id"),
+        nullable=True,
+        index=True,
+    )
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     appointment_type: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)

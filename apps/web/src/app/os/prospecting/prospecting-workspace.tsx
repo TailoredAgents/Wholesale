@@ -21,12 +21,15 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 
 import type {
   ProspectHandoff,
+  ProspectingAttemptCompletionPayload,
   ProspectingCallQuality,
   ProspectingCallQualityOutput,
   ProspectingCopilotOutput,
   ProspectingCopilotRecommendation,
   ProspectingEntry,
   ProspectingQualificationChecklist,
+  ProspectingSellerOutcome,
+  ProspectingTechnicalFailurePayload,
   ProspectingWorkbenchOverview,
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
@@ -34,27 +37,47 @@ import { labelize } from "../os-utils";
 import {
   ProspectingDialer,
   type ActiveProspectingDialerLease,
+  type ProspectingDialerRuntime,
 } from "./prospecting-dialer";
 import type { ProspectingDialerLeadership } from "./prospecting-dialer-policy";
 import { ProspectingQualificationChecklist as LiveQualificationChecklist } from "./prospecting-qualification-checklist";
 import { pruneQualificationOverrides } from "./prospecting-qualification-state";
+import {
+  createProspectingWrapUpReceipt,
+  createTechnicalFailureReceipt,
+  PROSPECTING_OUTCOME_GROUPS,
+  PROSPECTING_OUTCOME_OPTIONS,
+  prospectingOutcomeOption,
+  type ProspectingWrapUpReceipt,
+  validateProspectingWrapUp,
+} from "./prospecting-wrap-up-state";
 import styles from "./prospecting.module.css";
 
 type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
-type QueueFilter = "due" | "callbacks" | "corrections" | "scheduled" | "waiting" | "all";
+type QueueFilter =
+  | "due"
+  | "callbacks"
+  | "retries"
+  | "corrections"
+  | "scheduled"
+  | "waiting"
+  | "all";
 
-const outcomes = [
-  ["no_answer", "No answer"],
-  ["left_voicemail", "Left voicemail"],
-  ["callback_requested", "Callback requested"],
-  ["follow_up", "Follow up later"],
-  ["interested", "Interested seller"],
-  ["appointment_set", "Appointment set"],
-  ["not_interested", "Not interested"],
-  ["wrong_number", "Wrong number"],
-  ["do_not_call", "Do not call"],
-] as const;
+const EMPTY_DIALER_RUNTIME: ProspectingDialerRuntime = {
+  sessionState: null,
+  legStatus: null,
+  terminalResult: null,
+  providerError: null,
+  recipient: null,
+  technicalFailure: false,
+  wrapUpReady: false,
+};
+
+type PendingWrapUpSubmission = {
+  attemptId: string;
+  payload: ProspectingAttemptCompletionPayload;
+};
 
 const standardQuestions = [
   ["motivation", "Reason for selling", "What has you considering selling the property?", true],
@@ -87,13 +110,18 @@ function localDateTimeToIso(value: string) {
   return value ? new Date(value).toISOString() : null;
 }
 
+function dateToLocalInputValue(value: Date) {
+  const localValue = new Date(value.getTime() - value.getTimezoneOffset() * 60 * 1000);
+  return localValue.toISOString().slice(0, 16);
+}
+
 export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverview }) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [view, setView] = useState<View>("workbench");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
-  const [outcome, setOutcome] = useState("no_answer");
+  const [outcome, setOutcome] = useState<ProspectingSellerOutcome>("no_answer");
   const [entrySelection, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
   const [optimisticEntry, setOptimisticEntry] = useState<ProspectingEntry | null>(null);
   const optimisticEntryRef = useRef<ProspectingEntry | null>(null);
@@ -111,6 +139,16 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [nativeDialerAvailable, setNativeDialerAvailable] = useState(false);
   const [dialerLeadership, setDialerLeadership] =
     useState<ProspectingDialerLeadership>("checking");
+  const [dialerRuntime, setDialerRuntime] =
+    useState<ProspectingDialerRuntime>(EMPTY_DIALER_RUNTIME);
+  const [lastWrapUp, setLastWrapUp] = useState<ProspectingWrapUpReceipt | null>(null);
+  const [pendingWrapUpAttemptId, setPendingWrapUpAttemptId] = useState<string | null>(null);
+  const pendingWrapUpRef = useRef<PendingWrapUpSubmission | null>(null);
+  const wrapUpInFlightRef = useRef(false);
+  const technicalFailureSubmissionRef = useRef<{
+    attemptId: string;
+    idempotencyKey: string;
+  } | null>(null);
   const [qualificationBlocking, setQualificationBlocking] = useState(false);
   const [qualificationOverrides, setQualificationOverrides] = useState<
     Record<string, ProspectingQualificationChecklist>
@@ -197,12 +235,25 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   ];
 
   const selectEntry = useCallback((selected: ProspectingEntry) => {
+    const retainedWrapUp =
+      pendingWrapUpRef.current?.attemptId === selected.active_attempt?.id
+        ? pendingWrapUpRef.current
+        : null;
+    if (!retainedWrapUp) {
+      pendingWrapUpRef.current = null;
+      setPendingWrapUpAttemptId(null);
+    }
+    if (technicalFailureSubmissionRef.current?.attemptId !== selected.active_attempt?.id) {
+      technicalFailureSubmissionRef.current = null;
+    }
     optimisticEntryRef.current = null;
     setOptimisticEntry(null);
     setEntry(selected);
     setQualificationBlocking(false);
+    setOutcome(retainedWrapUp?.payload.outcome ?? "no_answer");
     setSelectedCopilotEntryId(selected.id);
     setLocalRecommendation(null);
+    setLastWrapUp(null);
   }, []);
 
   const applyOptimisticEntry = useCallback((selected: ProspectingEntry) => {
@@ -284,8 +335,54 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     }
   }
 
+  async function requestWrapUp<T>(
+    path: string,
+    body: object,
+  ): Promise<{ data: T | null; retryable: boolean }> {
+    setStatus("saving");
+    setMessage("");
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        const retryable =
+          [408, 425, 429].includes(response.status) || response.status >= 500;
+        setStatus("error");
+        setMessage(
+          `${payload?.detail ?? "The wrap-up could not be completed."}${
+            retryable ? " Use Retry safe wrap-up; Stonegate will send the exact same request." : ""
+          }`,
+        );
+        return { data: null, retryable };
+      }
+      setStatus("saved");
+      setMessage("Wrap-up saved by Stonegate.");
+      return { data: (await response.json()) as T, retryable: false };
+    } catch (error) {
+      setStatus("error");
+      setMessage(
+        `${
+          error instanceof Error ? error.message : "The wrap-up response was lost."
+        } Use Retry safe wrap-up; Stonegate will send the exact same request.`,
+      );
+      return { data: null, retryable: true };
+    }
+  }
+
   async function startCurrent() {
     if (!entry) return;
+    pendingWrapUpRef.current = null;
+    setPendingWrapUpAttemptId(null);
+    setLastWrapUp(null);
+    technicalFailureSubmissionRef.current = null;
     const result = await request<ProspectingEntry>(
       `/api/v1/prospecting/entries/${entry.id}/start`,
       "POST",
@@ -296,55 +393,135 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   async function completeCurrent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeAttempt || !entry?.script) return;
-    if (qualificationOutcomeBlocked) {
-      setStatus("error");
-      setMessage("Finish saving or resolve the highlighted qualification answer first.");
-      return;
-    }
+    if (wrapUpInFlightRef.current) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const result = await request<ProspectingEntry>(
-      `/api/v1/prospecting/attempts/${activeAttempt.id}/complete`,
-      "POST",
-      {
+    let pending = pendingWrapUpRef.current;
+    if (!pending || pending.attemptId !== activeAttempt.id) {
+      const callbackAt = value(formData, "callback_at");
+      const handoffUserId = value(formData, "handoff_user_id");
+      const appointmentStartAt = value(formData, "appointment_start_at");
+      const appointmentLocationType = value(formData, "appointment_location_type");
+      const appointmentLocation = value(formData, "appointment_location");
+      const validationMessage = validateProspectingWrapUp({
         outcome,
-        browser_session_id: dialerLease?.browserSessionId ?? null,
-        lease_token: dialerLease?.leaseToken ?? null,
-        qualification_answers: {},
-        notes: value(formData, "notes") || null,
-        callback_at: requiresCallback
-          ? localDateTimeToIso(value(formData, "callback_at"))
-          : null,
-        handoff_user_id: isWarm ? value(formData, "handoff_user_id") || null : null,
-        appointment_start_at: isAppointment
-          ? localDateTimeToIso(value(formData, "appointment_start_at"))
-          : null,
-        appointment_location_type: isAppointment
-          ? value(formData, "appointment_location_type") || null
-          : null,
-        appointment_location: isAppointment
-          ? value(formData, "appointment_location") || null
-          : null,
-        compliance_flags: formData
-          .getAll("compliance_flags")
-          .map((flag) => String(flag)),
-      },
-    );
-    if (result) {
-      if (dialerLease) applyOptimisticEntry(result);
+        callbackAt,
+        handoffUserId,
+        appointmentStartAt,
+        appointmentLocationType,
+        appointmentLocation,
+        propertyAddress: entry.property_address,
+        qualificationSaveBlocked: qualificationOutcomeBlocked,
+        missingWarmHandoffCount: isWarm
+          ? activeAttempt.qualification_checklist.missing_required_keys.length
+          : 0,
+        nativeDialer: nativeDialerAvailable,
+        nativeWrapUpReady: dialerRuntime.wrapUpReady,
+        technicalFailure: dialerRuntime.technicalFailure,
+      });
+      if (validationMessage) {
+        setStatus("error");
+        setMessage(validationMessage);
+        return;
+      }
+      pending = {
+        attemptId: activeAttempt.id,
+        payload: {
+          outcome,
+          idempotency_key: crypto.randomUUID(),
+          browser_session_id: dialerLease?.browserSessionId ?? null,
+          lease_token: dialerLease?.leaseToken ?? null,
+          qualification_answers: {},
+          notes: value(formData, "notes") || null,
+          callback_at: requiresCallback ? localDateTimeToIso(callbackAt) : null,
+          handoff_user_id: isWarm ? handoffUserId || null : null,
+          appointment_start_at: isAppointment
+            ? localDateTimeToIso(appointmentStartAt)
+            : null,
+          appointment_location_type: isAppointment
+            ? (appointmentLocationType as ProspectingAttemptCompletionPayload["appointment_location_type"])
+            : null,
+          appointment_location: isAppointment ? appointmentLocation || null : null,
+          compliance_flags: formData
+            .getAll("compliance_flags")
+            .map((flag) => String(flag)),
+        },
+      };
+      pendingWrapUpRef.current = pending;
+      setPendingWrapUpAttemptId(activeAttempt.id);
+    }
+
+    wrapUpInFlightRef.current = true;
+    const result = await requestWrapUp<ProspectingEntry>(
+      `/api/v1/prospecting/attempts/${activeAttempt.id}/complete`,
+      pending.payload,
+    ).finally(() => {
+      wrapUpInFlightRef.current = false;
+    });
+    if (result.data) {
+      const savedEntry = result.data;
+      const savedOutcome = pending.payload.outcome;
+      pendingWrapUpRef.current = null;
+      setPendingWrapUpAttemptId(null);
+      setLastWrapUp(
+        createProspectingWrapUpReceipt(
+          savedEntry,
+          savedOutcome,
+          activeAttempt.id,
+          dialerRuntime.recipient ?? entry.phone,
+        ),
+      );
+      if (dialerLease) applyOptimisticEntry(savedEntry);
       else {
         optimisticEntryRef.current = null;
         setOptimisticEntry(null);
         setEntry(
           data.queue_entries.find(
-            (item) => item.id !== result.id && item.is_actionable,
+            (item) => item.id !== savedEntry.id && item.is_actionable,
           ) ?? null,
         );
       }
       form.reset();
       setOutcome("no_answer");
       router.refresh();
+    } else if (!result.retryable) {
+      pendingWrapUpRef.current = null;
+      setPendingWrapUpAttemptId(null);
     }
+  }
+
+  async function completeTechnicalFailure() {
+    if (!activeAttempt || !entry || !dialerLease) {
+      setStatus("error");
+      setMessage("The active native dialer lease is required to record a technical failure.");
+      return;
+    }
+    if (wrapUpInFlightRef.current) return;
+    let pending = technicalFailureSubmissionRef.current;
+    if (!pending || pending.attemptId !== activeAttempt.id) {
+      pending = { attemptId: activeAttempt.id, idempotencyKey: crypto.randomUUID() };
+      technicalFailureSubmissionRef.current = pending;
+    }
+    const payload: ProspectingTechnicalFailurePayload = {
+      idempotency_key: pending.idempotencyKey,
+      browser_session_id: dialerLease.browserSessionId,
+      lease_token: dialerLease.leaseToken,
+    };
+    wrapUpInFlightRef.current = true;
+    const result = await request<ProspectingEntry>(
+      `/api/v1/prospecting/attempts/${activeAttempt.id}/technical-failure`,
+      "POST",
+      payload,
+    ).finally(() => {
+      wrapUpInFlightRef.current = false;
+    });
+    if (!result) return;
+    technicalFailureSubmissionRef.current = null;
+    pendingWrapUpRef.current = null;
+    setPendingWrapUpAttemptId(null);
+    setLastWrapUp(createTechnicalFailureReceipt(result, activeAttempt.id));
+    applyOptimisticEntry(result);
+    router.refresh();
   }
 
   async function reviewHandoff(
@@ -472,7 +649,8 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       <section className={styles.metrics} aria-label="Prospecting queue summary">
         <div><span>Due now</span><strong>{data.queue.ready}</strong></div>
         <div><span>Callbacks due</span><strong>{data.queue.callbacks_due}</strong></div>
-        <div><span>Scheduled</span><strong>{data.queue.callbacks_scheduled}</strong></div>
+        <div><span>Retries due</span><strong>{data.queue.retries_due ?? 0}</strong></div>
+        <div><span>Scheduled</span><strong>{data.queue.callbacks_scheduled + (data.queue.retries_scheduled ?? 0)}</strong></div>
         <div><span>Corrections</span><strong>{data.queue.corrections}</strong></div>
         <div><span>In progress</span><strong>{data.queue.in_progress}</strong></div>
         <div><span>Handoffs waiting</span><strong>{data.queue.handoff_pending}</strong></div>
@@ -503,9 +681,12 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
         onLeaseChange={setDialerLease}
         onNativeModeChange={setNativeDialerAvailable}
         onOwnershipChange={setDialerLeadership}
+        onRuntimeChange={setDialerRuntime}
         onWorkspaceRefresh={refreshWorkspace}
         selectedEntry={entry}
       />
+
+      {lastWrapUp ? <WrapUpReceipt receipt={lastWrapUp} /> : null}
 
       {view === "workbench" ? (
         <>
@@ -563,16 +744,27 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
               isWarm={isWarm}
               nativeDialerAvailable={nativeDialerAvailable}
               nativeDialerLeaseActive={Boolean(dialerLease)}
+              nativeWrapUpReady={dialerRuntime.wrapUpReady}
               onComplete={completeCurrent}
+              onTechnicalFailure={completeTechnicalFailure}
               onQualificationBlockingChange={setQualificationBlocking}
               onQualificationChecklistChange={updateQualificationChecklist}
-              onOutcomeChange={setOutcome}
+              onOutcomeChange={(nextOutcome) => {
+                if (pendingWrapUpRef.current?.attemptId !== activeAttempt?.id) {
+                  setOutcome(nextOutcome);
+                }
+              }}
               onStart={startCurrent}
               outcome={outcome}
               requiresCallback={requiresCallback}
               returnedHandoffs={data.returned_handoffs}
               saving={status === "saving" || qualificationOutcomeBlocked}
-              key={entry?.id ?? "empty-queue"}
+              technicalFailure={dialerRuntime.technicalFailure}
+              technicalFailureDetail={
+                dialerRuntime.providerError ?? dialerRuntime.terminalResult
+              }
+              wrapUpRetryPending={pendingWrapUpAttemptId === activeAttempt?.id}
+              key={`${entry?.id ?? "empty-queue"}:${activeAttempt?.id ?? "not-started"}`}
             />
           </div>
         </>
@@ -901,7 +1093,7 @@ function CallQualityView({
                 <div className={styles.qualityCorrection}>
                   <label><span>Manager summary</span><textarea rows={3} value={correction.call_summary} onChange={(event) => updateCorrection("call_summary", event.target.value)} /></label>
                   <div className={styles.correctionGrid}>
-                    <label><span>Suggested disposition</span><select value={correction.suggested_disposition} onChange={(event) => updateCorrection("suggested_disposition", event.target.value as ProspectingCallQualityOutput["suggested_disposition"])}>{outcomes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+                    <label><span>Suggested disposition</span><select value={correction.suggested_disposition} onChange={(event) => updateCorrection("suggested_disposition", event.target.value as ProspectingCallQualityOutput["suggested_disposition"])}>{PROSPECTING_OUTCOME_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
                     <label><span>Confidence</span><input max="100" min="0" type="number" value={correction.confidence} onChange={(event) => updateCorrection("confidence", Number(event.target.value))} /></label>
                     {(["script_adherence_score", "qualification_completeness_score", "objection_handling_score", "data_quality_score", "handoff_quality_score"] as const).map((field) => (
                       <label key={field}><span>{labelize(field.replace("_score", ""))}</span><input max="100" min="0" type="number" value={correction[field]} onChange={(event) => updateCorrection(field, Number(event.target.value))} /></label>
@@ -946,14 +1138,18 @@ function ShiftQueue({
   const visibleEntries = entries.filter((item) => {
     if (filter === "due") return item.is_actionable;
     if (filter === "callbacks") return item.queue_kind === "callback_due";
+    if (filter === "retries") return item.queue_kind === "retry_due";
     if (filter === "corrections") return item.queue_kind === "correction_required";
-    if (filter === "scheduled") return item.queue_kind === "callback_scheduled";
+    if (filter === "scheduled") {
+      return ["callback_scheduled", "retry_scheduled"].includes(item.queue_kind);
+    }
     if (filter === "waiting") return item.queue_kind === "handoff_pending";
     return true;
   });
   const filters: Array<{ key: QueueFilter; label: string }> = [
     { key: "due", label: "Due now" },
     { key: "callbacks", label: "Callbacks" },
+    { key: "retries", label: "Retries" },
     { key: "corrections", label: "Corrections" },
     { key: "scheduled", label: "Scheduled" },
     { key: "waiting", label: "Waiting" },
@@ -983,7 +1179,8 @@ function ShiftQueue({
             <span>{batch.campaign_name}</span>
             <strong>{batch.batch_name}</strong>
             <small>
-              {batch.callbacks_due} callbacks · {batch.corrections} corrections ·{" "}
+              {batch.callbacks_due} callbacks · {batch.retries_due ?? 0} retries ·{" "}
+              {batch.corrections} corrections ·{" "}
               {batch.ready} ready
             </small>
             <em className={styles.syncReady}>One-by-one calling</em>
@@ -1007,10 +1204,11 @@ function ShiftQueue({
             >
               <span className={styles.queueState}>
                 {item.queue_kind === "callback_due" ? <CalendarClock size={15} /> : null}
+                {item.queue_kind === "retry_due" ? <Clock3 size={15} /> : null}
                 {item.queue_kind === "correction_required" ? <AlertTriangle size={15} /> : null}
                 {item.queue_kind === "in_progress" ? <PhoneCall size={15} /> : null}
                 {item.queue_kind === "ready" ? <UserRoundCheck size={15} /> : null}
-                {item.queue_kind === "callback_scheduled" ? <Clock3 size={15} /> : null}
+                {["callback_scheduled", "retry_scheduled"].includes(item.queue_kind) ? <Clock3 size={15} /> : null}
                 {labelize(item.queue_kind)}
               </span>
               <strong>{item.legal_name}</strong>
@@ -1044,6 +1242,32 @@ function ShiftQueue({
   );
 }
 
+function WrapUpReceipt({ receipt }: { receipt: ProspectingWrapUpReceipt }) {
+  const nextAction = receipt.nextAttemptAt
+    ? receipt.nextAction.replace(
+        receipt.nextAttemptAt,
+        formatDateTime(receipt.nextAttemptAt),
+      )
+    : receipt.nextAction;
+  return (
+    <section
+      aria-live="polite"
+      className={`${styles.wrapUpReceipt} ${styles[`wrapUpReceipt_${receipt.tone}`]}`}
+      role="status"
+    >
+      <CheckCircle2 aria-hidden="true" size={20} />
+      <div>
+        <span>Server-confirmed wrap-up · {receipt.sellerName}</span>
+        <strong>{receipt.title}</strong>
+        <p>{receipt.detail}</p>
+        <small>
+          {nextAction} · Queue status: {labelize(receipt.savedStatus)}
+        </small>
+      </div>
+    </section>
+  );
+}
+
 function WorkbenchView({
   activeAttempt,
   acquisitionUsers,
@@ -1055,15 +1279,20 @@ function WorkbenchView({
   isWarm,
   nativeDialerAvailable,
   nativeDialerLeaseActive,
+  nativeWrapUpReady,
   onComplete,
   onOutcomeChange,
   onQualificationBlockingChange,
   onQualificationChecklistChange,
   onStart,
+  onTechnicalFailure,
   outcome,
   requiresCallback,
   returnedHandoffs,
   saving,
+  technicalFailure,
+  technicalFailureDetail,
+  wrapUpRetryPending,
 }: {
   activeAttempt: ProspectingEntry["active_attempt"];
   acquisitionUsers: ProspectingWorkbenchOverview["acquisition_users"];
@@ -1075,24 +1304,34 @@ function WorkbenchView({
   isWarm: boolean;
   nativeDialerAvailable: boolean;
   nativeDialerLeaseActive: boolean;
+  nativeWrapUpReady: boolean;
   onComplete: (event: FormEvent<HTMLFormElement>) => void;
-  onOutcomeChange: (outcome: string) => void;
+  onOutcomeChange: (outcome: ProspectingSellerOutcome) => void;
   onQualificationBlockingChange: (blocked: boolean) => void;
   onQualificationChecklistChange: (
     attemptId: string,
     checklist: ProspectingQualificationChecklist,
   ) => void;
   onStart: () => void;
-  outcome: string;
+  onTechnicalFailure: () => void;
+  outcome: ProspectingSellerOutcome;
   requiresCallback: boolean;
   returnedHandoffs: ProspectHandoff[];
   saving: boolean;
+  technicalFailure: boolean;
+  technicalFailureDetail: string | null;
+  wrapUpRetryPending: boolean;
 }) {
   const [callbackValue, setCallbackValue] = useState("");
+  const [appointmentLocationType, setAppointmentLocationType] =
+    useState("seller_property");
+  const [minimumDateTime] = useState(() =>
+    dateToLocalInputValue(new Date(Date.now() + 60_000)),
+  );
+  const selectedOutcome = prospectingOutcomeOption(outcome);
   function setQuickCallback(hoursFromNow: number) {
     const target = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-    const localTarget = new Date(target.getTime() - target.getTimezoneOffset() * 60 * 1000);
-    setCallbackValue(localTarget.toISOString().slice(0, 16));
+    setCallbackValue(dateToLocalInputValue(target));
   }
   if (!entry) {
     return <section className={styles.emptyState}><span>Queue clear</span><h3>No assigned prospect is due</h3><p>Future callbacks remain scheduled and will return here when due.</p></section>;
@@ -1199,47 +1438,181 @@ function WorkbenchView({
       </div>
 
       <aside className={styles.outcomePanel}>
-        <div className={styles.sectionHeader}><div><span>Required record</span><h3>Call outcome</h3></div></div>
+        <div className={styles.sectionHeader}><div><span>Required wrap-up</span><h3>Seller outcome</h3></div></div>
         {activeAttempt ? canMutateAttempt ? (
-          <form onSubmit={onComplete}>
-            <fieldset className={styles.outcomeChoices}>
-              <legend>Disposition</legend>
-              {outcomes.map(([key, label]) => (
+          technicalFailure ? (
+            <div className={`${styles.technicalOutcomeBoundary} ${styles.technicalOutcomeActive}`}>
+              <AlertTriangle aria-hidden="true" size={20} />
+              <div>
+                <strong>Technical failure — not a seller disposition</strong>
+                <p>
+                  The provider could not complete this call. Do not mark the seller as uninterested,
+                  wrong number, or do-not-call because of a carrier or browser failure.
+                </p>
+                {technicalFailureDetail ? <small>{technicalFailureDetail}</small> : null}
                 <button
-                  aria-pressed={outcome === key}
-                  className={outcome === key ? styles.selectedOutcome : undefined}
-                  key={key}
-                  onClick={() => onOutcomeChange(key)}
+                  className={styles.secondaryButton}
+                  disabled={saving || !dialerLease}
+                  onClick={onTechnicalFailure}
                   type="button"
                 >
-                  {label}
+                  Record technical failure and return to queue
                 </button>
-              ))}
-            </fieldset>
-            {requiresCallback ? <div className={styles.callbackControl}><label><span>Callback date and time</span><input name="callback_at" onChange={(event) => setCallbackValue(event.target.value)} required type="datetime-local" value={callbackValue} /></label><div><button onClick={() => setQuickCallback(1)} type="button">In 1 hour</button><button onClick={() => setQuickCallback(24)} type="button">Tomorrow</button><button onClick={() => setQuickCallback(72)} type="button">In 3 days</button></div></div> : null}
-            {isWarm ? <label><span>Acquisitions owner</span><select name="handoff_user_id" required><option value="">Select owner</option>{acquisitionUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label> : null}
-            {isAppointment ? <><label><span>Appointment date and time</span><input name="appointment_start_at" required type="datetime-local" /></label><label><span>Meeting type</span><select defaultValue="seller_property" name="appointment_location_type"><option value="seller_property">Seller property</option><option value="phone">Phone</option><option value="video">Video</option><option value="office">Office</option></select></label><label><span>Meeting location</span><input name="appointment_location" placeholder="Defaults to the property" /></label></> : null}
-            <label><span>Call notes</span><textarea name="notes" placeholder="Objections, commitments, and next action" /></label>
-            <fieldset className={styles.complianceChecks}>
-              <legend>Escalate immediately</legend>
-              <label><input name="compliance_flags" type="checkbox" value="seller_complaint" /><span>Seller complaint</span></label>
-              <label><input name="compliance_flags" type="checkbox" value="identity_unclear" /><span>Caller identity unclear</span></label>
-              <label><input name="compliance_flags" type="checkbox" value="policy_uncertainty" /><span>Policy uncertainty</span></label>
-              <label><input name="compliance_flags" type="checkbox" value="recording_disclosure_issue" /><span>Recording disclosure issue</span></label>
-            </fieldset>
-            {isWarm && missingWarmHandoffLabels.length ? (
-              <p className={styles.outcomeRequirement} role="status">
-                Complete before warm handoff: {missingWarmHandoffLabels.join(", ")}.
-              </p>
-            ) : null}
-            <button
-              className={styles.primaryButton}
-              disabled={saving || (isWarm && missingWarmHandoffLabels.length > 0)}
-              type="submit"
-            >
-              Save outcome
-            </button>
-          </form>
+              </div>
+            </div>
+          ) : (
+            <form key={activeAttempt.id} onSubmit={onComplete}>
+              <div className={styles.wrapUpGate} data-ready={!nativeDialerAvailable || nativeWrapUpReady}>
+                <ShieldAlert aria-hidden="true" size={17} />
+                <div>
+                  <strong>
+                    {nativeDialerAvailable
+                      ? nativeWrapUpReady
+                        ? "Call ended — wrap-up required"
+                        : "Seller call still active"
+                      : "Outcome required before the next record"}
+                  </strong>
+                  <p>
+                    {nativeDialerAvailable && !nativeWrapUpReady
+                      ? "You can prepare the result now. Saving unlocks only after the server enters wrap-up."
+                      : "The next call remains blocked until Stonegate validates and saves this result."}
+                  </p>
+                </div>
+              </div>
+              <fieldset
+                className={styles.wrapUpFields}
+                disabled={saving || wrapUpRetryPending}
+              >
+                <legend>Seller result details</legend>
+                <div className={styles.outcomeChoices} role="group" aria-label="Seller disposition">
+                  {PROSPECTING_OUTCOME_GROUPS.map((group) => (
+                    <section key={group.key}>
+                      <span>{group.label}</span>
+                      {PROSPECTING_OUTCOME_OPTIONS.filter(
+                        (option) => option.group === group.key,
+                      ).map((option) => (
+                        <button
+                          aria-pressed={outcome === option.key}
+                          className={outcome === option.key ? styles.selectedOutcome : undefined}
+                          key={option.key}
+                          onClick={() => onOutcomeChange(option.key)}
+                          type="button"
+                        >
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </button>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+                <p className={styles.outcomeAutomation} role="status">
+                  <CheckCircle2 aria-hidden="true" size={15} />
+                  <span><strong>After save:</strong> {selectedOutcome.automation}</span>
+                </p>
+                {requiresCallback ? (
+                  <div className={styles.callbackControl}>
+                    <label>
+                      <span>Callback date and time</span>
+                      <input
+                        min={minimumDateTime}
+                        name="callback_at"
+                        onChange={(event) => setCallbackValue(event.target.value)}
+                        required
+                        type="datetime-local"
+                        value={callbackValue}
+                      />
+                    </label>
+                    <div>
+                      <button onClick={() => setQuickCallback(1)} type="button">In 1 hour</button>
+                      <button onClick={() => setQuickCallback(24)} type="button">Tomorrow</button>
+                      <button onClick={() => setQuickCallback(72)} type="button">In 3 days</button>
+                    </div>
+                  </div>
+                ) : null}
+                {isWarm ? (
+                  <label>
+                    <span>Acquisitions owner</span>
+                    <select name="handoff_user_id" required>
+                      <option value="">Select owner</option>
+                      {acquisitionUsers.map((user) => (
+                        <option key={user.id} value={user.id}>{user.display_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {isAppointment ? (
+                  <>
+                    <label>
+                      <span>Appointment date and time</span>
+                      <input min={minimumDateTime} name="appointment_start_at" required type="datetime-local" />
+                    </label>
+                    <label>
+                      <span>Meeting type</span>
+                      <select
+                        name="appointment_location_type"
+                        onChange={(event) => setAppointmentLocationType(event.target.value)}
+                        required
+                        value={appointmentLocationType}
+                      >
+                        <option value="seller_property">Seller property</option>
+                        <option value="phone">Phone</option>
+                        <option value="video">Video</option>
+                        <option value="office">Office</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Meeting location</span>
+                      <input
+                        name="appointment_location"
+                        placeholder={
+                          appointmentLocationType === "seller_property" && entry.property_address
+                            ? `Uses saved property: ${entry.property_address}`
+                            : "Phone number, video link, office, or property address"
+                        }
+                        required={
+                          appointmentLocationType !== "seller_property" ||
+                          !entry.property_address
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <label>
+                  <span>Call notes</span>
+                  <textarea name="notes" placeholder="Objections, commitments, and next action" />
+                </label>
+                <div className={styles.complianceChecks} role="group" aria-label="Escalate immediately">
+                  <strong>Escalate immediately</strong>
+                  <label><input name="compliance_flags" type="checkbox" value="seller_complaint" /><span>Seller complaint</span></label>
+                  <label><input name="compliance_flags" type="checkbox" value="identity_unclear" /><span>Caller identity unclear</span></label>
+                  <label><input name="compliance_flags" type="checkbox" value="policy_uncertainty" /><span>Policy uncertainty</span></label>
+                  <label><input name="compliance_flags" type="checkbox" value="recording_disclosure_issue" /><span>Recording disclosure issue</span></label>
+                </div>
+              </fieldset>
+              {isWarm && missingWarmHandoffLabels.length ? (
+                <p className={styles.outcomeRequirement} role="status">
+                  Complete before warm handoff: {missingWarmHandoffLabels.join(", ")}.
+                </p>
+              ) : null}
+              {wrapUpRetryPending ? (
+                <p className={styles.safeRetryNotice} role="status">
+                  The first response was uncertain. Retry sends the exact same protected wrap-up;
+                  fields stay locked so a lost response cannot create a different result.
+                </p>
+              ) : null}
+              <button
+                className={styles.primaryButton}
+                disabled={
+                  saving ||
+                  (isWarm && missingWarmHandoffLabels.length > 0) ||
+                  (nativeDialerAvailable && !nativeWrapUpReady)
+                }
+                type="submit"
+              >
+                {wrapUpRetryPending ? "Retry safe wrap-up" : "Save outcome and unlock next call"}
+              </button>
+            </form>
+          )
         ) : (
           <div className={styles.monitoringOnly}>
             <strong>Read-only manager view</strong>

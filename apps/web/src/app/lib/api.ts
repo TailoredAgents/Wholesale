@@ -720,6 +720,39 @@ export type ProspectingQualificationChecklistItem = {
   revision: number;
   captured_at: string | null;
   updated_at: string | null;
+  blockers?: string[];
+};
+
+export type ProspectingSellerOutcome =
+  | "no_answer"
+  | "left_voicemail"
+  | "callback_requested"
+  | "follow_up"
+  | "interested"
+  | "appointment_set"
+  | "not_interested"
+  | "wrong_number"
+  | "do_not_call";
+
+export type ProspectingAttemptCompletionPayload = {
+  outcome: ProspectingSellerOutcome;
+  idempotency_key: string;
+  browser_session_id: string | null;
+  lease_token: string | null;
+  qualification_answers: Record<string, never>;
+  notes: string | null;
+  callback_at: string | null;
+  handoff_user_id: string | null;
+  appointment_start_at: string | null;
+  appointment_location_type: "phone" | "video" | "seller_property" | "office" | null;
+  appointment_location: string | null;
+  compliance_flags: string[];
+};
+
+export type ProspectingTechnicalFailurePayload = {
+  idempotency_key: string;
+  browser_session_id: string;
+  lease_token: string;
 };
 
 export type ProspectingQualificationChecklist = {
@@ -1066,6 +1099,8 @@ export type ProspectingWorkbenchOverview = {
     ready: number;
     callbacks_due: number;
     callbacks_scheduled: number;
+    retries_due?: number;
+    retries_scheduled?: number;
     corrections: number;
     in_progress: number;
     handoff_pending: number;
@@ -1081,6 +1116,8 @@ export type ProspectingWorkbenchOverview = {
     ready: number;
     callbacks_due: number;
     callbacks_scheduled: number;
+    retries_due?: number;
+    retries_scheduled?: number;
     corrections: number;
     in_progress: number;
     handoff_pending: number;

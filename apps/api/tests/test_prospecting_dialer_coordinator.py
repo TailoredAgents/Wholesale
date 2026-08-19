@@ -12,18 +12,24 @@ from app.core.auth import Principal
 from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
+    Appointment,
     Campaign,
+    ContactMethod,
+    Lead,
     Market,
     Organization,
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
+    ProspectContactPoint,
+    ProspectHandoff,
     ProspectingAttempt,
     ProspectingCohort,
     ProspectingDialerProfile,
     ProspectingDialLeg,
     ProspectingDialSession,
     ProspectingScriptVersion,
+    SuppressionRecord,
     User,
     VoiceLine,
 )
@@ -34,9 +40,15 @@ from app.schemas.prospecting import (
     ProspectingDialSessionRecoveryCommand,
     ProspectingDialSessionStart,
     ProspectingQualificationAutosaveRequest,
+    ProspectingTechnicalFailureComplete,
 )
 from app.services.bootstrap import bootstrap_foundation
-from app.services.prospecting import autosave_attempt_qualification, complete_attempt
+from app.services.prospecting import (
+    ProspectingCompletionConflictError,
+    autosave_attempt_qualification,
+    complete_attempt,
+    complete_technical_failure,
+)
 from app.services.prospecting_dialer import (
     ProspectingDialerConfigurationError,
     ProspectingDialerConflictError,
@@ -50,6 +62,7 @@ from app.services.prospecting_dialer import (
     reserve_next_dial_record,
     resume_dial_session,
     runtime_policy_blockers,
+    select_ranked_phone,
     start_dial_session,
     validate_reserved_dial_leg_policy,
 )
@@ -297,6 +310,46 @@ def lease_command(
     )
 
 
+def terminalize_test_leg(
+    db: Session,
+    graph: CoordinatorGraph,
+    leg: ProspectingDialLeg,
+    *,
+    key: str,
+    final_status: str,
+    connected: bool = False,
+) -> None:
+    now = datetime.now(UTC)
+    if connected:
+        record_dial_provider_event(
+            db,
+            organization_id=graph.organization.id,
+            provider="twilio",
+            external_event_id=f"{key}-connected",
+            event_type="call.connected",
+            payload={"CallStatus": "in-progress"},
+            dial_leg=leg,
+            target_status="connected",
+            occurred_at=now + timedelta(seconds=1),
+            signature_verified=True,
+            signature="verified-test-signature",
+        )
+    record_dial_provider_event(
+        db,
+        organization_id=graph.organization.id,
+        provider="twilio",
+        external_event_id=f"{key}-{final_status}",
+        event_type=f"call.{final_status}",
+        payload={"CallStatus": final_status.replace("_", "-")},
+        dial_leg=leg,
+        target_status=final_status,
+        occurred_at=now + timedelta(seconds=2 if connected else 1),
+        signature_verified=True,
+        signature="verified-test-signature",
+    )
+    db.commit()
+
+
 def test_native_qualification_autosave_requires_current_live_lease(
     db_session: Session,
     settings_factory: Callable[..., Settings],
@@ -441,12 +494,25 @@ def test_native_warm_completion_requires_persisted_qualification_rows(
         db_session,
         organization_id=graph.organization.id,
         provider="twilio",
+        external_event_id="d5-persisted-warm-connected",
+        event_type="call.connected",
+        payload={"CallStatus": "in-progress"},
+        dial_leg=leg,
+        target_status="connected",
+        occurred_at=now + timedelta(seconds=1),
+        signature_verified=True,
+        signature="verified-test-signature",
+    )
+    record_dial_provider_event(
+        db_session,
+        organization_id=graph.organization.id,
+        provider="twilio",
         external_event_id="d5-persisted-warm-terminal",
         event_type="call.completed",
         payload={"CallStatus": "completed"},
         dial_leg=leg,
         target_status="completed",
-        occurred_at=now + timedelta(seconds=1),
+        occurred_at=now + timedelta(seconds=2),
         signature_verified=True,
         signature="verified-test-signature",
     )
@@ -454,6 +520,7 @@ def test_native_warm_completion_requires_persisted_qualification_rows(
 
     completion = ProspectingAttemptComplete(
         outcome="interested",
+        idempotency_key="complete-persisted-warm",
         browser_session_id=start_payload.browser_session_id,
         lease_token=started.lease_token,
         handoff_user_id=graph.owner.id,
@@ -915,6 +982,7 @@ def test_terminal_provider_event_enters_wrap_up_and_completion_advances_queue(
         first_attempt_id,
         ProspectingAttemptComplete(
             outcome="no_answer",
+            idempotency_key="complete-terminal-no-answer",
             browser_session_id=start_payload.browser_session_id,
             lease_token=started.lease_token,
         ),
@@ -1183,3 +1251,450 @@ def test_stale_queued_orphan_is_released_after_grace(
     assert leg.reserved_cost_cents == 0
     assert attempt is not None and attempt.status == "cancelled"
     assert entry is not None and entry.status == "ready"
+
+
+def test_technical_failure_is_replay_safe_and_does_not_consume_seller_cadence(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    graph = seed_coordinator_graph(db_session, record_count=2)
+    settings = settings_factory()
+    start_payload = session_start(graph, suffix="technical-failure")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=datetime.now(UTC),
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    leg.provider_error_code = "provider_unavailable"
+    leg.provider_error_message = "Provider could not place the call."
+    terminalize_test_leg(
+        db_session,
+        graph,
+        leg,
+        key="d6-technical",
+        final_status="failed",
+    )
+    command = ProspectingTechnicalFailureComplete(
+        browser_session_id=start_payload.browser_session_id,
+        lease_token=started.lease_token,
+        idempotency_key=f"technical-failure:{attempt_id}",
+    )
+
+    completed = complete_technical_failure(
+        db_session,
+        graph.principal,
+        attempt_id,
+        command,
+    )
+    assert completed is not None
+    first_entry = db_session.get(ProspectCallingBatchEntry, graph.entries[0].id)
+    attempt = db_session.get(ProspectingAttempt, attempt_id)
+    assert first_entry is not None
+    assert attempt is not None
+    assert first_entry.attempt_count == 0
+    assert first_entry.status == "queued"
+    assert first_entry.next_attempt_at is not None
+    assert attempt.outcome == "technical_failure"
+    assert attempt.contact_made is False
+    assert attempt.measurement_metadata["cadence"]["consumes_seller_attempt"] is False
+    assert attempt.measurement_metadata["provider_terminal"]["status"] == "failed"
+
+    replay = complete_technical_failure(
+        db_session,
+        graph.principal,
+        attempt_id,
+        command,
+    )
+    assert replay is not None
+    db_session.refresh(first_entry)
+    assert first_entry.attempt_count == 0
+    with pytest.raises(ProspectingCompletionConflictError, match="idempotency key"):
+        complete_technical_failure(
+            db_session,
+            graph.principal,
+            attempt_id,
+            command.model_copy(update={"idempotency_key": f"different:{attempt_id}"}),
+        )
+    db_session.rollback()
+
+
+@pytest.mark.parametrize("location_type", ["phone", "video", "office"])
+def test_appointment_completion_requires_non_property_location(location_type: str) -> None:
+    with pytest.raises(ValueError, match="explicit location"):
+        ProspectingAttemptComplete(
+            outcome="appointment_set",
+            handoff_user_id=uuid4(),
+            appointment_start_at=datetime.now(UTC) + timedelta(days=1),
+            appointment_location_type=location_type,
+        )
+
+
+def test_native_appointment_completion_replays_once_and_uses_connected_phone(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    graph = seed_coordinator_graph(db_session, record_count=1)
+    settings = settings_factory()
+    prospect = db_session.get(Prospect, graph.entries[0].prospect_id)
+    assert prospect is not None
+    now = datetime.now(UTC)
+    alternate_phone = "+14045559991"
+    point = ProspectContactPoint(
+        organization_id=graph.organization.id,
+        prospect_id=prospect.id,
+        source_membership_id=None,
+        contact_type="phone",
+        value=alternate_phone,
+        normalized_value=alternate_phone,
+        rank=1,
+        is_primary=False,
+        validation_status="verified",
+        first_seen_at=now,
+        last_seen_at=now,
+        contact_metadata={"source": "d6_test"},
+    )
+    db_session.add(point)
+    db_session.commit()
+    start_payload = session_start(graph, suffix="appointment-replay")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    assert leg.contact_point_id == point.id
+    assert leg.recipient == alternate_phone
+    terminalize_test_leg(
+        db_session,
+        graph,
+        leg,
+        key="d6-appointment-replay",
+        final_status="completed",
+        connected=True,
+    )
+    provider_answered_at = leg.answered_at
+    payload = ProspectingAttemptComplete(
+        outcome="appointment_set",
+        idempotency_key=f"appointment-complete:{attempt_id}",
+        browser_session_id=start_payload.browser_session_id,
+        lease_token=started.lease_token,
+        handoff_user_id=graph.owner.id,
+        appointment_start_at=now + timedelta(days=1),
+        appointment_location_type="seller_property",
+        notes="Seller requested an in-person visit.",
+    )
+
+    completed = complete_attempt(db_session, graph.principal, attempt_id, payload)
+    assert completed is not None
+    replay = complete_attempt(db_session, graph.principal, attempt_id, payload)
+    assert replay is not None
+    assert db_session.scalar(select(func.count(Lead.id))) == 1
+    assert db_session.scalar(select(func.count(ProspectHandoff.id))) == 1
+    assert db_session.scalar(select(func.count(Appointment.id))) == 1
+    appointment = db_session.scalar(select(Appointment))
+    converted_prospect = db_session.get(Prospect, prospect.id)
+    attempt = db_session.get(ProspectingAttempt, attempt_id)
+    assert appointment is not None
+    assert converted_prospect is not None
+    assert attempt is not None
+    assert appointment.prospecting_attempt_id == attempt_id
+    assert appointment.location_type == "seller_property"
+    assert appointment.location == "1 Coordinator Way, Atlanta, GA 30303"
+    assert converted_prospect.converted_lead_id is not None
+    assert attempt.answered_at == provider_answered_at
+    assert attempt.classification_source == "provider_plus_manual_outcome"
+    lead = db_session.get(Lead, converted_prospect.converted_lead_id)
+    assert lead is not None
+    phones = list(
+        db_session.scalars(
+            select(ContactMethod).where(
+                ContactMethod.contact_id == lead.contact_id,
+                ContactMethod.method_type == "phone",
+            )
+        )
+    )
+    assert {phone.normalized_value for phone in phones} == {
+        alternate_phone,
+        prospect.normalized_phone,
+    }
+    assert next(phone for phone in phones if phone.is_primary).normalized_value == alternate_phone
+    with pytest.raises(ProspectingCompletionConflictError, match="payload"):
+        complete_attempt(
+            db_session,
+            graph.principal,
+            attempt_id,
+            payload.model_copy(update={"notes": "A different completion body."}),
+        )
+    db_session.rollback()
+
+
+def test_no_answer_cadence_exhausts_at_script_maximum(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    graph = seed_coordinator_graph(db_session, record_count=1)
+    settings = settings_factory()
+    script = db_session.scalar(
+        select(ProspectingScriptVersion).where(
+            ProspectingScriptVersion.organization_id == graph.organization.id
+        )
+    )
+    assert script is not None
+    script.disposition_rules = {
+        "maximum_seller_attempts": 1,
+        "no_answer_retry_delay_hours": 7,
+    }
+    db_session.commit()
+    start_payload = session_start(graph, suffix="cadence-exhausted")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=datetime.now(UTC),
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    terminalize_test_leg(
+        db_session,
+        graph,
+        leg,
+        key="d6-cadence-exhausted",
+        final_status="no_answer",
+    )
+    completed = complete_attempt(
+        db_session,
+        graph.principal,
+        attempt_id,
+        ProspectingAttemptComplete(
+            outcome="no_answer",
+            idempotency_key=f"no-answer-complete:{attempt_id}",
+            browser_session_id=start_payload.browser_session_id,
+            lease_token=started.lease_token,
+        ),
+    )
+    assert completed is not None
+    entry = db_session.get(ProspectCallingBatchEntry, graph.entries[0].id)
+    prospect = db_session.get(Prospect, graph.entries[0].prospect_id)
+    attempt = db_session.get(ProspectingAttempt, attempt_id)
+    assert entry is not None
+    assert prospect is not None
+    assert attempt is not None
+    assert entry.status == "completed"
+    assert entry.next_attempt_at is None
+    assert prospect.status == "cadence_exhausted"
+    assert attempt.measurement_metadata["cadence"] == {
+        "outcome": "no_answer",
+        "seller_attempt_number": 1,
+        "maximum_seller_attempts": 1,
+        "delay_seconds": 7 * 60 * 60,
+        "next_attempt_at": None,
+        "consumes_seller_attempt": True,
+        "exhausted": True,
+        "script_version_id": str(script.id),
+        "script_version_number": script.version_number,
+    }
+
+
+def test_wrong_number_invalidates_exact_phone_and_reserves_ranked_fallback(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    graph = seed_coordinator_graph(db_session, record_count=1)
+    settings = settings_factory()
+    prospect = db_session.get(Prospect, graph.entries[0].prospect_id)
+    assert prospect is not None
+    now = datetime.now(UTC)
+    first = ProspectContactPoint(
+        organization_id=graph.organization.id,
+        prospect_id=prospect.id,
+        source_membership_id=None,
+        contact_type="phone",
+        value="+14045559981",
+        normalized_value="+14045559981",
+        rank=1,
+        is_primary=False,
+        validation_status="verified",
+        first_seen_at=now,
+        last_seen_at=now,
+        contact_metadata={},
+    )
+    second = ProspectContactPoint(
+        organization_id=graph.organization.id,
+        prospect_id=prospect.id,
+        source_membership_id=None,
+        contact_type="phone",
+        value="+14045559982",
+        normalized_value="+14045559982",
+        rank=2,
+        is_primary=False,
+        validation_status="verified",
+        first_seen_at=now,
+        last_seen_at=now,
+        contact_metadata={},
+    )
+    db_session.add_all([first, second])
+    db_session.commit()
+    start_payload = session_start(graph, suffix="wrong-fallback")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    assert leg.contact_point_id == first.id
+    terminalize_test_leg(
+        db_session,
+        graph,
+        leg,
+        key="d6-wrong-fallback",
+        final_status="completed",
+        connected=True,
+    )
+    completed = complete_attempt(
+        db_session,
+        graph.principal,
+        attempt_id,
+        ProspectingAttemptComplete(
+            outcome="wrong_number",
+            idempotency_key=f"wrong-number-complete:{attempt_id}",
+            browser_session_id=start_payload.browser_session_id,
+            lease_token=started.lease_token,
+        ),
+    )
+    assert completed is not None
+    db_session.refresh(first)
+    db_session.refresh(second)
+    db_session.refresh(prospect)
+    assert first.validation_status == "invalid"
+    assert second.validation_status == "verified"
+    assert prospect.call_eligibility == "eligible"
+    suppression = db_session.scalar(
+        select(SuppressionRecord).where(
+            SuppressionRecord.normalized_address == first.normalized_value
+        )
+    )
+    assert suppression is not None
+    session = db_session.get(ProspectingDialSession, started.snapshot.session.id)
+    assert session is not None
+    assert session.current_attempt_id is not None
+    assert session.current_attempt_id != attempt_id
+    fallback_leg = db_session.scalar(
+        select(ProspectingDialLeg).where(
+            ProspectingDialLeg.attempt_id == session.current_attempt_id
+        )
+    )
+    assert fallback_leg is not None
+    assert fallback_leg.contact_point_id == second.id
+    assert fallback_leg.recipient == second.normalized_value
+
+
+def test_dnc_suppresses_only_exact_number_across_prospects(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    graph = seed_coordinator_graph(db_session, record_count=2)
+    settings = settings_factory()
+    first_prospect = db_session.get(Prospect, graph.entries[0].prospect_id)
+    second_prospect = db_session.get(Prospect, graph.entries[1].prospect_id)
+    assert first_prospect is not None
+    assert second_prospect is not None
+    shared_phone = "+14045559971"
+    second_prospect.phone = shared_phone
+    second_prospect.normalized_phone = shared_phone
+    second_prospect.phone_validation_status = "verified"
+    now = datetime.now(UTC)
+    point = ProspectContactPoint(
+        organization_id=graph.organization.id,
+        prospect_id=first_prospect.id,
+        source_membership_id=None,
+        contact_type="phone",
+        value=shared_phone,
+        normalized_value=shared_phone,
+        rank=1,
+        is_primary=False,
+        validation_status="verified",
+        first_seen_at=now,
+        last_seen_at=now,
+        contact_metadata={},
+    )
+    db_session.add(point)
+    db_session.commit()
+    start_payload = session_start(graph, suffix="exact-dnc")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    assert leg.recipient == shared_phone
+    terminalize_test_leg(
+        db_session,
+        graph,
+        leg,
+        key="d6-exact-dnc",
+        final_status="completed",
+        connected=True,
+    )
+    completed = complete_attempt(
+        db_session,
+        graph.principal,
+        attempt_id,
+        ProspectingAttemptComplete(
+            outcome="do_not_call",
+            idempotency_key=f"dnc-complete:{attempt_id}",
+            browser_session_id=start_payload.browser_session_id,
+            lease_token=started.lease_token,
+        ),
+    )
+    assert completed is not None
+    db_session.refresh(first_prospect)
+    db_session.refresh(second_prospect)
+    assert first_prospect.call_eligibility == "blocked"
+    assert first_prospect.suppression_status == "suppressed"
+    assert second_prospect.call_eligibility == "eligible"
+    assert select_ranked_phone(db_session, second_prospect) is None
+    suppression = db_session.scalar(
+        select(SuppressionRecord).where(SuppressionRecord.normalized_address == shared_phone)
+    )
+    assert suppression is not None
+    assert suppression.suppression_metadata["contact_point_id"] == str(point.id)
+    assert db_session.scalar(select(func.count(SuppressionRecord.id))) == 1

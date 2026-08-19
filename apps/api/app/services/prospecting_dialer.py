@@ -98,7 +98,12 @@ ACTIVE_DIAL_SESSION_STATES = {
 TERMINAL_DIAL_SESSION_STATES = {"ended", "stopped", "failed", "expired"}
 ACTIVE_DIAL_LEG_STATUSES = DIAL_LEG_STATUSES - DIAL_LEG_TERMINAL_STATUSES
 CALLBACK_DISPOSITIONS = {"callback_requested", "follow_up"}
-RETRY_DISPOSITIONS = {"no_answer", "left_voicemail"}
+RETRY_DISPOSITIONS = {
+    "no_answer",
+    "left_voicemail",
+    "technical_failure",
+    "wrong_number",
+}
 VALID_PHONE_STATUSES = {"valid", "verified"}
 ACTIVE_BATCH_STATUSES = {"active", "ready", "in_progress"}
 RECOVERY_REPLAY_DIGEST_VERSION = "hmac-sha256-v1"
@@ -2084,9 +2089,9 @@ def validate_native_attempt_terminal(
     attempt_id: UUID,
     *,
     native_attempt: bool,
-) -> None:
+) -> ProspectingDialLeg | None:
     if not native_attempt:
-        return
+        return None
     leg = db.scalar(
         select(ProspectingDialLeg)
         .where(
@@ -2103,6 +2108,7 @@ def validate_native_attempt_terminal(
         )
     if leg.status not in DIAL_LEG_TERMINAL_STATUSES:
         raise ValueError("End the active call before recording its final disposition.")
+    return leg
 
 
 def complete_native_wrap_up(

@@ -282,6 +282,10 @@ class ProspectingDialSessionLeaseCommand(BaseModel):
     lease_token: str = Field(min_length=32, max_length=255)
 
 
+class ProspectingTechnicalFailureComplete(ProspectingDialSessionLeaseCommand):
+    idempotency_key: str = Field(min_length=8, max_length=255)
+
+
 class ProspectingDialSessionEndCommand(ProspectingDialSessionLeaseCommand):
     reason: str = Field(min_length=3, max_length=255)
 
@@ -473,7 +477,10 @@ class ProspectingEntryRead(BaseModel):
 
 
 class ProspectingAttemptComplete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     outcome: ProspectingOutcome
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=255)
     browser_session_id: str | None = Field(default=None, min_length=8, max_length=255)
     lease_token: str | None = Field(default=None, min_length=32, max_length=255)
     qualification_answers: dict[str, str] = Field(default_factory=dict, max_length=50)
@@ -502,7 +509,19 @@ class ProspectingAttemptComplete(BaseModel):
             raise ValueError("Warm outcomes require an acquisitions handoff owner.")
         if self.outcome == "appointment_set" and self.appointment_start_at is None:
             raise ValueError("Appointment set requires an appointment date and time.")
+        if self.outcome == "appointment_set" and self.appointment_location_type is None:
+            raise ValueError("Appointment set requires an appointment location type.")
+        if (
+            self.outcome == "appointment_set"
+            and self.appointment_location_type in {"phone", "video", "office"}
+            and not (self.appointment_location or "").strip()
+        ):
+            raise ValueError("Phone, video, and office appointments require an explicit location.")
         if self.outcome != "appointment_set" and self.appointment_start_at is not None:
+            raise ValueError("Appointment details apply only to an appointment-set outcome.")
+        if self.outcome != "appointment_set" and (
+            self.appointment_location_type is not None or self.appointment_location is not None
+        ):
             raise ValueError("Appointment details apply only to an appointment-set outcome.")
         return self
 
@@ -553,6 +572,8 @@ class ProspectingQueueSummary(BaseModel):
     ready: int
     callbacks_due: int
     callbacks_scheduled: int
+    retries_due: int
+    retries_scheduled: int
     corrections: int
     in_progress: int
     handoff_pending: int
@@ -569,6 +590,8 @@ class ProspectingBatchQueueRead(BaseModel):
     ready: int
     callbacks_due: int
     callbacks_scheduled: int
+    retries_due: int
+    retries_scheduled: int
     corrections: int
     in_progress: int
     handoff_pending: int

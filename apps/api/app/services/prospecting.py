@@ -1,5 +1,6 @@
 import hashlib
 import json
+import secrets
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from app.models.foundation import (
     ProspectImportBatch,
     ProspectingAttempt,
     ProspectingCohort,
+    ProspectingDialLeg,
     ProspectingQualificationResponse,
     ProspectingScriptVersion,
     Role,
@@ -62,6 +64,7 @@ from app.schemas.prospecting import (
     ProspectingScorecardRead,
     ProspectingScriptCreate,
     ProspectingScriptRead,
+    ProspectingTechnicalFailureComplete,
     ProspectingWorkbenchOverview,
     QualificationResponseState,
     ScriptQuestion,
@@ -72,6 +75,7 @@ from app.services.acquisition_operations import (
     prospect_property_metadata,
     upsert_internal_calendar_event,
 )
+from app.services.communication_compliance import format_e164
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.lead_lifecycle import require_lead_open_for_work
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
@@ -109,16 +113,25 @@ CONTACT_OUTCOMES = {
     "do_not_call",
 }
 FINAL_OUTCOMES = {"not_interested", "wrong_number", "do_not_call"}
+RETRY_OUTCOMES = {"no_answer", "left_voicemail", "technical_failure", "wrong_number"}
 DEFAULT_DISPOSITION_RULES = {
     "warm_outcomes": sorted(WARM_OUTCOMES),
     "callback_outcomes": sorted(CALLBACK_OUTCOMES),
     "final_outcomes": sorted(FINAL_OUTCOMES),
     "warm_handoff_requires_all_required_answers": True,
+    "no_answer_retry_delay_hours": 24,
+    "voicemail_retry_delay_hours": 48,
+    "technical_failure_retry_delay_minutes": 15,
+    "maximum_seller_attempts": 6,
 }
 
 
 class ProspectingQualificationConflictError(RuntimeError):
     """An autosave mutation conflicts with the durable checklist revision."""
+
+
+class ProspectingCompletionConflictError(RuntimeError):
+    """A completion replay conflicts with the durable disposition receipt."""
 
 
 @dataclass(frozen=True)
@@ -136,9 +149,7 @@ class ProspectingReadContext:
     import_batches: Mapping[UUID, ProspectImportBatch]
     scripts: Mapping[UUID, ProspectingScriptVersion]
     approved_scripts_by_asset_class: Mapping[str, ProspectingScriptVersion]
-    qualification_responses_by_attempt: Mapping[
-        UUID, Sequence[ProspectingQualificationResponse]
-    ]
+    qualification_responses_by_attempt: Mapping[UUID, Sequence[ProspectingQualificationResponse]]
 
 
 def can_manage(principal: Principal) -> bool:
@@ -557,6 +568,7 @@ def complete_attempt(
     payload: ProspectingAttemptComplete,
 ) -> ProspectingEntryRead | None:
     now = datetime.now(UTC)
+    completion_fingerprint = completion_payload_fingerprint(payload)
     from app.services.prospecting_dialer import (
         complete_native_wrap_up,
         validate_native_attempt_can_complete,
@@ -582,16 +594,34 @@ def complete_attempt(
     )
     if attempt is None:
         return None
-    if attempt.status != "in_progress":
-        raise ValueError("This attempt has already been completed.")
     if attempt.caller_user_id != principal.user_id:
         raise PermissionError("Only the caller who started this attempt can complete it.")
-    validate_native_attempt_terminal(
+    if attempt.status != "in_progress":
+        return replayed_completion_entry(
+            db,
+            principal,
+            attempt,
+            payload,
+            completion_fingerprint=completion_fingerprint,
+            native_attempt=native_attempt,
+        )
+    if native_attempt and native_session is None:
+        raise ProspectingCompletionConflictError(
+            "The native dialer lease changed before this disposition was saved."
+        )
+    if native_attempt and payload.idempotency_key is None:
+        raise ValueError("Native dialer completion requires a stable idempotency key.")
+    if not native_attempt and (
+        payload.browser_session_id is not None or payload.lease_token is not None
+    ):
+        raise ValueError("Dialer lease credentials apply only to native dialer attempts.")
+    native_leg = validate_native_attempt_terminal(
         db,
         principal.organization_id,
         attempt_id,
         native_attempt=native_attempt,
     )
+    validate_native_seller_disposition(native_leg, payload.outcome)
     entry = db.scalar(
         select(ProspectCallingBatchEntry).where(
             ProspectCallingBatchEntry.organization_id == principal.organization_id,
@@ -599,10 +629,13 @@ def complete_attempt(
         )
     )
     prospect = db.scalar(
-        select(Prospect).where(
+        select(Prospect)
+        .where(
             Prospect.organization_id == principal.organization_id,
             Prospect.id == attempt.prospect_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     script = scoped_attempt_script(db, principal.organization_id, attempt)
     if entry is None or prospect is None or script is None:
@@ -709,8 +742,16 @@ def complete_attempt(
             raise ValueError("A complete property address is required before a warm handoff.")
         validate_acquisition_user(db, principal.organization_id, payload.handoff_user_id)
     callback_at = as_utc(payload.callback_at) if payload.callback_at else None
+    if payload.outcome in CALLBACK_OUTCOMES and callback_at is None:
+        raise ValueError("Callback and follow-up outcomes require a callback date and time.")
     if callback_at and callback_at <= now:
         raise ValueError("Schedule callbacks in the future.")
+    appointment_start_at = (
+        as_utc(payload.appointment_start_at) if payload.appointment_start_at else None
+    )
+    if appointment_start_at is not None and appointment_start_at <= now:
+        raise ValueError("Schedule appointments in the future.")
+    seller_attempt_number = completed_seller_attempt_count(db, attempt.batch_entry_id) + 1
     attempt.status = "completed"
     attempt.outcome = payload.outcome
     attempt.contact_made = payload.outcome in CONTACT_OUTCOMES
@@ -721,37 +762,106 @@ def complete_attempt(
     attempt.required_answer_count = len(required_keys)
     attempt.answered_required_count = answered_required
     attempt.quality_score_basis_points = rate_basis_points(answered_required, len(required_keys))
-    apply_outcome_measurement(attempt, outcome=payload.outcome, completed_at=now)
+    if native_leg is not None:
+        attempt.dial_started_at = (
+            attempt.dial_started_at or native_leg.dialing_at or native_leg.queued_at
+        )
+        attempt.answered_at = (
+            attempt.answered_at or native_leg.answered_at or native_leg.connected_at
+        )
+    apply_outcome_measurement(
+        attempt,
+        outcome=payload.outcome,
+        completed_at=now,
+        provider_evidence=native_leg is not None,
+    )
+    attempt.measurement_metadata = {
+        **dict(attempt.measurement_metadata),
+        **(
+            {
+                "provider_terminal": provider_terminal_receipt(native_leg),
+            }
+            if native_leg is not None
+            else {}
+        ),
+        "completion_receipt": completion_receipt(
+            payload,
+            completion_fingerprint=completion_fingerprint,
+            native_attempt=native_attempt,
+            completed_at=now,
+        ),
+    }
     entry.attempt_count += 1
     entry.disposition = payload.outcome
     entry.last_attempt_at = now
     entry.next_attempt_at = None
     entry.completed_at = None
-    prospect.last_contacted_at = now
+    if attempt.contact_made:
+        prospect.last_contacted_at = now
 
-    if payload.outcome == "no_answer":
-        entry.status = "queued"
-        entry.next_attempt_at = now + timedelta(days=1)
-    elif payload.outcome == "left_voicemail":
-        entry.status = "queued"
-        entry.next_attempt_at = now + timedelta(days=2)
+    if payload.outcome in {"no_answer", "left_voicemail"}:
+        apply_retry_cadence(
+            attempt,
+            entry,
+            prospect,
+            script,
+            outcome=payload.outcome,
+            seller_attempt_number=seller_attempt_number,
+            now=now,
+        )
     elif payload.outcome in CALLBACK_OUTCOMES:
         entry.status = "queued"
         entry.next_attempt_at = callback_at
+        attempt.measurement_metadata = {
+            **dict(attempt.measurement_metadata),
+            "callback_schedule": {
+                "requested_at": now.isoformat(),
+                "callback_at": callback_at.isoformat() if callback_at else None,
+                "priority": "due_callback_before_retry_or_new",
+            },
+        }
     elif payload.outcome in WARM_OUTCOMES:
-        create_warm_handoff(db, principal, attempt, entry, prospect, payload, answers, now)
+        create_warm_handoff(
+            db,
+            principal,
+            attempt,
+            entry,
+            prospect,
+            payload,
+            answers,
+            now,
+            connected_phone=dialed_phone(native_leg, prospect),
+        )
     else:
         entry.status = "completed"
         entry.completed_at = now
         prospect.status = payload.outcome
         if payload.outcome == "wrong_number":
-            prospect.phone_validation_status = "invalid"
-            prospect.call_eligibility = "blocked"
+            apply_wrong_number_disposition(
+                db,
+                principal,
+                attempt,
+                entry,
+                prospect,
+                native_leg=native_leg,
+                now=now,
+            )
         elif payload.outcome == "do_not_call":
             prospect.call_eligibility = "blocked"
             prospect.suppression_status = "suppressed"
-            record_dnc_suppression(db, principal, prospect, now)
+            record_dnc_suppression(
+                db,
+                principal,
+                prospect,
+                now,
+                attempted_phone=dialed_phone(native_leg, prospect),
+                attempt_id=attempt.id,
+                contact_point_id=native_leg.contact_point_id if native_leg else None,
+            )
 
+    # The coordinator's reservation query runs in this transaction and must see the
+    # completed attempt before it can immediately select a ranked fallback number.
+    db.flush()
     complete_native_wrap_up(
         db,
         principal,
@@ -779,6 +889,155 @@ def complete_attempt(
     from app.services.prospecting_copilot import ensure_call_quality_review
 
     ensure_call_quality_review(db, principal, attempt, payload.compliance_flags)
+    refresh_batch_status(db, entry.prospect_calling_batch_id)
+    db.commit()
+    return entry_read(db, entry)
+
+
+def complete_technical_failure(
+    db: Session,
+    principal: Principal,
+    attempt_id: UUID,
+    payload: ProspectingTechnicalFailureComplete,
+) -> ProspectingEntryRead | None:
+    """Close failed provider work without manufacturing a seller disposition."""
+
+    from app.services.prospecting_dialer import (
+        ProspectingDialerConfigurationError,
+        complete_native_wrap_up,
+        validate_native_attempt_can_complete,
+        validate_native_attempt_terminal,
+    )
+
+    now = datetime.now(UTC)
+    native_session, native_attempt = validate_native_attempt_can_complete(
+        db,
+        principal,
+        attempt_id,
+        browser_session_id=payload.browser_session_id,
+        lease_token=payload.lease_token,
+        now=now,
+    )
+    attempt = db.scalar(
+        select(ProspectingAttempt)
+        .where(
+            ProspectingAttempt.organization_id == principal.organization_id,
+            ProspectingAttempt.id == attempt_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if attempt is None:
+        return None
+    if attempt.caller_user_id != principal.user_id:
+        raise PermissionError("Only the caller who started this attempt can resolve it.")
+    if attempt.status != "in_progress":
+        if attempt.status == "completed" and attempt.outcome == "technical_failure":
+            validate_technical_failure_receipt(
+                attempt,
+                idempotency_key=payload.idempotency_key,
+                browser_session_id=payload.browser_session_id,
+                lease_token=payload.lease_token,
+            )
+            entry = scoped_attempt_entry(db, principal.organization_id, attempt)
+            return entry_read(db, entry)
+        raise ProspectingCompletionConflictError(
+            "This attempt already has a different final disposition."
+        )
+    if not native_attempt or native_session is None:
+        raise ProspectingDialerConfigurationError(
+            "Technical-failure completion is available only for the active native dialer call."
+        )
+    native_leg = validate_native_attempt_terminal(
+        db,
+        principal.organization_id,
+        attempt.id,
+        native_attempt=True,
+    )
+    if native_leg is None or native_leg.status not in {"failed", "cancelled"}:
+        raise ValueError(
+            "Only a failed or cancelled provider call can be resolved as a technical failure."
+        )
+    entry = scoped_attempt_entry(db, principal.organization_id, attempt, lock=True)
+    prospect = db.scalar(
+        select(Prospect)
+        .where(
+            Prospect.organization_id == principal.organization_id,
+            Prospect.id == attempt.prospect_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    script = scoped_attempt_script(db, principal.organization_id, attempt)
+    if prospect is None or script is None:
+        raise ValueError("The prospecting record is incomplete.")
+
+    delay_minutes = disposition_rule_int(
+        script,
+        "technical_failure_retry_delay_minutes",
+        default=15,
+        minimum=1,
+        maximum=24 * 60,
+    )
+    next_attempt_at = now + timedelta(minutes=delay_minutes)
+    attempt.status = "completed"
+    attempt.outcome = "technical_failure"
+    attempt.contact_made = False
+    attempt.notes = clean_text(native_leg.provider_error_message) or "Provider call failed."
+    attempt.callback_at = None
+    attempt.completed_at = now
+    attempt.answer_classification = "unknown"
+    attempt.party_classification = "unknown"
+    attempt.interest_classification = "not_assessed"
+    attempt.follow_up_permission = "not_recorded"
+    attempt.classification_source = "provider_terminal"
+    attempt.measurement_metadata = {
+        **dict(attempt.measurement_metadata),
+        "provider_terminal": {
+            **provider_terminal_receipt(native_leg),
+            "seller_disposition_recorded": False,
+        },
+        "cadence": {
+            "outcome": "technical_failure",
+            "delay_seconds": delay_minutes * 60,
+            "next_attempt_at": next_attempt_at.isoformat(),
+            "consumes_seller_attempt": False,
+            "exhausted": False,
+            "script_version_id": str(script.id),
+            "script_version_number": script.version_number,
+        },
+        "completion_receipt": {
+            "kind": "technical_failure",
+            "idempotency_key": payload.idempotency_key,
+            "payload_sha256": technical_failure_payload_fingerprint(attempt.id),
+            "browser_session_id": payload.browser_session_id,
+            "lease_token_sha256": token_sha256(payload.lease_token),
+            "completed_at": now.isoformat(),
+        },
+    }
+    entry.disposition = "technical_failure"
+    entry.last_attempt_at = now
+    entry.next_attempt_at = next_attempt_at
+    entry.completed_at = None
+    entry.status = "queued"
+
+    complete_native_wrap_up(db, principal, attempt, session=native_session, now=now)
+    add_audit(
+        db,
+        principal,
+        action="prospecting.attempt_technical_failure_completed",
+        entity_type="prospecting_attempt",
+        entity_id=attempt.id,
+        previous={"status": "in_progress"},
+        new={
+            "status": "completed",
+            "outcome": "technical_failure",
+            "provider_status": native_leg.status,
+            "entry_status": entry.status,
+            "next_attempt_at": next_attempt_at.isoformat(),
+        },
+        reason="Provider failure preserved without creating a seller disposition",
+    )
     refresh_batch_status(db, entry.prospect_calling_batch_id)
     db.commit()
     return entry_read(db, entry)
@@ -946,6 +1205,8 @@ def create_warm_handoff(
     payload: ProspectingAttemptComplete,
     answers: dict[str, str],
     now: datetime,
+    *,
+    connected_phone: str | None,
 ) -> None:
     assert payload.handoff_user_id is not None
     lead = convert_prospect_to_lead(
@@ -954,6 +1215,7 @@ def create_warm_handoff(
         prospect,
         payload.handoff_user_id,
         answers,
+        connected_phone=connected_phone,
     )
     prior_returns = db.scalars(
         select(ProspectHandoff).where(
@@ -982,7 +1244,7 @@ def create_warm_handoff(
     entry.status = "handoff_pending"
     prospect.status = "warm_handoff"
     if payload.outcome == "appointment_set" and payload.appointment_start_at:
-        create_handoff_appointment(db, lead, payload, now)
+        create_handoff_appointment(db, lead, attempt.id, payload, now)
     db.flush()
     create_case_for_handoff(
         db,
@@ -1013,7 +1275,21 @@ def convert_prospect_to_lead(
     prospect: Prospect,
     assigned_user_id: UUID,
     answers: dict[str, str],
+    *,
+    connected_phone: str | None,
 ) -> Lead:
+    locked_prospect = db.scalar(
+        select(Prospect)
+        .where(
+            Prospect.organization_id == principal.organization_id,
+            Prospect.id == prospect.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_prospect is None:
+        raise ValueError("The prospect is no longer available for handoff.")
+    prospect = locked_prospect
     if prospect.converted_lead_id:
         existing = db.scalar(
             select(Lead)
@@ -1029,6 +1305,13 @@ def convert_prospect_to_lead(
         require_lead_open_for_work(existing)
         existing.assigned_user_id = assigned_user_id
         update_lead_qualification(existing, answers)
+        sync_contact_phone_methods(
+            db,
+            organization_id=principal.organization_id,
+            contact_id=existing.contact_id,
+            connected_phone=connected_phone,
+            fallback_phone=prospect.phone or prospect.normalized_phone,
+        )
         conversation = ensure_primary_conversation(db, existing, queue_key="qualified")
         conversation.assigned_user_id = assigned_user_id
         conversation.queue_key = "qualified"
@@ -1057,17 +1340,13 @@ def convert_prospect_to_lead(
     )
     db.add(contact)
     db.flush()
-    if prospect.phone and prospect.normalized_phone:
-        db.add(
-            ContactMethod(
-                organization_id=principal.organization_id,
-                contact_id=contact.id,
-                method_type="phone",
-                value=prospect.phone,
-                normalized_value=prospect.normalized_phone,
-                is_primary=True,
-            )
-        )
+    has_phone = sync_contact_phone_methods(
+        db,
+        organization_id=principal.organization_id,
+        contact_id=contact.id,
+        connected_phone=connected_phone,
+        fallback_phone=prospect.phone or prospect.normalized_phone,
+    )
     if prospect.email and prospect.normalized_email:
         db.add(
             ContactMethod(
@@ -1076,7 +1355,7 @@ def convert_prospect_to_lead(
                 method_type="email",
                 value=prospect.email,
                 normalized_value=prospect.normalized_email,
-                is_primary=not bool(prospect.phone),
+                is_primary=not has_phone,
             )
         )
     property_type = source_property_type or (
@@ -1195,16 +1474,42 @@ def convert_prospect_to_lead(
 def create_handoff_appointment(
     db: Session,
     lead: Lead,
+    attempt_id: UUID,
     payload: ProspectingAttemptComplete,
     now: datetime,
 ) -> None:
     assert payload.appointment_start_at is not None
     appointment_start_at = as_utc(payload.appointment_start_at)
+    location_type = payload.appointment_location_type or "seller_property"
+    location = clean_text(payload.appointment_location)
+    if location_type == "seller_property" and location is None:
+        property_record = db.scalar(
+            select(Property).where(
+                Property.organization_id == lead.organization_id,
+                Property.id == lead.property_id,
+            )
+        )
+        if property_record is None:
+            raise ValueError("The seller property's appointment address is unavailable.")
+        address_parts = (
+            property_record.street_address,
+            property_record.city,
+            property_record.state,
+            property_record.postal_code,
+        )
+        if not all(clean_text(part) for part in address_parts):
+            raise ValueError(
+                "Seller-property appointments require a complete property address or "
+                "an explicit location."
+            )
+        location = (
+            f"{property_record.street_address}, {property_record.city}, "
+            f"{property_record.state} {property_record.postal_code}"
+        )
     existing = db.scalar(
         select(Appointment).where(
             Appointment.organization_id == lead.organization_id,
-            Appointment.lead_id == lead.id,
-            Appointment.status == "scheduled",
+            Appointment.prospecting_attempt_id == attempt_id,
         )
     )
     if existing:
@@ -1214,13 +1519,14 @@ def create_handoff_appointment(
         lead_id=lead.id,
         contact_id=lead.contact_id,
         property_id=lead.property_id,
+        prospecting_attempt_id=attempt_id,
         owner_user_id=lead.assigned_user_id,
         appointment_type="acquisition_consultation",
         status="scheduled",
         scheduled_start_at=appointment_start_at,
         scheduled_end_at=appointment_start_at + timedelta(hours=1),
-        location_type=payload.appointment_location_type or "seller_property",
-        location=payload.appointment_location,
+        location_type=location_type,
+        location=location,
         notes=clean_text(payload.notes),
         outcome=None,
         external_calendar_id=None,
@@ -1255,43 +1561,565 @@ def update_lead_qualification(lead: Lead, answers: dict[str, str]) -> None:
     lead.mortgage_balance = answers.get("mortgage_balance") or lead.mortgage_balance
 
 
+def completion_payload_fingerprint(payload: ProspectingAttemptComplete) -> str:
+    canonical = json.dumps(
+        payload.model_dump(
+            mode="json",
+            exclude={"browser_session_id", "lease_token", "idempotency_key"},
+        ),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def technical_failure_payload_fingerprint(attempt_id: UUID) -> str:
+    canonical = json.dumps(
+        {"attempt_id": str(attempt_id), "kind": "technical_failure"},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def token_sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def completion_receipt(
+    payload: ProspectingAttemptComplete,
+    *,
+    completion_fingerprint: str,
+    native_attempt: bool,
+    completed_at: datetime,
+) -> dict[str, object]:
+    receipt: dict[str, object] = {
+        "kind": "seller_disposition",
+        "idempotency_key": payload.idempotency_key,
+        "payload_sha256": completion_fingerprint,
+        "completed_at": completed_at.isoformat(),
+    }
+    if native_attempt:
+        assert payload.browser_session_id is not None
+        assert payload.lease_token is not None
+        receipt.update(
+            {
+                "browser_session_id": payload.browser_session_id,
+                "lease_token_sha256": token_sha256(payload.lease_token),
+            }
+        )
+    return receipt
+
+
+def completion_receipt_for_attempt(attempt: ProspectingAttempt) -> Mapping[str, object]:
+    receipt = (attempt.measurement_metadata or {}).get("completion_receipt")
+    if not isinstance(receipt, Mapping):
+        raise ProspectingCompletionConflictError(
+            "This attempt was already finalized without a replay receipt."
+        )
+    return receipt
+
+
+def validate_completion_lease_receipt(
+    receipt: Mapping[str, object],
+    *,
+    browser_session_id: str | None,
+    lease_token: str | None,
+) -> None:
+    stored_browser = receipt.get("browser_session_id")
+    stored_lease_digest = receipt.get("lease_token_sha256")
+    if (
+        not isinstance(stored_browser, str)
+        or not isinstance(stored_lease_digest, str)
+        or browser_session_id is None
+        or lease_token is None
+        or not secrets.compare_digest(stored_browser, browser_session_id)
+        or not secrets.compare_digest(stored_lease_digest, token_sha256(lease_token))
+    ):
+        raise ProspectingCompletionConflictError(
+            "The original dialer lease is required to replay this completion."
+        )
+
+
+def replayed_completion_entry(
+    db: Session,
+    principal: Principal,
+    attempt: ProspectingAttempt,
+    payload: ProspectingAttemptComplete,
+    *,
+    completion_fingerprint: str,
+    native_attempt: bool,
+) -> ProspectingEntryRead:
+    if attempt.status != "completed":
+        raise ProspectingCompletionConflictError("This attempt cannot be completed again.")
+    receipt = completion_receipt_for_attempt(attempt)
+    if receipt.get("kind") != "seller_disposition":
+        raise ProspectingCompletionConflictError(
+            "This attempt already has a different final completion type."
+        )
+    stored_key = receipt.get("idempotency_key")
+    if stored_key != payload.idempotency_key:
+        raise ProspectingCompletionConflictError(
+            "This completion idempotency key does not match the original request."
+        )
+    stored_fingerprint = receipt.get("payload_sha256")
+    if not isinstance(stored_fingerprint, str) or not secrets.compare_digest(
+        stored_fingerprint,
+        completion_fingerprint,
+    ):
+        raise ProspectingCompletionConflictError(
+            "This completion payload does not match the original request."
+        )
+    if native_attempt:
+        validate_completion_lease_receipt(
+            receipt,
+            browser_session_id=payload.browser_session_id,
+            lease_token=payload.lease_token,
+        )
+    elif payload.browser_session_id is not None or payload.lease_token is not None:
+        raise ProspectingCompletionConflictError(
+            "Dialer lease credentials do not belong to this manual attempt."
+        )
+    entry = scoped_attempt_entry(db, principal.organization_id, attempt, lock=True)
+    return entry_read(db, entry)
+
+
+def validate_technical_failure_receipt(
+    attempt: ProspectingAttempt,
+    *,
+    idempotency_key: str,
+    browser_session_id: str,
+    lease_token: str,
+) -> None:
+    receipt = completion_receipt_for_attempt(attempt)
+    if receipt.get("kind") != "technical_failure":
+        raise ProspectingCompletionConflictError(
+            "This attempt already has a different final completion type."
+        )
+    if receipt.get("idempotency_key") != idempotency_key:
+        raise ProspectingCompletionConflictError(
+            "This technical-failure idempotency key does not match the original request."
+        )
+    expected_fingerprint = technical_failure_payload_fingerprint(attempt.id)
+    stored_fingerprint = receipt.get("payload_sha256")
+    if not isinstance(stored_fingerprint, str) or not secrets.compare_digest(
+        stored_fingerprint,
+        expected_fingerprint,
+    ):
+        raise ProspectingCompletionConflictError("The stored technical-failure receipt is invalid.")
+    validate_completion_lease_receipt(
+        receipt,
+        browser_session_id=browser_session_id,
+        lease_token=lease_token,
+    )
+
+
+def scoped_attempt_entry(
+    db: Session,
+    organization_id: UUID,
+    attempt: ProspectingAttempt,
+    *,
+    lock: bool = False,
+) -> ProspectCallingBatchEntry:
+    statement = select(ProspectCallingBatchEntry).where(
+        ProspectCallingBatchEntry.organization_id == organization_id,
+        ProspectCallingBatchEntry.id == attempt.batch_entry_id,
+    )
+    if lock:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    entry = db.scalar(statement)
+    if entry is None:
+        raise ValueError("The prospecting queue entry is unavailable.")
+    return entry
+
+
+def validate_native_seller_disposition(
+    leg: ProspectingDialLeg | None,
+    outcome: str,
+) -> None:
+    if leg is None:
+        return
+    if leg.status in {"failed", "cancelled"}:
+        raise ValueError(
+            "The provider call failed before a seller outcome was known. "
+            "Use Resolve technical failure."
+        )
+    if leg.status in {"no_answer", "busy"}:
+        if outcome != "no_answer":
+            raise ValueError("Provider no-answer evidence can only be saved as No answer.")
+        return
+    if leg.status != "completed":
+        raise ValueError("The provider call has no compatible terminal result.")
+    if outcome == "no_answer":
+        raise ValueError("A completed provider call cannot be saved as No answer.")
+    if outcome in CONTACT_OUTCOMES | {"wrong_number"} and leg.connected_at is None:
+        raise ValueError(
+            "A seller-contact disposition requires provider evidence that the call connected."
+        )
+
+
+def provider_terminal_receipt(leg: ProspectingDialLeg) -> dict[str, object | None]:
+    def serialized(value: datetime | None) -> str | None:
+        return as_utc(value).isoformat() if value is not None else None
+
+    return {
+        "dial_leg_id": str(leg.id),
+        "contact_point_id": str(leg.contact_point_id) if leg.contact_point_id else None,
+        "recipient": leg.recipient,
+        "provider": leg.provider,
+        "provider_call_id": leg.provider_call_id,
+        "status": leg.status,
+        "terminal_result": leg.terminal_result,
+        "provider_error_code": leg.provider_error_code,
+        "queued_at": serialized(leg.queued_at),
+        "dialing_at": serialized(leg.dialing_at),
+        "ringing_at": serialized(leg.ringing_at),
+        "answered_at": serialized(leg.answered_at),
+        "connected_at": serialized(leg.connected_at),
+        "completed_at": serialized(leg.completed_at),
+        "last_provider_event_at": serialized(leg.last_provider_event_at),
+    }
+
+
+def completed_seller_attempt_count(db: Session, batch_entry_id: UUID) -> int:
+    return int(
+        db.scalar(
+            select(func.count(ProspectingAttempt.id)).where(
+                ProspectingAttempt.batch_entry_id == batch_entry_id,
+                ProspectingAttempt.status == "completed",
+                ProspectingAttempt.outcome.is_not(None),
+                ProspectingAttempt.outcome != "technical_failure",
+            )
+        )
+        or 0
+    )
+
+
+def disposition_rule_int(
+    script: ProspectingScriptVersion,
+    key: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw = (script.disposition_rules or {}).get(key, default)
+    if isinstance(raw, bool) or not isinstance(raw, int) or not minimum <= raw <= maximum:
+        raise ValueError(
+            f"Caller-script disposition rule {key} must be an integer from "
+            f"{minimum} through {maximum}."
+        )
+    return raw
+
+
+def apply_retry_cadence(
+    attempt: ProspectingAttempt,
+    entry: ProspectCallingBatchEntry,
+    prospect: Prospect,
+    script: ProspectingScriptVersion,
+    *,
+    outcome: str,
+    seller_attempt_number: int,
+    now: datetime,
+) -> None:
+    maximum_attempts = disposition_rule_int(
+        script,
+        "maximum_seller_attempts",
+        default=6,
+        minimum=1,
+        maximum=100,
+    )
+    delay_hours = disposition_rule_int(
+        script,
+        "no_answer_retry_delay_hours" if outcome == "no_answer" else "voicemail_retry_delay_hours",
+        default=24 if outcome == "no_answer" else 48,
+        minimum=1,
+        maximum=24 * 30,
+    )
+    exhausted = seller_attempt_number >= maximum_attempts
+    next_attempt_at = None if exhausted else now + timedelta(hours=delay_hours)
+    if exhausted:
+        entry.status = "completed"
+        entry.completed_at = now
+        prospect.status = "cadence_exhausted"
+    else:
+        entry.status = "queued"
+        entry.next_attempt_at = next_attempt_at
+        prospect.status = "ready"
+    attempt.measurement_metadata = {
+        **dict(attempt.measurement_metadata),
+        "cadence": {
+            "outcome": outcome,
+            "seller_attempt_number": seller_attempt_number,
+            "maximum_seller_attempts": maximum_attempts,
+            "delay_seconds": delay_hours * 60 * 60,
+            "next_attempt_at": next_attempt_at.isoformat() if next_attempt_at else None,
+            "consumes_seller_attempt": True,
+            "exhausted": exhausted,
+            "script_version_id": str(script.id),
+            "script_version_number": script.version_number,
+        },
+    }
+
+
+def dialed_phone(leg: ProspectingDialLeg | None, prospect: Prospect) -> str | None:
+    return format_e164(
+        leg.recipient if leg is not None else (prospect.normalized_phone or prospect.phone)
+    )
+
+
+def sync_contact_phone_methods(
+    db: Session,
+    *,
+    organization_id: UUID,
+    contact_id: UUID,
+    connected_phone: str | None,
+    fallback_phone: str | None,
+) -> bool:
+    connected = format_e164(connected_phone)
+    fallback = format_e164(fallback_phone)
+    primary = connected or fallback
+    if primary is None:
+        return False
+    desired = [primary]
+    if fallback is not None and fallback != primary:
+        desired.append(fallback)
+    rows = list(
+        db.scalars(
+            select(ContactMethod).where(
+                ContactMethod.organization_id == organization_id,
+                ContactMethod.contact_id == contact_id,
+                ContactMethod.method_type == "phone",
+            )
+        )
+    )
+    by_normalized = {
+        format_e164(row.normalized_value or row.value): row
+        for row in rows
+        if format_e164(row.normalized_value or row.value) is not None
+    }
+    for normalized in desired:
+        row = by_normalized.get(normalized)
+        if row is None:
+            row = ContactMethod(
+                organization_id=organization_id,
+                contact_id=contact_id,
+                method_type="phone",
+                value=normalized,
+                normalized_value=normalized,
+                is_primary=normalized == primary,
+            )
+            db.add(row)
+            rows.append(row)
+        else:
+            row.is_primary = normalized == primary
+    for row in rows:
+        row_phone = format_e164(row.normalized_value or row.value)
+        if row_phone != primary:
+            row.is_primary = False
+    return True
+
+
+def upsert_phone_suppression(
+    db: Session,
+    principal: Principal,
+    *,
+    normalized_phone: str,
+    reason: str,
+    source: str,
+    now: datetime,
+    metadata: Mapping[str, object],
+) -> SuppressionRecord:
+    existing = db.scalar(
+        select(SuppressionRecord)
+        .where(
+            SuppressionRecord.organization_id == principal.organization_id,
+            SuppressionRecord.channel == "phone",
+            SuppressionRecord.normalized_address == normalized_phone,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if existing is not None:
+        existing.status = "active"
+        existing.reason = reason
+        existing.source = source
+        existing.suppressed_at = now
+        existing.lifted_at = None
+        existing.suppression_metadata = {
+            **(existing.suppression_metadata or {}),
+            **metadata,
+        }
+        return existing
+    record = SuppressionRecord(
+        organization_id=principal.organization_id,
+        contact_id=None,
+        channel="phone",
+        normalized_address=normalized_phone,
+        status="active",
+        reason=reason,
+        source=source,
+        provider=None,
+        external_event_id=None,
+        suppressed_at=now,
+        lifted_at=None,
+        suppression_metadata=dict(metadata),
+    )
+    db.add(record)
+    return record
+
+
+def apply_wrong_number_disposition(
+    db: Session,
+    principal: Principal,
+    attempt: ProspectingAttempt,
+    entry: ProspectCallingBatchEntry,
+    prospect: Prospect,
+    *,
+    native_leg: ProspectingDialLeg | None,
+    now: datetime,
+) -> None:
+    from app.services.prospecting_dialer import select_ranked_phone
+
+    attempted_phone = dialed_phone(native_leg, prospect)
+    if attempted_phone is None:
+        raise ValueError("The attempted phone number is unavailable.")
+    matching_points = list(
+        db.scalars(
+            select(ProspectContactPoint)
+            .where(
+                ProspectContactPoint.organization_id == principal.organization_id,
+                ProspectContactPoint.prospect_id == prospect.id,
+                ProspectContactPoint.contact_type == "phone",
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+    invalidated_ids: list[str] = []
+    for point in matching_points:
+        if format_e164(point.normalized_value or point.value) != attempted_phone:
+            continue
+        point.validation_status = "invalid"
+        point.contact_metadata = {
+            **(point.contact_metadata or {}),
+            "wrong_number_at": now.isoformat(),
+            "wrong_number_attempt_id": str(attempt.id),
+        }
+        invalidated_ids.append(str(point.id))
+    if (
+        native_leg is not None
+        and native_leg.contact_point_id is not None
+        and str(native_leg.contact_point_id) not in invalidated_ids
+    ):
+        raise ValueError("The dialed contact point does not match the provider recipient.")
+    if format_e164(prospect.normalized_phone or prospect.phone) == attempted_phone:
+        prospect.phone_validation_status = "invalid"
+    upsert_phone_suppression(
+        db,
+        principal,
+        normalized_phone=attempted_phone,
+        reason="Confirmed wrong number",
+        source="prospecting_wrong_number",
+        now=now,
+        metadata={
+            "prospect_id": str(prospect.id),
+            "attempt_id": str(attempt.id),
+            "contact_point_id": (
+                str(native_leg.contact_point_id)
+                if native_leg is not None and native_leg.contact_point_id is not None
+                else None
+            ),
+            "dial_leg_id": str(native_leg.id) if native_leg is not None else None,
+        },
+    )
+    db.flush()
+    fallback = select_ranked_phone(db, prospect)
+    if fallback is None:
+        entry.status = "completed"
+        entry.completed_at = now
+        entry.next_attempt_at = None
+        prospect.status = "wrong_number"
+        prospect.call_eligibility = "blocked"
+    else:
+        fallback_point, fallback_phone = fallback
+        entry.status = "queued"
+        entry.completed_at = None
+        entry.next_attempt_at = now
+        prospect.status = "ready"
+        prospect.call_eligibility = "eligible"
+        attempt.measurement_metadata = {
+            **dict(attempt.measurement_metadata),
+            "number_resolution": {
+                "attempted_phone": attempted_phone,
+                "invalidated_contact_point_ids": invalidated_ids,
+                "fallback_contact_point_id": (
+                    str(fallback_point.id) if fallback_point is not None else None
+                ),
+                "fallback_phone": fallback_phone,
+                "retry_queued": True,
+            },
+        }
+        return
+    attempt.measurement_metadata = {
+        **dict(attempt.measurement_metadata),
+        "number_resolution": {
+            "attempted_phone": attempted_phone,
+            "invalidated_contact_point_ids": invalidated_ids,
+            "fallback_contact_point_id": None,
+            "fallback_phone": None,
+            "retry_queued": False,
+        },
+    }
+
+
 def record_dnc_suppression(
     db: Session,
     principal: Principal,
     prospect: Prospect,
     now: datetime,
+    *,
+    attempted_phone: str | None,
+    attempt_id: UUID,
+    contact_point_id: UUID | None,
 ) -> None:
-    if not prospect.normalized_phone:
+    normalized_phone = format_e164(attempted_phone)
+    if normalized_phone is None:
         return
-    existing = db.scalar(
-        select(SuppressionRecord).where(
-            SuppressionRecord.organization_id == principal.organization_id,
-            SuppressionRecord.channel == "phone",
-            SuppressionRecord.normalized_address == prospect.normalized_phone,
+    points = list(
+        db.scalars(
+            select(ProspectContactPoint)
+            .where(
+                ProspectContactPoint.organization_id == principal.organization_id,
+                ProspectContactPoint.prospect_id == prospect.id,
+                ProspectContactPoint.contact_type == "phone",
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     )
-    if existing:
-        existing.status = "active"
-        existing.reason = "Seller requested no further calls"
-        existing.source = "prospecting_disposition"
-        existing.suppressed_at = now
-        existing.lifted_at = None
-        return
-    db.add(
-        SuppressionRecord(
-            organization_id=principal.organization_id,
-            contact_id=None,
-            channel="phone",
-            normalized_address=prospect.normalized_phone,
-            status="active",
-            reason="Seller requested no further calls",
-            source="prospecting_disposition",
-            provider=None,
-            external_event_id=None,
-            suppressed_at=now,
-            lifted_at=None,
-            suppression_metadata={"prospect_id": str(prospect.id)},
-        )
+    for point in points:
+        if format_e164(point.normalized_value or point.value) != normalized_phone:
+            continue
+        point.contact_metadata = {
+            **(point.contact_metadata or {}),
+            "source_dnc": True,
+            "dnc_recorded_at": now.isoformat(),
+            "dnc_attempt_id": str(attempt_id),
+        }
+    upsert_phone_suppression(
+        db,
+        principal,
+        normalized_phone=normalized_phone,
+        reason="Seller requested no further calls",
+        source="prospecting_disposition",
+        now=now,
+        metadata={
+            "prospect_id": str(prospect.id),
+            "attempt_id": str(attempt_id),
+            "contact_point_id": str(contact_point_id) if contact_point_id else None,
+            "exact_dialed_number": normalized_phone,
+        },
     )
 
 
@@ -1509,9 +2337,9 @@ def build_prospecting_read_context(
     attempts_by_entry: dict[UUID, list[ProspectingAttempt]] = defaultdict(list)
     for attempt in attempts:
         attempts_by_entry[attempt.batch_entry_id].append(attempt)
-    qualification_responses_by_attempt: dict[
-        UUID, list[ProspectingQualificationResponse]
-    ] = defaultdict(list)
+    qualification_responses_by_attempt: dict[UUID, list[ProspectingQualificationResponse]] = (
+        defaultdict(list)
+    )
     for response in qualification_responses:
         qualification_responses_by_attempt[response.attempt_id].append(response)
     approved_scripts_by_asset_class: dict[str, ProspectingScriptVersion] = {}
@@ -1557,6 +2385,10 @@ def build_batch_queues(
                 callbacks_due=sum(item.queue_kind == "callback_due" for item in batch_entries),
                 callbacks_scheduled=sum(
                     item.queue_kind == "callback_scheduled" for item in batch_entries
+                ),
+                retries_due=sum(item.queue_kind == "retry_due" for item in batch_entries),
+                retries_scheduled=sum(
+                    item.queue_kind == "retry_scheduled" for item in batch_entries
                 ),
                 corrections=sum(item.queue_kind == "correction_required" for item in batch_entries),
                 in_progress=sum(item.queue_kind == "in_progress" for item in batch_entries),
@@ -1681,9 +2513,7 @@ def entry_read(
             raise ValueError("The attempt's pinned caller script is unavailable.")
     else:
         script = (
-            context.approved_scripts_by_asset_class.get(
-                normalize_asset_class(prospect.asset_class)
-            )
+            context.approved_scripts_by_asset_class.get(normalize_asset_class(prospect.asset_class))
             if context is not None
             else get_active_script(db, entry.organization_id, prospect.asset_class)
         )
@@ -1744,7 +2574,8 @@ def entry_read(
         sequence_number=entry.sequence_number,
         status=entry.status,
         queue_kind=queue_kind,
-        is_actionable=queue_kind in {"ready", "callback_due", "correction_required", "in_progress"},
+        is_actionable=queue_kind
+        in {"ready", "callback_due", "retry_due", "correction_required", "in_progress"},
         dialer_mode=batch.dialer_mode,
         provider_sync_status=provider_sync_status(),
         attempt_count=entry.attempt_count,
@@ -1765,8 +2596,14 @@ def entry_queue_kind(
         return "correction_required"
     if entry.status == "handoff_pending":
         return "handoff_pending"
+    if entry.status == "completed":
+        return "completed"
     if entry.next_attempt_at is not None:
-        return "callback_due" if as_utc(entry.next_attempt_at) <= now else "callback_scheduled"
+        due = as_utc(entry.next_attempt_at) <= now
+        if entry.disposition in CALLBACK_OUTCOMES:
+            return "callback_due" if due else "callback_scheduled"
+        if entry.disposition in RETRY_OUTCOMES:
+            return "retry_due" if due else "retry_scheduled"
     return "ready"
 
 
@@ -2181,27 +3018,16 @@ def queue_summary(
         statement = statement.where(ProspectCallingBatchEntry.assigned_user_id == principal.user_id)
     entries = db.scalars(statement).all()
     now = datetime.now(UTC)
+    queue_kinds = [entry_queue_kind(entry, now) for entry in entries]
     return ProspectingQueueSummary(
-        ready=sum(
-            entry.status in {"ready", "queued", "needs_correction"}
-            and (entry.next_attempt_at is None or as_utc(entry.next_attempt_at) <= now)
-            for entry in entries
-        ),
-        callbacks_due=sum(
-            entry.status == "queued"
-            and entry.next_attempt_at is not None
-            and as_utc(entry.next_attempt_at) <= now
-            for entry in entries
-        ),
-        callbacks_scheduled=sum(
-            entry.status == "queued"
-            and entry.next_attempt_at is not None
-            and as_utc(entry.next_attempt_at) > now
-            for entry in entries
-        ),
-        corrections=sum(entry.status == "needs_correction" for entry in entries),
-        in_progress=sum(entry.status == "in_progress" for entry in entries),
-        handoff_pending=sum(entry.status == "handoff_pending" for entry in entries),
+        ready=sum(kind == "ready" for kind in queue_kinds),
+        callbacks_due=sum(kind == "callback_due" for kind in queue_kinds),
+        callbacks_scheduled=sum(kind == "callback_scheduled" for kind in queue_kinds),
+        retries_due=sum(kind == "retry_due" for kind in queue_kinds),
+        retries_scheduled=sum(kind == "retry_scheduled" for kind in queue_kinds),
+        corrections=sum(kind == "correction_required" for kind in queue_kinds),
+        in_progress=sum(kind == "in_progress" for kind in queue_kinds),
+        handoff_pending=sum(kind == "handoff_pending" for kind in queue_kinds),
         completed=sum(entry.status == "completed" for entry in entries),
     )
 
