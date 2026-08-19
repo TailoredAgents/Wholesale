@@ -89,6 +89,12 @@ from app.services.lead_lifecycle import (
     lock_organization_lead,
     require_lead_open_for_work,
 )
+from app.services.prospecting_callbacks import (
+    complete_prospecting_callback_voicemail,
+    ensure_prospecting_missed_callback_task,
+    process_prospecting_inbound_callback,
+    update_prospecting_callback_status,
+)
 from app.services.prospecting_voice import (
     ProspectingVoiceConfigurationError,
     ProspectingVoiceConflictError,
@@ -990,9 +996,13 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     if line is None or not settings.twilio_voice_configured:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
     if line.purpose_key == "prospecting_outbound":
-        # Inbound prospect callbacks are intentionally deferred to D8. Most importantly,
-        # an outbound-only cold-calling number must not manufacture a warm seller lead.
-        raise VoiceConfigurationError("The prospecting line is outbound-only.")
+        return process_prospecting_inbound_callback(
+            db,
+            line,
+            caller=caller,
+            provider_call_id=call_sid,
+            settings=settings,
+        )
     existing = find_call(db, line.organization_id, provider_call_id=call_sid)
     if existing is not None:
         if existing.conversation_id is None:
@@ -1132,6 +1142,7 @@ def process_voice_screen_result(
             "mobile_screen_accepted_by_user_id": str(user.id),
             "mobile_screen_accepted_at": datetime.now(UTC).isoformat(),
         }
+        update_prospecting_callback_status(db, call, "answered")
         db.commit()
     return call_screen_result_twiml(accepted=accepted)
 
@@ -1155,7 +1166,7 @@ def process_voice_status(
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
-    if call.prospect_id is not None:
+    if call.prospecting_dial_leg_id is not None:
         return reconcile_signed_prospecting_status(
             db,
             call,
@@ -1177,6 +1188,20 @@ def process_voice_status(
         payload,
         answered_user_id=answered_user_id,
     )
+    if call.prospecting_inbound_callback_id is not None:
+        child_callback = bool(payload.get("ParentCallSid"))
+        aggregate_terminal = callback_kind == "dial_result" or (
+            not child_callback and status in FINAL_CALL_STATUSES
+        )
+        callback_status = (
+            status if status in {"in-progress", "answered"} else call.status
+        )
+        update_prospecting_callback_status(
+            db,
+            call,
+            callback_status,
+            aggregate_terminal=aggregate_terminal,
+        )
     event = record_provider_event(
         db,
         organization_id=call.organization_id,
@@ -1252,7 +1277,10 @@ def process_voice_voicemail_complete(
             "voicemail": True,
             "recording_sid": payload.get("RecordingSid"),
         }
-    ensure_missed_call_task(db, call)
+    if call.prospecting_inbound_callback_id is not None:
+        complete_prospecting_callback_voicemail(db, call)
+    else:
+        ensure_missed_call_task(db, call)
     db.commit()
 
 
@@ -1270,7 +1298,8 @@ def process_voice_recording(
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
-    is_prospecting_call = call.prospect_id is not None
+    is_prospecting_call = call.prospecting_dial_leg_id is not None
+    is_prospecting_callback = call.prospecting_inbound_callback_id is not None
     if recording_status == "completed" and call.recording_consent_status == "disclosure_configured":
         call.recording_consent_status = "disclosed"
     event_id = f"voice:recording:{recording_sid}:{recording_status}"
@@ -1327,7 +1356,11 @@ def process_voice_recording(
         if recording_status == "completed":
             recording.recorded_at = completed_at
             recording.retention_expires_at = recording.retention_expires_at or retention_expires_at
-    if recording_status == "completed" and not is_prospecting_call:
+    if (
+        recording_status == "completed"
+        and not is_prospecting_call
+        and not is_prospecting_callback
+    ):
         db.flush()
         enqueue_call_transcript(
             db,
@@ -1376,7 +1409,7 @@ def process_voice_recording_disclosure(
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
-    if call.prospect_id is not None:
+    if call.prospecting_dial_leg_id is not None:
         call.recording_consent_status = "disclosed"
         processing_status = reconcile_signed_prospecting_disclosure(
             db,
@@ -1655,6 +1688,10 @@ def apply_call_status(
             call.actor_user_id = user.id
     is_child_terminal = bool(payload.get("ParentCallSid")) and status in FINAL_CALL_STATUSES
     target_count = int((call.call_metadata or {}).get("ring_target_count") or 1)
+    if is_child_terminal and call.prospecting_inbound_callback_id is not None:
+        # A child leg cannot close the aggregate callback. Twilio may still be
+        # ringing another target; the final DialResult/root callback is authoritative.
+        return
     if is_child_terminal and target_count > 1:
         return
     current_rank = CALL_STATUS_RANK.get(call.status, -1)
@@ -1690,6 +1727,9 @@ def apply_call_status(
 
 
 def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
+    if call.prospecting_inbound_callback_id is not None:
+        ensure_prospecting_missed_callback_task(db, call)
+        return
     conversation = db.get(Conversation, call.conversation_id)
     if conversation is not None:
         reactivated_lead = reactivate_closed_lead_for_inbound(

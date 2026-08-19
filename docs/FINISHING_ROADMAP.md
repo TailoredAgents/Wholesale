@@ -53,7 +53,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
-| Native VA dialer | D0-D4 architecture, schema, prospect-aware Voice boundary, durable one-line coordinator, queue leasing, browser softphone controls, kill switches, and recovery implemented but inactive | Build D5-D9 evidence and operating workflows, then pass D10 controlled single-line production acceptance; keep BatchDialer as the live bridge |
+| Native VA dialer | D0-D8 foundation, one-line coordinator, browser workbench, automation, evidence continuity, inbound callbacks, and manager operations implemented; production feature globally available behind manager gates and an organization-wide one-line cap | Complete D9 analytics and D10 controlled single-line acceptance; keep BatchDialer as the live bridge and rollback path |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps

@@ -1035,21 +1035,34 @@ def runtime_policy_blockers(
         # already-reserved leg, so equality remains valid in that path.
         return active_count >= limit if for_reservation else active_count > limit
 
+    feature_line_cap = settings.prospecting_native_dialer_effective_line_cap
     if capacity_reached(
         organization_active_legs,
-        graph.organization.prospecting_dialer_max_concurrent_legs,
+        min(
+            graph.organization.prospecting_dialer_max_concurrent_legs,
+            feature_line_cap,
+        ),
     ):
         blockers.append("The company prospecting line capacity is already in use.")
     if capacity_reached(
         campaign_active_legs,
-        graph.campaign.prospecting_dialer_max_concurrent_legs,
+        min(
+            graph.campaign.prospecting_dialer_max_concurrent_legs,
+            feature_line_cap,
+        ),
     ):
         blockers.append("The campaign prospecting line capacity is already in use.")
-    if capacity_reached(caller_active_legs, graph.profile.max_line_count):
+    if capacity_reached(
+        caller_active_legs,
+        min(graph.profile.max_line_count, feature_line_cap),
+    ):
         blockers.append("The caller's prospecting line capacity is already in use.")
     if capacity_reached(
         voice_line_active_legs,
-        graph.line.prospecting_dialer_max_concurrent_legs,
+        min(
+            graph.line.prospecting_dialer_max_concurrent_legs,
+            feature_line_cap,
+        ),
     ):
         blockers.append("The assigned Twilio line is already at capacity.")
 

@@ -18,7 +18,15 @@ import {
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   ProspectHandoff,
@@ -29,6 +37,8 @@ import type {
   ProspectingCopilotOutput,
   ProspectingCopilotRecommendation,
   ProspectingEntry,
+  ProspectingInboundCallback,
+  ProspectingInboundCallbackList,
   ProspectingQualificationChecklist,
   ProspectingSellerOutcome,
   ProspectingTechnicalFailurePayload,
@@ -183,7 +193,15 @@ function CompletedAttemptHistoryItem({ attempt }: { attempt: ProspectingAttempt 
   );
 }
 
-export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverview }) {
+export function ProspectingWorkspace({
+  data,
+  initialCallbacks,
+  initialCallbacksAvailable,
+}: {
+  data: ProspectingWorkbenchOverview;
+  initialCallbacks: ProspectingInboundCallbackList;
+  initialCallbacksAvailable: boolean;
+}) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [view, setView] = useState<View>("workbench");
@@ -202,6 +220,18 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [editedSummary, setEditedSummary] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("due");
+  const [callbacks, setCallbacks] = useState(initialCallbacks);
+  const [callbacksAvailable, setCallbacksAvailable] = useState(initialCallbacksAvailable);
+  const [callbacksLastSuccessAt, setCallbacksLastSuccessAt] = useState<string | null>(
+    initialCallbacksAvailable ? new Date().toISOString() : null,
+  );
+  const [openingCallbackId, setOpeningCallbackId] = useState("");
+  const callbackRefreshSequenceRef = useRef(0);
+  const callbackRefreshControllerRef = useRef<AbortController | null>(null);
+  const callbackOpenInFlightRef = useRef(false);
+  const callbackOpenSequenceRef = useRef(0);
+  const callbackOpenControllerRef = useRef<AbortController | null>(null);
+  const callbackOpenBlockedRef = useRef(false);
   const [dialerLease, setDialerLease] =
     useState<ActiveProspectingDialerLease | null>(null);
   const [nativeDialerAvailable, setNativeDialerAvailable] = useState(false);
@@ -231,6 +261,62 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       "richardaustindugger@users.noreply.github.com",
     [],
   );
+
+  const refreshCallbacks = useCallback(async () => {
+    if (document.visibilityState === "hidden") return;
+    const requestSequence = callbackRefreshSequenceRef.current + 1;
+    callbackRefreshSequenceRef.current = requestSequence;
+    callbackRefreshControllerRef.current?.abort();
+    const controller = new AbortController();
+    callbackRefreshControllerRef.current = controller;
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      if (requestSequence === callbackRefreshSequenceRef.current) {
+        setCallbacksAvailable(false);
+      }
+    }, 10_000);
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/prospecting/dialer/callbacks`,
+        { headers, cache: "no-store", signal: controller.signal },
+      );
+      if (!response.ok) throw new Error("Callback status is temporarily unavailable.");
+      const payload = (await response.json()) as ProspectingInboundCallbackList;
+      if (requestSequence !== callbackRefreshSequenceRef.current) return;
+      setCallbacks(payload);
+      setCallbacksAvailable(true);
+      setCallbacksLastSuccessAt(new Date().toISOString());
+    } catch {
+      if (requestSequence === callbackRefreshSequenceRef.current) {
+        setCallbacksAvailable(false);
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (callbackRefreshControllerRef.current === controller) {
+        callbackRefreshControllerRef.current = null;
+      }
+    }
+  }, [apiBaseUrl, devUserEmail, getToken]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void refreshCallbacks(), 20_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshCallbacks();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      callbackRefreshSequenceRef.current += 1;
+      callbackRefreshControllerRef.current?.abort();
+      callbackOpenSequenceRef.current += 1;
+      callbackOpenControllerRef.current?.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshCallbacks]);
   const queueEntries = useMemo(
     () =>
       data.queue_entries.map((candidate) => {
@@ -260,7 +346,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     const selected =
       optimisticEntry?.id === entrySelection.id
         ? optimisticEntry
-        : serverEntry ?? currentEntry ?? entrySelection;
+        : serverEntry ?? entrySelection ?? currentEntry;
     const selectedAttempt = selected.active_attempt;
     const checklist = selectedAttempt
       ? qualificationOverrides[selectedAttempt.id]
@@ -278,6 +364,12 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const activeAttempt = entry?.active_attempt ?? null;
   const entryAssignedToCurrentUser =
     entry?.assigned_user_id === data.current_user_id;
+  const callbackOpenBlocked = Boolean(
+    dialerLease || (activeAttempt && entryAssignedToCurrentUser),
+  );
+  useLayoutEffect(() => {
+    callbackOpenBlockedRef.current = callbackOpenBlocked;
+  }, [callbackOpenBlocked]);
   const ownsAttemptMutationAuthority = Boolean(
     entryAssignedToCurrentUser &&
       ((dialerLeadership === "leader" &&
@@ -323,6 +415,77 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     setLocalRecommendation(null);
     setLastWrapUp(null);
   }, []);
+
+  const openCallback = useCallback(async (callback: ProspectingInboundCallback) => {
+    if (
+      !callback.can_open ||
+      !callback.batch_entry_id ||
+      callbackOpenBlockedRef.current ||
+      callbackOpenInFlightRef.current
+    ) return;
+    callbackOpenInFlightRef.current = true;
+    const requestSequence = callbackOpenSequenceRef.current + 1;
+    callbackOpenSequenceRef.current = requestSequence;
+    const controller = new AbortController();
+    callbackOpenControllerRef.current = controller;
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      if (requestSequence !== callbackOpenSequenceRef.current) return;
+      callbackOpenSequenceRef.current += 1;
+      callbackOpenInFlightRef.current = false;
+      if (callbackOpenControllerRef.current === controller) {
+        callbackOpenControllerRef.current = null;
+      }
+      setOpeningCallbackId("");
+      setStatus("error");
+      setMessage("Opening the callback timed out. Try again when the connection is stable.");
+    }, 15_000);
+    setOpeningCallbackId(callback.id);
+    setMessage("");
+    setStatus("saving");
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/prospecting/dialer/callbacks/${callback.id}/prospect`,
+        { headers, cache: "no-store", signal: controller.signal },
+      );
+      const errorPayload = (await response.clone().json().catch(() => null)) as
+        | { detail?: string }
+        | null;
+      if (!response.ok) {
+        throw new Error(errorPayload?.detail ?? "The matched prospect could not be opened.");
+      }
+      const selected = (await response.json()) as ProspectingEntry;
+      if (requestSequence !== callbackOpenSequenceRef.current) return;
+      if (callbackOpenBlockedRef.current) {
+        throw new Error("Finish or stop the current dialer session before opening a callback.");
+      }
+      selectEntry(selected);
+      setView("workbench");
+      setStatus("idle");
+      setMessage(`Opened ${callback.prospect_name ?? "the matched prospect"} from the callback card.`);
+    } catch (callbackError) {
+      if (requestSequence !== callbackOpenSequenceRef.current) return;
+      setStatus("error");
+      setMessage(
+        callbackError instanceof Error
+          ? callbackError.message
+          : "The matched prospect could not be opened.",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (requestSequence === callbackOpenSequenceRef.current) {
+        callbackOpenInFlightRef.current = false;
+        if (callbackOpenControllerRef.current === controller) {
+          callbackOpenControllerRef.current = null;
+        }
+        setOpeningCallbackId("");
+      }
+    }
+  }, [apiBaseUrl, devUserEmail, getToken, selectEntry]);
 
   const applyOptimisticEntry = useCallback((selected: ProspectingEntry) => {
     optimisticEntryRef.current = selected;
@@ -722,6 +885,85 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
         <div><span>Corrections</span><strong>{data.queue.corrections}</strong></div>
         <div><span>In progress</span><strong>{data.queue.in_progress}</strong></div>
         <div><span>Handoffs waiting</span><strong>{data.queue.handoff_pending}</strong></div>
+      </section>
+
+      <section aria-labelledby="callback-heading" className={styles.callbackPanel}>
+          <header>
+            <div>
+              <span>Inbound call routing</span>
+              <h2 id="callback-heading">Recent callbacks</h2>
+              <p>Caller matches update here without changing the prospect or call you are working.</p>
+            </div>
+            <button className={styles.secondaryButton} onClick={() => void refreshCallbacks()} type="button">
+              Refresh callbacks
+            </button>
+          </header>
+          {!callbacksAvailable ? (
+            <p className={styles.dialerInlineWarning} role="status">
+              Callback status is temporarily unavailable. Existing cards are the last confirmed
+              snapshot{callbacksLastSuccessAt ? ` from ${formatDateTime(callbacksLastSuccessAt)}` : ""}.
+            </p>
+          ) : null}
+          <div className={styles.callbackCardGrid}>
+            {callbacks.items.map((callback) => (
+              <article className={styles.callbackCard} key={callback.id}>
+                <div className={styles.callbackCardHeader}>
+                  <div>
+                    <strong>{callback.prospect_name ?? callback.caller_number}</strong>
+                    <span>{callback.property_address ?? "Property not matched"}</span>
+                  </div>
+                  <span
+                    className={
+                      callback.match_status === "matched"
+                        ? styles.statusGood
+                        : callback.match_status === "pending"
+                          ? styles.statusNeutral
+                          : styles.statusWarning
+                    }
+                  >
+                    {labelize(callback.match_status)}
+                  </span>
+                </div>
+                <dl>
+                  <div><dt>Caller</dt><dd>{callback.caller_number}</dd></div>
+                  <div><dt>Status</dt><dd>{labelize(callback.status)}</dd></div>
+                  <div><dt>Received</dt><dd>{formatDateTime(callback.received_at)}</dd></div>
+                  <div><dt>Match confidence</dt><dd>{formatPercent(callback.match_confidence_basis_points)}</dd></div>
+                </dl>
+                <div className={styles.callbackCardFooter}>
+                  <small>
+                    {callback.match_status === "ambiguous"
+                      ? `${callback.candidate_count} possible prospects — review before calling back.`
+                      : callback.match_status === "unknown"
+                        ? "No assigned prospect matched this number."
+                        : callback.assigned_user_name
+                          ? `Assigned to ${callback.assigned_user_name}`
+                          : callback.voice_line_label}
+                  </small>
+                  <button
+                    className={styles.primaryButton}
+                    disabled={
+                      !callback.can_open ||
+                      callbackOpenBlocked ||
+                      Boolean(openingCallbackId)
+                    }
+                    onClick={() => void openCallback(callback)}
+                    title={
+                      callbackOpenBlocked
+                        ? "Finish the current call before opening another prospect."
+                        : undefined
+                    }
+                    type="button"
+                  >
+                    {openingCallbackId === callback.id ? "Opening..." : "Open prospect"}
+                  </button>
+                </div>
+              </article>
+            ))}
+            {callbacksAvailable && !callbacks.items.length ? (
+              <p className={styles.dialerEmptyState}>No recent callbacks are waiting for this caller.</p>
+            ) : null}
+          </div>
       </section>
 
       <nav className={styles.viewTabs} aria-label="Prospecting views">

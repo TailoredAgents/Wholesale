@@ -1061,6 +1061,114 @@ export type ProspectingDialerContext = {
   blockers: string[];
 };
 
+export type ProspectingInboundCallback = {
+  id: string;
+  voice_line_id: string;
+  voice_line_label: string;
+  caller_number: string;
+  match_status: "pending" | "matched" | "unknown" | "ambiguous";
+  match_strategy: string;
+  match_confidence_basis_points: number;
+  candidate_count: number;
+  matched_prospect_id: string | null;
+  matched_attempt_id: string | null;
+  batch_entry_id: string | null;
+  can_open: boolean;
+  prospect_name: string | null;
+  property_address: string | null;
+  assigned_user_id: string | null;
+  assigned_user_name: string | null;
+  fallback_user_id: string | null;
+  status:
+    | "received"
+    | "routing"
+    | "ringing"
+    | "answered"
+    | "voicemail"
+    | "missed"
+    | "completed"
+    | "failed"
+    | "canceled";
+  call_record_id: string | null;
+  missed_task_id: string | null;
+  received_at: string;
+  answered_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProspectingInboundCallbackList = {
+  items: ProspectingInboundCallback[];
+  total: number;
+};
+
+export type ProspectingDialerOperations = {
+  feature_enabled: boolean;
+  company_enabled: boolean;
+  configured_line_cap: number;
+  implemented_line_cap: number;
+  effective_line_cap: number;
+  callers: Array<{
+    id: string;
+    display_name: string;
+    email: string;
+    is_active: boolean;
+    calling_enabled: boolean;
+  }>;
+  profiles: ProspectingDialerProfile[];
+  eligible_lines: Array<{
+    id: string;
+    label: string;
+    phone_number: string;
+    status: string;
+    assigned_user_id: string | null;
+    fallback_user_id: string | null;
+    assigned_team_id: string | null;
+    ring_strategy: string;
+    missed_call_action: string;
+    max_concurrent_legs: number;
+  }>;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    code: string;
+    status: string;
+    enabled: boolean;
+    max_concurrent_legs: number;
+  }>;
+  sessions: Array<{
+    session: ProspectingDialSession;
+    caller_name: string;
+    caller_email: string;
+    campaign_name: string;
+    voice_line_label: string | null;
+    current_leg_status: string | null;
+    health_status: "healthy" | "stale" | "reconnecting" | "attention";
+  }>;
+  health: {
+    active_session_count: number;
+    stale_session_count: number;
+    reconnecting_session_count: number;
+    active_leg_count: number;
+    callback_waiting_count: number;
+    missed_callback_task_count: number;
+    open_recovery_failure_count: number;
+    oldest_heartbeat_at: string | null;
+    worker_status: string;
+    worker_heartbeat_at: string | null;
+  };
+  recent_errors: Array<{
+    occurred_at: string;
+    code: string;
+    message: string;
+    session_id: string | null;
+    caller_user_id: string | null;
+    campaign_id: string | null;
+    recoverable: boolean;
+  }>;
+};
+
 export type ProspectingVoiceSession = {
   can_initialize: boolean;
   dial_session_id: string;
@@ -4529,6 +4637,56 @@ export async function getProspectingWorkbench(): Promise<{
   } catch (error) {
     console.error("Stonegate prospecting workbench request failed.", error);
     return { prospecting: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingDialerOperations(): Promise<{
+  dialerOperations: ProspectingDialerOperations | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/dialer/operations`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      dialerOperations: (await response.json()) as ProspectingDialerOperations,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate dialer operations request failed.", error);
+    return { dialerOperations: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingInboundCallbacks(): Promise<{
+  callbacks: ProspectingInboundCallbackList | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/dialer/callbacks`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      callbacks: (await response.json()) as ProspectingInboundCallbackList,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate prospecting callback request failed.", error);
+    return { callbacks: null, apiConnected: false };
   }
 }
 

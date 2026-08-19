@@ -470,6 +470,147 @@ class DialerContextRead(BaseModel):
     blockers: list[str]
 
 
+ProspectingCallbackMatchStatus = Literal["pending", "matched", "unknown", "ambiguous"]
+ProspectingCallbackStatus = Literal[
+    "received",
+    "routing",
+    "ringing",
+    "answered",
+    "voicemail",
+    "missed",
+    "completed",
+    "failed",
+    "canceled",
+]
+
+
+class ProspectingInboundCallbackRead(BaseModel):
+    id: UUID
+    voice_line_id: UUID
+    voice_line_label: str
+    caller_number: str
+    match_status: ProspectingCallbackMatchStatus
+    match_strategy: str
+    match_confidence_basis_points: int = Field(ge=0, le=10000)
+    candidate_count: int = Field(ge=0)
+    matched_prospect_id: UUID | None
+    matched_attempt_id: UUID | None
+    batch_entry_id: UUID | None
+    can_open: bool
+    prospect_name: str | None
+    property_address: str | None
+    assigned_user_id: UUID | None
+    assigned_user_name: str | None
+    fallback_user_id: UUID | None
+    status: ProspectingCallbackStatus
+    call_record_id: UUID | None
+    missed_task_id: UUID | None
+    received_at: datetime
+    answered_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProspectingInboundCallbackListRead(BaseModel):
+    items: list[ProspectingInboundCallbackRead]
+    total: int = Field(ge=0)
+
+
+class ProspectingEligibleVoiceLineRead(BaseModel):
+    id: UUID
+    label: str
+    phone_number: str
+    status: str
+    assigned_user_id: UUID | None
+    fallback_user_id: UUID | None
+    assigned_team_id: UUID | None
+    ring_strategy: str
+    missed_call_action: str
+    max_concurrent_legs: int = Field(ge=1, le=3)
+
+
+class ProspectingDialerCallerRead(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
+    is_active: bool
+    calling_enabled: bool
+
+
+class ProspectingCampaignDialerControlRead(BaseModel):
+    id: UUID
+    name: str
+    code: str
+    status: str
+    enabled: bool
+    max_concurrent_legs: int = Field(ge=1, le=3)
+
+
+class ProspectingDialSessionOperationRead(BaseModel):
+    session: ProspectingDialSessionRead
+    caller_name: str
+    caller_email: str
+    campaign_name: str
+    voice_line_label: str | None
+    current_leg_status: str | None
+    health_status: Literal["healthy", "stale", "reconnecting", "attention"]
+
+
+class ProspectingDialerHealthSummaryRead(BaseModel):
+    active_session_count: int = Field(ge=0)
+    stale_session_count: int = Field(ge=0)
+    reconnecting_session_count: int = Field(ge=0)
+    active_leg_count: int = Field(ge=0)
+    callback_waiting_count: int = Field(ge=0)
+    missed_callback_task_count: int = Field(ge=0)
+    open_recovery_failure_count: int = Field(ge=0)
+    oldest_heartbeat_at: datetime | None
+    worker_status: str
+    worker_heartbeat_at: datetime | None
+
+
+class ProspectingDialerOperationalErrorRead(BaseModel):
+    occurred_at: datetime
+    code: str
+    message: str
+    session_id: UUID | None
+    caller_user_id: UUID | None
+    campaign_id: UUID | None
+    recoverable: bool
+
+
+class ProspectingDialerOperationsRead(BaseModel):
+    feature_enabled: bool
+    company_enabled: bool
+    configured_line_cap: int = Field(ge=1, le=3)
+    implemented_line_cap: int = Field(ge=1, le=3)
+    effective_line_cap: int = Field(ge=1, le=3)
+    callers: list[ProspectingDialerCallerRead]
+    profiles: list[ProspectingDialerProfileRead]
+    eligible_lines: list[ProspectingEligibleVoiceLineRead]
+    campaigns: list[ProspectingCampaignDialerControlRead]
+    sessions: list[ProspectingDialSessionOperationRead]
+    health: ProspectingDialerHealthSummaryRead
+    recent_errors: list[ProspectingDialerOperationalErrorRead]
+
+
+class ProspectingManagerSessionStopCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["safe_drain", "cancel_unanswered"] = "safe_drain"
+    reason: str = Field(min_length=3, max_length=255)
+    idempotency_key: str = Field(min_length=8, max_length=255)
+
+
+class ProspectingManagerSessionRecoveryCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["reconcile", "release_orphan", "mark_failed"]
+    reason: str = Field(min_length=3, max_length=255)
+    idempotency_key: str = Field(min_length=8, max_length=255)
+
+
 class ProspectingContactPointRead(BaseModel):
     contact_type: str
     value: str

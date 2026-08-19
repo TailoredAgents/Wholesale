@@ -23,10 +23,13 @@ from app.integrations.voice_call_provider import (
 from app.main import app
 from app.models.foundation import (
     CallRecord,
+    CallRecording,
+    CallTranscript,
     Campaign,
     CommunicationRecord,
     Contact,
     Conversation,
+    Lead,
     Market,
     Organization,
     Prospect,
@@ -37,8 +40,10 @@ from app.models.foundation import (
     ProspectingDialerProfile,
     ProspectingDialLeg,
     ProspectingDialSession,
+    ProspectingInboundCallback,
     ProspectingProviderEvent,
     ProspectingScriptVersion,
+    Task,
     User,
     VoiceCallIntent,
     VoiceLine,
@@ -444,6 +449,55 @@ def post_signed(client: TestClient, path: str, payload: dict[str, str]) -> Respo
             headers=signed_headers(path, payload),
         ),
     )
+
+
+def attach_exact_dialed_number_evidence(
+    db: Session,
+    graph: ColdCallGraph,
+    *,
+    attempt: ProspectingAttempt | None = None,
+    leg: ProspectingDialLeg | None = None,
+    provider_call_id: str,
+    child_provider_call_id: str,
+) -> CallRecord:
+    selected_attempt = attempt or graph.attempt
+    selected_leg = leg or graph.leg
+    call = CallRecord(
+        organization_id=graph.organization.id,
+        conversation_id=None,
+        lead_id=None,
+        contact_id=None,
+        prospect_id=selected_attempt.prospect_id,
+        prospecting_attempt_id=selected_attempt.id,
+        prospecting_dial_leg_id=selected_leg.id,
+        prospecting_inbound_callback_id=None,
+        actor_user_id=selected_attempt.caller_user_id,
+        communication_record_id=None,
+        voice_line_id=graph.line.id,
+        call_intent_id=None,
+        provider="twilio",
+        provider_call_id=provider_call_id,
+        child_provider_call_id=child_provider_call_id,
+        direction="outbound",
+        status="completed",
+        from_number=PROSPECTING_NUMBER,
+        to_number=PROSPECT_NUMBER,
+        started_at=selected_attempt.started_at,
+        answered_at=None,
+        ended_at=datetime.now(UTC),
+        duration_seconds=0,
+        disposition="no_answer",
+        recording_consent_status="not_requested",
+        call_metadata={"source": "controlled_d8_callback_match_test"},
+    )
+    db.add(call)
+    db.flush()
+    selected_attempt.call_record_id = call.id
+    selected_attempt.provider = "twilio"
+    selected_attempt.provider_call_id = provider_call_id
+    selected_leg.call_record_id = call.id
+    selected_leg.provider_call_id = provider_call_id
+    return call
 
 
 def start_call(
@@ -1667,7 +1721,7 @@ def test_start_rejects_wrong_caller_line_or_prospect(
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 0
 
 
-def test_outbound_only_prospecting_line_does_not_manufacture_a_warm_inbound_lead(
+def test_prospecting_line_records_cold_callback_without_manufacturing_warm_lead(
     db_session: Session,
     api_db_override: None,
     prospecting_voice_settings: None,
@@ -1684,7 +1738,760 @@ def test_outbound_only_prospecting_line_does_not_manufacture_a_warm_inbound_lead
     response = post_signed(client, path, payload)
 
     assert response.status_code == 200, response.text
-    assert "<Hangup" in response.text
+    assert "<Record" in response.text
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
     assert db_session.scalar(select(func.count()).select_from(Contact)) == 0
     assert db_session.scalar(select(func.count()).select_from(Conversation)) == 0
-    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 0
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+    callback = db_session.scalar(select(ProspectingInboundCallback))
+    assert callback is not None
+    assert callback.match_status == "unknown"
+    assert callback.matched_prospect_id is None
+    assert callback.matched_attempt_id is None
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    assert call.prospecting_inbound_callback_id == callback.id
+    assert call.prospect_id is None
+    assert call.prospecting_attempt_id is None
+    assert call.conversation_id is None
+    assert call.lead_id is None
+    assert call.contact_id is None
+
+
+def test_exact_recent_same_line_callback_matches_cold_prospect_and_replay_is_idempotent(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000301",
+        child_provider_call_id="CA00000000000000000000000000001301",
+    )
+    db_session.commit()
+    payload = {
+        "From": PROSPECT_NUMBER,
+        "To": PROSPECTING_NUMBER,
+        "CallSid": "CA00000000000000000000000000000302",
+    }
+    path = "/api/v1/webhooks/twilio/voice/incoming"
+
+    first = post_signed(client, path, payload)
+    replay = post_signed(client, path, payload)
+
+    assert first.status_code == 200, first.text
+    assert replay.status_code == 200, replay.text
+    assert "<Dial" in first.text
+    assert FORWARDING_NUMBER in first.text
+    callbacks = list(db_session.scalars(select(ProspectingInboundCallback)))
+    calls = list(db_session.scalars(select(CallRecord)))
+    assert len(callbacks) == 1
+    assert len(calls) == 2
+    callback = callbacks[0]
+    call = next(item for item in calls if item.prospecting_inbound_callback_id is not None)
+    assert callback.match_status == "matched"
+    assert callback.match_strategy == "exact_phone_recent_same_line"
+    assert callback.match_confidence_basis_points == 8000
+    assert callback.candidate_count == 1
+    assert callback.matched_prospect_id == graph.prospect.id
+    assert callback.matched_attempt_id == graph.attempt.id
+    assert callback.assigned_user_id == graph.caller.id
+    assert call.prospect_id == graph.prospect.id
+    assert call.prospecting_attempt_id == graph.attempt.id
+    assert call.prospecting_dial_leg_id is None
+    assert call.prospecting_inbound_callback_id == callback.id
+    assert call.conversation_id is None
+    assert call.lead_id is None
+    assert call.contact_id is None
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Contact)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Conversation)) == 0
+
+
+def test_root_provider_call_without_dialed_number_child_evidence_does_not_match(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    graph.leg.provider_call_id = "CA00000000000000000000000000000305"
+    graph.attempt.provider = "twilio"
+    graph.attempt.provider_call_id = "CA00000000000000000000000000000305"
+    db_session.commit()
+
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000306",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    callback = db_session.scalar(select(ProspectingInboundCallback))
+    assert callback is not None
+    assert callback.match_status == "unknown"
+    assert callback.match_strategy == "exact_phone_no_recent_line_attempt"
+    assert callback.matched_prospect_id is None
+    assert callback.matched_attempt_id is None
+
+
+def test_ambiguous_exact_callback_never_promotes_a_warm_record(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000311",
+        child_provider_call_id="CA00000000000000000000000000001311",
+    )
+    now = datetime.now(UTC)
+    second = Prospect(
+        organization_id=graph.organization.id,
+        campaign_id=graph.prospect.campaign_id,
+        assigned_user_id=graph.other_caller.id,
+        source_record_key="d8-ambiguous-prospect",
+        status="ready",
+        legal_name="D8 Same Number Prospect",
+        phone=PROSPECT_NUMBER,
+        normalized_phone=PROSPECT_NUMBER,
+        street_address="202 Callback Court",
+        city="Atlanta",
+        state_code="GA",
+        postal_code="30303",
+        suppression_status="clear",
+        phone_validation_status="verified",
+        call_eligibility="eligible",
+        source_payload={},
+    )
+    db_session.add(second)
+    db_session.flush()
+    second_entry = ProspectCallingBatchEntry(
+        organization_id=graph.organization.id,
+        prospect_calling_batch_id=graph.batch.id,
+        prospect_id=second.id,
+        assigned_user_id=graph.other_caller.id,
+        sequence_number=2,
+        status="completed",
+        attempt_count=1,
+    )
+    db_session.add(second_entry)
+    db_session.flush()
+    second_attempt = ProspectingAttempt(
+        organization_id=graph.organization.id,
+        batch_entry_id=second_entry.id,
+        prospect_id=second.id,
+        caller_user_id=graph.other_caller.id,
+        script_version_id=graph.attempt.script_version_id,
+        status="completed",
+        outcome="no_answer",
+        measurement_metadata={},
+        qualification_answers={},
+        started_at=now - timedelta(minutes=5),
+        completed_at=now - timedelta(minutes=4),
+    )
+    db_session.add(second_attempt)
+    db_session.flush()
+    second_leg = ProspectingDialLeg(
+        organization_id=graph.organization.id,
+        dial_session_id=graph.session.id,
+        prospect_id=second.id,
+        batch_entry_id=second_entry.id,
+        attempt_id=second_attempt.id,
+        voice_line_id=graph.line.id,
+        line_slot=1,
+        recipient=PROSPECT_NUMBER,
+        provider="twilio",
+        provider_call_id="CA00000000000000000000000000000312",
+        idempotency_key="d8-ambiguous-second-leg",
+        status="completed",
+        last_provider_event_sequence=2,
+        queued_at=now - timedelta(minutes=5),
+        completed_at=now - timedelta(minutes=4),
+        answer_classification="unknown",
+        party_classification="unknown",
+        leg_metadata={},
+    )
+    db_session.add(second_leg)
+    db_session.flush()
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        attempt=second_attempt,
+        leg=second_leg,
+        provider_call_id="CA00000000000000000000000000000312",
+        child_provider_call_id="CA00000000000000000000000000001312",
+    )
+    db_session.commit()
+
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000313",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    callback = db_session.scalar(select(ProspectingInboundCallback))
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id.is_not(None))
+    )
+    assert callback is not None
+    assert callback.match_status == "ambiguous"
+    assert callback.candidate_count == 2
+    assert callback.matched_prospect_id is None
+    assert callback.matched_attempt_id is None
+    assert call is not None
+    assert call.prospect_id is None
+    assert call.prospecting_attempt_id is None
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Contact)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Conversation)) == 0
+
+
+def test_callback_routing_prefers_fresh_same_line_va_then_manager_fallback_and_scopes_list(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000321",
+        child_provider_call_id="CA00000000000000000000000000001321",
+    )
+    db_session.commit()
+    first = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000322",
+        },
+    )
+    assert first.status_code == 200, first.text
+    first_callback = db_session.scalar(
+        select(ProspectingInboundCallback).where(
+            ProspectingInboundCallback.provider_call_id
+            == "CA00000000000000000000000000000322"
+        )
+    )
+    assert first_callback is not None
+    assert first_callback.assigned_user_id == graph.caller.id
+    assert first_callback.fallback_user_id == graph.owner.id
+
+    graph.owner.voice_forwarding_number = "+14045550888"
+    graph.owner.voice_forwarding_enabled = True
+    graph.line.assigned_user_id = graph.owner.id
+    graph.session.heartbeat_at = datetime.now(UTC) - timedelta(minutes=10)
+    graph.session.lease_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    db_session.commit()
+    second = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000323",
+        },
+    )
+    assert second.status_code == 200, second.text
+    assert "+14045550888" in second.text
+    second_callback = db_session.scalar(
+        select(ProspectingInboundCallback).where(
+            ProspectingInboundCallback.provider_call_id
+            == "CA00000000000000000000000000000323"
+        )
+    )
+    assert second_callback is not None
+    assert second_callback.assigned_user_id == graph.owner.id
+
+    va_list = client.get(
+        "/api/v1/prospecting/dialer/callbacks",
+        headers={"X-Dev-User-Email": VA_EMAIL},
+    )
+    manager_list = client.get(
+        "/api/v1/prospecting/dialer/callbacks",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert va_list.status_code == 200, va_list.text
+    assert va_list.json()["total"] == 1
+    assert len(va_list.json()["items"]) == 1
+    assert va_list.json()["items"][0]["can_open"] is True
+    assert va_list.json()["items"][0]["batch_entry_id"] == str(graph.entry.id)
+    assert manager_list.status_code == 200, manager_list.text
+    assert manager_list.json()["total"] == 2
+    assert len(manager_list.json()["items"]) == 2
+    assert all(item["can_open"] is True for item in manager_list.json()["items"])
+
+    # Callback access is captured when the call arrives; closing and reassigning
+    # the historical queue entry must not make that callback unusable.
+    graph.entry.status = "completed"
+    graph.entry.assigned_user_id = graph.other_caller.id
+    db_session.commit()
+    callback_path = f"/api/v1/prospecting/dialer/callbacks/{first_callback.id}/prospect"
+    assigned_access = client.get(
+        callback_path,
+        headers={"X-Dev-User-Email": VA_EMAIL},
+    )
+    manager_access = client.get(
+        callback_path,
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    unrelated_access = client.get(
+        callback_path,
+        headers={"X-Dev-User-Email": OTHER_VA_EMAIL},
+    )
+    assert assigned_access.status_code == 200, assigned_access.text
+    assert assigned_access.json()["id"] == str(graph.entry.id)
+    assert manager_access.status_code == 200, manager_access.text
+    assert unrelated_access.status_code == 404, unrelated_access.text
+
+    other_foundation = bootstrap_foundation(
+        db_session,
+        organization_name="D8 Isolated Callback Workspace",
+        admin_email="d8-isolated-owner@example.com",
+        admin_name="D8 Isolated Owner",
+    )
+    assert other_foundation.admin_user is not None
+    db_session.commit()
+    cross_org_access = client.get(
+        callback_path,
+        headers={"X-Dev-User-Email": "d8-isolated-owner@example.com"},
+    )
+    assert cross_org_access.status_code == 404, cross_org_access.text
+
+
+def test_explicit_line_fallback_can_open_callback_even_when_another_va_owns_batch(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000325",
+        child_provider_call_id="CA00000000000000000000000000001325",
+    )
+    graph.other_caller.voice_forwarding_number = "+14045550778"
+    graph.other_caller.voice_forwarding_enabled = True
+    graph.line.fallback_user_id = graph.other_caller.id
+    graph.session.heartbeat_at = datetime.now(UTC) - timedelta(minutes=10)
+    graph.session.lease_expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    db_session.commit()
+
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000326",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "+14045550778" in response.text
+    callback = db_session.scalar(select(ProspectingInboundCallback))
+    assert callback is not None
+    assert callback.assigned_user_id == graph.other_caller.id
+    assert graph.entry.assigned_user_id == graph.caller.id
+    callback_list = client.get(
+        "/api/v1/prospecting/dialer/callbacks",
+        headers={"X-Dev-User-Email": OTHER_VA_EMAIL},
+    )
+    callback_context = client.get(
+        f"/api/v1/prospecting/dialer/callbacks/{callback.id}/prospect",
+        headers={"X-Dev-User-Email": OTHER_VA_EMAIL},
+    )
+    assert callback_list.status_code == 200, callback_list.text
+    assert callback_list.json()["total"] == 1
+    assert callback_list.json()["items"][0]["can_open"] is True
+    assert callback_context.status_code == 200, callback_context.text
+    assert callback_context.json()["id"] == str(graph.entry.id)
+
+
+def test_child_no_answer_does_not_close_callback_but_final_dial_result_creates_one_task(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000331",
+        child_provider_call_id="CA00000000000000000000000000001331",
+    )
+    graph.owner.voice_forwarding_number = "+14045550888"
+    graph.owner.voice_forwarding_enabled = True
+    graph.line.assigned_user_id = graph.owner.id
+    graph.line.missed_call_action = "task_only"
+    db_session.commit()
+    inbound_sid = "CA00000000000000000000000000000332"
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {"From": PROSPECT_NUMBER, "To": PROSPECTING_NUMBER, "CallSid": inbound_sid},
+    )
+    assert response.status_code == 200, response.text
+    callback = db_session.scalar(select(ProspectingInboundCallback))
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id.is_not(None))
+    )
+    assert callback is not None
+    assert call is not None
+    assert (call.call_metadata or {}).get("ring_target_count") == 2
+
+    child_path = f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"
+    child = post_signed(
+        client,
+        child_path,
+        {
+            "CallSid": "CA00000000000000000000000000000333",
+            "ParentCallSid": inbound_sid,
+            "CallStatus": "no-answer",
+        },
+    )
+    assert child.status_code == 204, child.text
+    db_session.expire_all()
+    callback = db_session.get(ProspectingInboundCallback, callback.id)
+    assert callback is not None
+    assert callback.status == "ringing"
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+
+    final_path = f"/api/v1/webhooks/twilio/voice/dial-result?call_id={call.id}"
+    final_payload = {
+        "CallSid": inbound_sid,
+        "DialCallSid": "CA00000000000000000000000000000334",
+        "DialCallStatus": "no-answer",
+    }
+    final = post_signed(client, final_path, final_payload)
+    replay = post_signed(client, final_path, final_payload)
+    terminal_inbound_replay = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {"From": PROSPECT_NUMBER, "To": PROSPECTING_NUMBER, "CallSid": inbound_sid},
+    )
+    assert final.status_code == 200, final.text
+    assert replay.status_code == 200, replay.text
+    assert terminal_inbound_replay.status_code == 200, terminal_inbound_replay.text
+    assert "<Hangup" in terminal_inbound_replay.text
+    db_session.expire_all()
+    callback = db_session.get(ProspectingInboundCallback, callback.id)
+    assert callback is not None
+    assert callback.status == "missed"
+    tasks = list(db_session.scalars(select(Task)))
+    assert len(tasks) == 1
+    assert db_session.scalar(select(func.count()).select_from(ProspectingInboundCallback)) == 1
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CallRecord)
+            .where(CallRecord.prospecting_inbound_callback_id.is_not(None))
+        )
+        == 1
+    )
+    assert tasks[0].task_type == "missed_prospecting_callback"
+    assert tasks[0].prospecting_inbound_callback_id == callback.id
+    assert tasks[0].prospect_id == graph.prospect.id
+    assert tasks[0].call_record_id == call.id
+
+
+def test_callback_recording_is_retained_without_creating_a_malformed_warm_transcript(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id="CA00000000000000000000000000000341",
+        child_provider_call_id="CA00000000000000000000000000001341",
+    )
+    db_session.commit()
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": PROSPECT_NUMBER,
+            "To": PROSPECTING_NUMBER,
+            "CallSid": "CA00000000000000000000000000000342",
+        },
+    )
+    assert response.status_code == 200, response.text
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id.is_not(None))
+    )
+    assert call is not None
+    recording_path = f"/api/v1/webhooks/twilio/voice/recording?call_id={call.id}"
+    recording_payload = {
+        "CallSid": call.provider_call_id or "",
+        "RecordingSid": "RE00000000000000000000000000000342",
+        "RecordingStatus": "completed",
+        "RecordingDuration": "42",
+        "RecordingChannels": "2",
+        "RecordingSource": "DialVerb",
+    }
+
+    recorded = post_signed(client, recording_path, recording_payload)
+    replay = post_signed(client, recording_path, recording_payload)
+
+    assert recorded.status_code == 204, recorded.text
+    assert replay.status_code == 204, replay.text
+    recordings = list(db_session.scalars(select(CallRecording)))
+    assert len(recordings) == 1
+    assert recordings[0].call_record_id == call.id
+    assert recordings[0].status == "completed"
+    assert db_session.scalar(select(func.count()).select_from(CallTranscript)) == 0
+
+
+def test_operations_overview_is_manager_only_and_never_exposes_control_secrets(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    graph.leg.provider_error_code = "provider_failed"
+    graph.leg.provider_error_message = (
+        "Bearer token=super-secret-provider-token-1234567890 failed for 14045550101"
+    )
+    db_session.commit()
+
+    forbidden = client.get(
+        "/api/v1/prospecting/dialer/operations",
+        headers={"X-Dev-User-Email": VA_EMAIL},
+    )
+    allowed = client.get(
+        "/api/v1/prospecting/dialer/operations",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert forbidden.status_code == 403, forbidden.text
+    assert allowed.status_code == 200, allowed.text
+    body = allowed.json()
+    serialized = allowed.text.lower()
+    assert body["health"]["active_session_count"] == 1
+    assert body["sessions"][0]["session"]["id"] == str(graph.session.id)
+    assert body["recent_errors"]
+    assert "lease_token" not in serialized
+    assert "d2-controlled-lease-token" not in serialized
+    assert "super-secret-provider-token" not in serialized
+    assert "14045550101" not in serialized
+    assert "[redacted]" in body["recent_errors"][0]["message"]
+
+
+def test_manager_cancel_failure_can_retry_then_replay_completed_command(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    graph.leg.status = "ringing"
+    graph.leg.provider_call_id = "CA00000000000000000000000000000351"
+    graph.leg.ringing_at = datetime.now(UTC)
+    db_session.commit()
+    provider = FakeVoiceProvider(cancel_failures_remaining=1)
+    monkeypatch.setattr(
+        "app.services.prospecting_dialer_operations.get_twilio_voice_call_provider",
+        lambda: provider,
+    )
+    path = f"/api/v1/prospecting/dialer/operations/sessions/{graph.session.id}/stop"
+    payload = {
+        "mode": "cancel_unanswered",
+        "reason": "Manager ended the unanswered test call.",
+        "idempotency_key": "d8-manager-stop-retry-0001",
+    }
+
+    failed = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+    retried = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+    replayed = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+
+    assert failed.status_code == 502, failed.text
+    assert retried.status_code == 200, retried.text
+    assert replayed.status_code == 200, replayed.text
+    assert provider.cancel_calls == [
+        "CA00000000000000000000000000000351",
+        "CA00000000000000000000000000000351",
+    ]
+    db_session.expire_all()
+    session = db_session.get(ProspectingDialSession, graph.session.id)
+    leg = db_session.get(ProspectingDialLeg, graph.leg.id)
+    assert session is not None
+    assert leg is not None
+    commands = (session.session_metadata or {}).get("manager_commands") or []
+    assert commands[-1]["status"] == "completed"
+    assert commands[-1]["retry_count"] == "1"
+    assert leg.status == "cancelled"
+
+
+def test_manager_pending_stop_command_is_not_replayed_blindly(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    graph.session.session_metadata = {
+        "manager_commands": [
+            {
+                "key": "d8-pending-manager-stop",
+                "kind": "stop",
+                "value": "safe_drain",
+                "reason": "Controlled pending action.",
+                "status": "pending",
+                "requested_at": datetime.now(UTC).isoformat(),
+            }
+        ]
+    }
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/prospecting/dialer/operations/sessions/{graph.session.id}/stop",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "mode": "safe_drain",
+            "reason": "Controlled pending action.",
+            "idempotency_key": "d8-pending-manager-stop",
+        },
+    )
+
+    assert response.status_code == 409, response.text
+    assert "may still be in progress" in response.json()["detail"]
+
+
+def test_manager_release_orphan_recovery_is_scoped_safe_and_idempotent(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    path = f"/api/v1/prospecting/dialer/operations/sessions/{graph.session.id}/recover"
+    payload = {
+        "action": "release_orphan",
+        "reason": "Release the untouched test reservation.",
+        "idempotency_key": "d8-release-orphan-0001",
+    }
+
+    forbidden = client.post(path, headers={"X-Dev-User-Email": VA_EMAIL}, json=payload)
+    released = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+    replayed = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+
+    assert forbidden.status_code == 403, forbidden.text
+    assert released.status_code == 200, released.text
+    assert replayed.status_code == 200, replayed.text
+    assert released.json()["session"]["state"] == "failed"
+    assert replayed.json()["session"]["state"] == "failed"
+    db_session.expire_all()
+    session = db_session.get(ProspectingDialSession, graph.session.id)
+    leg = db_session.get(ProspectingDialLeg, graph.leg.id)
+    attempt = db_session.get(ProspectingAttempt, graph.attempt.id)
+    entry = db_session.get(ProspectCallingBatchEntry, graph.entry.id)
+    assert session is not None
+    assert leg is not None
+    assert attempt is not None
+    assert entry is not None
+    assert session.state == "failed"
+    assert session.ended_at is not None
+    assert session.lease_token is None
+    assert session.lease_expires_at is None
+    assert session.current_prospect_id is None
+    assert session.current_batch_entry_id is None
+    assert session.current_attempt_id is None
+    assert leg.status == "cancelled"
+    assert leg.completed_at is not None
+    assert leg.provider_call_id is None
+    assert attempt.status == "cancelled"
+    assert attempt.outcome == "technical_failure"
+    assert entry.status == "queued"
+    commands = (session.session_metadata or {}).get("manager_commands") or []
+    assert len(commands) == 1
+    assert commands[0]["status"] == "completed"
+
+
+def test_manager_reconcile_fetches_provider_and_repairs_terminal_state_once(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    root_call_sid = "CA00000000000000000000000000000361"
+    child_call_sid = "CA00000000000000000000000000001361"
+    call = attach_exact_dialed_number_evidence(
+        db_session,
+        graph,
+        provider_call_id=root_call_sid,
+        child_provider_call_id=child_call_sid,
+    )
+    observed_at = datetime.now(UTC)
+    graph.leg.status = "ringing"
+    graph.leg.ringing_at = observed_at
+    graph.leg.completed_at = None
+    call.status = "ringing"
+    call.ended_at = None
+    db_session.commit()
+    provider = FakeVoiceProvider(
+        fetch_result=VoiceCallResult(sid=child_call_sid, status="completed")
+    )
+    monkeypatch.setattr(
+        "app.services.prospecting_dialer_operations.get_twilio_voice_call_provider",
+        lambda: provider,
+    )
+    path = f"/api/v1/prospecting/dialer/operations/sessions/{graph.session.id}/recover"
+    payload = {
+        "action": "reconcile",
+        "reason": "Repair the stale provider terminal state.",
+        "idempotency_key": "d8-reconcile-provider-0001",
+    }
+
+    repaired = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+    replayed = client.post(path, headers={"X-Dev-User-Email": OWNER_EMAIL}, json=payload)
+
+    assert repaired.status_code == 200, repaired.text
+    assert replayed.status_code == 200, replayed.text
+    assert provider.fetch_calls == [child_call_sid]
+    assert repaired.json()["current_leg_status"] == "completed"
+    assert repaired.json()["session"]["state"] == "wrap_up"
+    db_session.expire_all()
+    session = db_session.get(ProspectingDialSession, graph.session.id)
+    leg = db_session.get(ProspectingDialLeg, graph.leg.id)
+    call = db_session.get(CallRecord, call.id)
+    assert session is not None
+    assert leg is not None
+    assert call is not None
+    assert session.state == "wrap_up"
+    assert session.ended_at is None
+    assert leg.status == "completed"
+    assert leg.completed_at is not None
+    assert call.status == "completed"
+    assert call.ended_at is not None
+    commands = (session.session_metadata or {}).get("manager_commands") or []
+    assert len(commands) == 1
+    assert commands[0]["status"] == "completed"

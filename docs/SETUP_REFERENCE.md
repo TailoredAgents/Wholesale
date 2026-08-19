@@ -712,7 +712,7 @@ All paths use `https://api.stonegatehb.com` as the base.
 
 ### Variables
 
-- `PROSPECTING_NATIVE_DIALER_ENABLED=false`
+- `PROSPECTING_NATIVE_DIALER_ENABLED=true` in the Render API and worker services
 - `PROSPECTING_NATIVE_DIALER_MAX_LINES=1`
 - `PROSPECTING_NATIVE_DIALER_LEASE_SECONDS=90`
 - `PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS=180`
@@ -734,37 +734,44 @@ source, documentation, screenshots, URLs, browser storage, or frontend environme
 - `TWILIO_TWIML_APP_SID`
 - `TWILIO_VOICE_TOKEN_TTL_SECONDS`
 
-The native VA dialer is disabled by default. The schema can preserve requested limits from one to
-three lines so a later controlled pilot does not require another data-model redesign, but the
-current implementation and production configuration are hard-capped at one line. A production
-value above `1` is rejected during application startup.
+The application setting remains fail-closed by default in unconfigured local and test environments,
+while the Render production blueprint explicitly enables the native VA dialer. The schema can
+preserve requested limits from one to three lines so a later controlled pilot does not require
+another data-model redesign, but the current implementation and production configuration are
+hard-capped at one line across the entire organization. A production value above `1` is rejected
+during application startup.
 
-Phases D1-D4 install the disabled data foundation, controlled server-side cold-call provider
-boundary, durable one-line coordinator, and browser softphone. D3 owns the authenticated browser
+Phases D1-D7 install the data foundation, controlled server-side cold-call provider boundary,
+durable one-line coordinator, browser softphone, VA workbench, disposition automation, and evidence
+continuity. D3 owns the authenticated browser
 lease, atomic queue reservation, calling-window and suppression rechecks, cap accounting, wrap-up
 lock, company and campaign switches, and stale-session recovery. Call start, call control, and
 native disposition completion are bound to the same lease; provider-start checkpoints and
 provider-state reconciliation prevent ambiguous retries or missed callbacks from stranding a
 session. D4 adds the
 client-only Twilio SDK boundary, short-lived outbound-only Voice sessions, browser call controls,
-and a strict separation between browser-audio status and seller child-leg status. It does not
-activate production calling.
+and a strict separation between browser-audio status and seller child-leg status. No implementation
+phase by itself authorizes a caller or campaign; runtime manager gates remain authoritative.
 
 A native-dialer phone line must be active, belong to Acquisitions, and use purpose
 `prospecting_outbound`. Do not reuse the ordinary `seller_conversations` line for native outbound
 prospecting. Stonegate excludes the dedicated prospecting line from normal warm CRM call selection,
-and inbound calls on it remain blocked until the D8 callback workflow is implemented.
+and routes inbound callbacks on that line through the D8 cold-prospect callback workflow. An exact
+recent same-line dial match opens the assigned prospect context; ambiguous or unknown callers remain
+isolated for review and never manufacture a warm seller lead.
 
-Keep `PROSPECTING_NATIVE_DIALER_ENABLED=false` until the remaining dashboard, disposition
-automation, evidence continuity, inbound callback, observability, and D10 single-line
-production-acceptance gates in `VA_DIALER_ROADMAP.md` are complete. Keep the company and campaign
-database switches off as an independent fail-closed boundary. BatchDialer and its existing
-qualified-lead and appointment Zaps remain the production bridge and rollback path; D4 does not
-replace, disable, or modify them.
+Production sets `PROSPECTING_NATIVE_DIALER_ENABLED=true`, but that global availability does not start
+calls. Company and campaign switches, an active caller profile, an active dedicated prospecting
+line, calling windows, suppression checks, and the one-line feature cap remain independent
+fail-closed boundaries. Enable only an approved, non-overlapping campaign through the manager
+controls. BatchDialer and its existing qualified-lead and appointment Zaps remain the production
+bridge and rollback path and are not replaced, disabled, or modified by native-dialer activation.
 
 ### D4 Twilio Browser Setup
 
-1. Leave the production native-dialer environment flag and both database activation switches off.
+1. Confirm the production API and worker both report the native-dialer environment flag on and a
+   maximum of one line. Leave company and campaign switches off until the dedicated test setup is
+   complete.
 2. In Twilio, create or select the TwiML App referenced by `TWILIO_TWIML_APP_SID` and configure its
    Voice Request URL as a POST to
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`.
@@ -775,12 +782,31 @@ replace, disable, or modify them.
    with purpose `prospecting_outbound`. Keep its configured, profile, campaign, company, and
    environment line limits at one.
 5. Confirm the Twilio callback base URL is HTTPS and callback-signature validation remains enabled.
-6. Deploy while the native dialer remains disabled. Configuration alone is not production
-   activation.
+6. Deploy with the one-line production feature available. Configuration alone does not authorize a
+   caller or campaign; use the manager controls only for the approved isolated rollout.
+
+### D8 Manager Controls And Callback Routing
+
+1. In **Settings > Communications**, create or edit the dedicated Acquisitions number and set
+   **Line purpose** to **Prospecting outbound and callbacks**. Configure an approved primary or
+   fallback manager for return-call coverage.
+2. Open **Prospecting > Dialer control**. Configure each approved caller's dedicated line, active
+   status, and optional daily dial and spend limits. The effective limit remains one live line.
+3. Create a calling-hours and approved-script policy, then turn on the company switch and only the
+   isolated campaign approved for the pilot. A switch change requires an audit reason.
+4. Use **Sessions and recovery** to safely drain a caller after the current call, cancel an
+   unanswered call, reconcile provider state, release only an untouched orphan reservation, or
+   deliberately mark a terminal session failed. Never use recovery to interrupt a connected seller.
+5. In **Prospecting > My Calls**, review **Recent callbacks**. Known callbacks can open the matched
+   assigned prospect only after an explicit click. Unknown or ambiguous callbacks remain visible
+   without changing the caller's current work. Missed callbacks create one urgent return-call task.
+6. Monitor worker health, fresh session heartbeats, active legs, waiting callbacks, missed-call
+   tasks, and sanitized operational errors from **Dialer control** before and during a pilot.
 
 ### D4 Controlled Acceptance Boundary
 
-Complete an isolated test-number or nonproduction acceptance before any production activation:
+Complete an isolated test-number or approved non-overlapping campaign acceptance before broad
+production use:
 
 1. Confirm an unauthorized user, wrong organization, stale tab, wrong browser identity, expired
    lease, and replaced lease cannot obtain a token or control a call.

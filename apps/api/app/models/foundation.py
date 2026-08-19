@@ -2789,6 +2789,103 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     line_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
+class ProspectingInboundCallback(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Durable, cold-prospect context for a callback to a prospecting line."""
+
+    __tablename__ = "prospecting_inbound_callbacks"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_call_id",
+            name="uq_prospecting_inbound_callbacks_org_provider_call",
+        ),
+        CheckConstraint(
+            "match_status IN ('pending', 'matched', 'unknown', 'ambiguous')",
+            name="ck_prospecting_inbound_callbacks_match_status",
+        ),
+        CheckConstraint(
+            "status IN ('received', 'routing', 'ringing', 'answered', 'voicemail', "
+            "'missed', 'completed', 'failed', 'canceled')",
+            name="ck_prospecting_inbound_callbacks_status",
+        ),
+        CheckConstraint(
+            "match_confidence_basis_points IS NULL "
+            "OR match_confidence_basis_points BETWEEN 0 AND 10000",
+            name="ck_prospecting_inbound_callbacks_match_confidence",
+        ),
+        CheckConstraint(
+            "candidate_count >= 0",
+            name="ck_prospecting_inbound_callbacks_candidate_count",
+        ),
+        CheckConstraint(
+            "(match_status = 'matched' "
+            "AND matched_prospect_id IS NOT NULL "
+            "AND matched_attempt_id IS NOT NULL) OR "
+            "(match_status <> 'matched' "
+            "AND matched_prospect_id IS NULL "
+            "AND matched_attempt_id IS NULL)",
+            name="ck_prospecting_inbound_callbacks_match_context",
+        ),
+        Index(
+            "ix_prospecting_inbound_callbacks_line_caller_received",
+            "organization_id",
+            "voice_line_id",
+            "normalized_caller",
+            "received_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    voice_line_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("voice_lines.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_call_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    normalized_caller: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    caller_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    matched_prospect_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospects.id"),
+        nullable=True,
+        index=True,
+    )
+    matched_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_attempts.id"),
+        nullable=True,
+        index=True,
+    )
+    match_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="pending", server_default="pending", index=True
+    )
+    match_strategy: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    match_confidence_basis_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    candidate_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    fallback_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="received", server_default="received", index=True
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    routing_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+
+
 class VoiceCallIntent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "voice_call_intents"
     __table_args__ = (
@@ -2887,20 +2984,37 @@ class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "prospecting_dial_leg_id",
             name="uq_call_records_prospecting_dial_leg",
         ),
+        UniqueConstraint(
+            "prospecting_inbound_callback_id",
+            name="uq_call_records_prospecting_inbound_callback",
+        ),
         CheckConstraint(
             "(prospect_id IS NULL "
             "AND prospecting_attempt_id IS NULL "
             "AND prospecting_dial_leg_id IS NULL "
+            "AND prospecting_inbound_callback_id IS NULL "
             "AND conversation_id IS NOT NULL "
             "AND contact_id IS NOT NULL) "
             "OR "
             "(prospect_id IS NOT NULL "
             "AND prospecting_attempt_id IS NOT NULL "
             "AND prospecting_dial_leg_id IS NOT NULL "
+            "AND prospecting_inbound_callback_id IS NULL "
             "AND conversation_id IS NULL "
             "AND lead_id IS NULL "
             "AND contact_id IS NULL "
-            "AND communication_record_id IS NULL)",
+            "AND communication_record_id IS NULL) "
+            "OR "
+            "(prospecting_inbound_callback_id IS NOT NULL "
+            "AND prospecting_dial_leg_id IS NULL "
+            "AND ((prospect_id IS NULL AND prospecting_attempt_id IS NULL) "
+            "OR (prospect_id IS NOT NULL AND prospecting_attempt_id IS NOT NULL)) "
+            "AND conversation_id IS NULL "
+            "AND lead_id IS NULL "
+            "AND contact_id IS NULL "
+            "AND communication_record_id IS NULL "
+            "AND call_intent_id IS NULL "
+            "AND direction = 'inbound')",
             name="ck_call_records_context",
         ),
     )
@@ -2944,6 +3058,16 @@ class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey(
             "prospecting_dial_legs.id",
             name="fk_call_records_prospecting_dial_leg_id",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
+    prospecting_inbound_callback_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "prospecting_inbound_callbacks.id",
+            name="fk_call_records_prospecting_inbound_callback_id",
             use_alter=True,
         ),
         nullable=True,
@@ -7001,6 +7125,20 @@ class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
                 "AND deal_id IS NOT NULL"
             ),
         ),
+        Index(
+            "uq_tasks_prospecting_missed_callback",
+            "organization_id",
+            "prospecting_inbound_callback_id",
+            unique=True,
+            postgresql_where=text(
+                "task_type = 'missed_prospecting_callback' "
+                "AND prospecting_inbound_callback_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "task_type = 'missed_prospecting_callback' "
+                "AND prospecting_inbound_callback_id IS NOT NULL"
+            ),
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -7008,6 +7146,24 @@ class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    prospecting_inbound_callback_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_inbound_callbacks.id"),
+        nullable=True,
+        index=True,
+    )
+    prospect_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("call_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     task_type: Mapped[str] = mapped_column(String(120), nullable=False)
     work_kind: Mapped[str] = mapped_column(

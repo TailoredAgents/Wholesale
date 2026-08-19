@@ -14,7 +14,11 @@ type VoiceLine = {
   is_default: boolean;
   inbound_route: string;
   department_key: "acquisitions" | "dispositions" | "general";
-  purpose_key: "seller_conversations" | "buyer_relations" | "company_general";
+  purpose_key:
+    | "seller_conversations"
+    | "prospecting_outbound"
+    | "buyer_relations"
+    | "company_general";
   assigned_user_id: string | null;
   assigned_user_name: string | null;
   fallback_user_id: string | null;
@@ -62,17 +66,85 @@ type VoiceReadiness = {
   }>;
 };
 
-function purposeForDepartment(department: string) {
-  if (department === "dispositions") return "buyer_relations";
-  if (department === "general") return "company_general";
-  return "seller_conversations";
-}
-
 function labelize(value: string) {
   return value
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+type VoiceDepartment = VoiceLine["department_key"];
+type VoicePurpose = VoiceLine["purpose_key"];
+
+const PURPOSES_BY_DEPARTMENT: Record<
+  VoiceDepartment,
+  Array<{ value: VoicePurpose; label: string }>
+> = {
+  acquisitions: [
+    { value: "seller_conversations", label: "Seller conversations" },
+    { value: "prospecting_outbound", label: "Prospecting outbound and callbacks" },
+  ],
+  dispositions: [{ value: "buyer_relations", label: "Buyer relations" }],
+  general: [{ value: "company_general", label: "Company general" }],
+};
+
+function VoiceLineRoutingFields({
+  initialDepartment,
+  initialPurpose,
+}: {
+  initialDepartment: VoiceDepartment;
+  initialPurpose: VoicePurpose;
+}) {
+  const [department, setDepartment] = useState(initialDepartment);
+  const initialOptions = PURPOSES_BY_DEPARTMENT[initialDepartment];
+  const [purpose, setPurpose] = useState<VoicePurpose>(
+    initialOptions.some((option) => option.value === initialPurpose)
+      ? initialPurpose
+      : initialOptions[0].value,
+  );
+  const options = PURPOSES_BY_DEPARTMENT[department];
+
+  return (
+    <>
+      <label>
+        <span>Department</span>
+        <select
+          name="department_key"
+          onChange={(event) => {
+            const nextDepartment = event.target.value as VoiceDepartment;
+            const nextOptions = PURPOSES_BY_DEPARTMENT[nextDepartment];
+            setDepartment(nextDepartment);
+            setPurpose((current) =>
+              nextOptions.some((option) => option.value === current)
+                ? current
+                : nextOptions[0].value,
+            );
+          }}
+          value={department}
+        >
+          <option value="acquisitions">Acquisitions</option>
+          <option value="dispositions">Dispositions</option>
+          <option value="general">Company general</option>
+        </select>
+      </label>
+      <label>
+        <span>Line purpose</span>
+        <select
+          name="purpose_key"
+          onChange={(event) => setPurpose(event.target.value as VoicePurpose)}
+          value={purpose}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <small>
+          Prospecting lines stay separate from warm seller calls and route cold callbacks to the
+          assigned caller.
+        </small>
+      </label>
+    </>
+  );
 }
 
 export function VoiceLineSettings() {
@@ -154,7 +226,7 @@ export function VoiceLineSettings() {
           phone_number: String(data.get("phone_number") ?? "").trim(),
           label: String(data.get("label") ?? "").trim(),
           department_key: departmentKey,
-          purpose_key: purposeForDepartment(departmentKey),
+          purpose_key: String(data.get("purpose_key") ?? "seller_conversations"),
           assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
           fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
           assigned_team_id: String(data.get("assigned_team_id") ?? "") || null,
@@ -192,7 +264,7 @@ export function VoiceLineSettings() {
         body: JSON.stringify({
           label: String(data.get("label") ?? "").trim(),
           department_key: departmentKey,
-          purpose_key: purposeForDepartment(departmentKey),
+          purpose_key: String(data.get("purpose_key") ?? "seller_conversations"),
           assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
           fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
           assigned_team_id: String(data.get("assigned_team_id") ?? "") || null,
@@ -402,14 +474,10 @@ export function VoiceLineSettings() {
               <span>Label</span>
               <input defaultValue={line.label} name="label" required />
             </label>
-            <label>
-              <span>Department</span>
-              <select defaultValue={line.department_key} name="department_key">
-                <option value="acquisitions">Acquisitions</option>
-                <option value="dispositions">Dispositions</option>
-                <option value="general">Company general</option>
-              </select>
-            </label>
+            <VoiceLineRoutingFields
+              initialDepartment={line.department_key}
+              initialPurpose={line.purpose_key}
+            />
             <label>
               <span>Status</span>
               <select defaultValue={line.status} name="status">
@@ -509,14 +577,10 @@ export function VoiceLineSettings() {
             <span>Label</span>
             <input name="label" placeholder="Acquisitions main" required />
           </label>
-          <label>
-            <span>Department</span>
-            <select defaultValue="acquisitions" name="department_key">
-              <option value="acquisitions">Acquisitions</option>
-              <option value="dispositions">Dispositions</option>
-              <option value="general">Company general</option>
-            </select>
-          </label>
+          <VoiceLineRoutingFields
+            initialDepartment="acquisitions"
+            initialPurpose="seller_conversations"
+          />
           <label>
             <span>Primary owner</span>
             <select defaultValue="" name="assigned_user_id">

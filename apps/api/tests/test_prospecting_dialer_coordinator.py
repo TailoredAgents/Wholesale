@@ -739,26 +739,23 @@ def test_session_start_rejects_an_outside_hours_queue(
         )
 
 
-def test_one_active_leg_consumes_each_single_line_capacity(
+def test_feature_line_cap_limits_every_stored_aggregate_capacity(
     db_session: Session,
     settings_factory: Callable[..., Settings],
 ) -> None:
     graph = seed_coordinator_graph(db_session)
     settings = settings_factory()
-    graph.organization.prospecting_dialer_max_concurrent_legs = 1
-    graph.campaign.prospecting_dialer_max_concurrent_legs = 1
-    # Resolve the assigned line through the profile because its UUID intentionally
-    # differs from the caller UUID.
     profile = db_session.scalar(
         select(ProspectingDialerProfile).where(ProspectingDialerProfile.user_id == graph.caller.id)
     )
     assert profile is not None and profile.voice_line_id is not None
     line = db_session.get(VoiceLine, profile.voice_line_id)
     assert line is not None
-    line.prospecting_dialer_max_concurrent_legs = 1
-    profile.default_line_count = 1
-    profile.max_line_count = 1
-    db_session.commit()
+    assert settings.prospecting_native_dialer_effective_line_cap == 1
+    assert graph.organization.prospecting_dialer_max_concurrent_legs == 3
+    assert graph.campaign.prospecting_dialer_max_concurrent_legs == 3
+    assert profile.max_line_count == 3
+    assert line.prospecting_dialer_max_concurrent_legs == 3
     now = datetime.now(UTC)
 
     started = start_dial_session(
@@ -769,6 +766,7 @@ def test_one_active_leg_consumes_each_single_line_capacity(
         now=now,
     )
     assert started is not None
+    assert started.snapshot.session.effective_line_count == 1
     runtime_graph = load_runtime_graph(
         db_session,
         graph.principal,

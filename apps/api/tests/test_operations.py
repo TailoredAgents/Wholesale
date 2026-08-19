@@ -210,6 +210,8 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
         "OPENAI_API_KEY",
         "OPENAI_DEFAULT_MODEL",
         "OPENAI_TRANSCRIPTION_MODEL",
+        "PROSPECTING_NATIVE_DIALER_ENABLED",
+        "PROSPECTING_NATIVE_DIALER_MAX_LINES",
         "PROPERTY_DATA_PROVIDER",
         "PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED",
         "REALESTATEAPI_API_KEY",
@@ -235,6 +237,11 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
 
     assert shared_runtime_keys <= api_keys
     assert shared_runtime_keys <= worker_keys
+    api_values = render_service_environment_values(blueprint, "oakwell-api")
+    worker_values = render_service_environment_values(blueprint, "oakwell-worker")
+    for service_values in (api_values, worker_values):
+        assert service_values["PROSPECTING_NATIVE_DIALER_ENABLED"] == "true"
+        assert service_values["PROSPECTING_NATIVE_DIALER_MAX_LINES"] == "1"
 
 
 def render_service_environment_keys(blueprint: str, service_name: str) -> set[str]:
@@ -242,3 +249,15 @@ def render_service_environment_keys(blueprint: str, service_name: str) -> set[st
     assert marker in blueprint
     service_block = blueprint.split(marker, 1)[1].split("\n  - type:", 1)[0]
     return set(re.findall(r"(?m)^\s+- key: ([A-Z0-9_]+)\s*$", service_block))
+
+
+def render_service_environment_values(blueprint: str, service_name: str) -> dict[str, str]:
+    marker = f"    name: {service_name}"
+    assert marker in blueprint
+    service_block = blueprint.split(marker, 1)[1].split("\n  - type:", 1)[0]
+    return dict(
+        re.findall(
+            r"(?m)^\s+- key: ([A-Z0-9_]+)\s*\r?\n\s+value: ([^\r\n]+?)\s*$",
+            service_block,
+        )
+    )

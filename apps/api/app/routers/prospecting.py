@@ -22,6 +22,7 @@ from app.schemas.prospecting import (
     ProspectingCopilotAnalyzeRequest,
     ProspectingCopilotReviewRead,
     ProspectingCopilotReviewRequest,
+    ProspectingDialerOperationsRead,
     ProspectingDialerProfileRead,
     ProspectingDialerProfileUpsert,
     ProspectingDialerSwitchRead,
@@ -29,10 +30,14 @@ from app.schemas.prospecting import (
     ProspectingDialSessionControlRead,
     ProspectingDialSessionEndCommand,
     ProspectingDialSessionLeaseCommand,
+    ProspectingDialSessionOperationRead,
     ProspectingDialSessionRecoveryCommand,
     ProspectingDialSessionSnapshotRead,
     ProspectingDialSessionStart,
     ProspectingEntryRead,
+    ProspectingInboundCallbackListRead,
+    ProspectingManagerSessionRecoveryCommand,
+    ProspectingManagerSessionStopCommand,
     ProspectingQualificationAutosaveRequest,
     ProspectingQualificationChecklistItemRead,
     ProspectingQualificationChecklistRead,
@@ -58,6 +63,10 @@ from app.services.prospecting import (
     get_prospecting_overview,
     start_attempt,
 )
+from app.services.prospecting_callbacks import (
+    get_prospecting_callback_prospect,
+    list_prospecting_inbound_callbacks,
+)
 from app.services.prospecting_copilot import (
     analyze_call_quality,
     analyze_entry,
@@ -80,6 +89,12 @@ from app.services.prospecting_dialer import (
     update_campaign_dialer_switch,
     update_company_dialer_switch,
     upsert_dialer_profile,
+)
+from app.services.prospecting_dialer_operations import (
+    ProspectingDialerOperationsConflictError,
+    get_prospecting_dialer_operations,
+    manager_recover_dial_session,
+    manager_stop_dial_session,
 )
 from app.services.prospecting_evidence import get_prospecting_call_evidence
 from app.services.prospecting_voice import (
@@ -152,6 +167,19 @@ def _raise_prospecting_dialer_error(exc: Exception) -> NoReturn:
     raise exc
 
 
+def _raise_prospecting_operations_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, ProspectingDialerOperationsConflictError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if isinstance(exc, VoiceCallProviderError):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    raise exc
+
+
 @router.get("/dialer/context")
 def read_native_dialer_context(
     db: Annotated[Session, Depends(get_db)],
@@ -166,6 +194,73 @@ def read_native_dialer_profiles(
     principal: Annotated[Principal, Depends(manage_dependency)],
 ) -> list[ProspectingDialerProfileRead]:
     return list_dialer_profiles(db, principal)
+
+
+@router.get("/dialer/operations")
+def read_native_dialer_operations(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerOperationsRead:
+    _mark_sensitive_response_no_store(response)
+    return get_prospecting_dialer_operations(db, principal)
+
+
+@router.get("/dialer/callbacks")
+def read_native_dialer_callbacks(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+    limit: int = 50,
+) -> ProspectingInboundCallbackListRead:
+    _mark_sensitive_response_no_store(response)
+    return list_prospecting_inbound_callbacks(db, principal, limit=limit)
+
+
+@router.get("/dialer/callbacks/{callback_id}/prospect")
+def read_native_dialer_callback_prospect(
+    callback_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingEntryRead:
+    _mark_sensitive_response_no_store(response)
+    entry = get_prospecting_callback_prospect(db, principal, callback_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Prospecting callback context not found.")
+    return entry
+
+
+@router.post("/dialer/operations/sessions/{session_id}/stop")
+def stop_native_dial_session_as_manager(
+    session_id: UUID,
+    payload: ProspectingManagerSessionStopCommand,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialSessionOperationRead:
+    try:
+        result = manager_stop_dial_session(db, principal, session_id, payload)
+    except (ProspectingDialerOperationsConflictError, VoiceCallProviderError, ValueError) as exc:
+        _raise_prospecting_operations_error(exc)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Prospecting dial session not found.")
+    return result
+
+
+@router.post("/dialer/operations/sessions/{session_id}/recover")
+def recover_native_dial_session_as_manager(
+    session_id: UUID,
+    payload: ProspectingManagerSessionRecoveryCommand,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialSessionOperationRead:
+    try:
+        result = manager_recover_dial_session(db, principal, session_id, payload)
+    except (ProspectingDialerOperationsConflictError, VoiceCallProviderError, ValueError) as exc:
+        _raise_prospecting_operations_error(exc)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Prospecting dial session not found.")
+    return result
 
 
 @router.put("/dialer/profiles/{user_id}")

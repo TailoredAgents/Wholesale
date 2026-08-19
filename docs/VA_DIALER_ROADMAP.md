@@ -88,7 +88,9 @@ pool, but no number rotation may be designed to evade carrier protections or spa
 
 ### 4.3 BatchDialer Boundary During Migration
 
-BatchDialer remains the default external dialer until the native system is Active.
+BatchDialer remains the production bridge and rollback path. The native system is globally
+available for controlled one-line use, but only manager-approved, non-overlapping campaigns may be
+activated before D10 acceptance.
 
 During migration:
 
@@ -591,11 +593,11 @@ The phase table is the progress ledger. Update the status in this file as work s
 | D1 | Additive dialer schema and feature flags | Implemented |
 | D2 | Prospect-aware Voice context and Twilio provider adapter | Implemented |
 | D3 | Dial-session coordinator, queue reservation, and recovery | Implemented |
-| D4 | Browser softphone and single-line call controls | Implemented; inactive pending acceptance |
-| D5 | Per-VA dashboard and live qualification checklist | Implemented; inactive pending D4/D10 acceptance |
-| D6 | Dispositions, cadence, handoff, and appointment automation | Implemented; inactive pending D4/D10 acceptance |
-| D7 | Recording, transcript, AI notes, and evidence continuity | Implemented; inactive pending D4/D10 acceptance |
-| D8 | Inbound callbacks, manager controls, and operational health | Planned |
+| D4 | Browser softphone and single-line call controls | Implemented; globally available under manager gates |
+| D5 | Per-VA dashboard and live qualification checklist | Implemented; available to approved native campaigns |
+| D6 | Dispositions, cadence, handoff, and appointment automation | Implemented; available to approved native campaigns |
+| D7 | Recording, transcript, AI notes, and evidence continuity | Implemented; available to approved native campaigns |
+| D8 | Inbound callbacks, manager controls, and operational health | Implemented; available under manager gates |
 | D9 | Analytics, quality, cost, and launch readiness | Planned |
 | D10 | Controlled single-line production acceptance | Planned |
 | D11 | Optional two-line pilot | Planned |
@@ -648,8 +650,9 @@ Implementation record (2026-08-19):
 
 - migration `0103_native_prospecting_dialer` adds the D1 tables, concurrency columns, integrity
   checks, partial unique indexes, and downgrade path
-- feature controls are present in application settings and deployment templates; the native dialer
-  remains disabled by default and the effective production cap is one line
+- feature controls are present in application settings and deployment templates; unconfigured
+  environments remain fail-closed, the production API and worker explicitly enable controlled
+  native calling, and the effective production cap is one line across the organization
 - managers can configure and list organization-scoped VA dialer profiles, while an assigned caller
   can read only their own dialer context
 - request payloads can record future one-to-three-line preferences but cannot override the
@@ -704,14 +707,13 @@ Implementation record (2026-08-19):
   and durable prepared and dispatching checkpoints are committed before provider placement so an
   immediate callback cannot outrun its Stonegate record or an ambiguous retry duplicate a call
 - dedicated cold-calling lines use purpose `prospecting_outbound`; they are excluded from ordinary
-  warm seller-call selection, and inbound calls on those lines remain blocked until the D8 callback
-  workflow exists rather than creating a fake seller lead
+  warm seller-call selection, and at the D2 boundary inbound calls on those lines were deliberately
+  blocked rather than creating a fake seller lead; D8 now supplies the isolated callback workflow
 - cold-call recordings can be attached to their prospecting call evidence, but D2 intentionally
   does not send them into the warm CRM transcript or AI-note pipeline; that continuity belongs to
   D7
 - D2 does not add the D3 session coordinator, change session/current-record pointers, add a browser
-  softphone, or activate live calling; the feature remains disabled by default and capped at one
-  line
+  softphone, or authorize live calling by itself; the completed system remains capped at one line
 - focused cold-call, provider-adapter, migration, model, callback, retry, authorization, and
   no-fake-CRM-record tests pass alongside the existing warm Twilio Voice and D1 dialer suites
 
@@ -772,9 +774,10 @@ Implementation record (2026-08-19):
   pause/resume/stop, terminal-to-wrap-up advancement, stale-tab and expired-lease rejection,
   manager-safe completion, provider-start recovery, missed-callback reconciliation, stale-provider
   preservation, and queued orphan release alongside the D1 and D2 regression suites
-- D3 remains implemented but inactive: there is no browser softphone or VA dialer dashboard yet,
-  the environment launch flag and both database switches remain off, effective concurrency remains
-  one, and BatchDialer stays the production bridge until D4-D10 acceptance
+- D3's coordinator is production-available through the completed browser workbench, while company,
+  campaign, caller-profile, and dedicated-line gates remain fail-closed until a manager approves an
+  isolated rollout. Effective organization-wide concurrency remains one, and BatchDialer stays the
+  production bridge and rollback path through D10 acceptance
 
 ### D4. Browser Softphone And Single-Line Call Controls
 
@@ -844,9 +847,10 @@ Implementation record (2026-08-19):
 - a full browser reload cannot reattach JavaScript audio to a call already in progress. After such
   a reload the UI restores durable server state and offers a server-side hang-up; it must never
   claim that live browser audio resumed
-- D4 remains disabled by default, its effective concurrency is still exactly one line, both
-  database activation switches remain independent fail-closed gates, and BatchDialer remains the
-  production bridge and rollback path through controlled D10 acceptance
+- the production feature is globally available, its effective concurrency is still exactly one
+  line across the organization, company and campaign activation switches remain independent
+  fail-closed gates, and BatchDialer remains the production bridge and rollback path through
+  controlled D10 acceptance
 - focused backend coverage exercises lease-bound token issuance, no-cache controls, idempotent
   preparation, stale lease and duplicate-browser rejection, root-versus-child status truth,
   exact lost-response recovery replay, pre-provider retry/cancel/expiry, provider cancel/hang-up,
@@ -899,8 +903,8 @@ Implementation record (2026-08-19):
 - responsive and accessible workbench behavior plus focused backend and frontend tests cover the
   pinned scripts, four states, authorization, autosave/retry/conflict behavior, refresh recovery,
   assignment scope, and stale-form protection
-- the native dialer remains disabled and inactive pending D4/D10 acceptance; the BatchDialer
-  bridge remains unchanged as the active rollback path
+- the native dialer is available only to manager-approved one-line campaigns pending D10
+  acceptance; the BatchDialer bridge remains unchanged as the active rollback path
 
 ### D6. Dispositions, Cadence, Handoff, And Appointment Automation
 
@@ -954,8 +958,8 @@ Implementation record (2026-08-19):
 - focused D6 contracts plus the complete prospecting coordinator, workbench, Voice lifecycle,
   migration, and BatchDialer bridge regressions cover replay, cadence exhaustion, callbacks,
   qualification enforcement, appointment uniqueness, ranked fallback, and exact-number suppression
-- the native dialer remains disabled and inactive pending D4/D10 acceptance; the current BatchDialer
-  bridge and its rollback path remain unchanged
+- the native dialer is available only to manager-approved one-line campaigns pending D10
+  acceptance; the current BatchDialer bridge and its rollback path remain unchanged
 
 ### D7. Recording, Transcript, AI Notes, And Evidence Continuity
 
@@ -1002,7 +1006,8 @@ D7 implementation record:
   handoff-first order; the original call time is preserved, the assigned acquisitions user can
   access the retained evidence, and unrelated callers, roles, and organizations cannot
 - call-quality analysis can use automatically completed prospecting transcripts without adding an
-  approval step, while the native dialer remains disabled pending controlled D4/D10 acceptance
+  approval step; native calling remains limited to manager-approved one-line campaigns pending
+  controlled D10 acceptance
 - focused D7 contracts cover long calls, unavailable provider media, retry/exhaustion/recovery,
   exactly-once enqueue and timeline linkage, more-than-one-page fallback discovery, house/land
   evidence conflicts, role and organization isolation, and prior D4-D6 browser regressions
@@ -1030,6 +1035,34 @@ Tests:
 Exit criteria:
 
 - a seller callback can be handled without manually searching BatchDialer or a spreadsheet
+
+Implementation record (2026-08-19):
+
+- production makes the native dialer globally available in both API and worker services while the
+  company, campaign, caller-profile, dedicated-line, calling-window, and suppression gates remain
+  independently fail-closed; the effective organization-wide cap is enforced at one line
+- dedicated `prospecting_outbound` lines now accept inbound callbacks without creating a fake warm
+  lead, contact, or conversation; exact caller-number evidence must match a recent outbound attempt
+  placed from that same line, and ambiguous or unknown callers remain isolated for review
+- callback routing prefers the matched assigned VA when that VA has a fresh eligible session on the
+  receiving line, then uses only configured fallbacks with authority to access the matched work;
+  terminal provider replays do not re-ring staff
+- callback state is durable and monotonic across parent and child provider events, multi-target
+  ringing cannot be closed by one failed child leg, and voicemail or a fully missed callback creates
+  exactly one urgent return-call task even when provider callbacks race or replay
+- **Prospecting > My Calls** polls callback cards independently and opens a matched prospect only
+  after an explicit user action, so a new callback never steals the caller's current workspace
+- **Prospecting > Dialer control** gives managers audited company and campaign switches, caller and
+  dedicated-line setup, daily caps, calling-hours and approved-script policy creation, live session
+  and callback health, sanitized recent errors, safe-drain and unanswered-call stop controls, and
+  guarded provider reconciliation or orphan recovery
+- **Settings > Communications** preserves an explicit **Prospecting outbound and callbacks** line
+  purpose instead of silently converting an Acquisitions prospecting line back to seller calls
+- focused migration, model, callback matching and routing, provider replay, access isolation,
+  voicemail and missed-task, manager control, stop and recovery, warm Voice regression, frontend
+  contract, type, lint, and production-build coverage protect the D8 operating boundary
+- BatchDialer and its existing Zaps remain unchanged as the production bridge and rollback path;
+  D9 analytics and D10 controlled single-line acceptance are still required before broad rollout
 
 ### D9. Analytics, Quality, Cost, And Launch Readiness
 

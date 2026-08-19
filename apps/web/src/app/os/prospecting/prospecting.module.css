@@ -2777,6 +2777,704 @@
   line-height: 1.4;
 }
 
+.callbackPanel,
+.dialerOperationsHero,
+.dialerOperationsSection {
+  border: 1px solid #d9d6cf;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(24 48 35 / 5%);
+}
+
+.callbackPanel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.callbackPanel > header,
+.dialerOperationsHero,
+.dialerOperationsSection > header,
+.dialerProfileCard > header,
+.dialerSessionCard > header,
+.callbackCardHeader,
+.callbackCardFooter,
+.dialerProfileFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.callbackPanel > header > div,
+.dialerOperationsHero > div,
+.dialerOperationsSection > header > div,
+.dialerProfileCard > header > div,
+.dialerSessionCard > header > div,
+.callbackCardHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.callbackPanel h2,
+.callbackPanel p,
+.dialerOperationsHero h2,
+.dialerOperationsHero p,
+.dialerOperationsSection h2,
+.dialerOperationsSection p,
+.dialerProfileCard p,
+.dialerSessionCard p,
+.callbackCard p,
+.dialerErrorList p {
+  margin: 0;
+}
+
+.callbackPanel h2,
+.dialerOperationsHero h2,
+.dialerOperationsSection h2 {
+  color: #1e2e25;
+  font-size: 1.08rem;
+}
+
+.callbackPanel > header span,
+.dialerOperationsHero > div > span,
+.dialerOperationsSection > header > div > span {
+  color: #27724b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.callbackPanel > header p,
+.dialerOperationsHero p,
+.dialerSectionDescription {
+  color: #637069;
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.callbackCardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.callbackCard {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dde2de;
+  border-radius: 7px;
+  background: #fafbf9;
+}
+
+.callbackCardHeader strong,
+.dialerProfileCard > header strong,
+.dialerSessionCard > header strong {
+  overflow-wrap: anywhere;
+  color: #223229;
+  font-size: 0.9rem;
+}
+
+.callbackCardHeader > div > span,
+.dialerProfileCard > header > div > span,
+.dialerSessionCard > header > div > span {
+  overflow-wrap: anywhere;
+  color: #66716b;
+  font-size: 0.72rem;
+}
+
+.callbackCard dl,
+.dialerSessionFacts,
+.dialerCaps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #e1e4e1;
+  border-radius: 5px;
+  background: #e1e4e1;
+}
+
+.callbackCard dl > div,
+.dialerSessionFacts > div,
+.dialerCaps > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px;
+  background: #fff;
+}
+
+.callbackCard dt,
+.dialerSessionFacts dt,
+.dialerCaps dt {
+  color: #747c77;
+  font-size: 0.63rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.callbackCard dd,
+.dialerSessionFacts dd,
+.dialerCaps dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #29362f;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.callbackCardFooter {
+  align-items: flex-end;
+}
+
+.callbackCardFooter small {
+  color: #65716a;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.statusGood,
+.statusWarning,
+.statusNeutral {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 25px;
+  padding: 3px 8px;
+  border: 1px solid #bad8c5;
+  border-radius: 999px;
+  background: #edf7f0;
+  color: #185839;
+  font-size: 0.67rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.statusWarning {
+  border-color: #e4c68f;
+  background: #fff7e9;
+  color: #79511c;
+}
+
+.statusNeutral {
+  border-color: #d6d8d4;
+  background: #f4f4f1;
+  color: #636760;
+}
+
+.dialerOperationsWorkspace {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.dialerOperationsHero {
+  padding: 20px 22px;
+  background: linear-gradient(135deg, #f7faf7, #eef6f0);
+}
+
+.dialerOperationsHero p {
+  max-width: 760px;
+}
+
+.dialerOperationsHero button,
+.callbackPanel > header button,
+.callbackCardFooter button,
+.dialerProfileFooter button,
+.dialerSessionActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.dialerHealthGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #d9d6cf;
+  border-radius: 8px;
+  background: #d9d6cf;
+}
+
+.dialerHealthGrid > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 9px;
+  min-width: 0;
+  padding: 16px;
+  background: #fff;
+}
+
+.dialerHealthGrid svg {
+  grid-row: 1 / 4;
+  color: #27724b;
+}
+
+.dialerHealthGrid span {
+  color: #68726c;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dialerHealthGrid strong {
+  overflow-wrap: anywhere;
+  color: #24342b;
+  font-size: 0.92rem;
+}
+
+.dialerHealthGrid small {
+  color: #737b76;
+  font-size: 0.66rem;
+}
+
+.dialerOperationsSection {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.dialerOperationsSection > header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e0da;
+}
+
+.dialerInlineWarning {
+  padding: 10px 12px;
+  border-left: 3px solid #a7651c;
+  background: #fff7e9;
+  color: #6c4b1c;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.dialerOperationForm {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dfe2de;
+  border-radius: 7px;
+  background: #fafbf9;
+}
+
+.dialerSwitchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dialerSwitchRow > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dialerSwitchRow strong {
+  color: #26352d;
+  font-size: 0.85rem;
+}
+
+.dialerSwitchRow p {
+  color: #667069;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.dialerSwitch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.dialerSwitch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.dialerSwitch > span {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #b8bcb8;
+  transition: background 120ms ease;
+}
+
+.dialerSwitch > span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 24%);
+  content: "";
+  transition: transform 120ms ease;
+}
+
+.dialerSwitch input:checked + span {
+  background: #27724b;
+}
+
+.dialerSwitch input:checked + span::after {
+  transform: translateX(16px);
+}
+
+.dialerSwitch input:focus-visible + span {
+  outline: 3px solid rgb(39 114 75 / 24%);
+  outline-offset: 2px;
+}
+
+.dialerSwitch input:disabled + span {
+  opacity: 0.48;
+}
+
+.dialerSwitch b {
+  min-width: 22px;
+  color: #4f5b54;
+  font-size: 0.7rem;
+}
+
+.dialerOperationActionRow {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding-top: 11px;
+  border-top: 1px solid #e2e4e1;
+}
+
+.dialerOperationActionRow label,
+.dialerProfileGrid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dialerOperationActionRow label > span,
+.dialerProfileGrid label > span {
+  color: #59655e;
+  font-size: 0.69rem;
+  font-weight: 800;
+}
+
+.dialerOperationActionRow input,
+.dialerProfileGrid input,
+.dialerProfileGrid select,
+.dialerSessionActions input,
+.dialerSessionActions select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cdd2ce;
+  border-radius: 4px;
+  background: #fff;
+  color: #27342d;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.dialerCaps {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dialerCaps dd {
+  color: #1f5e3e;
+  font-size: 1rem;
+}
+
+.dialerCampaignGrid,
+.dialerProfileList,
+.dialerSessionList,
+.dialerErrorList {
+  display: grid;
+  gap: 10px;
+}
+
+.dialerCampaignGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dialerProfileCard,
+.dialerSessionCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #dfe2de;
+  border-radius: 7px;
+  background: #fafbf9;
+}
+
+.dialerProfileGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialerProfileFooter p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #53635a;
+  font-size: 0.7rem;
+}
+
+.dialerProfileFooter svg {
+  color: #27724b;
+}
+
+.dialerSessionFacts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dialerSessionActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialerSessionActions form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid #e1e3e0;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.dialerSessionActions form > strong {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #39483f;
+  font-size: 0.73rem;
+}
+
+.dialerErrorList article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border-left: 3px solid #a7651c;
+  background: #fff8ea;
+}
+
+.dialerErrorList article svg {
+  color: #a7651c;
+}
+
+.dialerErrorList article > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dialerErrorList article strong {
+  color: #644718;
+  font-size: 0.77rem;
+}
+
+.dialerErrorList article p {
+  overflow-wrap: anywhere;
+  color: #765b2e;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.dialerErrorList article > span {
+  color: #826c48;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.dialerEmptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 72px;
+  padding: 16px;
+  border: 1px dashed #ccd2cd;
+  border-radius: 6px;
+  color: #68736c;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.dialerTextLink {
+  color: #1f6843;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dialerPolicyList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialerPolicyList > article {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #dfe2de;
+  border-radius: 7px;
+  background: #fafbf9;
+}
+
+.dialerPolicyList > article > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dialerPolicyList > article > header strong {
+  color: #29372f;
+  font-size: 0.82rem;
+}
+
+.dialerPolicyList > article > header span,
+.dialerPolicyList > article > p {
+  color: #6d756f;
+  font-size: 0.68rem;
+}
+
+.dialerPolicyList > article > div {
+  display: grid;
+  gap: 7px;
+}
+
+.dialerPolicyList dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #e2e4e1;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.dialerPolicyList dl > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dialerPolicyList dt {
+  color: #747c77;
+  font-size: 0.61rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dialerPolicyList dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #334139;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.dialerPolicyCreator {
+  border: 1px solid #cfd8d2;
+  border-radius: 7px;
+  background: #f6faf7;
+}
+
+.dialerPolicyCreator > summary {
+  min-height: 44px;
+  padding: 12px 14px;
+  color: #205d3e;
+  font-size: 0.79rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dialerPolicyCreator > form {
+  display: grid;
+  gap: 13px;
+  padding: 0 14px 14px;
+}
+
+.dialerPolicyCreator > form > p {
+  color: #5e6b63;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.dialerPolicyGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dialerPolicyGrid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dialerPolicyGrid label > span {
+  color: #59655e;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.dialerPolicyGrid input,
+.dialerPolicyGrid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cdd2ce;
+  border-radius: 4px;
+  background: #fff;
+  color: #27342d;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.dialerPolicyFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dialerPolicyFooter a {
+  color: #286846;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 760px) {
   .attemptHistory .attemptHistoryItem > summary {
     min-height: 56px;
@@ -2810,6 +3508,84 @@
   .callEvidenceDelete form > div {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .callbackPanel,
+  .dialerOperationsHero,
+  .dialerOperationsSection {
+    padding: 14px;
+  }
+
+  .callbackPanel > header,
+  .dialerOperationsHero,
+  .dialerOperationsSection > header,
+  .dialerProfileCard > header,
+  .dialerSessionCard > header,
+  .callbackCardFooter,
+  .dialerProfileFooter,
+  .dialerSwitchRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .callbackCardGrid,
+  .dialerCampaignGrid,
+  .dialerProfileGrid,
+  .dialerSessionActions,
+  .dialerHealthGrid,
+  .dialerCaps,
+  .dialerSessionFacts,
+  .dialerOperationActionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .dialerPolicyList,
+  .dialerPolicyGrid,
+  .dialerPolicyList dl {
+    grid-template-columns: 1fr;
+  }
+
+  .dialerPolicyFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dialerPolicyFooter button,
+  .dialerPolicyGrid input,
+  .dialerPolicyGrid select {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .dialerSwitch {
+    min-height: 44px;
+  }
+
+  .dialerOperationActionRow button,
+  .callbackPanel > header button,
+  .callbackCardFooter button,
+  .dialerOperationsHero button,
+  .dialerProfileFooter button,
+  .dialerSessionActions button,
+  .dialerProfileGrid input,
+  .dialerProfileGrid select,
+  .dialerSessionActions input,
+  .dialerSessionActions select {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .dialerSessionActions form {
+    grid-template-columns: 1fr;
+  }
+
+  .dialerErrorList article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .dialerErrorList article > span {
+    grid-column: 2;
+    white-space: normal;
   }
 }
 
