@@ -756,6 +756,40 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="TWILIO_VOICE_RECORDING_DISCLOSURE",
     )
+    prospecting_native_dialer_enabled: bool = Field(
+        default=False,
+        validation_alias="PROSPECTING_NATIVE_DIALER_ENABLED",
+    )
+    prospecting_native_dialer_max_lines: int = Field(
+        default=1,
+        ge=1,
+        le=3,
+        validation_alias="PROSPECTING_NATIVE_DIALER_MAX_LINES",
+    )
+    prospecting_native_dialer_lease_seconds: int = Field(
+        default=90,
+        ge=30,
+        le=900,
+        validation_alias="PROSPECTING_NATIVE_DIALER_LEASE_SECONDS",
+    )
+    prospecting_native_dialer_stale_after_seconds: int = Field(
+        default=180,
+        ge=60,
+        le=3600,
+        validation_alias="PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS",
+    )
+    prospecting_native_dialer_orphan_grace_seconds: int = Field(
+        default=300,
+        ge=60,
+        le=7200,
+        validation_alias="PROSPECTING_NATIVE_DIALER_ORPHAN_GRACE_SECONDS",
+    )
+    prospecting_native_dialer_reserved_cost_cents: int = Field(
+        default=5,
+        ge=0,
+        le=10_000,
+        validation_alias="PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS",
+    )
     underwriting_active_methodology_version: Literal["v2.2", "v3"] = Field(
         default="v3",
         validation_alias="UNDERWRITING_ACTIVE_METHODOLOGY_VERSION",
@@ -869,6 +903,11 @@ class Settings(BaseSettings):
             and self.email_provider == "simulate"
         ):
             raise ValueError("EMAIL_PROVIDER=simulate is forbidden in production.")
+        if self.app_env == "production" and self.prospecting_native_dialer_max_lines > 1:
+            raise ValueError(
+                "PROSPECTING_NATIVE_DIALER_MAX_LINES cannot exceed 1 in the "
+                "single-line implementation phase."
+            )
         return self
 
     @property
@@ -1043,6 +1082,19 @@ class Settings(BaseSettings):
             self.twilio_voice_configured
             and self.twilio_voice_recording_enabled
             and self.call_recording_retention_days
+        )
+
+    @property
+    def prospecting_native_dialer_implemented_line_cap(self) -> int:
+        """Return the line concurrency that the current implementation can safely execute."""
+
+        return 1
+
+    @property
+    def prospecting_native_dialer_effective_line_cap(self) -> int:
+        return min(
+            self.prospecting_native_dialer_max_lines,
+            self.prospecting_native_dialer_implemented_line_cap,
         )
 
     @property

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -84,14 +85,23 @@ from app.services.lead_lifecycle import (
     lock_organization_lead,
     require_lead_open_for_work,
 )
+from app.services.prospecting_voice import (
+    ProspectingVoiceConfigurationError,
+    ProspectingVoiceConflictError,
+    process_browser_prospecting_outbound_request,
+    reconcile_signed_prospecting_disclosure,
+    reconcile_signed_prospecting_recording,
+    reconcile_signed_prospecting_status,
+    validate_prospecting_connect_intent,
+)
 
 VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user"}
 VOICE_LINE_STATUSES = {"active", "inactive"}
 VOICE_LINE_RING_STRATEGIES = {"sequential", "simultaneous"}
 VOICE_LINE_DEPARTMENT_PURPOSES = {
-    "acquisitions": "seller_conversations",
-    "dispositions": "buyer_relations",
-    "general": "company_general",
+    "acquisitions": {"seller_conversations", "prospecting_outbound"},
+    "dispositions": {"buyer_relations"},
+    "general": {"company_general"},
 }
 VOICE_LINE_MISSED_CALL_ACTIONS = {
     "fallback_then_voicemail",
@@ -666,6 +676,7 @@ def start_forwarded_call(
     intent = db.get(VoiceCallIntent, intent_read.id)
     if intent is None:
         return None
+    conversation_id, contact_id = require_warm_call_intent_context(intent)
     if intent.lead_id is not None:
         lead = lock_organization_lead(
             db,
@@ -708,9 +719,9 @@ def start_forwarded_call(
     communication, call = create_call_records(
         db,
         organization_id=intent.organization_id,
-        conversation_id=intent.conversation_id,
+        conversation_id=conversation_id,
         lead_id=intent.lead_id,
-        contact_id=intent.contact_id,
+        contact_id=contact_id,
         actor_user_id=intent.actor_user_id,
         voice_line_id=line.id,
         call_intent_id=intent.id,
@@ -721,7 +732,7 @@ def start_forwarded_call(
         to_number=intent.recipient,
         recording_consent_status=intent.recording_consent_status,
     )
-    conversation = db.get(Conversation, intent.conversation_id)
+    conversation = db.get(Conversation, conversation_id)
     if conversation is None:
         raise VoiceConfigurationError("Call conversation is unavailable.")
     entity_type, entity_id = conversation_activity_entity(db, conversation)
@@ -805,6 +816,12 @@ def process_forwarded_voice_connect(
         raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
     if payload.get("Digits") != "1":
         return hangup_twiml()
+    if intent.prospect_id is not None:
+        try:
+            validate_prospecting_connect_intent(db, intent, payload)
+        except (ProspectingVoiceConfigurationError, ProspectingVoiceConflictError) as exc:
+            raise VoiceConfigurationError(str(exc)) from exc
+        db.commit()
     if intent.lead_id is not None:
         lead = lock_organization_lead(
             db,
@@ -847,6 +864,19 @@ def process_outbound_voice_request(
     intent = db.get(VoiceCallIntent, intent_id)
     if intent is None:
         raise ValueError("Unknown Stonegate call intent.")
+    if intent.prospect_id is not None:
+        try:
+            return process_browser_prospecting_outbound_request(
+                db,
+                intent,
+                payload,
+                settings=settings,
+            )
+        except ProspectingVoiceConflictError as exc:
+            raise VoiceConfigurationError(str(exc)) from exc
+        except ProspectingVoiceConfigurationError as exc:
+            raise VoiceConfigurationError(str(exc)) from exc
+    conversation_id, contact_id = require_warm_call_intent_context(intent)
     if intent.lead_id is not None:
         lead = lock_organization_lead(
             db,
@@ -877,9 +907,9 @@ def process_outbound_voice_request(
         communication, call = create_call_records(
             db,
             organization_id=intent.organization_id,
-            conversation_id=intent.conversation_id,
+            conversation_id=conversation_id,
             lead_id=intent.lead_id,
-            contact_id=intent.contact_id,
+            contact_id=contact_id,
             actor_user_id=intent.actor_user_id,
             voice_line_id=line.id,
             call_intent_id=intent.id,
@@ -890,7 +920,7 @@ def process_outbound_voice_request(
             to_number=intent.recipient,
             recording_consent_status=intent.recording_consent_status,
         )
-        conversation = db.get(Conversation, intent.conversation_id)
+        conversation = db.get(Conversation, conversation_id)
         if conversation is None:
             raise VoiceConfigurationError("Call conversation is unavailable.")
         entity_type, entity_id = conversation_activity_entity(db, conversation)
@@ -955,8 +985,14 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     line = find_voice_line_by_number(db, recipient)
     if line is None or not settings.twilio_voice_configured:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
+    if line.purpose_key == "prospecting_outbound":
+        # Inbound prospect callbacks are intentionally deferred to D8. Most importantly,
+        # an outbound-only cold-calling number must not manufacture a warm seller lead.
+        raise VoiceConfigurationError("The prospecting line is outbound-only.")
     existing = find_call(db, line.organization_id, provider_call_id=call_sid)
     if existing is not None:
+        if existing.conversation_id is None:
+            raise VoiceConfigurationError("Inbound call context is unavailable.")
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
         targets = resolve_inbound_targets(db, target_user_ids)
         if not targets:
@@ -1103,6 +1139,9 @@ def process_voice_status(
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
     answered_user_id: UUID | None = None,
+    signature_verified: bool = False,
+    signature: str | None = None,
+    callback_kind: Literal["status", "dial_result"] = "status",
 ) -> str:
     status = (
         payload.get("DialCallStatus")
@@ -1112,6 +1151,16 @@ def process_voice_status(
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
+    if call.prospect_id is not None:
+        return reconcile_signed_prospecting_status(
+            db,
+            call,
+            payload,
+            status=status,
+            signature_verified=signature_verified,
+            signature=signature,
+            callback_kind=callback_kind,
+        )
     event_sid = payload.get("CallSid") or payload.get("DialCallSid") or call.provider_call_id
     event_id = f"voice:status:{event_sid}:{status}"
     existing_event = get_voice_provider_event(db, call.organization_id, event_id)
@@ -1144,8 +1193,18 @@ def process_voice_dial_result(
     *,
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
+    signature_verified: bool = False,
+    signature: str | None = None,
 ) -> str:
-    process_voice_status(db, payload, intent_id=intent_id, call_id=call_id)
+    process_voice_status(
+        db,
+        payload,
+        intent_id=intent_id,
+        call_id=call_id,
+        signature_verified=signature_verified,
+        signature=signature,
+        callback_kind="dial_result",
+    )
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None or call.direction != "inbound":
         return hangup_twiml()
@@ -1199,18 +1258,22 @@ def process_voice_recording(
     *,
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
+    signature_verified: bool = False,
+    signature: str | None = None,
 ) -> str:
     recording_sid = required_voice_value(payload, "RecordingSid")
     recording_status = required_voice_value(payload, "RecordingStatus").lower()
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
+    is_prospecting_call = call.prospect_id is not None
     if recording_status == "completed" and call.recording_consent_status == "disclosure_configured":
         call.recording_consent_status = "disclosed"
     event_id = f"voice:recording:{recording_sid}:{recording_status}"
-    existing_event = get_voice_provider_event(db, call.organization_id, event_id)
-    if existing_event is not None:
-        return existing_event.processing_status
+    if not is_prospecting_call:
+        existing_event = get_voice_provider_event(db, call.organization_id, event_id)
+        if existing_event is not None:
+            return existing_event.processing_status
     recording = db.scalar(
         select(CallRecording).where(
             CallRecording.organization_id == call.organization_id,
@@ -1218,6 +1281,10 @@ def process_voice_recording(
             CallRecording.provider_recording_id == recording_sid,
         )
     )
+    if recording is not None and recording.call_record_id != call.id:
+        raise ProspectingVoiceConflictError(
+            "Provider recording ID is already attached to another call."
+        )
     settings = get_settings()
     completed_at = datetime.now(UTC) if recording_status == "completed" else None
     retention_expires_at = (
@@ -1255,13 +1322,23 @@ def process_voice_recording(
         if recording_status == "completed":
             recording.recorded_at = completed_at
             recording.retention_expires_at = recording.retention_expires_at or retention_expires_at
-    if recording_status == "completed":
+    if recording_status == "completed" and not is_prospecting_call:
         db.flush()
         enqueue_call_transcript(
             db,
             recording,
             model_name=settings.openai_transcription_model,
         )
+    if is_prospecting_call:
+        processing_status = reconcile_signed_prospecting_recording(
+            db,
+            call,
+            payload,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+        db.commit()
+        return processing_status
     event = record_provider_event(
         db,
         organization_id=call.organization_id,
@@ -1282,10 +1359,23 @@ def process_voice_recording_disclosure(
     *,
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
+    signature_verified: bool = False,
+    signature: str | None = None,
 ) -> str:
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
+    if call.prospect_id is not None:
+        call.recording_consent_status = "disclosed"
+        processing_status = reconcile_signed_prospecting_disclosure(
+            db,
+            call,
+            payload,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+        db.commit()
+        return processing_status
     event_id = f"voice:recording-disclosure:{call.id}"
     existing_event = get_voice_provider_event(db, call.organization_id, event_id)
     if existing_event is not None:
@@ -1616,11 +1706,7 @@ def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
             organization_id=call.organization_id,
             lead_id=call.lead_id,
         )
-        if (
-            lead is None
-            or lead.archived_at is not None
-            or lead.stage_key in INACTIVE_LEAD_STAGES
-        ):
+        if lead is None or lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES:
             return
         inbound_reactivation_task = db.scalar(
             select(Task.id).where(
@@ -2029,6 +2115,8 @@ def voice_line_announcement(line: VoiceLine) -> str:
         return "Stonegate dispositions call."
     if line.purpose_key == "seller_conversations":
         return "Stonegate acquisitions call."
+    if line.purpose_key == "prospecting_outbound":
+        return "Stonegate prospecting call."
     return "Stonegate company call."
 
 
@@ -2086,6 +2174,7 @@ def select_voice_line(
                 | (VoiceLine.assigned_team_id.in_(team_ids))
             ),
             VoiceLine.status == "active",
+            VoiceLine.purpose_key != "prospecting_outbound",
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
@@ -2096,6 +2185,7 @@ def select_voice_line(
         .where(
             VoiceLine.organization_id == organization_id,
             VoiceLine.status == "active",
+            VoiceLine.purpose_key != "prospecting_outbound",
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
@@ -2262,10 +2352,10 @@ def validate_line_ownership(
     validate_line_team(db, organization_id, assigned_team_id)
     if assigned_user_id is not None and assigned_user_id == fallback_user_id:
         raise ValueError("Primary and fallback owners must be different people.")
-    expected_purpose = VOICE_LINE_DEPARTMENT_PURPOSES.get(department_key)
-    if expected_purpose is None:
+    expected_purposes = VOICE_LINE_DEPARTMENT_PURPOSES.get(department_key)
+    if expected_purposes is None:
         raise ValueError("Unsupported phone-line department.")
-    if purpose_key != expected_purpose:
+    if purpose_key not in expected_purposes:
         raise ValueError("Phone-line purpose must match its department.")
     if missed_call_action not in VOICE_LINE_MISSED_CALL_ACTIONS:
         raise ValueError("Unsupported missed-call action.")
@@ -2326,15 +2416,22 @@ def call_intent_to_read(
     line: VoiceLine,
     settings: Settings,
 ) -> VoiceCallIntentRead:
+    conversation_id, _ = require_warm_call_intent_context(intent)
     return VoiceCallIntentRead(
         id=intent.id,
-        conversation_id=intent.conversation_id,
+        conversation_id=conversation_id,
         recipient=intent.recipient,
         from_number=line.phone_number,
         status=intent.status,
         expires_at=intent.expires_at,
         recording_enabled=settings.twilio_voice_recording_configured,
     )
+
+
+def require_warm_call_intent_context(intent: VoiceCallIntent) -> tuple[UUID, UUID]:
+    if intent.conversation_id is None or intent.contact_id is None:
+        raise VoiceConfigurationError("Warm CRM call context is unavailable.")
+    return intent.conversation_id, intent.contact_id
 
 
 def record_line_audit(

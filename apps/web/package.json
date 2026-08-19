@@ -12,6 +12,8 @@
     "audit:performance": "node --test scripts/public-performance-contract.test.mjs",
     "audit:meta": "node --test scripts/meta-tracking.test.mjs",
     "audit:underwriting": "node --test scripts/underwriting-workspace-contract.test.mjs",
+    "audit:dialer": "node --test scripts/prospecting-softphone-contract.test.mjs",
+    "audit:prospecting-qualification": "node --test scripts/prospecting-qualification-contract.test.mjs",
     "baseline:ia": "node scripts/os-ia-baseline.mjs",
     "audit:os": "node scripts/os-quality-audit.mjs",
     "audit:help": "node scripts/help-bubble-audit.mjs",
@@ -20,6 +22,7 @@
   "dependencies": {
     "@clerk/nextjs": "^7.5.17",
     "@sentry/nextjs": "^10.68.0",
+    "@twilio/voice-sdk": "^2.18.3",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^6.2.0",
     "meta-capi-param-builder-clientjs": "1.3.1",

@@ -61,9 +61,12 @@ class VoiceLineCreate(BaseModel):
     fallback_user_id: UUID | None = None
     assigned_team_id: UUID | None = None
     department_key: Literal["acquisitions", "dispositions", "general"] = "acquisitions"
-    purpose_key: Literal["seller_conversations", "buyer_relations", "company_general"] = (
-        "seller_conversations"
-    )
+    purpose_key: Literal[
+        "seller_conversations",
+        "buyer_relations",
+        "company_general",
+        "prospecting_outbound",
+    ] = "seller_conversations"
     is_default: bool = False
     inbound_route: str = Field(default="conversation_owner", max_length=80)
     ring_strategy: Literal["sequential", "simultaneous"] = "simultaneous"
@@ -81,7 +84,15 @@ class VoiceLineAssignmentUpdate(BaseModel):
     assigned_team_id: UUID | None = None
     label: str | None = Field(default=None, min_length=1, max_length=120)
     department_key: Literal["acquisitions", "dispositions", "general"] | None = None
-    purpose_key: Literal["seller_conversations", "buyer_relations", "company_general"] | None = None
+    purpose_key: (
+        Literal[
+            "seller_conversations",
+            "buyer_relations",
+            "company_general",
+            "prospecting_outbound",
+        ]
+        | None
+    ) = None
     status: str | None = Field(default=None, max_length=40)
     is_default: bool | None = None
     inbound_route: str | None = Field(default=None, max_length=80)

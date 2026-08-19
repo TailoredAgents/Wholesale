@@ -665,7 +665,8 @@ After campaign approval and direct-number configuration:
 - `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
-keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode.
+keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode, but they are
+required for the D4 browser softphone described under **Native VA Dialer Foundation**.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
 The disclosure is optional. Stonegate's Owner-selected Georgia-only one-party mode leaves it unset
@@ -706,6 +707,113 @@ All paths use `https://api.stonegatehb.com` as the base.
 10. In a controlled test, exhaust `CALL_TRANSCRIPTION_MAX_ATTEMPTS`, confirm Inbox displays the
     stopped state, then select **Retry call intelligence** and verify the audited retry succeeds on
     the same call record.
+
+## Native VA Dialer Foundation And Browser Softphone
+
+### Variables
+
+- `PROSPECTING_NATIVE_DIALER_ENABLED=false`
+- `PROSPECTING_NATIVE_DIALER_MAX_LINES=1`
+- `PROSPECTING_NATIVE_DIALER_LEASE_SECONDS=90`
+- `PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS=180`
+- `PROSPECTING_NATIVE_DIALER_ORPHAN_GRACE_SECONDS=300`
+- `PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS=5`
+
+The D4 browser softphone also uses these existing Twilio variables. The first eight are readiness
+gates; the token TTL has a safe application default and is listed for deliberate tuning. This list
+intentionally contains names only: credentials belong in the API service environment and never in
+source, documentation, screenshots, URLs, browser storage, or frontend environment variables.
+
+- `TWILIO_VOICE_ENABLED`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WEBHOOK_BASE_URL`
+- `TWILIO_VALIDATE_WEBHOOK_SIGNATURES`
+- `TWILIO_API_KEY_SID`
+- `TWILIO_API_KEY_SECRET`
+- `TWILIO_TWIML_APP_SID`
+- `TWILIO_VOICE_TOKEN_TTL_SECONDS`
+
+The native VA dialer is disabled by default. The schema can preserve requested limits from one to
+three lines so a later controlled pilot does not require another data-model redesign, but the
+current implementation and production configuration are hard-capped at one line. A production
+value above `1` is rejected during application startup.
+
+Phases D1-D4 install the disabled data foundation, controlled server-side cold-call provider
+boundary, durable one-line coordinator, and browser softphone. D3 owns the authenticated browser
+lease, atomic queue reservation, calling-window and suppression rechecks, cap accounting, wrap-up
+lock, company and campaign switches, and stale-session recovery. Call start, call control, and
+native disposition completion are bound to the same lease; provider-start checkpoints and
+provider-state reconciliation prevent ambiguous retries or missed callbacks from stranding a
+session. D4 adds the
+client-only Twilio SDK boundary, short-lived outbound-only Voice sessions, browser call controls,
+and a strict separation between browser-audio status and seller child-leg status. It does not
+activate production calling.
+
+A native-dialer phone line must be active, belong to Acquisitions, and use purpose
+`prospecting_outbound`. Do not reuse the ordinary `seller_conversations` line for native outbound
+prospecting. Stonegate excludes the dedicated prospecting line from normal warm CRM call selection,
+and inbound calls on it remain blocked until the D8 callback workflow is implemented.
+
+Keep `PROSPECTING_NATIVE_DIALER_ENABLED=false` until the remaining dashboard, disposition
+automation, evidence continuity, inbound callback, observability, and D10 single-line
+production-acceptance gates in `VA_DIALER_ROADMAP.md` are complete. Keep the company and campaign
+database switches off as an independent fail-closed boundary. BatchDialer and its existing
+qualified-lead and appointment Zaps remain the production bridge and rollback path; D4 does not
+replace, disable, or modify them.
+
+### D4 Twilio Browser Setup
+
+1. Leave the production native-dialer environment flag and both database activation switches off.
+2. In Twilio, create or select the TwiML App referenced by `TWILIO_TWIML_APP_SID` and configure its
+   Voice Request URL as a POST to
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`.
+3. Add the browser-Voice variable names listed above to the API service using the matching Twilio
+   account, API key, and TwiML App. Never copy a secret into the web service or a `NEXT_PUBLIC_*`
+   variable.
+4. In **Settings > Communications**, assign the test caller an active Twilio line in Acquisitions
+   with purpose `prospecting_outbound`. Keep its configured, profile, campaign, company, and
+   environment line limits at one.
+5. Confirm the Twilio callback base URL is HTTPS and callback-signature validation remains enabled.
+6. Deploy while the native dialer remains disabled. Configuration alone is not production
+   activation.
+
+### D4 Controlled Acceptance Boundary
+
+Complete an isolated test-number or nonproduction acceptance before any production activation:
+
+1. Confirm an unauthorized user, wrong organization, stale tab, wrong browser identity, expired
+   lease, and replaced lease cannot obtain a token or control a call.
+2. Confirm every session-control response that can contain a lease and the Voice-session response
+   includes `Cache-Control: private, no-store`. Confirm the Voice JWT remains memory-only. Confirm
+   the dial-session ID, browser-session ID, and lease use only same-tab `sessionStorage` for idle
+   reload recovery, never `localStorage`, URLs, DOM attributes, or application logs, and are cleared
+   after terminal end or stop.
+3. Deny microphone permission once and confirm the UI explains the failure without starting a
+   provider call; grant permission and confirm readiness recovers.
+4. Place one controlled browser-to-phone call and verify Start Calling, Stop Ringing, Mute, Hang
+   Up, Retry, Pause, Resume, and End Shift against the durable Stonegate state.
+5. Confirm Retry after a pre-connect SDK or network error reuses the same prepared intent and does
+   not create a second Twilio call. Confirm Stop before Twilio supplies a call ID safely cancels the
+   local preparation, and confirm an untouched preparation expires and releases after five minutes.
+6. Confirm the browser/root SDK connection is labeled as browser audio and never marks the seller
+   connected; only the Twilio child `<Number>` call may establish seller ringing or answer state.
+7. Open a duplicate tab and confirm it stays passive. Expire a lease and confirm audited recovery
+   rotates browser ownership and invalidates the old Voice identity. Repeat the exact recovery
+   request to simulate a lost response and confirm it returns the same current lease without a
+   second rotation; altered prior tokens or browser identifiers must remain rejected.
+8. Refresh while idle and confirm the same valid lease and reserved prospect restore. Refresh
+   during a live call and confirm the durable server state restores with a server-side hang-up
+   option, while the UI clearly states that browser audio did not reattach. A full reload cannot
+   resume the live JavaScript audio stream. During a live call, cancel one internal navigation and
+   one browser Back attempt and confirm the page and audio remain in place; approve each once and
+   confirm browser audio disconnects before navigation continues.
+9. Confirm no cold call creates a fake warm Contact, Lead, Inbox conversation, or communication
+   record, and confirm the existing cellphone-forwarding Voice and BatchDialer handoff workflows
+   remain unchanged.
+10. Return all native-dialer gates to off after the controlled test. Production remains inactive
+    until the D5-D10 workflow and acceptance gates are complete and the owner explicitly approves
+    activation.
 
 ## SignWell
 

@@ -28,6 +28,7 @@ def create_voice_access_token(
     settings: Settings,
     *,
     identity: str,
+    incoming_allow: bool = True,
 ) -> tuple[str, datetime]:
     if not settings.twilio_browser_voice_configured:
         raise TwilioVoiceConfigurationError("Twilio Voice is not fully configured.")
@@ -46,7 +47,7 @@ def create_voice_access_token(
     token.add_grant(
         VoiceGrant(
             outgoing_application_sid=settings.twilio_twiml_app_sid,
-            incoming_allow=True,
+            incoming_allow=incoming_allow,
         )
     )
     jwt_value = token.to_jwt()

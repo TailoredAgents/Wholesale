@@ -114,6 +114,198 @@
   color: #184b33;
 }
 
+.dialerPanel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #d2d8d3;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(24 48 35 / 6%);
+}
+
+.dialerPanel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dialerPanel > header div {
+  display: grid;
+  gap: 3px;
+}
+
+.dialerPanel > header span,
+.dialerStates span {
+  color: #67716b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dialerPanel h3,
+.dialerPanel p {
+  margin: 0;
+}
+
+.dialerPanel h3 {
+  color: #1d2c24;
+  font-size: 1.05rem;
+}
+
+.dialerReady,
+.dialerInactive {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid #b8d5c3;
+  border-radius: 999px;
+  background: #edf7f0;
+  color: #185839;
+  font-size: 0.7rem;
+}
+
+.dialerInactive {
+  border-color: #d8d4ca;
+  background: #f5f3ee;
+  color: #6a675f;
+}
+
+.dialerWarning,
+.dialerInformation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-left: 3px solid #a7651c;
+  background: #fff7e9;
+  color: #674514;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.dialerWarning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.dialerInformation {
+  display: grid;
+  border-left-color: #597168;
+  background: #f2f6f4;
+  color: #3f5149;
+}
+
+.dialerInformation small {
+  color: #67716b;
+}
+
+.dialerStates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #d9dedb;
+  border-radius: 6px;
+  background: #d9dedb;
+}
+
+.dialerStates > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 9px;
+  min-width: 0;
+  padding: 13px;
+  background: #f8faf8;
+}
+
+.dialerStates svg {
+  grid-row: 1 / 4;
+  color: #246643;
+}
+
+.dialerStates strong,
+.dialerStates small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dialerStates strong {
+  color: #233229;
+  font-size: 0.86rem;
+}
+
+.dialerStates small {
+  color: #6b736e;
+  font-size: 0.72rem;
+}
+
+.dialerControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialerControls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid #bcc8c0;
+  border-radius: 5px;
+  background: #fff;
+  color: #294035;
+  font: inherit;
+  font-size: 0.79rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dialerControls button:hover:not(:disabled) {
+  border-color: #27724b;
+  background: #f1f7f3;
+  color: #184b33;
+}
+
+.dialerControls button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.dialerControls .primaryButton {
+  border-color: #23633f;
+  background: #27724b;
+  color: #fff;
+}
+
+.dialerControls .dangerButton {
+  border-color: #9c3d36;
+  background: #fff;
+  color: #8c302a;
+}
+
+.dialerControlHint {
+  color: #5d6761;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.dialerStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-height: 20px;
+  color: #3e5548;
+  font-size: 0.78rem;
+}
+
+.dialerStatus strong {
+  color: #8a3029;
+}
+
 .notice,
 .error {
   margin: 0;
@@ -832,6 +1024,45 @@
   text-transform: uppercase;
 }
 
+.workbenchFlow {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.queueQualificationProgress {
+  display: grid;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.queueQualificationProgress > span {
+  color: #455b50;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.queueQualificationProgress progress,
+.qualificationChecklist > progress {
+  width: 100%;
+  height: 7px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  accent-color: #27724b;
+}
+
+.queueQualificationProgress progress::-webkit-progress-bar,
+.qualificationChecklist > progress::-webkit-progress-bar {
+  background: #dfe6e1;
+}
+
+.queueQualificationProgress progress::-webkit-progress-value,
+.qualificationChecklist > progress::-webkit-progress-value {
+  background: #27724b;
+}
+
 .prospectPanel,
 .scriptPanel,
 .outcomePanel {
@@ -903,6 +1134,34 @@
   color: #676a66;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.prospectBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.prospectBadges strong,
+.prospectBadges em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid #b9d0c1;
+  border-radius: 999px;
+  background: #edf6f0;
+  color: #225c3c;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.prospectBadges em {
+  border-color: #e1c38e;
+  background: #fff7e8;
+  color: #754c14;
 }
 
 .contactList {
@@ -1069,6 +1328,226 @@
   line-height: 1.45;
 }
 
+.qualificationChecklist {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.qualificationChecklist > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qualificationChecklist > header span {
+  color: #68706b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.qualificationChecklist > header h3 {
+  margin: 4px 0 0;
+  color: #243129;
+  font-size: 1rem;
+}
+
+.qualificationChecklist > header > strong {
+  color: #245f3f;
+  font-size: 1rem;
+}
+
+.qualificationRequiredProgress,
+.qualificationReadOnly {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #27724b;
+  background: #f0f6f2;
+  color: #536159;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.qualificationRequiredProgress strong {
+  color: #245f3f;
+}
+
+.qualificationReadOnly {
+  border-left-color: #8c682b;
+  background: #fff8e9;
+  color: #654a1e;
+}
+
+.qualificationItems {
+  display: grid;
+  gap: 10px;
+}
+
+.qualificationItem {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid #d5d7d3;
+  border-left: 4px solid #8a918c;
+  border-radius: 5px;
+  background: #f8f9f8;
+}
+
+.qualificationItem legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 0 4px;
+  color: #263129;
+}
+
+.qualificationItem legend > span {
+  color: #6e7771;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.qualificationItem legend strong {
+  font-size: 0.82rem;
+}
+
+.qualificationItem legend em {
+  color: #795419;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.qualificationItem > p {
+  margin: 0;
+  color: #4f5852;
+  font-size: 0.81rem;
+  line-height: 1.45;
+}
+
+.qualificationItem > label {
+  color: #5d655f;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.qualificationItem textarea,
+.qualificationItem select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid #c7ccc8;
+  border-radius: 4px;
+  background: #fff;
+  color: #232b26;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.qualificationItem textarea {
+  resize: vertical;
+}
+
+.qualificationItem:focus-within {
+  box-shadow: 0 0 0 3px rgb(39 114 75 / 12%);
+}
+
+.qualificationNotCovered {
+  border-left-color: #8a918c;
+  background: #f8f9f8;
+}
+
+.qualificationAnswered {
+  border-left-color: #27724b;
+  background: #f1f8f3;
+}
+
+.qualificationFollowUp {
+  border-left-color: #c28522;
+  background: #fff9ed;
+}
+
+.qualificationConflict {
+  border-left-color: #a63d36;
+  background: #fff5f3;
+}
+
+.qualificationStateControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.qualificationStateControls button,
+.qualificationSaveState button {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #cbd0cc;
+  border-radius: 3px;
+  background: #fff;
+  color: #4d5751;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.qualificationStateControls button[aria-pressed="true"] {
+  border-color: #47745d;
+  background: #e8f3eb;
+  color: #194e32;
+}
+
+.qualificationStateControls button:disabled,
+.qualificationItem textarea:disabled,
+.qualificationItem select:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
+.qualificationSaveState {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 25px;
+}
+
+.qualificationStateBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4f5c54;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.qualificationSaveState small {
+  color: #606963;
+  font-size: 0.68rem;
+}
+
+.qualificationSaveState small[role="alert"] {
+  flex-basis: 100%;
+  color: #8e2f29;
+}
+
+.qualificationSaveState button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+}
+
 .sectionHeader {
   display: flex;
   align-items: center;
@@ -1140,6 +1619,35 @@
   gap: 5px;
 }
 
+.outcomeRequirement {
+  margin: 0;
+  padding: 9px 10px;
+  border-left: 3px solid #b7791f;
+  background: #fff8e8;
+  color: #684a1d;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.monitoringOnly {
+  margin-top: 18px;
+  padding: 14px;
+  border-left: 3px solid #718079;
+  background: #f3f6f4;
+}
+
+.monitoringOnly strong {
+  color: #33463c;
+  font-size: 0.82rem;
+}
+
+.monitoringOnly p {
+  margin: 5px 0 0;
+  color: #5c6861;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .outcomePanel label,
 .scriptForm label,
 .reviewForm label {
@@ -1160,6 +1668,7 @@
 .outcomePanel select,
 .outcomePanel textarea,
 .scriptForm input,
+.scriptForm select,
 .scriptForm textarea,
 .reviewForm input,
 .reviewForm select {
@@ -1409,6 +1918,28 @@
 }
 
 @media (max-width: 760px) {
+  .dialerPanel {
+    padding: 14px;
+  }
+
+  .dialerPanel > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dialerStates {
+    grid-template-columns: 1fr;
+  }
+
+  .dialerControls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialerControls button {
+    width: 100%;
+  }
+
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1419,6 +1950,11 @@
 
   .workbenchGrid {
     grid-template-columns: 1fr;
+    order: 1;
+  }
+
+  .workbenchFlow .shiftQueue {
+    order: 2;
   }
 
   .shiftQueue > header {
@@ -1467,9 +2003,29 @@
     border-bottom: 1px solid #e1ded7;
   }
 
+  .scriptPanel {
+    order: 1;
+  }
+
   .outcomePanel {
     grid-column: auto;
     border-top: 0;
+    order: 2;
+  }
+
+  .prospectPanel {
+    order: 3;
+  }
+
+  .qualificationStateControls {
+    grid-template-columns: 1fr;
+  }
+
+  .qualificationStateControls button,
+  .qualificationSaveState button,
+  .qualificationItem select,
+  .qualificationItem textarea {
+    min-height: 44px;
   }
 
   .handoffMeta,

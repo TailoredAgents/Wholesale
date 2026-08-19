@@ -683,6 +683,7 @@ export type CampaignManagementOverview = {
 export type ProspectingScript = {
   id: string;
   version_number: number;
+  asset_class: "house" | "land";
   title: string;
   status: string;
   opening_script: string;
@@ -698,6 +699,39 @@ export type ProspectingScript = {
   approved_by_name: string | null;
   approved_at: string | null;
   created_at: string;
+};
+
+export type ProspectingQualificationState =
+  | "not_covered"
+  | "answered"
+  | "needs_follow_up"
+  | "conflict";
+
+export type ProspectingQualificationChecklistItem = {
+  question_key: string;
+  label: string;
+  prompt: string;
+  answer_type: "text" | "choice";
+  choices: string[];
+  is_required: boolean;
+  state: ProspectingQualificationState;
+  answer_value: string | null;
+  source: string;
+  revision: number;
+  captured_at: string | null;
+  updated_at: string | null;
+};
+
+export type ProspectingQualificationChecklist = {
+  attempt_id: string;
+  script_version_id: string;
+  items: ProspectingQualificationChecklistItem[];
+  answered_count: number;
+  total_count: number;
+  required_answered_count: number;
+  required_count: number;
+  missing_required_keys: string[];
+  complete: boolean;
 };
 
 export type ProspectingAttempt = {
@@ -719,6 +753,7 @@ export type ProspectingAttempt = {
   right_party_confirmed_at: string | null;
   interest_confirmed_at: string | null;
   measurement_metadata: Record<string, unknown>;
+  qualification_checklist: ProspectingQualificationChecklist;
   qualification_answers: Record<string, string>;
   notes: string | null;
   callback_at: string | null;
@@ -731,9 +766,14 @@ export type ProspectingEntry = {
   id: string;
   batch_id: string;
   batch_name: string;
+  campaign_id: string;
   cohort_id: string | null;
   cohort_name: string | null;
   campaign_name: string;
+  asset_class: "house" | "land";
+  script: ProspectingScript | null;
+  source_name: string;
+  warnings: string[];
   assigned_user_id: string;
   assigned_user_name: string;
   prospect_id: string;
@@ -759,6 +799,174 @@ export type ProspectingEntry = {
   next_attempt_at: string | null;
   active_attempt: ProspectingAttempt | null;
   attempts: ProspectingAttempt[];
+};
+
+export type ProspectingDialerProfile = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  user_is_active: boolean;
+  user_calling_enabled: boolean;
+  voice_line_id: string | null;
+  voice_line_label: string | null;
+  voice_line_number: string | null;
+  status: "inactive" | "active" | "suspended";
+  default_line_count: number;
+  max_line_count: number;
+  effective_line_count: number;
+  recording_policy: string;
+  daily_dial_limit: number | null;
+  daily_spend_limit_cents: number | null;
+};
+
+export type ProspectingDialSession = {
+  id: string;
+  caller_user_id: string;
+  campaign_id: string;
+  cohort_id: string | null;
+  prospect_calling_batch_id: string | null;
+  voice_line_id: string | null;
+  current_prospect_id: string | null;
+  current_batch_entry_id: string | null;
+  current_attempt_id: string | null;
+  state:
+    | "ready"
+    | "dialing"
+    | "ringing"
+    | "connected"
+    | "wrap_up"
+    | "paused"
+    | "reconnecting"
+    | "ended"
+    | "stopped"
+    | "failed"
+    | "expired";
+  requested_line_count: number;
+  effective_line_count: number;
+  organization_line_limit: number;
+  va_line_limit: number;
+  campaign_line_limit: number;
+  voice_line_limit: number;
+  feature_line_limit: number;
+  pause_after_current: boolean;
+  stop_after_current: boolean;
+  lease_expires_at: string | null;
+  started_at: string;
+  paused_at: string | null;
+  resumed_at: string | null;
+  heartbeat_at: string;
+  ended_at: string | null;
+  stop_reason: string | null;
+};
+
+export type ProspectingDialLeg = {
+  id: string;
+  dial_session_id: string;
+  prospect_id: string;
+  batch_entry_id: string;
+  attempt_id: string | null;
+  contact_point_id: string | null;
+  voice_line_id: string | null;
+  call_record_id: string | null;
+  line_slot: number;
+  recipient: string;
+  provider: string;
+  provider_call_id: string | null;
+  status:
+    | "queued"
+    | "dialing"
+    | "ringing"
+    | "answered"
+    | "connected"
+    | "cancelling"
+    | "cancelled"
+    | "no_answer"
+    | "busy"
+    | "failed"
+    | "completed";
+  queued_at: string;
+  dialing_at: string | null;
+  ringing_at: string | null;
+  answered_at: string | null;
+  connected_at: string | null;
+  cancelled_at: string | null;
+  failed_at: string | null;
+  completed_at: string | null;
+  answer_classification: string;
+  party_classification: string;
+  terminal_result: string | null;
+  provider_error_code: string | null;
+  provider_error_message: string | null;
+  cancellation_reason: string | null;
+};
+
+export type ProspectingDialSessionSnapshot = {
+  session: ProspectingDialSession;
+  current_leg: ProspectingDialLeg | null;
+};
+
+export type ProspectingDialSessionControl = {
+  snapshot: ProspectingDialSessionSnapshot;
+  lease_token: string | null;
+  queue_status: "reserved" | "unchanged" | "empty" | "none";
+  replayed: boolean;
+};
+
+export type ProspectingDialerContext = {
+  feature_enabled: boolean;
+  configured_line_cap: number;
+  implemented_line_cap: number;
+  effective_line_cap: number;
+  can_manage: boolean;
+  profile: ProspectingDialerProfile | null;
+  active_session: ProspectingDialSession | null;
+  active_legs: ProspectingDialLeg[];
+  blockers: string[];
+};
+
+export type ProspectingVoiceSession = {
+  can_initialize: boolean;
+  dial_session_id: string;
+  identity: string;
+  token: string | null;
+  expires_at: string | null;
+  line: {
+    id: string;
+    phone_number: string;
+    label: string;
+    provider: string;
+    status: string;
+    department_key: string;
+    purpose_key: string;
+  };
+  recording_enabled: boolean;
+  effective_line_count: 1;
+  blockers: string[];
+};
+
+export type ProspectingVoiceCall = {
+  context_type: "prospecting";
+  call_intent_id: string;
+  call_record_id: string;
+  prospect_id: string;
+  attempt_id: string;
+  dial_session_id: string;
+  dial_leg_id: string;
+  provider: string;
+  provider_call_id: string | null;
+  provider_status: string;
+  recipient: string;
+  from_number: string;
+  recording_enabled: boolean;
+  control_action:
+    | "prepared"
+    | "started"
+    | "fetched"
+    | "cancelled"
+    | "hung_up"
+    | "replayed";
+  leg: ProspectingDialLeg;
 };
 
 export type ProspectHandoff = {

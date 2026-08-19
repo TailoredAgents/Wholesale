@@ -43,6 +43,7 @@ from app.services.property_intelligence import (
     backfill_next_property_snapshot,
     process_next_property_research,
 )
+from app.services.prospecting_dialer import process_next_prospecting_dialer_recovery
 from app.services.resend_email_events import (
     process_next_resend_event,
     recover_next_received_email,
@@ -58,6 +59,7 @@ logger = structlog.get_logger()
 WorkerOperation = Callable[[Session, Settings], UUID | None]
 
 WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
+    ("prospecting_dialer_recovery", process_next_prospecting_dialer_recovery),
     ("batchdialer_zapier", process_next_batchdialer_event),
     ("meta_lead_ads", process_next_meta_lead_event),
     ("staff_lead_alerts", process_next_staff_lead_alert),

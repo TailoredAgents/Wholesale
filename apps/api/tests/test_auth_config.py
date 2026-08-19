@@ -14,6 +14,54 @@ def test_app_environment_is_normalized_and_rejects_unknown_values() -> None:
         Settings.model_validate({"APP_ENV": "prod"})
 
 
+def test_native_prospecting_dialer_defaults_to_disabled_single_line() -> None:
+    settings = Settings.model_validate({"APP_ENV": "test"})
+
+    assert settings.prospecting_native_dialer_enabled is False
+    assert settings.prospecting_native_dialer_max_lines == 1
+    assert settings.prospecting_native_dialer_implemented_line_cap == 1
+    assert settings.prospecting_native_dialer_effective_line_cap == 1
+
+
+def test_native_prospecting_dialer_stores_future_limit_without_activating_it() -> None:
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "PROSPECTING_NATIVE_DIALER_ENABLED": True,
+            "PROSPECTING_NATIVE_DIALER_MAX_LINES": 3,
+        }
+    )
+
+    assert settings.prospecting_native_dialer_max_lines == 3
+    assert settings.prospecting_native_dialer_effective_line_cap == 1
+
+
+@pytest.mark.parametrize("configured_limit", [0, 4])
+def test_native_prospecting_dialer_rejects_out_of_range_limits(
+    configured_limit: int,
+) -> None:
+    with pytest.raises(ValueError):
+        Settings.model_validate(
+            {
+                "APP_ENV": "test",
+                "PROSPECTING_NATIVE_DIALER_MAX_LINES": configured_limit,
+            }
+        )
+
+
+def test_production_rejects_native_prospecting_multi_line_configuration() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="PROSPECTING_NATIVE_DIALER_MAX_LINES cannot exceed 1",
+    ):
+        Settings.model_validate(
+            {
+                "APP_ENV": "production",
+                "PROSPECTING_NATIVE_DIALER_MAX_LINES": 2,
+            }
+        )
+
+
 def test_production_api_startup_requires_complete_clerk_configuration(
     monkeypatch: MonkeyPatch,
 ) -> None:

@@ -53,6 +53,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
+| Native VA dialer | D0-D4 architecture, schema, prospect-aware Voice boundary, durable one-line coordinator, queue leasing, browser softphone controls, kill switches, and recovery implemented but inactive | Build D5-D9 evidence and operating workflows, then pass D10 controlled single-line production acceptance; keep BatchDialer as the live bridge |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -62,9 +63,10 @@ Do not mark a phase finished from code alone when its exit criteria require prod
   the existing platform without authorizing a second CRM or duplicate business records.
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
-- `VA_DIALER_ROADMAP.md` owns the shared Twilio acquisitions/dispositions lines and external
-  BatchDialer VA workflow. It supersedes the July 30 one-by-one-only decision without creating a
-  second CRM or communication history.
+- `VA_DIALER_ROADMAP.md` owns the native Stonegate prospecting dialer target, the initial
+  single-line implementation sequence, the temporary BatchDialer operating bridge, and the
+  separately gated path to optional two- or three-line operation. It extends the existing
+  Prospecting and Voice systems without creating a second CRM or communication history.
 - `UNDERWRITING_COMP_METHOD.md` owns the live Stonegate Valuation method, historical V2.2
   compatibility, and ongoing measured calibration.
 

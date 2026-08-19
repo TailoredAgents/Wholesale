@@ -315,6 +315,13 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
         "APN APN-45-100, Pickens County, GA"
     )
     assert start_response.json()["active_attempt"]["script_version_id"] == land_script["id"]
+    assert start_response.json()["script"]["id"] == land_script["id"]
+    assert (
+        start_response.json()["active_attempt"]["qualification_checklist"][
+            "script_version_id"
+        ]
+        == land_script["id"]
+    )
 
     complete_response = client.post(
         (

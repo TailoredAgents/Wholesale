@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ProspectHandoff,
@@ -26,10 +26,18 @@ import type {
   ProspectingCopilotOutput,
   ProspectingCopilotRecommendation,
   ProspectingEntry,
+  ProspectingQualificationChecklist,
   ProspectingWorkbenchOverview,
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
+import {
+  ProspectingDialer,
+  type ActiveProspectingDialerLease,
+} from "./prospecting-dialer";
+import type { ProspectingDialerLeadership } from "./prospecting-dialer-policy";
+import { ProspectingQualificationChecklist as LiveQualificationChecklist } from "./prospecting-qualification-checklist";
+import { pruneQualificationOverrides } from "./prospecting-qualification-state";
 import styles from "./prospecting.module.css";
 
 type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
@@ -86,7 +94,9 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [outcome, setOutcome] = useState("no_answer");
-  const [entry, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
+  const [entrySelection, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
+  const [optimisticEntry, setOptimisticEntry] = useState<ProspectingEntry | null>(null);
+  const optimisticEntryRef = useRef<ProspectingEntry | null>(null);
   const [selectedCopilotEntryId, setSelectedCopilotEntryId] = useState(
     data.current_entry?.id ?? data.copilot.work_items[0]?.entry_id ?? "",
   );
@@ -96,6 +106,15 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [editedSummary, setEditedSummary] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("due");
+  const [dialerLease, setDialerLease] =
+    useState<ActiveProspectingDialerLease | null>(null);
+  const [nativeDialerAvailable, setNativeDialerAvailable] = useState(false);
+  const [dialerLeadership, setDialerLeadership] =
+    useState<ProspectingDialerLeadership>("checking");
+  const [qualificationBlocking, setQualificationBlocking] = useState(false);
+  const [qualificationOverrides, setQualificationOverrides] = useState<
+    Record<string, ProspectingQualificationChecklist>
+  >({});
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -106,16 +125,63 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       "richardaustindugger@users.noreply.github.com",
     [],
   );
+  const queueEntries = useMemo(
+    () =>
+      data.queue_entries.map((candidate) => {
+        const attempt = candidate.active_attempt;
+        const checklist = attempt ? qualificationOverrides[attempt.id] : null;
+        return checklist && attempt
+          ? {
+              ...candidate,
+              active_attempt: { ...attempt, qualification_checklist: checklist },
+            }
+          : candidate;
+      }),
+    [data.queue_entries, qualificationOverrides],
+  );
+  const currentEntry = useMemo(() => {
+    if (!data.current_entry) return null;
+    return (
+      queueEntries.find((candidate) => candidate.id === data.current_entry?.id) ??
+      data.current_entry
+    );
+  }, [data.current_entry, queueEntries]);
+  const entry = useMemo(() => {
+    if (!entrySelection) return currentEntry;
+    const serverEntry = queueEntries.find(
+      (candidate) => candidate.id === entrySelection.id,
+    );
+    const selected =
+      optimisticEntry?.id === entrySelection.id
+        ? optimisticEntry
+        : serverEntry ?? currentEntry ?? entrySelection;
+    const selectedAttempt = selected.active_attempt;
+    const checklist = selectedAttempt
+      ? qualificationOverrides[selectedAttempt.id]
+      : null;
+    return checklist && selectedAttempt
+      ? {
+          ...selected,
+          active_attempt: {
+            ...selectedAttempt,
+            qualification_checklist: checklist,
+          },
+        }
+      : selected;
+  }, [currentEntry, entrySelection, optimisticEntry, qualificationOverrides, queueEntries]);
   const activeAttempt = entry?.active_attempt ?? null;
+  const entryAssignedToCurrentUser =
+    entry?.assigned_user_id === data.current_user_id;
+  const ownsAttemptMutationAuthority = Boolean(
+    entryAssignedToCurrentUser &&
+      ((dialerLeadership === "leader" &&
+        (!nativeDialerAvailable || dialerLease)) ||
+        (dialerLeadership === "unsupported" && !nativeDialerAvailable)),
+  );
+  const qualificationOutcomeBlocked = qualificationBlocking;
   const requiresCallback = ["callback_requested", "follow_up"].includes(outcome);
   const isWarm = ["interested", "appointment_set"].includes(outcome);
   const isAppointment = outcome === "appointment_set";
-  const capturesQualification = [
-    "callback_requested",
-    "follow_up",
-    "interested",
-    "appointment_set",
-  ].includes(outcome);
   const availableViews: Array<{ key: View; label: string; count?: number }> = [
     { key: "workbench", label: "Work queue" },
     {
@@ -129,6 +195,67 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     { key: "performance", label: "Performance" },
     ...(data.can_manage ? [{ key: "scripts" as const, label: "Caller scripts" }] : []),
   ];
+
+  const selectEntry = useCallback((selected: ProspectingEntry) => {
+    optimisticEntryRef.current = null;
+    setOptimisticEntry(null);
+    setEntry(selected);
+    setQualificationBlocking(false);
+    setSelectedCopilotEntryId(selected.id);
+    setLocalRecommendation(null);
+  }, []);
+
+  const applyOptimisticEntry = useCallback((selected: ProspectingEntry) => {
+    optimisticEntryRef.current = selected;
+    setOptimisticEntry(selected);
+    setEntry(selected);
+  }, []);
+
+  useEffect(() => {
+    const pending = optimisticEntryRef.current;
+    if (!pending) return;
+    const serverEntry = data.queue_entries.find((item) => item.id === pending.id);
+    const serverHasMutation = pending.active_attempt
+      ? serverEntry?.active_attempt?.id === pending.active_attempt.id
+      : !serverEntry || !serverEntry.active_attempt;
+    if (!serverHasMutation) return;
+    optimisticEntryRef.current = null;
+    setOptimisticEntry(null);
+    if (!serverEntry && data.current_entry) setEntry(data.current_entry);
+  }, [data.current_entry, data.queue_entries]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const retainedAttemptIds = new Set(
+        data.queue_entries.flatMap((candidate) =>
+          candidate.active_attempt ? [candidate.active_attempt.id] : [],
+        ),
+      );
+      if (data.current_entry?.active_attempt) {
+        retainedAttemptIds.add(data.current_entry.active_attempt.id);
+      }
+      const pendingAttempt = optimisticEntryRef.current?.active_attempt;
+      if (pendingAttempt) retainedAttemptIds.add(pendingAttempt.id);
+      setQualificationOverrides((current) =>
+        pruneQualificationOverrides(current, retainedAttemptIds),
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [data.current_entry, data.queue_entries]);
+
+  const updateQualificationChecklist = useCallback(
+    (attemptId: string, checklist: ProspectingQualificationChecklist) => {
+      setQualificationOverrides((current) => ({
+        ...current,
+        [attemptId]: checklist,
+      }));
+    },
+    [],
+  );
+
+  const refreshWorkspace = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
   async function request<T>(path: string, method: "POST", body?: object): Promise<T | null> {
     setStatus("saving");
@@ -163,25 +290,27 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       `/api/v1/prospecting/entries/${entry.id}/start`,
       "POST",
     );
-    if (result) setEntry(result);
+    if (result) applyOptimisticEntry(result);
   }
 
   async function completeCurrent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!activeAttempt || !data.active_script) return;
+    if (!activeAttempt || !entry?.script) return;
+    if (qualificationOutcomeBlocked) {
+      setStatus("error");
+      setMessage("Finish saving or resolve the highlighted qualification answer first.");
+      return;
+    }
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const answers = Object.fromEntries(
-      data.active_script.qualification_questions
-        .map((question) => [question.key, value(formData, question.key)])
-        .filter(([, answer]) => Boolean(answer)),
-    );
     const result = await request<ProspectingEntry>(
       `/api/v1/prospecting/attempts/${activeAttempt.id}/complete`,
       "POST",
       {
         outcome,
-        qualification_answers: answers,
+        browser_session_id: dialerLease?.browserSessionId ?? null,
+        lease_token: dialerLease?.leaseToken ?? null,
+        qualification_answers: {},
         notes: value(formData, "notes") || null,
         callback_at: requiresCallback
           ? localDateTimeToIso(value(formData, "callback_at"))
@@ -202,11 +331,16 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       },
     );
     if (result) {
-      setEntry(
-        data.queue_entries.find(
-          (item) => item.id !== result.id && item.is_actionable,
-        ) ?? null,
-      );
+      if (dialerLease) applyOptimisticEntry(result);
+      else {
+        optimisticEntryRef.current = null;
+        setOptimisticEntry(null);
+        setEntry(
+          data.queue_entries.find(
+            (item) => item.id !== result.id && item.is_actionable,
+          ) ?? null,
+        );
+      }
       form.reset();
       setOutcome("no_answer");
       router.refresh();
@@ -238,6 +372,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     const form = event.currentTarget;
     const formData = new FormData(form);
     const result = await request("/api/v1/prospecting/scripts", "POST", {
+      asset_class: value(formData, "asset_class") || "house",
       title: value(formData, "title"),
       opening_script: value(formData, "opening_script"),
       qualification_questions: standardQuestions.map(([key, label, fallbackPrompt, required]) => ({
@@ -361,6 +496,17 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
         <p className={status === "error" ? styles.error : styles.notice}>{message}</p>
       ) : null}
 
+      <ProspectingDialer
+        currentUserId={data.current_user_id}
+        entries={queueEntries}
+        onEntryChange={selectEntry}
+        onLeaseChange={setDialerLease}
+        onNativeModeChange={setNativeDialerAvailable}
+        onOwnershipChange={setDialerLeadership}
+        onWorkspaceRefresh={refreshWorkspace}
+        selectedEntry={entry}
+      />
+
       {view === "workbench" ? (
         <>
           <CopilotLauncher
@@ -390,36 +536,45 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
               selectedEntryId={selectedCopilotEntryId}
             />
           </CopilotLauncher>
-          <ShiftQueue
-            activeAttemptId={activeAttempt?.id ?? null}
-            batchQueues={data.batch_queues}
-            entries={data.queue_entries}
-            filter={queueFilter}
-            onFilter={setQueueFilter}
-            onSelect={(selected) => {
-              setEntry(selected);
-              setSelectedCopilotEntryId(selected.id);
-              setLocalRecommendation(null);
-            }}
-            selectedEntryId={entry?.id ?? ""}
-          />
-          <WorkbenchView
-            activeAttempt={activeAttempt}
-            activeScript={data.active_script}
-            acquisitionUsers={data.acquisition_users}
-            capturesQualification={capturesQualification}
-            entry={entry}
-            isAppointment={isAppointment}
-            isWarm={isWarm}
-            onComplete={completeCurrent}
-            onOutcomeChange={setOutcome}
-            onStart={startCurrent}
-            outcome={outcome}
-            requiresCallback={requiresCallback}
-            returnedHandoffs={data.returned_handoffs}
-            saving={status === "saving"}
-            key={entry?.id ?? "empty-queue"}
-          />
+          <div className={styles.workbenchFlow}>
+            <ShiftQueue
+              activeAttemptId={activeAttempt?.id ?? null}
+              batchQueues={data.batch_queues}
+              entries={queueEntries}
+              filter={queueFilter}
+              lockSelectionToCurrentAttempt={Boolean(
+                activeAttempt && entryAssignedToCurrentUser,
+              )}
+              onFilter={setQueueFilter}
+              onSelect={selectEntry}
+              selectedEntryId={entry?.id ?? ""}
+            />
+            <WorkbenchView
+              activeAttempt={activeAttempt}
+              acquisitionUsers={data.acquisition_users}
+              canMutateAttempt={Boolean(
+                entryAssignedToCurrentUser &&
+                  (!activeAttempt || ownsAttemptMutationAuthority),
+              )}
+              canAutosaveQualification={ownsAttemptMutationAuthority}
+              dialerLease={dialerLease}
+              entry={entry}
+              isAppointment={isAppointment}
+              isWarm={isWarm}
+              nativeDialerAvailable={nativeDialerAvailable}
+              nativeDialerLeaseActive={Boolean(dialerLease)}
+              onComplete={completeCurrent}
+              onQualificationBlockingChange={setQualificationBlocking}
+              onQualificationChecklistChange={updateQualificationChecklist}
+              onOutcomeChange={setOutcome}
+              onStart={startCurrent}
+              outcome={outcome}
+              requiresCallback={requiresCallback}
+              returnedHandoffs={data.returned_handoffs}
+              saving={status === "saving" || qualificationOutcomeBlocked}
+              key={entry?.id ?? "empty-queue"}
+            />
+          </div>
         </>
       ) : null}
 
@@ -541,7 +696,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
             <div className={styles.scriptList}>
               {data.scripts.map((script) => (
                 <article key={script.id}>
-                  <div><strong>v{script.version_number} · {script.title}</strong><span>{labelize(script.status)} · {script.created_by_name}</span></div>
+                  <div><strong>v{script.version_number} · {script.title}</strong><span>{labelize(script.asset_class)} · {labelize(script.status)} · {script.created_by_name}</span></div>
                   {script.status === "draft" ? <button onClick={() => approveScript(script.id)} type="button">Approve</button> : <span>{script.approved_at ? formatDateTime(script.approved_at) : "Not approved"}</span>}
                 </article>
               ))}
@@ -549,6 +704,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
           </div>
           <form className={styles.scriptForm} onSubmit={createScript}>
             <div className={styles.sectionHeader}><div><span>New immutable version</span><h3>Draft caller script</h3></div></div>
+            <label><span>Property workflow</span><select defaultValue="house" name="asset_class"><option value="house">House</option><option value="land">Land</option></select></label>
             <label><span>Version title</span><input name="title" placeholder="Stonegate seller conversation" required /></label>
             <label><span>Opening</span><textarea name="opening_script" placeholder="Introduce Stonegate, identify the property, and ask permission to continue." required /></label>
             {standardQuestions.map(([key, label, prompt]) => (
@@ -773,6 +929,7 @@ function ShiftQueue({
   batchQueues,
   entries,
   filter,
+  lockSelectionToCurrentAttempt,
   onFilter,
   onSelect,
   selectedEntryId,
@@ -781,6 +938,7 @@ function ShiftQueue({
   batchQueues: ProspectingWorkbenchOverview["batch_queues"];
   entries: ProspectingEntry[];
   filter: QueueFilter;
+  lockSelectionToCurrentAttempt: boolean;
   onFilter: (filter: QueueFilter) => void;
   onSelect: (entry: ProspectingEntry) => void;
   selectedEntryId: string;
@@ -835,7 +993,9 @@ function ShiftQueue({
       <div className={styles.queueRows}>
         {visibleEntries.map((item) => {
           const blockedByActiveAttempt = Boolean(
-            activeAttemptId && item.id !== selectedEntryId,
+            lockSelectionToCurrentAttempt &&
+            activeAttemptId &&
+            item.id !== selectedEntryId,
           );
           return (
             <button
@@ -856,6 +1016,22 @@ function ShiftQueue({
               <strong>{item.legal_name}</strong>
               <small>{item.property_address ?? item.phone ?? "No property details"}</small>
               <span>{item.campaign_name} · {item.assigned_user_name}</span>
+              {item.active_attempt?.qualification_checklist ? (
+                <span className={styles.queueQualificationProgress}>
+                  <span>
+                    Qualification {item.active_attempt.qualification_checklist.answered_count}/
+                    {item.active_attempt.qualification_checklist.total_count}
+                  </span>
+                  <progress
+                    aria-label={`${item.legal_name} qualification progress`}
+                    max={Math.max(
+                      item.active_attempt.qualification_checklist.total_count,
+                      1,
+                    )}
+                    value={item.active_attempt.qualification_checklist.answered_count}
+                  />
+                </span>
+              ) : null}
               <time>{item.next_attempt_at ? formatDateTime(item.next_attempt_at) : `Record ${item.sequence_number}`}</time>
             </button>
           );
@@ -870,14 +1046,19 @@ function ShiftQueue({
 
 function WorkbenchView({
   activeAttempt,
-  activeScript,
   acquisitionUsers,
-  capturesQualification,
+  canMutateAttempt,
+  canAutosaveQualification,
+  dialerLease,
   entry,
   isAppointment,
   isWarm,
+  nativeDialerAvailable,
+  nativeDialerLeaseActive,
   onComplete,
   onOutcomeChange,
+  onQualificationBlockingChange,
+  onQualificationChecklistChange,
   onStart,
   outcome,
   requiresCallback,
@@ -885,14 +1066,22 @@ function WorkbenchView({
   saving,
 }: {
   activeAttempt: ProspectingEntry["active_attempt"];
-  activeScript: ProspectingWorkbenchOverview["active_script"];
   acquisitionUsers: ProspectingWorkbenchOverview["acquisition_users"];
-  capturesQualification: boolean;
+  canMutateAttempt: boolean;
+  canAutosaveQualification: boolean;
+  dialerLease: ActiveProspectingDialerLease | null;
   entry: ProspectingEntry | null;
   isAppointment: boolean;
   isWarm: boolean;
+  nativeDialerAvailable: boolean;
+  nativeDialerLeaseActive: boolean;
   onComplete: (event: FormEvent<HTMLFormElement>) => void;
   onOutcomeChange: (outcome: string) => void;
+  onQualificationBlockingChange: (blocked: boolean) => void;
+  onQualificationChecklistChange: (
+    attemptId: string,
+    checklist: ProspectingQualificationChecklist,
+  ) => void;
   onStart: () => void;
   outcome: string;
   requiresCallback: boolean;
@@ -905,21 +1094,37 @@ function WorkbenchView({
     const localTarget = new Date(target.getTime() - target.getTimezoneOffset() * 60 * 1000);
     setCallbackValue(localTarget.toISOString().slice(0, 16));
   }
-  if (!activeScript) {
-    return <section className={styles.emptyState}><span>Queue paused</span><h3>An approved caller script is required</h3><p>An acquisition manager must approve a script version before assigned prospects can be worked.</p></section>;
-  }
   if (!entry) {
     return <section className={styles.emptyState}><span>Queue clear</span><h3>No assigned prospect is due</h3><p>Future callbacks remain scheduled and will return here when due.</p></section>;
   }
+  const activeScript = entry.script;
+  if (!activeScript) {
+    return <section className={styles.emptyState}><span>Queue paused</span><h3>An approved caller script is required</h3><p>An acquisition manager must approve the exact {entry.asset_class} script version pinned to this record before it can be worked.</p></section>;
+  }
   const returned = returnedHandoffs.find((handoff) => handoff.prospect_id === entry.prospect_id);
-  const priorAnswers =
-    entry.attempts.find((attempt) => attempt.status === "completed")
-      ?.qualification_answers ?? {};
+  const missingWarmHandoffLabels = activeAttempt
+    ? activeAttempt.qualification_checklist.missing_required_keys.map(
+        (key) =>
+          activeAttempt.qualification_checklist.items.find(
+            (item) => item.question_key === key,
+          )?.label ?? labelize(key),
+      )
+    : [];
   return (
     <section className={styles.workbenchGrid}>
       <aside className={styles.prospectPanel}>
         <div className={styles.queuePosition}><span>{entry.batch_name}</span><strong>{labelize(entry.queue_kind)}</strong></div>
-        <div className={styles.sellerIdentity}><span>{entry.campaign_name}</span><h3>{entry.legal_name}</h3><p>{entry.property_address ?? "Property address unavailable"}</p></div>
+        <div className={styles.sellerIdentity}>
+          <span>{entry.source_name} · {entry.campaign_name}</span>
+          <h3>{entry.legal_name}</h3>
+          <p>{entry.property_address ?? "Property address unavailable"}</p>
+          <div className={styles.prospectBadges}>
+            <strong>{entry.asset_class === "land" ? "Land" : "House"}</strong>
+            {entry.warnings.map((warning) => (
+              <em key={warning}><AlertTriangle aria-hidden="true" size={13} />{warning}</em>
+            ))}
+          </div>
+        </div>
         <div className={styles.providerState}>
           <span>Calling method</span>
           <strong className={styles.syncReady}>One-by-one calling</strong>
@@ -966,20 +1171,36 @@ function WorkbenchView({
       <div className={styles.scriptPanel}>
         <div className={styles.scriptVersion}><span>Approved script</span><strong>v{activeScript.version_number} · {activeScript.title}</strong></div>
         <blockquote>{activeScript.opening_script}</blockquote>
-        {!activeAttempt ? (
+        {!activeAttempt ? !canMutateAttempt ? (
+          <div className={styles.startAction}>
+            <p>This record is assigned to {entry.assigned_user_name}. Manager monitoring is read-only.</p>
+          </div>
+        ) : nativeDialerAvailable ? (
+          <div className={styles.startAction}>
+            <p>
+              {nativeDialerLeaseActive
+                ? "The native dialer is confirming this reserved attempt. Call controls remain above."
+                : "Use Start Calling above. The native dialer will lock the selected record and open its qualification form."}
+            </p>
+          </div>
+        ) : (
           <div className={styles.startAction}><p>Start locks this record to you until an outcome is saved.</p><button className={styles.primaryButton} disabled={saving} onClick={onStart} type="button">Start prospect</button></div>
         ) : (
-          <div className={styles.questionGuide}>
-            {activeScript.qualification_questions.map((question, index) => (
-              <div key={question.key}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{question.label}{question.required_for_handoff ? " *" : ""}</strong><p>{question.prompt}</p></div></div>
-            ))}
-          </div>
+          <LiveQualificationChecklist
+            attemptId={activeAttempt.id}
+            canAutosave={canAutosaveQualification}
+            checklist={activeAttempt.qualification_checklist}
+            key={activeAttempt.id}
+            lease={dialerLease}
+            onBlockingChange={onQualificationBlockingChange}
+            onChecklistChange={onQualificationChecklistChange}
+          />
         )}
       </div>
 
       <aside className={styles.outcomePanel}>
         <div className={styles.sectionHeader}><div><span>Required record</span><h3>Call outcome</h3></div></div>
-        {activeAttempt ? (
+        {activeAttempt ? canMutateAttempt ? (
           <form onSubmit={onComplete}>
             <fieldset className={styles.outcomeChoices}>
               <legend>Disposition</legend>
@@ -995,9 +1216,6 @@ function WorkbenchView({
                 </button>
               ))}
             </fieldset>
-            {capturesQualification ? activeScript.qualification_questions.map((question) => (
-              <label key={question.key}><span>{question.label}{question.required_for_handoff && isWarm ? " *" : ""}</span>{question.answer_type === "choice" ? <select name={question.key} defaultValue={priorAnswers[question.key] ?? ""}><option value="">Select</option>{question.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input defaultValue={priorAnswers[question.key] ?? ""} name={question.key} />}</label>
-            )) : null}
             {requiresCallback ? <div className={styles.callbackControl}><label><span>Callback date and time</span><input name="callback_at" onChange={(event) => setCallbackValue(event.target.value)} required type="datetime-local" value={callbackValue} /></label><div><button onClick={() => setQuickCallback(1)} type="button">In 1 hour</button><button onClick={() => setQuickCallback(24)} type="button">Tomorrow</button><button onClick={() => setQuickCallback(72)} type="button">In 3 days</button></div></div> : null}
             {isWarm ? <label><span>Acquisitions owner</span><select name="handoff_user_id" required><option value="">Select owner</option>{acquisitionUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label> : null}
             {isAppointment ? <><label><span>Appointment date and time</span><input name="appointment_start_at" required type="datetime-local" /></label><label><span>Meeting type</span><select defaultValue="seller_property" name="appointment_location_type"><option value="seller_property">Seller property</option><option value="phone">Phone</option><option value="video">Video</option><option value="office">Office</option></select></label><label><span>Meeting location</span><input name="appointment_location" placeholder="Defaults to the property" /></label></> : null}
@@ -1009,8 +1227,24 @@ function WorkbenchView({
               <label><input name="compliance_flags" type="checkbox" value="policy_uncertainty" /><span>Policy uncertainty</span></label>
               <label><input name="compliance_flags" type="checkbox" value="recording_disclosure_issue" /><span>Recording disclosure issue</span></label>
             </fieldset>
-            <button className={styles.primaryButton} disabled={saving} type="submit">Save outcome</button>
+            {isWarm && missingWarmHandoffLabels.length ? (
+              <p className={styles.outcomeRequirement} role="status">
+                Complete before warm handoff: {missingWarmHandoffLabels.join(", ")}.
+              </p>
+            ) : null}
+            <button
+              className={styles.primaryButton}
+              disabled={saving || (isWarm && missingWarmHandoffLabels.length > 0)}
+              type="submit"
+            >
+              Save outcome
+            </button>
           </form>
+        ) : (
+          <div className={styles.monitoringOnly}>
+            <strong>Read-only manager view</strong>
+            <p>{entry.assigned_user_name} owns this active call and its final disposition.</p>
+          </div>
         ) : <p className={styles.empty}>Start the prospect to unlock the guided outcome form.</p>}
       </aside>
     </section>

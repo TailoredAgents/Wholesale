@@ -124,6 +124,18 @@ services:
         value: 3
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
+      - key: PROSPECTING_NATIVE_DIALER_ENABLED
+        value: false
+      - key: PROSPECTING_NATIVE_DIALER_MAX_LINES
+        value: 1
+      - key: PROSPECTING_NATIVE_DIALER_LEASE_SECONDS
+        value: 90
+      - key: PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS
+        value: 180
+      - key: PROSPECTING_NATIVE_DIALER_ORPHAN_GRACE_SECONDS
+        value: 300
+      - key: PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS
+        value: 5
       - key: EMAIL_ENABLED
         value: true
       - key: EMAIL_PROVIDER
@@ -489,6 +501,18 @@ services:
         value: 3
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
+      - key: PROSPECTING_NATIVE_DIALER_ENABLED
+        value: false
+      - key: PROSPECTING_NATIVE_DIALER_MAX_LINES
+        value: 1
+      - key: PROSPECTING_NATIVE_DIALER_LEASE_SECONDS
+        value: 90
+      - key: PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS
+        value: 180
+      - key: PROSPECTING_NATIVE_DIALER_ORPHAN_GRACE_SECONDS
+        value: 300
+      - key: PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS
+        value: 5
       - key: EMAIL_ENABLED
         value: true
       - key: EMAIL_PROVIDER

@@ -4,10 +4,12 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.rbac import PermissionKeys
 from app.main import app
 from app.models.foundation import (
     AiOrchestratorEvent,
@@ -23,15 +25,20 @@ from app.models.foundation import (
     LeadQualificationSession,
     Notification,
     Prospect,
+    ProspectCallingBatchEntry,
+    ProspectContactPoint,
     ProspectHandoff,
     ProspectingAttempt,
     ProspectingCallQualityReview,
     ProspectingCopilotRecommendation,
+    ProspectingQualificationResponse,
     ProspectingScriptVersion,
     SuppressionRecord,
 )
+from app.schemas.prospecting import ProspectingQualificationAutosaveRequest
 from app.services.bootstrap import bootstrap_foundation
 from app.services.lead_manager import process_next_escalation
+from app.services.prospecting import autosave_attempt_qualification, list_queue_entries
 
 OWNER_EMAIL = "owner@example.com"
 VA_EMAIL = "va@example.com"
@@ -331,6 +338,547 @@ def create_approved_script(client: TestClient, headers: dict[str, str]) -> dict[
     return cast(dict[str, Any], approval.json())
 
 
+def test_qualification_autosave_is_scoped_idempotent_and_authoritative(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    caller = create_user(
+        client,
+        owner_headers,
+        VA_EMAIL,
+        "Qualification VA",
+        "prospecting_caller",
+    )
+    create_user(
+        client,
+        owner_headers,
+        OTHER_VA_EMAIL,
+        "Other Qualification VA",
+        "prospecting_caller",
+    )
+    acquisitions = create_user(
+        client,
+        owner_headers,
+        ACQUISITIONS_EMAIL,
+        "Acquisitions Owner",
+        "acquisition_rep",
+        calling_enabled=True,
+    )
+    batch = create_prospecting_batch(client, owner_headers, caller["id"])
+    pinned_script = create_approved_script(client, owner_headers)
+    caller_headers = {"X-Dev-User-Email": VA_EMAIL}
+    start = client.post(
+        f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
+        headers=caller_headers,
+    )
+    assert start.status_code == 200, start.text
+    attempt_id = start.json()["active_attempt"]["id"]
+    assert start.json()["script"]["id"] == pinned_script["id"]
+    assert start.json()["source_name"]
+    assert isinstance(start.json()["warnings"], list)
+    replacement_script = create_approved_script(client, owner_headers)
+    assert replacement_script["id"] != pinned_script["id"]
+    refreshed_workbench = client.get("/api/v1/prospecting", headers=caller_headers)
+    assert refreshed_workbench.status_code == 200
+    assert refreshed_workbench.json()["current_entry"]["script"]["id"] == pinned_script["id"]
+
+    checklist_url = f"/api/v1/prospecting/attempts/{attempt_id}/qualification"
+    checklist = client.get(checklist_url, headers=caller_headers)
+    assert checklist.status_code == 200, checklist.text
+    assert checklist.headers["cache-control"] == "private, no-store"
+    assert checklist.json()["script_version_id"] == pinned_script["id"]
+    assert checklist.json()["answered_count"] == 0
+    assert checklist.json()["required_count"] == 4
+    assert checklist.json()["complete"] is False
+    assert {item["state"] for item in checklist.json()["items"]} == {"not_covered"}
+
+    assert (
+        client.get(
+            checklist_url,
+            headers={"X-Dev-User-Email": OTHER_VA_EMAIL},
+        ).status_code
+        == 403
+    )
+    assert client.get(checklist_url, headers=owner_headers).status_code == 200
+    mutation_url = f"{checklist_url}/motivation"
+    mutation_id = "670b4bf6-b085-46f6-8dd5-4691718c5309"
+    owner_write = client.put(
+        mutation_url,
+        headers=owner_headers,
+        json={
+            "state": "answered",
+            "answer_value": "Inherited property",
+            "expected_revision": 0,
+            "mutation_id": mutation_id,
+        },
+    )
+    assert owner_write.status_code == 403
+    assigned_manager_attempt = db_session.get(ProspectingAttempt, UUID(attempt_id))
+    assert assigned_manager_attempt is not None
+    saved_by_assigned_manager = autosave_attempt_qualification(
+        db_session,
+        Principal(
+            user_id=UUID(caller["id"]),
+            organization_id=assigned_manager_attempt.organization_id,
+            email=VA_EMAIL,
+            permission_keys=frozenset(
+                {
+                    PermissionKeys.WORK_ASSIGNED_CALLING_LISTS,
+                    PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+                }
+            ),
+        ),
+        UUID(attempt_id),
+        "timeline",
+        ProspectingQualificationAutosaveRequest(
+            state="answered",
+            answer_value="Within 90 days",
+            expected_revision=0,
+            mutation_id="32d4a12c-1432-44aa-a155-98d6b41581ce",
+        ),
+    )
+    assert saved_by_assigned_manager is not None
+    assert saved_by_assigned_manager.answer_value == "Within 90 days"
+    blank = client.put(
+        mutation_url,
+        headers=caller_headers,
+        json={
+            "state": "answered",
+            "answer_value": "   ",
+            "expected_revision": 0,
+            "mutation_id": "5e837b92-9104-4fcc-a510-d5ebdf835d28",
+        },
+    )
+    assert blank.status_code == 422
+    for state in ("needs_follow_up", "conflict"):
+        blank_state = client.put(
+            f"{checklist_url}/asking_price",
+            headers=caller_headers,
+            json={
+                "state": state,
+                "answer_value": " ",
+                "expected_revision": 0,
+                "mutation_id": (
+                    "2c9c6440-9e03-461e-9318-fb41365d0428"
+                    if state == "needs_follow_up"
+                    else "f7b18d6d-51d5-45f3-ab3e-60275d96224c"
+                ),
+            },
+        )
+        assert blank_state.status_code == 422
+    invalid_choice = client.put(
+        f"{checklist_url}/occupancy",
+        headers=caller_headers,
+        json={
+            "state": "answered",
+            "answer_value": "Sometimes",
+            "expected_revision": 0,
+            "mutation_id": "573196eb-1544-4124-8556-8be3f42058b4",
+        },
+    )
+    assert invalid_choice.status_code == 422
+    choice_follow_up = client.put(
+        f"{checklist_url}/occupancy",
+        headers=caller_headers,
+        json={
+            "state": "needs_follow_up",
+            "answer_value": "Seller was unsure who is currently staying there",
+            "expected_revision": 0,
+            "mutation_id": "41cd8b1c-cc20-4d7f-85f6-82b42f5c4c08",
+        },
+    )
+    assert choice_follow_up.status_code == 200, choice_follow_up.text
+    assert choice_follow_up.json()["answer_value"] == (
+        "Seller was unsure who is currently staying there"
+    )
+
+    payload = {
+        "state": "answered",
+        "answer_value": "Inherited property",
+        "expected_revision": 0,
+        "mutation_id": mutation_id,
+    }
+    saved = client.put(mutation_url, headers=caller_headers, json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.headers["cache-control"] == "private, no-store"
+    assert saved.json()["revision"] == 1
+    assert saved.json()["source"] == "va_entry"
+    replay = client.put(mutation_url, headers=caller_headers, json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json() == saved.json()
+    motivation_response_id = db_session.scalar(
+        select(ProspectingQualificationResponse.id).where(
+            ProspectingQualificationResponse.attempt_id == UUID(attempt_id),
+            ProspectingQualificationResponse.question_key == "motivation",
+        )
+    )
+    assert motivation_response_id is not None
+    mutation_audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditEvent)
+        .where(
+            AuditEvent.action == "prospecting.qualification_response_saved",
+            AuditEvent.entity_id == motivation_response_id,
+        )
+    )
+    assert mutation_audits == 1
+    changed_replay = client.put(
+        mutation_url,
+        headers=caller_headers,
+        json={**payload, "answer_value": "Different answer"},
+    )
+    assert changed_replay.status_code == 409
+    stale = client.put(
+        mutation_url,
+        headers=caller_headers,
+        json={
+            **payload,
+            "mutation_id": "f6675085-90cf-46aa-b64b-71032d65f6a0",
+            "expected_revision": 0,
+        },
+    )
+    assert stale.status_code == 409
+
+    optional_url = f"{checklist_url}/asking_price"
+    follow_up = client.put(
+        optional_url,
+        headers=caller_headers,
+        json={
+            "state": "needs_follow_up",
+            "answer_value": "Seller deferred the answer",
+            "expected_revision": 0,
+            "mutation_id": "77271b80-8f12-4ad3-9255-40b1cab617fd",
+        },
+    )
+    assert follow_up.status_code == 200
+    assert follow_up.json()["state"] == "needs_follow_up"
+    first_capture = follow_up.json()["captured_at"]
+    conflict = client.put(
+        optional_url,
+        headers=caller_headers,
+        json={
+            "state": "conflict",
+            "answer_value": "Seller gave two prices",
+            "expected_revision": 1,
+            "mutation_id": "eb3683c9-7788-4fda-bf6c-c4c89d0dd3db",
+        },
+    )
+    assert conflict.status_code == 200
+    assert conflict.json()["state"] == "conflict"
+    assert conflict.json()["captured_at"] == first_capture
+    cleared = client.put(
+        optional_url,
+        headers=caller_headers,
+        json={
+            "state": "not_covered",
+            "answer_value": "This must be cleared",
+            "expected_revision": 2,
+            "mutation_id": "7141d365-5be2-4727-8a70-7382a5927157",
+        },
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["state"] == "not_covered"
+    assert cleared.json()["answer_value"] is None
+    assert cleared.json()["captured_at"] == first_capture
+    occupancy_saved = client.put(
+        f"{checklist_url}/occupancy",
+        headers=caller_headers,
+        json={
+            "state": "answered",
+            "answer_value": "Owner occupied",
+            "expected_revision": 1,
+            "mutation_id": "9b49000c-d353-46eb-a94a-975a47e2d599",
+        },
+    )
+    assert occupancy_saved.status_code == 200
+
+    refreshed = client.get(checklist_url, headers=caller_headers)
+    motivation = next(
+        item for item in refreshed.json()["items"] if item["question_key"] == "motivation"
+    )
+    assert motivation["answer_value"] == "Inherited property"
+    assert motivation["state"] == "answered"
+    assert refreshed.json()["answered_count"] == 3
+
+    completed = client.post(
+        f"/api/v1/prospecting/attempts/{attempt_id}/complete",
+        headers=caller_headers,
+        json={
+            "outcome": "interested",
+            "handoff_user_id": acquisitions["id"],
+            "qualification_answers": {
+                "motivation": "Stale browser value",
+                "timeline": "Within 30 days",
+                "property_condition": "Needs paint",
+                "occupancy": "Invalid stale browser choice",
+            },
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    completed_attempt = next(
+        item for item in completed.json()["attempts"] if item["id"] == attempt_id
+    )
+    assert completed_attempt["qualification_answers"]["motivation"] == "Inherited property"
+    assert completed_attempt["qualification_answers"]["timeline"] == "Within 90 days"
+    assert completed_attempt["qualification_answers"]["occupancy"] == "Owner occupied"
+    persisted = db_session.scalar(
+        select(ProspectingQualificationResponse).where(
+            ProspectingQualificationResponse.attempt_id == UUID(attempt_id),
+            ProspectingQualificationResponse.question_key == "motivation",
+        )
+    )
+    assert persisted is not None
+    assert persisted.source == "va_entry"
+    assert str(persisted.actor_user_id) == caller["id"]
+    materialized = db_session.scalar(
+        select(ProspectingQualificationResponse).where(
+            ProspectingQualificationResponse.attempt_id == UUID(attempt_id),
+            ProspectingQualificationResponse.question_key == "property_condition",
+        )
+    )
+    assert materialized is not None
+    assert materialized.answer_value == "Needs paint"
+    assert materialized.source == "legacy_completion"
+    assert materialized.actor_user_id == UUID(caller["id"])
+    assert materialized.captured_at is not None
+    assert materialized.response_metadata["revision"] == 1
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.action == "prospecting.qualification_response_materialized",
+                AuditEvent.entity_id == materialized.id,
+            )
+        )
+        == 1
+    )
+    after_complete = client.put(
+        mutation_url,
+        headers=caller_headers,
+        json={
+            "state": "not_covered",
+            "answer_value": None,
+            "expected_revision": 1,
+            "mutation_id": "ae4a3b25-6ec4-4af8-b4e1-dca6960dbb91",
+        },
+    )
+    assert after_complete.status_code == 409
+
+
+def test_queue_serialization_query_count_is_constant_for_twenty_five_entries(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    caller = create_user(
+        client,
+        owner_headers,
+        VA_EMAIL,
+        "Queue Performance VA",
+        "prospecting_caller",
+    )
+    batch_payload = create_prospecting_batch(client, owner_headers, caller["id"])
+    script_payload = create_approved_script(client, owner_headers)
+    batch_id = UUID(batch_payload["id"])
+    organization_id = foundation.organization.id
+    caller_id = UUID(caller["id"])
+    script_id = UUID(script_payload["id"])
+    now = datetime.now(UTC)
+
+    existing_entries = db_session.scalars(
+        select(ProspectCallingBatchEntry)
+        .where(ProspectCallingBatchEntry.prospect_calling_batch_id == batch_id)
+        .order_by(ProspectCallingBatchEntry.sequence_number)
+    ).all()
+    assert len(existing_entries) == 3
+    template = db_session.get(Prospect, existing_entries[0].prospect_id)
+    assert template is not None
+    for sequence_number in range(4, 26):
+        suffix = f"{sequence_number:02d}"
+        phone = f"40455501{sequence_number:02d}"
+        prospect = Prospect(
+            organization_id=organization_id,
+            campaign_id=template.campaign_id,
+            asset_class=template.asset_class,
+            territory_id=template.territory_id,
+            assigned_user_id=caller_id,
+            converted_lead_id=None,
+            import_batch_id=template.import_batch_id,
+            source_record_key=f"queue-perf-{suffix}",
+            status="ready",
+            legal_name=f"Queue Seller {suffix}",
+            phone=phone,
+            normalized_phone=f"+1{phone}",
+            email=None,
+            normalized_email=None,
+            street_address=f"{sequence_number} Performance Way",
+            city="Atlanta",
+            state_code="GA",
+            postal_code="30303",
+            normalized_address_key=f"{sequence_number} performance way atlanta ga 30303",
+            suppression_status="clear",
+            suppression_checked_at=now,
+            phone_validation_status="valid",
+            address_validation_status="valid",
+            call_eligibility="eligible",
+            last_contacted_at=None,
+            source_payload={},
+        )
+        db_session.add(prospect)
+        db_session.flush()
+        entry = ProspectCallingBatchEntry(
+            organization_id=organization_id,
+            prospect_calling_batch_id=batch_id,
+            prospect_id=prospect.id,
+            assigned_user_id=caller_id,
+            sequence_number=sequence_number,
+            status="ready",
+            attempt_count=1,
+            disposition=None,
+            last_attempt_at=None,
+            next_attempt_at=None,
+            completed_at=None,
+        )
+        contact_point = ProspectContactPoint(
+            organization_id=organization_id,
+            prospect_id=prospect.id,
+            source_membership_id=None,
+            contact_type="phone",
+            value=phone,
+            normalized_value=f"+1{phone}",
+            rank=1,
+            is_primary=True,
+            validation_status="valid",
+            first_seen_at=now,
+            last_seen_at=now,
+            contact_metadata={},
+        )
+        db_session.add_all((entry, contact_point))
+        db_session.flush()
+        attempt = ProspectingAttempt(
+            organization_id=organization_id,
+            batch_entry_id=entry.id,
+            prospect_id=prospect.id,
+            caller_user_id=caller_id,
+            script_version_id=script_id,
+            call_record_id=None,
+            provider=None,
+            provider_call_id=None,
+            provider_recording_id=None,
+            provider_agent_id=None,
+            cohort_id=None,
+            status="completed",
+            outcome="no_answer",
+            contact_made=False,
+            dialer_mode="one_line_power",
+            answer_classification="no_answer",
+            party_classification="unknown",
+            interest_classification="not_assessed",
+            follow_up_permission="not_recorded",
+            classification_source="manual_outcome",
+            dial_started_at=now,
+            answered_at=None,
+            right_party_confirmed_at=None,
+            interest_confirmed_at=None,
+            measurement_metadata={},
+            qualification_answers={"motivation": "Testing batched reads"},
+            notes=None,
+            callback_at=None,
+            started_at=now,
+            completed_at=now,
+            required_answer_count=4,
+            answered_required_count=1,
+            quality_score_basis_points=2500,
+        )
+        db_session.add(attempt)
+        db_session.flush()
+        db_session.add(
+            ProspectingQualificationResponse(
+                organization_id=organization_id,
+                attempt_id=attempt.id,
+                script_version_id=script_id,
+                question_key="motivation",
+                state="answered",
+                answer_value="Testing batched reads",
+                source="va_entry",
+                actor_user_id=caller_id,
+                is_required=True,
+                captured_at=now,
+                transcript_evidence=None,
+                response_metadata={"revision": 1},
+            )
+        )
+    db_session.commit()
+
+    principal = Principal(
+        user_id=caller_id,
+        organization_id=organization_id,
+        email=VA_EMAIL,
+        permission_keys=frozenset({PermissionKeys.MANAGE_ACQUISITION_OPERATIONS}),
+    )
+    engine = db_session.get_bind()
+
+    def measure_selects() -> tuple[int, int]:
+        count = 0
+
+        def count_selects(
+            _connection: object,
+            _cursor: object,
+            statement: str,
+            _parameters: object,
+            _context: object,
+            _executemany: bool,
+        ) -> None:
+            nonlocal count
+            if statement.lstrip().upper().startswith("SELECT"):
+                count += 1
+
+        event.listen(engine, "before_cursor_execute", count_selects)
+        try:
+            with Session(bind=engine) as measured_db:
+                result = list_queue_entries(measured_db, principal, manageable=True)
+                return len(result), count
+        finally:
+            event.remove(engine, "before_cursor_execute", count_selects)
+
+    all_entries = db_session.scalars(
+        select(ProspectCallingBatchEntry)
+        .where(ProspectCallingBatchEntry.prospect_calling_batch_id == batch_id)
+        .order_by(ProspectCallingBatchEntry.sequence_number)
+    ).all()
+    assert len(all_entries) == 25
+    for entry in all_entries[1:]:
+        entry.status = "completed"
+    db_session.commit()
+    one_length, one_selects = measure_selects()
+
+    for entry in all_entries:
+        entry.status = "ready"
+    db_session.commit()
+    twenty_five_length, twenty_five_selects = measure_selects()
+
+    assert one_length == 1
+    assert twenty_five_length == 25
+    assert twenty_five_selects <= one_selects + 1
+    assert twenty_five_selects < 20
+
+
 def test_phase_four_guided_queue_handoff_review_and_scorecards(
     db_session: Session,
     api_db_override: None,
@@ -409,6 +957,12 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
         ).status_code
         == 404
     )
+    manager_start = client.post(
+        f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
+        headers=owner_headers,
+    )
+    assert manager_start.status_code == 403
+    assert "assigned caller" in manager_start.json()["detail"]
     for restricted_path in (
         "/api/v1/underwriting/calibration",
         "/api/v1/transactions",

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, NoReturn
 from urllib.parse import parse_qsl
 from uuid import UUID
 
@@ -10,6 +10,10 @@ from app.core.database import get_db
 from app.integrations.twilio_messaging import validate_twilio_signature
 from app.integrations.twilio_voice import disclosure_twiml, hangup_twiml
 from app.services.messaging import process_twilio_inbound, process_twilio_status
+from app.services.prospecting_voice import (
+    ProspectingVoiceConfigurationError,
+    ProspectingVoiceConflictError,
+)
 from app.services.voice import (
     VoiceConfigurationError,
     process_forwarded_voice_connect,
@@ -25,6 +29,17 @@ from app.services.voice import (
 )
 
 router = APIRouter(prefix="/api/v1/webhooks/twilio", tags=["webhooks"])
+
+
+def raise_voice_callback_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, PermissionError):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, ProspectingVoiceConflictError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=str(exc),
+    ) from exc
 
 
 @router.post("/messaging/incoming")
@@ -144,14 +159,24 @@ async def twilio_voice_status(
     answered_user_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
-    validate_request(request, payload, signature)
-    process_voice_status(
-        db,
-        payload,
-        intent_id=intent_id,
-        call_id=call_id,
-        answered_user_id=answered_user_id,
-    )
+    signature_verified = validate_request(request, payload, signature)
+    try:
+        process_voice_status(
+            db,
+            payload,
+            intent_id=intent_id,
+            call_id=call_id,
+            answered_user_id=answered_user_id,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+    except (
+        PermissionError,
+        ValueError,
+        ProspectingVoiceConfigurationError,
+        ProspectingVoiceConflictError,
+    ) as exc:
+        raise_voice_callback_error(exc)
     return Response(status_code=204)
 
 
@@ -213,13 +238,23 @@ async def twilio_voice_dial_result(
     call_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
-    validate_request(request, payload, signature)
-    content = process_voice_dial_result(
-        db,
-        payload,
-        intent_id=intent_id,
-        call_id=call_id,
-    )
+    signature_verified = validate_request(request, payload, signature)
+    try:
+        content = process_voice_dial_result(
+            db,
+            payload,
+            intent_id=intent_id,
+            call_id=call_id,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+    except (
+        PermissionError,
+        ValueError,
+        ProspectingVoiceConfigurationError,
+        ProspectingVoiceConflictError,
+    ) as exc:
+        raise_voice_callback_error(exc)
     return Response(content=content, media_type="application/xml")
 
 
@@ -246,13 +281,23 @@ async def twilio_voice_recording(
     call_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
-    validate_request(request, payload, signature)
-    process_voice_recording(
-        db,
-        payload,
-        intent_id=intent_id,
-        call_id=call_id,
-    )
+    signature_verified = validate_request(request, payload, signature)
+    try:
+        process_voice_recording(
+            db,
+            payload,
+            intent_id=intent_id,
+            call_id=call_id,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+    except (
+        PermissionError,
+        ValueError,
+        ProspectingVoiceConfigurationError,
+        ProspectingVoiceConflictError,
+    ) as exc:
+        raise_voice_callback_error(exc)
     return Response(status_code=204)
 
 
@@ -265,13 +310,23 @@ async def twilio_voice_recording_disclosure(
     call_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
-    validate_request(request, payload, signature)
-    process_voice_recording_disclosure(
-        db,
-        payload,
-        intent_id=intent_id,
-        call_id=call_id,
-    )
+    signature_verified = validate_request(request, payload, signature)
+    try:
+        process_voice_recording_disclosure(
+            db,
+            payload,
+            intent_id=intent_id,
+            call_id=call_id,
+            signature_verified=signature_verified,
+            signature=signature,
+        )
+    except (
+        PermissionError,
+        ValueError,
+        ProspectingVoiceConfigurationError,
+        ProspectingVoiceConflictError,
+    ) as exc:
+        raise_voice_callback_error(exc)
     return Response(content=disclosure_twiml(get_settings()), media_type="application/xml")
 
 
@@ -284,7 +339,7 @@ def validate_request(
     request: Request,
     payload: dict[str, str],
     signature: str | None,
-) -> None:
+) -> bool:
     settings = get_settings()
     if not settings.twilio_validate_webhook_signatures:
         if settings.app_env == "production":
@@ -292,7 +347,7 @@ def validate_request(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Twilio webhook validation cannot be disabled in production.",
             )
-        return
+        return False
     if not settings.twilio_auth_token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -324,6 +379,7 @@ def validate_request(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Twilio webhook signature.",
         )
+    return True
 
 
 def build_validation_url(request: Request) -> str:

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.assets import HOUSE_ASSET_CLASS, AssetClass
 from app.schemas.operations import OperationsUserRead
@@ -34,6 +34,39 @@ HandoffDecisionCode = Literal[
     "rejected_invalid_property",
     "rejected_no_follow_up_permission",
     "rejected_other",
+]
+DialerProfileStatus = Literal["inactive", "active", "suspended"]
+DialerSessionState = Literal[
+    "ready",
+    "dialing",
+    "ringing",
+    "connected",
+    "wrap_up",
+    "paused",
+    "reconnecting",
+    "ended",
+    "stopped",
+    "failed",
+    "expired",
+]
+DialerLegStatus = Literal[
+    "queued",
+    "dialing",
+    "ringing",
+    "answered",
+    "connected",
+    "cancelling",
+    "cancelled",
+    "no_answer",
+    "busy",
+    "failed",
+    "completed",
+]
+QualificationResponseState = Literal[
+    "not_covered",
+    "answered",
+    "needs_follow_up",
+    "conflict",
 ]
 
 
@@ -82,6 +115,50 @@ class ProspectingScriptRead(BaseModel):
     created_at: datetime
 
 
+class ProspectingQualificationChecklistItemRead(BaseModel):
+    question_key: str
+    label: str
+    prompt: str
+    answer_type: Literal["text", "choice"]
+    choices: list[str]
+    is_required: bool
+    state: QualificationResponseState
+    answer_value: str | None
+    source: str
+    revision: int = Field(ge=0)
+    captured_at: datetime | None
+    updated_at: datetime | None
+
+
+class ProspectingQualificationChecklistRead(BaseModel):
+    attempt_id: UUID
+    script_version_id: UUID
+    items: list[ProspectingQualificationChecklistItemRead]
+    answered_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+    required_answered_count: int = Field(ge=0)
+    required_count: int = Field(ge=0)
+    missing_required_keys: list[str]
+    complete: bool
+
+
+class ProspectingQualificationAutosaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: QualificationResponseState
+    answer_value: str | None = Field(default=None, max_length=2000)
+    expected_revision: int = Field(ge=0)
+    mutation_id: UUID
+    browser_session_id: str | None = Field(default=None, min_length=8, max_length=255)
+    lease_token: str | None = Field(default=None, min_length=32, max_length=255)
+
+    @model_validator(mode="after")
+    def dialer_lease_fields_are_coherent(self) -> "ProspectingQualificationAutosaveRequest":
+        if (self.browser_session_id is None) != (self.lease_token is None):
+            raise ValueError("Browser session ID and dialer lease token must be supplied together.")
+        return self
+
+
 class ProspectingAttemptRead(BaseModel):
     id: UUID
     script_version_id: UUID
@@ -107,6 +184,251 @@ class ProspectingAttemptRead(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     quality_score_basis_points: int | None
+    qualification_checklist: ProspectingQualificationChecklistRead
+
+
+class ProspectingDialerProfileUpsert(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: DialerProfileStatus = "inactive"
+    voice_line_id: UUID | None = None
+    default_line_count: int = Field(default=1, ge=1, le=3)
+    max_line_count: int = Field(default=1, ge=1, le=3)
+    recording_policy: str = Field(default="company_policy", min_length=1, max_length=80)
+    daily_dial_limit: int | None = Field(default=None, gt=0)
+    daily_spend_limit_cents: int | None = Field(default=None, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def default_lines_do_not_exceed_maximum(self) -> "ProspectingDialerProfileUpsert":
+        if self.default_line_count > self.max_line_count:
+            raise ValueError("Default line count cannot exceed the profile maximum.")
+        return self
+
+
+class ProspectingDialerProfileRead(BaseModel):
+    id: UUID
+    organization_id: UUID
+    user_id: UUID
+    user_name: str
+    user_email: str
+    user_is_active: bool
+    user_calling_enabled: bool
+    voice_line_id: UUID | None
+    voice_line_label: str | None
+    voice_line_number: str | None
+    status: DialerProfileStatus
+    default_line_count: int = Field(ge=1, le=3)
+    max_line_count: int = Field(ge=1, le=3)
+    effective_line_count: int = Field(ge=1, le=3)
+    recording_policy: str
+    daily_dial_limit: int | None
+    daily_spend_limit_cents: int | None
+    metadata: dict[str, Any]
+    created_by_user_id: UUID
+    updated_by_user_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProspectingDialSessionRead(BaseModel):
+    id: UUID
+    organization_id: UUID
+    dialer_profile_id: UUID
+    caller_user_id: UUID
+    campaign_id: UUID
+    cohort_id: UUID | None
+    prospect_calling_batch_id: UUID | None
+    voice_line_id: UUID | None
+    current_prospect_id: UUID | None
+    current_batch_entry_id: UUID | None
+    current_attempt_id: UUID | None
+    state: DialerSessionState
+    requested_line_count: int = Field(ge=1, le=3)
+    effective_line_count: int = Field(ge=1, le=3)
+    organization_line_limit: int = Field(ge=1, le=3)
+    va_line_limit: int = Field(ge=1, le=3)
+    campaign_line_limit: int = Field(ge=1, le=3)
+    voice_line_limit: int = Field(ge=1, le=3)
+    feature_line_limit: int = Field(ge=1, le=3)
+    lease_expires_at: datetime | None
+    started_at: datetime
+    paused_at: datetime | None
+    resumed_at: datetime | None
+    heartbeat_at: datetime
+    ended_at: datetime | None
+    stop_reason: str | None
+    pause_after_current: bool
+    stop_after_current: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProspectingDialSessionStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    campaign_id: UUID
+    cohort_id: UUID
+    calling_batch_id: UUID
+    browser_session_id: str = Field(min_length=8, max_length=255)
+    idempotency_key: str = Field(min_length=8, max_length=255)
+    requested_line_count: int = Field(ge=1, le=3)
+
+
+class ProspectingDialSessionLeaseCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    browser_session_id: str = Field(min_length=8, max_length=255)
+    lease_token: str = Field(min_length=32, max_length=255)
+
+
+class ProspectingDialSessionEndCommand(ProspectingDialSessionLeaseCommand):
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class ProspectingDialSessionRecoveryCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    previous_browser_session_id: str = Field(min_length=8, max_length=255)
+    new_browser_session_id: str = Field(min_length=8, max_length=255)
+    lease_token: str = Field(min_length=32, max_length=255)
+
+
+class ProspectingDialLegRead(BaseModel):
+    id: UUID
+    organization_id: UUID
+    dial_session_id: UUID
+    prospect_id: UUID
+    batch_entry_id: UUID
+    attempt_id: UUID | None
+    contact_point_id: UUID | None
+    voice_line_id: UUID | None
+    call_record_id: UUID | None
+    line_slot: int = Field(ge=1, le=3)
+    recipient: str
+    provider: str
+    provider_call_id: str | None
+    status: DialerLegStatus
+    queued_at: datetime
+    dialing_at: datetime | None
+    ringing_at: datetime | None
+    answered_at: datetime | None
+    connected_at: datetime | None
+    cancelled_at: datetime | None
+    failed_at: datetime | None
+    completed_at: datetime | None
+    answer_classification: str
+    party_classification: str
+    terminal_result: str | None
+    provider_error_code: str | None
+    provider_error_message: str | None
+    cancellation_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProspectingDialSessionSnapshotRead(BaseModel):
+    session: ProspectingDialSessionRead
+    current_leg: ProspectingDialLegRead | None = None
+
+
+class ProspectingDialSessionControlRead(BaseModel):
+    snapshot: ProspectingDialSessionSnapshotRead
+    lease_token: str | None = None
+    queue_status: Literal["reserved", "unchanged", "empty", "none"]
+    replayed: bool
+
+
+class ProspectingDialerSwitchUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class ProspectingDialerSwitchRead(BaseModel):
+    scope: Literal["company", "campaign"]
+    scope_id: UUID
+    enabled: bool
+    reason: str
+    updated_at: datetime
+
+
+class ProspectingVoiceCallCreate(ProspectingDialSessionLeaseCommand):
+    """Authorize one controlled provider call for an already-reserved dial leg."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class ProspectingVoiceCallControl(ProspectingDialSessionLeaseCommand):
+    """Audited operator reason for ending a provider call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=3, max_length=255)
+
+
+class ProspectingBrowserVoiceLineRead(BaseModel):
+    id: UUID
+    phone_number: str
+    label: str
+    provider: str
+    status: str
+    department_key: str
+    purpose_key: str
+
+
+class ProspectingBrowserVoiceSessionRead(BaseModel):
+    can_initialize: bool
+    dial_session_id: UUID
+    identity: str
+    token: str | None
+    expires_at: datetime | None
+    line: ProspectingBrowserVoiceLineRead
+    recording_enabled: bool
+    effective_line_count: Literal[1]
+    blockers: list[str]
+
+
+class ProspectingVoiceCallRead(BaseModel):
+    """Cold-call state without requiring a CRM conversation or contact."""
+
+    context_type: Literal["prospecting"] = "prospecting"
+    call_intent_id: UUID
+    call_record_id: UUID
+    prospect_id: UUID
+    attempt_id: UUID
+    dial_session_id: UUID
+    dial_leg_id: UUID
+    provider: str
+    provider_call_id: str | None
+    provider_status: str
+    recipient: str
+    from_number: str
+    recording_enabled: bool
+    control_action: Literal[
+        "prepared",
+        "started",
+        "fetched",
+        "cancelled",
+        "hung_up",
+        "replayed",
+    ]
+    leg: ProspectingDialLegRead
+
+
+class DialerContextRead(BaseModel):
+    feature_enabled: bool
+    configured_line_cap: int = Field(ge=1, le=3)
+    implemented_line_cap: int = Field(ge=1, le=3)
+    effective_line_cap: int = Field(ge=1, le=3)
+    can_manage: bool
+    profile: ProspectingDialerProfileRead | None
+    active_session: ProspectingDialSessionRead | None
+    active_legs: list[ProspectingDialLegRead]
+    blockers: list[str]
 
 
 class ProspectingContactPointRead(BaseModel):
@@ -121,6 +443,7 @@ class ProspectingEntryRead(BaseModel):
     id: UUID
     batch_id: UUID
     batch_name: str
+    campaign_id: UUID
     cohort_id: UUID | None
     cohort_name: str | None
     campaign_name: str
@@ -128,6 +451,9 @@ class ProspectingEntryRead(BaseModel):
     assigned_user_name: str
     prospect_id: UUID
     asset_class: AssetClass
+    script: ProspectingScriptRead | None
+    source_name: str
+    warnings: list[str]
     legal_name: str
     phone: str | None
     email: str | None
@@ -148,6 +474,8 @@ class ProspectingEntryRead(BaseModel):
 
 class ProspectingAttemptComplete(BaseModel):
     outcome: ProspectingOutcome
+    browser_session_id: str | None = Field(default=None, min_length=8, max_length=255)
+    lease_token: str | None = Field(default=None, min_length=32, max_length=255)
     qualification_answers: dict[str, str] = Field(default_factory=dict, max_length=50)
     notes: str | None = Field(default=None, max_length=2000)
     callback_at: datetime | None = None
@@ -166,6 +494,8 @@ class ProspectingAttemptComplete(BaseModel):
 
     @model_validator(mode="after")
     def outcome_fields_are_coherent(self) -> "ProspectingAttemptComplete":
+        if (self.browser_session_id is None) != (self.lease_token is None):
+            raise ValueError("Browser session ID and dialer lease token must be supplied together.")
         if self.outcome in {"callback_requested", "follow_up"} and self.callback_at is None:
             raise ValueError("Callback and follow-up outcomes require a callback date and time.")
         if self.outcome in {"interested", "appointment_set"} and self.handoff_user_id is None:

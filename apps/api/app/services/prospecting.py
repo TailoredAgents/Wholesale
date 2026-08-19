@@ -1,6 +1,10 @@
+import hashlib
+import json
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import case, func, or_, select
@@ -31,8 +35,10 @@ from app.models.foundation import (
     ProspectCallingBatchEntry,
     ProspectContactPoint,
     ProspectHandoff,
+    ProspectImportBatch,
     ProspectingAttempt,
     ProspectingCohort,
+    ProspectingQualificationResponse,
     ProspectingScriptVersion,
     Role,
     RoleAssignment,
@@ -49,11 +55,15 @@ from app.schemas.prospecting import (
     ProspectingBatchQueueRead,
     ProspectingContactPointRead,
     ProspectingEntryRead,
+    ProspectingQualificationAutosaveRequest,
+    ProspectingQualificationChecklistItemRead,
+    ProspectingQualificationChecklistRead,
     ProspectingQueueSummary,
     ProspectingScorecardRead,
     ProspectingScriptCreate,
     ProspectingScriptRead,
     ProspectingWorkbenchOverview,
+    QualificationResponseState,
     ScriptQuestion,
 )
 from app.services.acquisition_operations import (
@@ -105,6 +115,30 @@ DEFAULT_DISPOSITION_RULES = {
     "final_outcomes": sorted(FINAL_OUTCOMES),
     "warm_handoff_requires_all_required_answers": True,
 }
+
+
+class ProspectingQualificationConflictError(RuntimeError):
+    """An autosave mutation conflicts with the durable checklist revision."""
+
+
+@dataclass(frozen=True)
+class ProspectingReadContext:
+    """Organization-scoped objects preloaded for one queue serialization pass."""
+
+    now: datetime
+    prospects: Mapping[UUID, Prospect]
+    batches: Mapping[UUID, ProspectCallingBatch]
+    campaigns: Mapping[UUID, Campaign]
+    cohorts: Mapping[UUID, ProspectingCohort]
+    users: Mapping[UUID, User]
+    contact_points_by_prospect: Mapping[UUID, Sequence[ProspectContactPoint]]
+    attempts_by_entry: Mapping[UUID, Sequence[ProspectingAttempt]]
+    import_batches: Mapping[UUID, ProspectImportBatch]
+    scripts: Mapping[UUID, ProspectingScriptVersion]
+    approved_scripts_by_asset_class: Mapping[str, ProspectingScriptVersion]
+    qualification_responses_by_attempt: Mapping[
+        UUID, Sequence[ProspectingQualificationResponse]
+    ]
 
 
 def can_manage(principal: Principal) -> bool:
@@ -260,6 +294,165 @@ def approve_script(
     return script_read(db, script)
 
 
+def get_attempt_qualification(
+    db: Session,
+    principal: Principal,
+    attempt_id: UUID,
+) -> ProspectingQualificationChecklistRead | None:
+    attempt = db.scalar(
+        select(ProspectingAttempt).where(
+            ProspectingAttempt.organization_id == principal.organization_id,
+            ProspectingAttempt.id == attempt_id,
+        )
+    )
+    if attempt is None:
+        return None
+    if attempt.caller_user_id != principal.user_id and not can_manage(principal):
+        raise PermissionError(
+            "Only the assigned caller or an acquisitions manager can view this checklist."
+        )
+    script = scoped_attempt_script(db, principal.organization_id, attempt)
+    return qualification_checklist_read(db, attempt, script)
+
+
+def autosave_attempt_qualification(
+    db: Session,
+    principal: Principal,
+    attempt_id: UUID,
+    question_key: str,
+    payload: ProspectingQualificationAutosaveRequest,
+) -> ProspectingQualificationChecklistItemRead | None:
+    now = datetime.now(UTC)
+    from app.services.prospecting_dialer import validate_native_attempt_write_lease
+
+    validate_native_attempt_write_lease(
+        db,
+        principal,
+        attempt_id,
+        browser_session_id=payload.browser_session_id,
+        lease_token=payload.lease_token,
+        now=now,
+    )
+    attempt = db.scalar(
+        select(ProspectingAttempt)
+        .where(
+            ProspectingAttempt.organization_id == principal.organization_id,
+            ProspectingAttempt.id == attempt_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if attempt is None:
+        return None
+    if attempt.caller_user_id != principal.user_id:
+        raise PermissionError("Only the assigned caller can update this checklist.")
+    if attempt.status != "in_progress":
+        raise ProspectingQualificationConflictError(
+            "Qualification answers can only be changed while the attempt is active."
+        )
+
+    script = scoped_attempt_script(db, principal.organization_id, attempt)
+    question_by_key = {question.key: question for question in script_questions(script)}
+    question = question_by_key.get(question_key)
+    if question is None:
+        raise ValueError("The question is not part of this attempt's pinned script.")
+    answer_value = normalize_qualification_answer(question, payload.state, payload.answer_value)
+    mutation_hash = qualification_mutation_hash(
+        state=payload.state,
+        answer_value=answer_value,
+        expected_revision=payload.expected_revision,
+    )
+    response = db.scalar(
+        select(ProspectingQualificationResponse)
+        .where(
+            ProspectingQualificationResponse.attempt_id == attempt.id,
+            ProspectingQualificationResponse.question_key == question.key,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if response is not None and (
+        response.organization_id != principal.organization_id
+        or response.script_version_id != script.id
+    ):
+        raise ValueError("The saved qualification response does not match this attempt.")
+    metadata = dict(response.response_metadata or {}) if response is not None else {}
+    revision = qualification_revision(metadata)
+    last_mutation_id = str(metadata.get("last_mutation_id") or "")
+    mutation_id = str(payload.mutation_id)
+    if last_mutation_id == mutation_id:
+        if metadata.get("last_mutation_hash") != mutation_hash:
+            raise ProspectingQualificationConflictError(
+                "This mutation ID was already used with different qualification data."
+            )
+        assert response is not None
+        return qualification_item_read(question, response=response, fallback_value=None)
+    if payload.expected_revision != revision:
+        raise ProspectingQualificationConflictError(
+            "Qualification answer revision changed "
+            f"(expected {payload.expected_revision}, current {revision})."
+        )
+
+    previous = qualification_response_snapshot(response)
+    if response is None:
+        response = ProspectingQualificationResponse(
+            organization_id=principal.organization_id,
+            attempt_id=attempt.id,
+            script_version_id=script.id,
+            question_key=question.key,
+            state=payload.state,
+            answer_value=answer_value,
+            source="va_entry",
+            actor_user_id=principal.user_id,
+            is_required=question.required_for_handoff,
+            captured_at=None if payload.state == "not_covered" else now,
+            transcript_evidence=None,
+            response_metadata={},
+        )
+        db.add(response)
+    else:
+        response.state = payload.state
+        response.answer_value = answer_value
+        response.source = "va_entry"
+        response.actor_user_id = principal.user_id
+        response.is_required = question.required_for_handoff
+        if response.captured_at is None and payload.state != "not_covered":
+            response.captured_at = now
+    response.response_metadata = {
+        **metadata,
+        "revision": revision + 1,
+        "last_mutation_id": mutation_id,
+        "last_mutation_hash": mutation_hash,
+    }
+    answers = dict(attempt.qualification_answers or {})
+    if payload.state == "answered" and answer_value:
+        answers[question.key] = answer_value
+    else:
+        answers.pop(question.key, None)
+    attempt.qualification_answers = answers
+    required_keys = {item.key for item in question_by_key.values() if item.required_for_handoff}
+    attempt.required_answer_count = len(required_keys)
+    attempt.answered_required_count = sum(bool(answers.get(key)) for key in required_keys)
+    attempt.quality_score_basis_points = rate_basis_points(
+        attempt.answered_required_count,
+        attempt.required_answer_count,
+    )
+    db.flush()
+    add_audit(
+        db,
+        principal,
+        action="prospecting.qualification_response_saved",
+        entity_type="prospecting_qualification_response",
+        entity_id=response.id,
+        previous=previous,
+        new=qualification_response_snapshot(response) or {},
+        reason="Caller qualification checklist response autosaved",
+    )
+    db.commit()
+    db.refresh(response)
+    return qualification_item_read(question, response=response, fallback_value=None)
+
+
 def start_attempt(
     db: Session,
     principal: Principal,
@@ -268,6 +461,8 @@ def start_attempt(
     entry = scoped_entry(db, principal, entry_id)
     if entry is None:
         return None
+    if entry.assigned_user_id != principal.user_id:
+        raise PermissionError("Only the assigned caller can start this prospecting attempt.")
     existing_user_attempt = db.scalar(
         select(ProspectingAttempt).where(
             ProspectingAttempt.organization_id == principal.organization_id,
@@ -361,31 +556,134 @@ def complete_attempt(
     attempt_id: UUID,
     payload: ProspectingAttemptComplete,
 ) -> ProspectingEntryRead | None:
+    now = datetime.now(UTC)
+    from app.services.prospecting_dialer import (
+        complete_native_wrap_up,
+        validate_native_attempt_can_complete,
+        validate_native_attempt_terminal,
+    )
+
+    native_session, native_attempt = validate_native_attempt_can_complete(
+        db,
+        principal,
+        attempt_id,
+        browser_session_id=payload.browser_session_id,
+        lease_token=payload.lease_token,
+        now=now,
+    )
     attempt = db.scalar(
-        select(ProspectingAttempt).where(
+        select(ProspectingAttempt)
+        .where(
             ProspectingAttempt.organization_id == principal.organization_id,
             ProspectingAttempt.id == attempt_id,
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if attempt is None:
         return None
     if attempt.status != "in_progress":
         raise ValueError("This attempt has already been completed.")
-    if attempt.caller_user_id != principal.user_id and not can_manage(principal):
+    if attempt.caller_user_id != principal.user_id:
         raise PermissionError("Only the caller who started this attempt can complete it.")
-    entry = db.get(ProspectCallingBatchEntry, attempt.batch_entry_id)
-    prospect = db.get(Prospect, attempt.prospect_id)
-    script = db.get(ProspectingScriptVersion, attempt.script_version_id)
+    validate_native_attempt_terminal(
+        db,
+        principal.organization_id,
+        attempt_id,
+        native_attempt=native_attempt,
+    )
+    entry = db.scalar(
+        select(ProspectCallingBatchEntry).where(
+            ProspectCallingBatchEntry.organization_id == principal.organization_id,
+            ProspectCallingBatchEntry.id == attempt.batch_entry_id,
+        )
+    )
+    prospect = db.scalar(
+        select(Prospect).where(
+            Prospect.organization_id == principal.organization_id,
+            Prospect.id == attempt.prospect_id,
+        )
+    )
+    script = scoped_attempt_script(db, principal.organization_id, attempt)
     if entry is None or prospect is None or script is None:
         raise ValueError("The prospecting record is incomplete.")
-    answers = clean_answers(payload.qualification_answers)
-    known_keys = {question.key for question in script_questions(script)}
-    unknown = set(answers) - known_keys
+    questions = script_questions(script)
+    question_by_key = {question.key: question for question in questions}
+    legacy_answers = clean_answers(payload.qualification_answers) if not native_attempt else {}
+    unknown = set(legacy_answers) - set(question_by_key)
     if unknown:
         raise ValueError(f"Unknown caller-script answers: {', '.join(sorted(unknown))}.")
-    required_keys = {
-        question.key for question in script_questions(script) if question.required_for_handoff
-    }
+    saved_responses = db.scalars(
+        select(ProspectingQualificationResponse)
+        .where(
+            ProspectingQualificationResponse.attempt_id == attempt.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
+    if any(
+        response.organization_id != principal.organization_id
+        or response.script_version_id != script.id
+        or response.question_key not in question_by_key
+        for response in saved_responses
+    ):
+        raise ValueError("Saved qualification evidence does not match the pinned caller script.")
+    saved_by_key = {response.question_key: response for response in saved_responses}
+    materialized_responses: list[ProspectingQualificationResponse] = []
+    for key, value in legacy_answers.items():
+        if key not in saved_by_key:
+            question = question_by_key[key]
+            normalized_value = normalize_qualification_answer(question, "answered", value)
+            response = ProspectingQualificationResponse(
+                organization_id=principal.organization_id,
+                attempt_id=attempt.id,
+                script_version_id=script.id,
+                question_key=question.key,
+                state="answered",
+                answer_value=normalized_value,
+                source="legacy_completion",
+                actor_user_id=principal.user_id,
+                is_required=question.required_for_handoff,
+                captured_at=now,
+                transcript_evidence=None,
+                response_metadata={
+                    "revision": 1,
+                    "materialized_during_completion": True,
+                },
+            )
+            db.add(response)
+            saved_by_key[key] = response
+            materialized_responses.append(response)
+    if materialized_responses:
+        db.flush()
+        for response in materialized_responses:
+            add_audit(
+                db,
+                principal,
+                action="prospecting.qualification_response_materialized",
+                entity_type="prospecting_qualification_response",
+                entity_id=response.id,
+                previous=None,
+                new=qualification_response_snapshot(response) or {},
+                reason="Legacy completion answer materialized before attempt completion",
+            )
+    answers: dict[str, str] = {}
+    for question in questions:
+        saved_response = saved_by_key.get(question.key)
+        if saved_response is not None:
+            if saved_response.state == "answered" and saved_response.answer_value is not None:
+                saved_value = str(saved_response.answer_value).strip()
+                if saved_value:
+                    answers[question.key] = (
+                        normalize_qualification_answer(
+                            question,
+                            "answered",
+                            saved_value,
+                        )
+                        or ""
+                    )
+            continue
+    required_keys = {question.key for question in questions if question.required_for_handoff}
     answered_required = sum(bool(answers.get(key)) for key in required_keys)
     if payload.outcome in WARM_OUTCOMES:
         missing = sorted(key for key in required_keys if not answers.get(key))
@@ -410,7 +708,6 @@ def complete_attempt(
                 )
             raise ValueError("A complete property address is required before a warm handoff.")
         validate_acquisition_user(db, principal.organization_id, payload.handoff_user_id)
-    now = datetime.now(UTC)
     callback_at = as_utc(payload.callback_at) if payload.callback_at else None
     if callback_at and callback_at <= now:
         raise ValueError("Schedule callbacks in the future.")
@@ -454,6 +751,14 @@ def complete_attempt(
             prospect.call_eligibility = "blocked"
             prospect.suppression_status = "suppressed"
             record_dnc_suppression(db, principal, prospect, now)
+
+    complete_native_wrap_up(
+        db,
+        principal,
+        attempt,
+        session=native_session,
+        now=now,
+    )
 
     add_audit(
         db,
@@ -558,10 +863,9 @@ def decide_handoff(
             lead.id,
             LeadCloseOutRequest(
                 disposition="disqualified",
-                reason=(
-                    f"Prospecting handoff rejected ({decision_code}): "
-                    f"{handoff.review_reason}"
-                )[:500],
+                reason=(f"Prospecting handoff rejected ({decision_code}): {handoff.review_reason}")[
+                    :500
+                ],
             ),
             commit=False,
         )
@@ -778,17 +1082,15 @@ def convert_prospect_to_lead(
     property_type = source_property_type or (
         LAND_ASSET_CLASS if asset_class == LAND_ASSET_CLASS else None
     )
-    property_record, normalized_property_key, normalized_parcel_key = (
-        find_property_by_identity(
-            db,
-            organization_id=principal.organization_id,
-            street_address=street_address,
-            city=city,
-            state=state_code,
-            postal_code=postal_code,
-            parcel_id=parcel_id,
-            county=county,
-        )
+    property_record, normalized_property_key, normalized_parcel_key = find_property_by_identity(
+        db,
+        organization_id=principal.organization_id,
+        street_address=street_address,
+        city=city,
+        state=state_code,
+        postal_code=postal_code,
+        parcel_id=parcel_id,
+        county=county,
     )
     if property_record is None:
         property_record = Property(
@@ -1080,7 +1382,158 @@ def list_queue_entries(
             ProspectCallingBatchEntry.sequence_number,
         ).limit(250)
     ).all()
-    return [entry_read(db, entry) for entry in entries]
+    if not entries:
+        return []
+    context = build_prospecting_read_context(db, entries)
+    return [entry_read(db, entry, context=context) for entry in entries]
+
+
+def build_prospecting_read_context(
+    db: Session,
+    entries: Sequence[ProspectCallingBatchEntry],
+) -> ProspectingReadContext:
+    """Bulk-load every relationship needed to serialize a bounded queue page."""
+
+    organization_ids = {entry.organization_id for entry in entries}
+    if len(organization_ids) != 1:
+        raise ValueError("Prospecting queue entries must belong to one organization.")
+    organization_id = next(iter(organization_ids))
+    prospect_ids = {entry.prospect_id for entry in entries}
+    batch_ids = {entry.prospect_calling_batch_id for entry in entries}
+    entry_ids = {entry.id for entry in entries}
+
+    prospects = db.scalars(
+        select(Prospect).where(
+            Prospect.organization_id == organization_id,
+            Prospect.id.in_(prospect_ids),
+        )
+    ).all()
+    batches = db.scalars(
+        select(ProspectCallingBatch).where(
+            ProspectCallingBatch.organization_id == organization_id,
+            ProspectCallingBatch.id.in_(batch_ids),
+        )
+    ).all()
+    campaign_ids = {batch.campaign_id for batch in batches}
+    cohort_ids = {batch.cohort_id for batch in batches if batch.cohort_id is not None}
+    campaigns = db.scalars(
+        select(Campaign).where(
+            Campaign.organization_id == organization_id,
+            Campaign.id.in_(campaign_ids),
+        )
+    ).all()
+    cohorts = (
+        db.scalars(
+            select(ProspectingCohort).where(
+                ProspectingCohort.organization_id == organization_id,
+                ProspectingCohort.id.in_(cohort_ids),
+            )
+        ).all()
+        if cohort_ids
+        else []
+    )
+    attempts = db.scalars(
+        select(ProspectingAttempt)
+        .where(
+            ProspectingAttempt.organization_id == organization_id,
+            ProspectingAttempt.batch_entry_id.in_(entry_ids),
+        )
+        .order_by(ProspectingAttempt.batch_entry_id, ProspectingAttempt.started_at.desc())
+    ).all()
+    import_batch_ids = {
+        prospect.import_batch_id for prospect in prospects if prospect.import_batch_id is not None
+    }
+    import_batches = (
+        db.scalars(
+            select(ProspectImportBatch).where(
+                ProspectImportBatch.organization_id == organization_id,
+                ProspectImportBatch.id.in_(import_batch_ids),
+            )
+        ).all()
+        if import_batch_ids
+        else []
+    )
+    scripts = db.scalars(
+        select(ProspectingScriptVersion)
+        .where(ProspectingScriptVersion.organization_id == organization_id)
+        .order_by(ProspectingScriptVersion.version_number.desc())
+    ).all()
+    user_ids = {entry.assigned_user_id for entry in entries}
+    user_ids.update(script.created_by_user_id for script in scripts)
+    user_ids.update(
+        script.approved_by_user_id for script in scripts if script.approved_by_user_id is not None
+    )
+    users = db.scalars(
+        select(User).where(
+            User.organization_id == organization_id,
+            User.id.in_(user_ids),
+        )
+    ).all()
+    contact_points = db.scalars(
+        select(ProspectContactPoint)
+        .where(
+            ProspectContactPoint.organization_id == organization_id,
+            ProspectContactPoint.prospect_id.in_(prospect_ids),
+        )
+        .order_by(
+            ProspectContactPoint.prospect_id,
+            ProspectContactPoint.contact_type.desc(),
+            ProspectContactPoint.rank,
+            ProspectContactPoint.created_at,
+        )
+    ).all()
+    qualification_responses = (
+        db.scalars(
+            select(ProspectingQualificationResponse)
+            .join(
+                ProspectingAttempt,
+                ProspectingAttempt.id == ProspectingQualificationResponse.attempt_id,
+            )
+            .where(
+                ProspectingQualificationResponse.organization_id == organization_id,
+                ProspectingAttempt.organization_id == organization_id,
+                ProspectingAttempt.batch_entry_id.in_(entry_ids),
+            )
+            .order_by(
+                ProspectingQualificationResponse.attempt_id,
+                ProspectingQualificationResponse.question_key,
+            )
+        ).all()
+        if attempts
+        else []
+    )
+
+    contact_points_by_prospect: dict[UUID, list[ProspectContactPoint]] = defaultdict(list)
+    for contact_point in contact_points:
+        contact_points_by_prospect[contact_point.prospect_id].append(contact_point)
+    attempts_by_entry: dict[UUID, list[ProspectingAttempt]] = defaultdict(list)
+    for attempt in attempts:
+        attempts_by_entry[attempt.batch_entry_id].append(attempt)
+    qualification_responses_by_attempt: dict[
+        UUID, list[ProspectingQualificationResponse]
+    ] = defaultdict(list)
+    for response in qualification_responses:
+        qualification_responses_by_attempt[response.attempt_id].append(response)
+    approved_scripts_by_asset_class: dict[str, ProspectingScriptVersion] = {}
+    for script in scripts:
+        asset_class = normalize_asset_class(script.asset_class)
+        if script.status == "approved" and asset_class not in approved_scripts_by_asset_class:
+            approved_scripts_by_asset_class[asset_class] = script
+
+    return ProspectingReadContext(
+        now=datetime.now(UTC),
+        prospects={prospect.id: prospect for prospect in prospects},
+        batches={batch.id: batch for batch in batches},
+        campaigns={campaign.id: campaign for campaign in campaigns},
+        cohorts={cohort.id: cohort for cohort in cohorts},
+        users={user.id: user for user in users},
+        contact_points_by_prospect=contact_points_by_prospect,
+        attempts_by_entry=attempts_by_entry,
+        import_batches={batch.id: batch for batch in import_batches},
+        scripts={script.id: script for script in scripts},
+        approved_scripts_by_asset_class=approved_scripts_by_asset_class,
+        qualification_responses_by_attempt=qualification_responses_by_attempt,
+    )
 
 
 def build_batch_queues(
@@ -1127,35 +1580,143 @@ def scoped_entry(
     return db.scalar(statement)
 
 
-def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntryRead:
-    prospect = db.get(Prospect, entry.prospect_id)
-    batch = db.get(ProspectCallingBatch, entry.prospect_calling_batch_id)
-    campaign = db.get(Campaign, batch.campaign_id) if batch else None
-    cohort = db.get(ProspectingCohort, batch.cohort_id) if batch and batch.cohort_id else None
-    assignee = db.get(User, entry.assigned_user_id)
-    contact_points = db.scalars(
-        select(ProspectContactPoint)
-        .where(ProspectContactPoint.prospect_id == entry.prospect_id)
-        .order_by(
-            ProspectContactPoint.contact_type.desc(),
-            ProspectContactPoint.rank,
-            ProspectContactPoint.created_at,
+def entry_read(
+    db: Session,
+    entry: ProspectCallingBatchEntry,
+    *,
+    context: ProspectingReadContext | None = None,
+) -> ProspectingEntryRead:
+    prospect = (
+        context.prospects.get(entry.prospect_id)
+        if context is not None
+        else db.scalar(
+            select(Prospect).where(
+                Prospect.organization_id == entry.organization_id,
+                Prospect.id == entry.prospect_id,
+            )
         )
-    ).all()
-    attempts = db.scalars(
-        select(ProspectingAttempt)
-        .where(ProspectingAttempt.batch_entry_id == entry.id)
-        .order_by(ProspectingAttempt.started_at.desc())
-    ).all()
-    active = next((attempt for attempt in attempts if attempt.status == "in_progress"), None)
+    )
+    batch = (
+        context.batches.get(entry.prospect_calling_batch_id)
+        if context is not None
+        else db.scalar(
+            select(ProspectCallingBatch).where(
+                ProspectCallingBatch.organization_id == entry.organization_id,
+                ProspectCallingBatch.id == entry.prospect_calling_batch_id,
+            )
+        )
+    )
     if prospect is None or batch is None:
         raise ValueError("The calling-batch entry is incomplete.")
-    now = datetime.now(UTC)
+    campaign = (
+        context.campaigns.get(batch.campaign_id)
+        if context is not None
+        else db.scalar(
+            select(Campaign).where(
+                Campaign.organization_id == entry.organization_id,
+                Campaign.id == batch.campaign_id,
+            )
+        )
+    )
+    cohort = (
+        context.cohorts.get(batch.cohort_id)
+        if context is not None and batch.cohort_id is not None
+        else (
+            db.scalar(
+                select(ProspectingCohort).where(
+                    ProspectingCohort.organization_id == entry.organization_id,
+                    ProspectingCohort.id == batch.cohort_id,
+                )
+            )
+            if batch.cohort_id
+            else None
+        )
+    )
+    assignee = (
+        context.users.get(entry.assigned_user_id)
+        if context is not None
+        else db.scalar(
+            select(User).where(
+                User.organization_id == entry.organization_id,
+                User.id == entry.assigned_user_id,
+            )
+        )
+    )
+    contact_points = (
+        list(context.contact_points_by_prospect.get(entry.prospect_id, ()))
+        if context is not None
+        else db.scalars(
+            select(ProspectContactPoint)
+            .where(
+                ProspectContactPoint.organization_id == entry.organization_id,
+                ProspectContactPoint.prospect_id == entry.prospect_id,
+            )
+            .order_by(
+                ProspectContactPoint.contact_type.desc(),
+                ProspectContactPoint.rank,
+                ProspectContactPoint.created_at,
+            )
+        ).all()
+    )
+    attempts = (
+        list(context.attempts_by_entry.get(entry.id, ()))
+        if context is not None
+        else db.scalars(
+            select(ProspectingAttempt)
+            .where(
+                ProspectingAttempt.organization_id == entry.organization_id,
+                ProspectingAttempt.batch_entry_id == entry.id,
+            )
+            .order_by(ProspectingAttempt.started_at.desc())
+        ).all()
+    )
+    active = next((attempt for attempt in attempts if attempt.status == "in_progress"), None)
+    if active is not None:
+        script = (
+            context.scripts.get(active.script_version_id)
+            if context is not None
+            else scoped_attempt_script(db, entry.organization_id, active)
+        )
+        if script is None:
+            raise ValueError("The attempt's pinned caller script is unavailable.")
+    else:
+        script = (
+            context.approved_scripts_by_asset_class.get(
+                normalize_asset_class(prospect.asset_class)
+            )
+            if context is not None
+            else get_active_script(db, entry.organization_id, prospect.asset_class)
+        )
+    import_batch = (
+        context.import_batches.get(prospect.import_batch_id)
+        if context is not None and prospect.import_batch_id is not None
+        else (
+            db.scalar(
+                select(ProspectImportBatch).where(
+                    ProspectImportBatch.organization_id == entry.organization_id,
+                    ProspectImportBatch.id == prospect.import_batch_id,
+                )
+            )
+            if prospect.import_batch_id
+            else None
+        )
+    )
+    source_name = (
+        clean_text(import_batch.source_list_name) if import_batch is not None else None
+    ) or (clean_text(import_batch.source_name) if import_batch is not None else None)
+    source_name = source_name or (campaign.name if campaign else "Unknown campaign")
+    now = context.now if context is not None else datetime.now(UTC)
     queue_kind = entry_queue_kind(entry, now)
+    attempt_reads = [attempt_read(db, attempt, context=context) for attempt in attempts]
+    active_attempt_read = next(
+        (item for item in attempt_reads if active is not None and item.id == active.id),
+        None,
+    )
     return ProspectingEntryRead(
         id=entry.id,
         batch_id=batch.id,
         batch_name=batch.name,
+        campaign_id=batch.campaign_id,
         cohort_id=batch.cohort_id,
         cohort_name=cohort.name if cohort else None,
         campaign_name=campaign.name if campaign else "Unknown campaign",
@@ -1163,6 +1724,9 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
         assigned_user_name=assignee.display_name if assignee else "Unassigned caller",
         prospect_id=prospect.id,
         asset_class=normalize_asset_class(prospect.asset_class),
+        script=script_read(db, script, context=context) if script else None,
+        source_name=source_name[:255],
+        warnings=prospecting_entry_warnings(prospect, contact_points),
         legal_name=prospect.legal_name,
         phone=prospect.phone,
         email=prospect.email,
@@ -1186,8 +1750,8 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
         attempt_count=entry.attempt_count,
         disposition=entry.disposition,
         next_attempt_at=entry.next_attempt_at,
-        active_attempt=attempt_read(db, active) if active else None,
-        attempts=[attempt_read(db, attempt) for attempt in attempts],
+        active_attempt=active_attempt_read,
+        attempts=attempt_reads,
     )
 
 
@@ -1210,12 +1774,28 @@ def provider_sync_status() -> str:
     return "stonegate_direct"
 
 
-def attempt_read(db: Session, attempt: ProspectingAttempt) -> ProspectingAttemptRead:
-    script = db.get(ProspectingScriptVersion, attempt.script_version_id)
+def attempt_read(
+    db: Session,
+    attempt: ProspectingAttempt,
+    *,
+    context: ProspectingReadContext | None = None,
+) -> ProspectingAttemptRead:
+    script = (
+        context.scripts.get(attempt.script_version_id)
+        if context is not None
+        else scoped_attempt_script(db, attempt.organization_id, attempt)
+    )
+    if script is None:
+        raise ValueError("The attempt's pinned caller script is unavailable.")
+    qualification_rows = (
+        context.qualification_responses_by_attempt.get(attempt.id, ())
+        if context is not None
+        else None
+    )
     return ProspectingAttemptRead(
         id=attempt.id,
         script_version_id=attempt.script_version_id,
-        script_version_number=script.version_number if script else 0,
+        script_version_number=script.version_number,
         cohort_id=attempt.cohort_id,
         dialer_mode=attempt.dialer_mode,
         status=attempt.status,
@@ -1237,6 +1817,12 @@ def attempt_read(db: Session, attempt: ProspectingAttempt) -> ProspectingAttempt
         started_at=attempt.started_at,
         completed_at=attempt.completed_at,
         quality_score_basis_points=attempt.quality_score_basis_points,
+        qualification_checklist=qualification_checklist_read(
+            db,
+            attempt,
+            script,
+            rows=qualification_rows,
+        ),
     )
 
 
@@ -1249,9 +1835,22 @@ def list_scripts(db: Session, principal: Principal) -> list[ProspectingScriptRea
     return [script_read(db, script) for script in scripts]
 
 
-def script_read(db: Session, script: ProspectingScriptVersion) -> ProspectingScriptRead:
-    creator = db.get(User, script.created_by_user_id)
-    approver = db.get(User, script.approved_by_user_id) if script.approved_by_user_id else None
+def script_read(
+    db: Session,
+    script: ProspectingScriptVersion,
+    *,
+    context: ProspectingReadContext | None = None,
+) -> ProspectingScriptRead:
+    creator = (
+        context.users.get(script.created_by_user_id)
+        if context is not None
+        else db.get(User, script.created_by_user_id)
+    )
+    approver = (
+        context.users.get(script.approved_by_user_id)
+        if context is not None and script.approved_by_user_id is not None
+        else (db.get(User, script.approved_by_user_id) if script.approved_by_user_id else None)
+    )
     return ProspectingScriptRead(
         id=script.id,
         version_number=script.version_number,
@@ -1269,6 +1868,189 @@ def script_read(db: Session, script: ProspectingScriptVersion) -> ProspectingScr
 
 def script_questions(script: ProspectingScriptVersion) -> list[ScriptQuestion]:
     return [ScriptQuestion.model_validate(item) for item in script.qualification_questions]
+
+
+def scoped_attempt_script(
+    db: Session,
+    organization_id: UUID,
+    attempt: ProspectingAttempt,
+) -> ProspectingScriptVersion:
+    script = db.scalar(
+        select(ProspectingScriptVersion).where(
+            ProspectingScriptVersion.organization_id == organization_id,
+            ProspectingScriptVersion.id == attempt.script_version_id,
+        )
+    )
+    if script is None:
+        raise ValueError("The attempt's pinned caller script is unavailable.")
+    return script
+
+
+def qualification_checklist_read(
+    db: Session,
+    attempt: ProspectingAttempt,
+    script: ProspectingScriptVersion,
+    *,
+    rows: Sequence[ProspectingQualificationResponse] | None = None,
+) -> ProspectingQualificationChecklistRead:
+    if rows is None:
+        rows = db.scalars(
+            select(ProspectingQualificationResponse).where(
+                ProspectingQualificationResponse.attempt_id == attempt.id,
+            )
+        ).all()
+    known_keys = {question.key for question in script_questions(script)}
+    if any(
+        row.organization_id != attempt.organization_id
+        or row.script_version_id != script.id
+        or row.question_key not in known_keys
+        for row in rows
+    ):
+        raise ValueError("Saved qualification evidence does not match the pinned caller script.")
+    row_by_key = {row.question_key: row for row in rows}
+    legacy_answers = attempt.qualification_answers or {}
+    items = [
+        qualification_item_read(
+            question,
+            response=row_by_key.get(question.key),
+            fallback_value=(
+                str(legacy_answers[question.key]).strip()
+                if question.key in legacy_answers and str(legacy_answers[question.key]).strip()
+                else None
+            ),
+        )
+        for question in script_questions(script)
+    ]
+    answered_count = sum(item.state == "answered" and bool(item.answer_value) for item in items)
+    required_items = [item for item in items if item.is_required]
+    required_answered_count = sum(
+        item.state == "answered" and bool(item.answer_value) for item in required_items
+    )
+    missing_required_keys = [
+        item.question_key
+        for item in required_items
+        if item.state != "answered" or not item.answer_value
+    ]
+    return ProspectingQualificationChecklistRead(
+        attempt_id=attempt.id,
+        script_version_id=script.id,
+        items=items,
+        answered_count=answered_count,
+        total_count=len(items),
+        required_answered_count=required_answered_count,
+        required_count=len(required_items),
+        missing_required_keys=missing_required_keys,
+        complete=not missing_required_keys,
+    )
+
+
+def qualification_item_read(
+    question: ScriptQuestion,
+    *,
+    response: ProspectingQualificationResponse | None,
+    fallback_value: str | None,
+) -> ProspectingQualificationChecklistItemRead:
+    if response is not None:
+        answer_value = (
+            str(response.answer_value).strip() if response.answer_value is not None else None
+        )
+        answer_value = answer_value or None
+        state = cast(QualificationResponseState, response.state)
+        source = response.source
+        revision = qualification_revision(response.response_metadata or {})
+        captured_at = response.captured_at
+        updated_at = response.updated_at
+    elif fallback_value:
+        answer_value = fallback_value
+        state = "answered"
+        source = "legacy_completion"
+        revision = 0
+        captured_at = None
+        updated_at = None
+    else:
+        answer_value = None
+        state = "not_covered"
+        source = "not_recorded"
+        revision = 0
+        captured_at = None
+        updated_at = None
+    return ProspectingQualificationChecklistItemRead(
+        question_key=question.key,
+        label=question.label,
+        prompt=question.prompt,
+        answer_type=question.answer_type,
+        choices=list(question.choices),
+        is_required=question.required_for_handoff,
+        state=state,
+        answer_value=answer_value,
+        source=source,
+        revision=revision,
+        captured_at=captured_at,
+        updated_at=updated_at,
+    )
+
+
+def normalize_qualification_answer(
+    question: ScriptQuestion,
+    state: QualificationResponseState,
+    answer_value: str | None,
+) -> str | None:
+    value = clean_text(answer_value)
+    if state in {"answered", "needs_follow_up", "conflict"} and value is None:
+        raise ValueError(
+            "Answered, follow-up, and conflict qualification states require a usable response."
+        )
+    if state == "not_covered":
+        return None
+    if (
+        state == "answered"
+        and value is not None
+        and question.answer_type == "choice"
+        and value not in question.choices
+    ):
+        raise ValueError("Select one of the approved answers for this qualification question.")
+    return value
+
+
+def qualification_revision(metadata: Mapping[str, object]) -> int:
+    value = metadata.get("revision", 0)
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
+def qualification_mutation_hash(
+    *,
+    state: QualificationResponseState,
+    answer_value: str | None,
+    expected_revision: int,
+) -> str:
+    canonical = json.dumps(
+        {
+            "state": state,
+            "answer_value": answer_value,
+            "expected_revision": expected_revision,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def qualification_response_snapshot(
+    response: ProspectingQualificationResponse | None,
+) -> dict[str, object] | None:
+    if response is None:
+        return None
+    return {
+        "attempt_id": str(response.attempt_id),
+        "script_version_id": str(response.script_version_id),
+        "question_key": response.question_key,
+        "state": response.state,
+        "answer_value": response.answer_value,
+        "source": response.source,
+        "actor_user_id": str(response.actor_user_id) if response.actor_user_id else None,
+        "is_required": response.is_required,
+        "revision": qualification_revision(response.response_metadata or {}),
+    }
 
 
 def required_question_count(script: ProspectingScriptVersion) -> int:
@@ -1509,14 +2291,54 @@ def refresh_batch_status(db: Session, batch_id: UUID) -> None:
 
 def format_property_address(prospect: Prospect) -> str | None:
     parcel_id, county, _ = prospect_property_metadata(prospect)
-    return property_identity_label(
-        street_address=prospect.street_address,
-        city=prospect.city,
-        state=prospect.state_code,
-        postal_code=prospect.postal_code,
-        parcel_id=parcel_id,
-        county=county,
-    ) or None
+    return (
+        property_identity_label(
+            street_address=prospect.street_address,
+            city=prospect.city,
+            state=prospect.state_code,
+            postal_code=prospect.postal_code,
+            parcel_id=parcel_id,
+            county=county,
+        )
+        or None
+    )
+
+
+def prospecting_entry_warnings(
+    prospect: Prospect,
+    contact_points: Sequence[ProspectContactPoint],
+) -> list[str]:
+    warnings: list[str] = []
+    if prospect.call_eligibility != "eligible":
+        warnings.append(
+            f"Calling eligibility requires review ({display_status(prospect.call_eligibility)})."
+        )
+    if prospect.suppression_status != "clear":
+        warnings.append(
+            f"Suppression status requires review ({display_status(prospect.suppression_status)})."
+        )
+    has_phone = bool(prospect.phone) or any(
+        item.contact_type == "phone" and item.value.strip() for item in contact_points
+    )
+    if not has_phone:
+        warnings.append("No callable phone number is on file.")
+    elif prospect.phone_validation_status not in {"valid", "verified"}:
+        warnings.append(
+            f"Primary phone validation is {display_status(prospect.phone_validation_status)}."
+        )
+    if not format_property_address(prospect):
+        warnings.append("Property identity is incomplete.")
+    elif prospect.address_validation_status not in {"valid", "verified", "provider_confirmed"}:
+        warnings.append(
+            f"Property address validation is {display_status(prospect.address_validation_status)}."
+        )
+    if not prospect.legal_name.strip():
+        warnings.append("The property owner name is missing.")
+    return warnings[:8]
+
+
+def display_status(value: str) -> str:
+    return value.replace("_", " ").strip().lower()[:80]
 
 
 def clean_answers(values: dict[str, str]) -> dict[str, str]:
