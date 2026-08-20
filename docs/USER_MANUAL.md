@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 8, 2026
+Last verified against the application: August 19, 2026
 
 ## Purpose
 
@@ -279,9 +279,9 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
-local views for focused work: Campaigns, Dialer control, Analytics, and My Calls in Prospecting;
+local views for focused work: Campaigns, Dialer control, Analytics, Pilot acceptance, and My Calls in Prospecting;
 Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
-inside Deals. Dialer control and Analytics are manager-only.
+inside Deals. Dialer control, Analytics, and Pilot acceptance are manager-only.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
@@ -298,6 +298,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Prospecting: Campaigns | `/os/prospecting?view=campaigns` |
 | Prospecting: Dialer control | `/os/prospecting?view=dialer-control` |
 | Prospecting: Analytics | `/os/prospecting?view=analytics` |
+| Prospecting: Pilot acceptance | `/os/prospecting?view=pilot` |
 | Prospecting: My Calls | `/os/prospecting?view=my-calls` |
 | Leads | `/os/leads` |
 | Deals | `/os/deals` |
@@ -961,6 +962,80 @@ completed later remains attributed to that originating work and is shown as of t
 timestamp; it is not silently moved out of its original acquisition cohort. The all-source summary
 de-duplicates overlapping source rows. Collected gross revenue and approved-reconciliation company
 profit are separate evidence and should not be treated as the same number.
+
+### Run The D10 Single-Line Pilot
+
+Managers use **Prospecting > Pilot acceptance** after D9 is technically ready. This screen is an
+evidence workflow, not an extra dialer on/off switch. The workflow exists in Stonegate, but the
+native dialer is not production-accepted until the live evidence and owner decision are complete.
+
+1. Create one pilot by selecting exactly one VA, enabled native campaign, non-overlapping cohort,
+   75-to-250-record calling batch, and dedicated prospecting line. Keep the company, campaign, VA,
+   line, and release limits at one live line. Set the pilot daily dial cap between 25 and 50
+   reservations so a qualifying shift remains possible; reserved provider spend cannot exceed $10
+   per VA local date.
+2. Add one to ten unique controlled E.164 numbers from active Stonegate staff forwarding profiles.
+   Each number must also exist as an eligible test record in this selected calling batch. Attest
+   that the external
+   BatchDialer list is separate. Stonegate can verify its own records; it cannot inspect every raw
+   BatchDialer record through the current Zapier bridge, so the external export/list digest remains
+   a named human attestation.
+3. Select **Begin controlled-number smoke test** only after the screen shows no starting blocker.
+   The pilot enters `smoke_testing`, where the coordinator can reserve only the saved test records.
+   Complete answered controlled seller calls with durable call records, canonical recordings, and
+   signed seller-child evidence. Refresh the page, select those exact records under **Smoke test**,
+   and enter the provider-reported charge and evidence reference for every displayed root and
+   seller-child call ID. Valid evidence moves the exact scope to `running`;
+   it does not grant other VAs, campaigns, batches, lines, caps, or configurations permission.
+   The cost list covers the entire ended smoke stage, including root-only failures, while the
+   selected records prove at least one answered, recorded seller call. If smoke exceeds 50
+   reservations / 100 provider IDs, roll it back and begin a new controlled pilot. Smoke calls do
+   not count toward production-shift volume or time.
+4. After every call, open its D10 review. Verify the disposition and any applicable recording,
+   transcript, compact notes, callback, DNC action, handoff, and provider-cost evidence. Failed,
+   canceled, no-answer, and voicemail attempts must be reviewed too. Only applicable connected
+   seller conversations require a recording, completed transcript, and structured notes;
+   non-contact outcomes still require an accurate disposition, review, compliance, and cost
+   evidence but do not wait for a transcript.
+5. After the shift ends, submit the shift review. For every exact root and seller-child provider
+   call ID shown, enter the provider-reported charge and the matching usage-export, invoice, or
+   call-detail reference. Stonegate rejects missing, duplicate, extra, cross-linked, or ambiguous
+   call IDs. A provider-documented `$0` charge is valid; a guessed or unreferenced zero is not. A
+   passing shift requires at least 60 minutes of provider-signed right-party conversation time, 25 terminal
+   signed seller calls, 100% passed reviews for every reserved attempt, and no lost answer,
+   unintended duplicate, stuck session, missing callback, complaint, or unresolved compliance issue.
+6. Complete at least three passing shifts on three distinct local dates and at least 75 qualifying
+   signed seller calls total. Review every reservation, including safe pre-provider releases and
+   root-only provider failures.
+7. Name the comparable, disjoint BatchDialer cohort or list, attest that overlap is zero, and record
+   an honest comparison summary. The current Zap does not verify BatchDialer raw attempts or cost,
+   so leave unsupported rates or economics unavailable. It is acceptable for the comparison to be
+   inconclusive; it is not acceptable to invent a rate or claim superiority.
+8. Exercise the company and campaign switches on a real controlled pilot session, then reach the
+   configured daily dial limit, which must be between 25 and 50, and attempt one more reservation.
+   The gate passes only when the
+   server records the off-then-on switch cycles, stopped/drained sessions, zero live sessions, and
+   the actual daily-cap denial. Typed confirmation is not proof.
+9. Complete a separate, later rollback rehearsal: pause and re-enable the native campaign with a
+   new switch cycle, safely end or drain a real pilot session, verify no live sessions or legs
+   remain, preserve immutable attempt/shift reviews, and identify the hashed unworked remainder.
+   Then complete a later clean shift. Use **Rollback native pilot** only when intentionally closing
+   the pilot and type **ROLL BACK SINGLE-LINE PILOT** exactly. Closing an unstarted draft records
+   `cancelled`; closing a started pilot records `rolled_back`, disables its scope, and preserves its
+   evidence. This terminal action does not change BatchDialer automatically.
+10. Submit for owner review. Only an Owner or Founder/operator can type **ACCEPT SINGLE-LINE
+    DIALER** to accept or **REJECT SINGLE-LINE DIALER** to reject, exactly as shown, and provide the
+    reason. The server recomputes all evidence before freezing the decision; managers cannot
+    override a failed or unknown hard gate.
+
+If the pilot is rolled back, leave its evidence in Stonegate. Do not delete attempts or run the
+same active cohort in both systems. Acceptance authorizes only the frozen pilot scope and safety
+configuration. To stop an accepted authorization, an Owner or Founder/operator enters a reason and
+types **REVOKE SINGLE-LINE DIALER** exactly. Stonegate blocks every new seller bridge that has not
+already been authorized, safely drains provider work already authorized or in progress, and retains
+the evidence. The terminal pilot remains
+visible while a manager creates the new D10 pilot required before native calling can resume. BatchDialer remains
+available throughout D10 and after revocation as the fallback.
 
 An assigned-only caller cannot open another caller's prospect. Enabling **Cold calling** adds the
 Prospecting work permission; it does not grant unrelated tabs or override the permissions from the

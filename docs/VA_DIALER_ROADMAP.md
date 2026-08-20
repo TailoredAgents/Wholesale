@@ -599,7 +599,7 @@ The phase table is the progress ledger. Update the status in this file as work s
 | D7 | Recording, transcript, AI notes, and evidence continuity | Implemented; available to approved native campaigns |
 | D8 | Inbound callbacks, manager controls, and operational health | Implemented; available under manager gates |
 | D9 | Analytics, quality, cost, and launch readiness | Implemented; technical controlled-pilot readiness only |
-| D10 | Controlled single-line production acceptance | Planned |
+| D10 | Controlled single-line production acceptance | Workflow implemented; live pilot evidence and owner acceptance still required |
 | D11 | Optional two-line pilot | Planned |
 | D12 | Optional three-line or adaptive pacing pilot | Planned |
 
@@ -1130,18 +1130,79 @@ Exit criteria:
   outcomes without mistaking missing evidence for zero
 - a manager can identify technical blockers and the exact missing measurement coverage before a
   controlled pilot
-- D10 remains Planned and mandatory; D9 output alone cannot authorize general production use
+- D10 remains mandatory and is not production-accepted; its workflow is implemented, but D9 output
+  and an empty D10 record cannot authorize general production use
 
 ### D10. Controlled Single-Line Production Acceptance
 
+Implementation record (2026-08-19):
+
+- Stonegate stores one versioned pilot scope containing exactly one VA, campaign, cohort, calling
+  batch, and dedicated Voice line. A current `smoke_testing`, `running`, or owner-accepted scope is
+  required before a new native dial session may start; smoke sessions remain limited to the saved
+  test records.
+- Technical D9 readiness remains separate from D10 acceptance. A green D9 result can permit the
+  controlled pilot to begin, but it cannot mark the dialer accepted.
+- Starting a draft stores one to ten controlled E.164 numbers from active Stonegate staff
+  forwarding profiles and moves the pilot to `smoke_testing`. Every controlled number must also be
+  an eligible test record in the selected calling batch. While this state is active, the
+  coordinator can reserve only those saved records; durable answered seller-call records with
+  canonical recordings, signed seller-child evidence, every distinct root and child provider call
+  ID, provider-reported charges, and provider references must pass the smoke-test check before the
+  pilot moves to `running` and the rest of the exact batch becomes callable.
+  Selected records prove answered, recorded controlled seller calls, while cost evidence covers
+  every provider-started ID in the entire ended smoke stage, including root-only failures. The
+  smoke stage is bounded at 50 reservations / 100 provider IDs and is excluded from production
+  shift volume and timing.
+- Every pilot attempt receives its own manager acceptance review, including no-answer, voicemail,
+  canceled, failed, and connected outcomes. AI call-quality evidence can support that review but
+  cannot replace it. Canonical recording, transcript, and structured-note evidence is required for
+  applicable connected seller conversations, not for non-contact outcomes that should have no
+  transcript.
+- Each submitted shift is recomputed from linked session, leg, attempt, callback, handoff,
+  recording, transcript, cost, and review evidence. Every reservation counts toward the dial-cap
+  proof; every provider-started root/child graph counts toward billing; only signed seller-child
+  calls count toward volume, productive timing, outcomes, and duplicate checks. The manager must
+  reconcile every distinct provider call ID to its provider-reported charge and a provider
+  usage-export, invoice, or call-detail reference; a typed aggregate total never satisfies the
+  billing gate, while a referenced provider-reported `$0` remains valid.
+- Controlled-number checks, provider-billing reconciliation, a separate BatchDialer comparison,
+  and two server-observed safety drills remain explicit evidence sections. The kill-switch drill
+  requires audited company/campaign switch cycles, stopped sessions, and a real daily-cap
+  reservation denial. The later rollback drill requires a distinct campaign switch cycle, zero
+  live calls, immutable evidence, a hashed unworked remainder, and a subsequent clean shift.
+  Evidence that Stonegate cannot observe directly is labeled as a human attestation rather than
+  presented as an automated fact.
+- Final acceptance is an explicit Owner or Founder/operator decision. The server recomputes every
+  hard gate, requires **ACCEPT SINGLE-LINE DIALER** to accept or **REJECT SINGLE-LINE DIALER** to
+  reject plus a reason, freezes an evidence snapshot and digest, and does not permit a hard-gate
+  override.
+- A material scope or safety-configuration change makes the prior decision unusable for new
+  sessions. Rollback preserves all native evidence and never reactivates the same cohort in
+  BatchDialer automatically.
+- The terminal close control requires **ROLL BACK SINGLE-LINE PILOT** typed exactly. It records an
+  unstarted draft as `cancelled`; only a started pilot is recorded as `rolled_back` with its scope
+  disabled and evidence preserved.
+- Owner acceptance authorizes only the frozen exact scope while the organization acceptance gate
+  remains enabled. An Owner or Founder/operator can type **REVOKE SINGLE-LINE DIALER** with a reason
+  to block every new seller bridge that has not already been authorized for that accepted scope,
+  safely drain provider work already authorized or in progress, and preserve its evidence; the
+  terminal history remains visible while native calling waits for a new D10 pilot.
+
 Rollout:
 
-1. Controlled owner and staff phone numbers.
+1. Add controlled owner and staff test records to the selected batch, start `smoke_testing`, and
+   prove an answered recorded call before broadening the exact pilot to `running`.
 2. One VA and one small non-overlapping campaign.
 3. Review every call, disposition, recording, callback, and handoff.
-4. Confirm daily caps, kill switches, and provider billing.
-5. Run several complete shifts without duplicate calls, lost answers, stuck sessions, or missing
-   callbacks.
+4. Reconcile every distinct root and seller-child provider call ID to its provider-reported charge
+   and provider evidence reference; confirm reservation-based daily caps and the audited kill
+   switches.
+5. Keep the saved daily dial cap between 25 and 50 reservations so the safety cap can still permit
+   a qualifying shift, then pass three fully reviewed shifts on separate local dates, each with at least 25 terminal signed
+   seller calls and 60 minutes of provider-signed right-party conversation time, without duplicate calls,
+   lost answers, stuck sessions, or missing callbacks. At least 75 signed seller calls must qualify
+   in total, and every reserved attempt must have a manager review.
 6. Compare against a separate BatchDialer cohort.
 7. Mark single-line Active only after owner acceptance.
 
@@ -1149,7 +1210,7 @@ Rollback:
 
 - pause the native campaign
 - end all native sessions
-- return an unworked cohort to BatchDialer
+- identify the unworked remainder for a separate, controlled return to BatchDialer
 - keep native call evidence read-only
 - never place the same active cohort in both systems
 
@@ -1157,6 +1218,9 @@ Exit criteria:
 
 - the native single-line dialer is Active for approved campaigns
 - BatchDialer remains available until management makes a later cancellation decision
+
+Shipping the acceptance workflow is not the exit criterion. D10 remains open until the real pilot
+has accumulated the required linked evidence and an authorized owner has accepted it.
 
 ### D11. Optional Two-Line Pilot
 

@@ -118,6 +118,9 @@ def seed_coordinator_graph(db: Session, *, record_count: int = 3) -> Coordinator
     organization = foundation.organization
     organization.prospecting_dialer_enabled = True
     organization.prospecting_dialer_max_concurrent_legs = 3
+    # D3 coordinator tests isolate lease, reservation, and recovery behavior.
+    # D10 acceptance enforcement has its own fail-closed contract suite.
+    organization.prospecting_dialer_acceptance_required = False
     caller = User(
         organization_id=organization.id,
         email="d3-coordinator-caller@example.com",
@@ -863,6 +866,128 @@ def test_pause_resume_and_end_release_an_unstarted_reservation(
     assert leg is not None and leg.status == "cancelled"
     assert leg.reserved_cost_cents == 0
     assert entry is not None and entry.status == "ready"
+
+
+@pytest.mark.parametrize("operation", ["resume", "reserve", "recover"])
+def test_session_mutations_revalidate_d10_pilot_identity_before_control(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+    monkeypatch: MonkeyPatch,
+    operation: str,
+) -> None:
+    graph = seed_coordinator_graph(db_session)
+    settings = settings_factory()
+    now = datetime.now(UTC)
+    start_payload = session_start(graph, suffix=f"pilot-lock-{operation}")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    unexpected_pilot_id = uuid4()
+    monkeypatch.setattr(
+        "app.services.prospecting_dialer.lock_expected_session_pilot",
+        lambda *args, **kwargs: unexpected_pilot_id,
+    )
+    session_id = started.snapshot.session.id
+
+    with pytest.raises(ProspectingDialerConflictError, match="authorization changed"):
+        if operation == "resume":
+            resume_dial_session(
+                db_session,
+                graph.principal,
+                session_id,
+                lease_command(start_payload, started.lease_token),
+                settings=settings,
+                now=now + timedelta(seconds=1),
+            )
+        elif operation == "reserve":
+            reserve_next_dial_record(
+                db_session,
+                graph.principal,
+                session_id,
+                lease_command(start_payload, started.lease_token),
+                settings=settings,
+                now=now + timedelta(seconds=1),
+            )
+        else:
+            recover_dial_session(
+                db_session,
+                graph.principal,
+                session_id,
+                ProspectingDialSessionRecoveryCommand(
+                    previous_browser_session_id=start_payload.browser_session_id,
+                    new_browser_session_id=f"browser-pilot-lock-{operation}",
+                    lease_token=started.lease_token,
+                ),
+                settings=settings,
+                now=now + timedelta(seconds=1),
+            )
+
+
+def test_native_wrap_up_revalidates_d10_pilot_identity_before_auto_advance(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    graph = seed_coordinator_graph(db_session)
+    settings = settings_factory()
+    now = datetime.now(UTC)
+    start_payload = session_start(graph, suffix="pilot-lock-wrap-up")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    assert started.snapshot.current_leg is not None
+    attempt_id = started.snapshot.session.current_attempt_id
+    assert attempt_id is not None
+    leg = db_session.get(ProspectingDialLeg, started.snapshot.current_leg.id)
+    assert leg is not None
+    record_dial_provider_event(
+        db_session,
+        organization_id=graph.organization.id,
+        provider="twilio",
+        external_event_id="d10-wrap-up-pilot-lock-terminal",
+        event_type="call.no_answer",
+        payload={"CallStatus": "no-answer"},
+        dial_leg=leg,
+        target_status="no_answer",
+        occurred_at=now + timedelta(seconds=1),
+        signature_verified=True,
+        signature="verified-test-signature",
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        "app.services.prospecting_dialer.lock_expected_session_pilot",
+        lambda *args, **kwargs: uuid4(),
+    )
+
+    with pytest.raises(ProspectingDialerConflictError, match="authorization changed"):
+        complete_attempt(
+            db_session,
+            graph.principal,
+            attempt_id,
+            ProspectingAttemptComplete(
+                outcome="no_answer",
+                idempotency_key="d10-wrap-up-pilot-lock",
+                browser_session_id=start_payload.browser_session_id,
+                lease_token=started.lease_token,
+            ),
+        )
+
+    db_session.rollback()
+    attempt = db_session.get(ProspectingAttempt, attempt_id)
+    assert attempt is not None
+    assert attempt.status == "in_progress"
 
 
 def test_live_call_deferred_pause_and_stop_are_exposed_in_session_read(

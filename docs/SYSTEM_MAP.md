@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 8, 2026
+Last verified against the repository: August 19, 2026
 
 ## 1. Document Authority
 
@@ -466,7 +466,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Refreshes match existing people, contact methods, properties, and source IDs without resetting
   prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
 - Prospecting cohorts preserve source, list type, market, script, date range, and call window for
-  both BatchDialer campaigns and Stonegate's one-by-one contingency workflow.
+  both BatchDialer campaigns and Stonegate's native one-line workflow.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 - The selected campaign, local section, and deep-link context are preserved with `campaign`,
@@ -484,11 +484,52 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
   commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
   guidance.
-- This workspace is Stonegate's one-by-one contingency workflow. Its calls open through the
-  device `tel:` handler and the VA records the result directly in Stonegate.
-- Production VA volume is worked in BatchDialer after acceptance. Raw cold records, no answers,
-  voicemails, and routine retries stay there. Only provider-qualified leads, initial appointments,
-  and DNC signals cross into Stonegate through the authenticated Zapier intake.
+- The native workbench uses the browser Twilio softphone, a server-reserved queue, short-lived
+  browser ownership, one controlled outbound line, structured qualification, and deterministic
+  wrap-up automation. It does not use the device `tel:` handler.
+- New native sessions require the company, campaign, caller, line, schedule, and compliance gates.
+  When D10 enforcement is enabled, the exact VA, campaign, cohort, batch, line, caps, and safety
+  configuration must also match a `smoke_testing`, `running`, or owner-accepted pilot. The smoke
+  state authorizes only its saved controlled records.
+- BatchDialer remains the production bridge and rollback path while the real D10 pilot gathers
+  evidence. Its qualified-lead, initial-appointment, and DNC events continue to enter Stonegate
+  through the authenticated, idempotent Zapier intake.
+
+**Prospecting > Pilot acceptance (`/os/prospecting?view=pilot`)**
+
+- Manager-only D10 workspace kept separate from the D9 technical-readiness dashboard.
+- Defines one immutable pilot scope: one VA, campaign, cohort, calling batch, and dedicated line.
+- Starting a draft moves it to `smoke_testing` with one to ten active Stonegate staff forwarding
+  numbers that must already be eligible test records in the exact batch. Only those records can be
+  reserved until answered seller-call records, canonical recordings, signed seller-child evidence,
+  exact root and child provider costs, and provider references pass the durable smoke-evidence
+  check and advance the pilot to `running`. The selected records prove successful controlled calls,
+  while billing covers every provider-started ID in the ended smoke stage. Smoke attempts remain
+  outside production-shift volume and timing.
+- Records controlled-number, kill-switch, billing, BatchDialer comparison, rollback, per-attempt,
+  and clean-shift evidence without accepting manually entered aggregate totals as proof.
+- Shift billing reconciles every distinct root and seller-child call ID from every provider-started
+  graph to its provider-reported charge and external usage-export, invoice, or call-detail reference
+  before the server accepts the review. A referenced provider-reported `$0` is valid.
+- Daily dial-cap evidence counts every reservation, provider billing counts every exact
+  provider-started root/child graph, and seller volume, timing, outcomes, and duplicate checks count
+  only terminal calls with signed seller-child evidence.
+- The daily-cap and rollback gates rely on separate server-observed switch cycles, stopped/drained
+  sessions, an actual cap-denied reservation, zero live calls, preserved review hashes, and the
+  hashed unworked remainder; a clean shift must follow the rollback rehearsal.
+- The terminal close control requires **ROLL BACK SINGLE-LINE PILOT**. It records an unstarted
+  draft as `cancelled`; a started pilot becomes `rolled_back` with its scope disabled and evidence
+  retained.
+- Final acceptance requires every server-recomputed hard gate, an Owner or Founder/operator role,
+  **ACCEPT SINGLE-LINE DIALER** typed exactly, and a reason; rejection requires **REJECT SINGLE-LINE
+  DIALER** typed exactly plus its reason. Acceptance authorizes only that frozen
+  scope. The signed evidence snapshot and digest remain retained; a material configuration change
+  invalidates the runtime match. An owner can type **REVOKE SINGLE-LINE DIALER** with a reason to
+  block every new seller bridge that has not already been authorized, safely drain provider work
+  already authorized or in progress, and stop the accepted scope; terminal history remains visible
+  while resuming native calls waits for a new pilot.
+- The workflow is implemented, but the production decision remains pending until three reviewed
+  shifts pass on separate local dates and an authorized owner records acceptance.
 
 **Leads (`/os/leads`)**
 
@@ -696,22 +737,26 @@ redirect to their new owners.
 6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
 7. For the BatchDialer path, the approved export is loaded into its matching external campaign and
-   assigned to an individual VA seat. For contingency work, valid prospects can instead enter a
-   Stonegate cohort-linked calling batch.
+   assigned to an individual VA seat. For a manager-approved native pilot, a separate,
+   non-overlapping cohort enters a Stonegate calling batch assigned to one VA.
 
 ### 8.2 Prospecting
 
-1. A non-manager caller sees only the BatchDialer campaigns assigned to that individual agent
-   login. Stonegate's My Calls workspace remains available for controlled contingency work.
-2. The approved script and required lead sheet guide each connected call.
-3. BatchDialer retains ordinary attempts, callbacks, recordings, and call-center activity. The
+1. A non-manager caller sees only assigned Stonegate calling batches in **My Calls** and only the
+   external campaigns assigned to that person's separate BatchDialer Agent login.
+2. A list must be active in only one dialer. Managers use the D10 pilot scope and explicit
+   BatchDialer comparison evidence to keep the native and external cohorts separate.
+3. In the native path, the approved script and live qualification checklist guide the call; the
+   server records the attempt, provider leg, disposition, callback, recording, transcript,
+   qualification, and any warm handoff directly in Stonegate.
+4. In the BatchDialer path, ordinary attempts and call-center activity stay with BatchDialer. The
    qualified handoff preserves the originating campaign, VA, disposition, notes, seller facts,
    and provider identifiers in Stonegate.
-4. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
-5. Only a truthful call result configured with BatchDialer's **Mark As Lead** rule creates a
+5. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
+6. Only a truthful call result configured with BatchDialer's **Mark As Lead** rule creates a
    structured Stonegate handoff. A separate initial-calendar trigger and DNC trigger do not create
    duplicate leads.
-6. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
+7. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
 
 ### 8.3 Warm Handoff And Lead Creation
 
@@ -1509,7 +1554,7 @@ telemarketing, recording, or real-estate advice.
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 198 operational model classes. They group into:
+The primary SQLAlchemy model file contains 211 operational model classes. They group into:
 
 ### Identity And Organization
 
@@ -1520,8 +1565,9 @@ The primary SQLAlchemy model file contains 198 operational model classes. They g
 
 `Market`, `Territory`, `Campaign`, `Prospect`, import mapping/batch/row records, suppression checks,
 prospecting cohorts, paid/productive work sessions, cohort-attributed campaign costs, calling
-batches and entries, script versions, evidence-classified attempts, structured handoffs, Copilot
-recommendations, reviews, and call quality.
+batches and entries, script versions, dial sessions and provider legs, D10 pilot acceptance and
+attempt/shift reviews, evidence-classified attempts, structured handoffs, Copilot recommendations,
+reviews, and call quality.
 
 ### CRM And Seller Evidence
 

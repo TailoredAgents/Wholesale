@@ -27,6 +27,7 @@ from app.models.foundation import (
     ProspectContactPoint,
     ProspectingAttempt,
     ProspectingCohort,
+    ProspectingDialerPilot,
     ProspectingDialerProfile,
     ProspectingDialLeg,
     ProspectingDialSession,
@@ -181,6 +182,20 @@ def start_dial_session(
     )
     if graph is None:
         return None
+    acceptance_pilot = require_runtime_acceptance_pilot(
+        db,
+        graph,
+        active_settings,
+    )
+    reject_and_record_daily_dial_cap(
+        db,
+        principal,
+        graph,
+        acceptance_pilot,
+        session=None,
+        now=current,
+        commit_audit=True,
+    )
     validate_runtime_policy(db, graph, active_settings, now=current, for_reservation=True)
 
     effective_lines = min(
@@ -199,6 +214,7 @@ def start_dial_session(
     lease_token = secrets.token_urlsafe(32)
     session = ProspectingDialSession(
         organization_id=principal.organization_id,
+        pilot_id=acceptance_pilot.id if acceptance_pilot is not None else None,
         dialer_profile_id=graph.profile.id,
         caller_user_id=principal.user_id,
         campaign_id=graph.campaign.id,
@@ -229,7 +245,15 @@ def start_dial_session(
         ended_at=None,
         stop_reason=None,
         recovery_metadata={},
-        session_metadata={"coordinator_version": "d3", "pause_after_current": False},
+        session_metadata={
+            "coordinator_version": "d3",
+            "pause_after_current": False,
+            **(
+                {"acceptance_stage": acceptance_pilot.status}
+                if acceptance_pilot is not None
+                else {}
+            ),
+        },
         created_by_user_id=principal.user_id,
         updated_by_user_id=principal.user_id,
     )
@@ -403,6 +427,22 @@ def resume_dial_session(
     graph = load_session_runtime_graph(db, session)
     if graph is None:
         raise ProspectingDialerConfigurationError("The dialer session setup is incomplete.")
+    acceptance_pilot = validate_session_acceptance_pilot(
+        db,
+        session,
+        graph,
+        active_settings,
+    )
+    if session.current_attempt_id is None:
+        reject_and_record_daily_dial_cap(
+            db,
+            principal,
+            graph,
+            acceptance_pilot,
+            session=session,
+            now=current,
+            commit_audit=True,
+        )
     validate_runtime_policy(db, graph, active_settings, now=current, for_reservation=False)
     previous = session_snapshot(session)
     metadata = dict(session.session_metadata)
@@ -651,6 +691,21 @@ def reserve_next_dial_record(
     graph = load_session_runtime_graph(db, session)
     if graph is None:
         raise ProspectingDialerConfigurationError("The dialer session setup is incomplete.")
+    acceptance_pilot = validate_session_acceptance_pilot(
+        db,
+        session,
+        graph,
+        active_settings,
+    )
+    reject_and_record_daily_dial_cap(
+        db,
+        principal,
+        graph,
+        acceptance_pilot,
+        session=session,
+        now=current,
+        commit_audit=True,
+    )
     validate_runtime_policy(db, graph, active_settings, now=current, for_reservation=True)
     queue_status = reserve_next_locked(
         db,
@@ -891,6 +946,60 @@ def load_session_runtime_graph(
     )
 
 
+def matching_runtime_acceptance_pilot(
+    db: Session,
+    graph: DialerRuntimeGraph,
+    settings: Settings,
+) -> ProspectingDialerPilot | None:
+    """Resolve the one exact D10 record that authorizes this runtime graph."""
+
+    if not graph.organization.prospecting_dialer_acceptance_required:
+        return None
+    # Local import avoids a module cycle: the acceptance service deliberately
+    # reuses the dialer's canonical runtime graph and policy checks.
+    from app.services.prospecting_dialer_acceptance import matching_active_pilot
+
+    return matching_active_pilot(db, graph, settings)
+
+
+def require_runtime_acceptance_pilot(
+    db: Session,
+    graph: DialerRuntimeGraph,
+    settings: Settings,
+) -> ProspectingDialerPilot | None:
+    """Fail closed when D10 is required and the exact scope is not authorized."""
+
+    pilot = matching_runtime_acceptance_pilot(db, graph, settings)
+    if graph.organization.prospecting_dialer_acceptance_required and pilot is None:
+        raise ProspectingDialerConfigurationError(
+            "This exact VA, campaign, cohort, batch, line, and safety configuration "
+            "does not have an active D10 pilot authorization."
+        )
+    return pilot
+
+
+def validate_session_acceptance_pilot(
+    db: Session,
+    session: ProspectingDialSession,
+    graph: DialerRuntimeGraph,
+    settings: Settings,
+) -> ProspectingDialerPilot | None:
+    """Prevent old or cross-pilot sessions from reserving or starting a call."""
+
+    if graph.organization.prospecting_dialer_acceptance_required and session.pilot_id is None:
+        raise ProspectingDialerConfigurationError(
+            "This dialer session is not attached to a D10 pilot authorization."
+        )
+    pilot = require_runtime_acceptance_pilot(db, graph, settings)
+    if pilot is None:
+        return None
+    if session.pilot_id != pilot.id:
+        raise ProspectingDialerConfigurationError(
+            "This dialer session is not attached to the currently authorized D10 pilot."
+        )
+    return pilot
+
+
 def validate_runtime_policy(
     db: Session,
     graph: DialerRuntimeGraph,
@@ -917,6 +1026,7 @@ def runtime_policy_blockers(
     *,
     now: datetime,
     for_reservation: bool,
+    enforce_acceptance: bool = True,
 ) -> list[str]:
     blockers: list[str] = []
     local_date = cohort_local_date(graph.cohort, now)
@@ -958,6 +1068,8 @@ def runtime_policy_blockers(
         blockers.append("The calling batch no longer matches this campaign and cohort.")
     if graph.profile.voice_line_id != graph.line.id:
         blockers.append("The caller's assigned prospecting line has changed.")
+    if graph.line.assigned_user_id != graph.caller.id:
+        blockers.append("The dedicated prospecting line is assigned to another caller.")
     if graph.line.status != "active" or graph.line.provider != "twilio":
         blockers.append("The assigned Twilio prospecting line is unavailable.")
     if (
@@ -967,6 +1079,20 @@ def runtime_policy_blockers(
         blockers.append("A dedicated acquisitions prospecting-outbound line is required.")
     if not settings.twilio_voice_configured:
         blockers.append("Twilio Voice is not configured for controlled calling.")
+    if (
+        graph.organization.prospecting_dialer_acceptance_required
+        and not settings.twilio_voice_recording_configured
+    ):
+        blockers.append("Twilio call recording and retention are not configured.")
+    if (
+        enforce_acceptance
+        and graph.organization.prospecting_dialer_acceptance_required
+        and matching_runtime_acceptance_pilot(db, graph, settings) is None
+    ):
+        blockers.append(
+            "This exact VA, campaign, cohort, batch, line, and safety configuration "
+            "does not have an active D10 pilot authorization."
+        )
     if (
         min(
             graph.organization.prospecting_dialer_max_concurrent_legs,
@@ -1067,27 +1193,12 @@ def runtime_policy_blockers(
         blockers.append("The assigned Twilio line is already at capacity.")
 
     day_start, day_end = cohort_local_day_bounds(graph.cohort, now)
-    dial_count = (
-        db.scalar(
-            select(func.count(ProspectingDialLeg.id)).where(
-                ProspectingDialLeg.organization_id == graph.organization.id,
-                ProspectingDialLeg.dial_session_id.in_(
-                    select(ProspectingDialSession.id).where(
-                        ProspectingDialSession.organization_id == graph.organization.id,
-                        ProspectingDialSession.caller_user_id == graph.caller.id,
-                    )
-                ),
-                ProspectingDialLeg.queued_at >= day_start,
-                ProspectingDialLeg.queued_at < day_end,
-            )
-        )
-        or 0
-    )
-    if graph.profile.daily_dial_limit is not None:
+    _, dial_count, daily_dial_limit = daily_dial_cap_observation(db, graph, now=now)
+    if daily_dial_limit is not None:
         over_limit = (
-            dial_count >= graph.profile.daily_dial_limit
+            dial_count >= daily_dial_limit
             if for_reservation
-            else dial_count > graph.profile.daily_dial_limit
+            else dial_count > daily_dial_limit
         )
         if over_limit:
             blockers.append("The caller's daily dial limit has been reached.")
@@ -1169,6 +1280,82 @@ def cohort_local_day_bounds(
     return start, end
 
 
+def daily_dial_cap_observation(
+    db: Session,
+    graph: DialerRuntimeGraph,
+    *,
+    now: datetime,
+) -> tuple[date, int, int | None]:
+    """Return the exact caller-local count used by the reservation guard."""
+
+    local_date = cohort_local_date(graph.cohort, now)
+    day_start, day_end = cohort_local_day_bounds(graph.cohort, now)
+    dial_count = (
+        db.scalar(
+            select(func.count(ProspectingDialLeg.id)).where(
+                ProspectingDialLeg.organization_id == graph.organization.id,
+                ProspectingDialLeg.dial_session_id.in_(
+                    select(ProspectingDialSession.id).where(
+                        ProspectingDialSession.organization_id == graph.organization.id,
+                        ProspectingDialSession.caller_user_id == graph.caller.id,
+                    )
+                ),
+                ProspectingDialLeg.queued_at >= day_start,
+                ProspectingDialLeg.queued_at < day_end,
+            )
+        )
+        or 0
+    )
+    return local_date, int(dial_count), graph.profile.daily_dial_limit
+
+
+def reject_and_record_daily_dial_cap(
+    db: Session,
+    principal: Principal,
+    graph: DialerRuntimeGraph,
+    pilot: ProspectingDialerPilot | None,
+    *,
+    session: ProspectingDialSession | None,
+    now: datetime,
+    commit_audit: bool,
+) -> None:
+    """Deny an over-cap reservation and retain server-verifiable D10 evidence."""
+
+    local_date, dial_count, daily_dial_limit = daily_dial_cap_observation(
+        db,
+        graph,
+        now=now,
+    )
+    if daily_dial_limit is None or dial_count < daily_dial_limit:
+        return
+    if pilot is not None:
+        add_audit(
+            db,
+            principal,
+            action="prospecting.dialer_pilot_daily_cap_blocked",
+            entity_type="prospecting_dialer_pilot",
+            entity_id=pilot.id,
+            previous=None,
+            new={
+                "pilot_id": str(pilot.id),
+                "session_id": str(session.id) if session is not None else None,
+                "caller_user_id": str(graph.caller.id),
+                "campaign_id": str(graph.campaign.id),
+                "cohort_id": str(graph.cohort.id),
+                "prospect_calling_batch_id": str(graph.batch.id),
+                "local_date": local_date.isoformat(),
+                "observed_dial_count": dial_count,
+                "daily_dial_limit": daily_dial_limit,
+            },
+            reason="The server rejected a reservation at the frozen D10 daily dial cap",
+        )
+        if commit_audit:
+            db.commit()
+    raise ProspectingDialerConfigurationError(
+        "The caller's daily dial limit has been reached."
+    )
+
+
 def reserve_next_locked(
     db: Session,
     principal: Principal,
@@ -1185,6 +1372,21 @@ def reserve_next_locked(
     if session.state in {"paused", "reconnecting"} | TERMINAL_DIAL_SESSION_STATES:
         raise ProspectingDialerConflictError("This dialer session cannot reserve a record.")
     serialize_reservation_capacity(db, session.organization_id)
+    acceptance_pilot = validate_session_acceptance_pilot(
+        db,
+        session,
+        graph,
+        settings,
+    )
+    reject_and_record_daily_dial_cap(
+        db,
+        principal,
+        graph,
+        acceptance_pilot,
+        session=session,
+        now=now,
+        commit_audit=False,
+    )
     validate_runtime_policy(db, graph, settings, now=now, for_reservation=True)
 
     skipped_ids: list[UUID] = []
@@ -1217,6 +1419,14 @@ def reserve_next_locked(
                 skipped_ids.append(entry.id)
                 continue
             contact_point, recipient = selected
+            if acceptance_pilot is not None:
+                from app.services.prospecting_dialer_acceptance import (
+                    pilot_authorizes_recipient,
+                )
+
+                if not pilot_authorizes_recipient(acceptance_pilot, recipient):
+                    skipped_ids.append(entry.id)
+                    continue
             script = approved_script_for_reservation(db, graph, prospect)
             if script is None:
                 raise ProspectingDialerConfigurationError(
@@ -1608,6 +1818,11 @@ def locked_control_session(
     principal: Principal,
     session_id: UUID,
 ) -> ProspectingDialSession | None:
+    expected_pilot_id = lock_expected_session_pilot(
+        db,
+        organization_id=principal.organization_id,
+        session_id=session_id,
+    )
     session = db.scalar(
         select(ProspectingDialSession)
         .where(
@@ -1617,9 +1832,45 @@ def locked_control_session(
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    if session is not None and session.pilot_id != expected_pilot_id:
+        raise ProspectingDialerConflictError(
+            "The dialer's D10 authorization changed while locking its session."
+        )
     if session is not None and session.caller_user_id != principal.user_id:
         raise PermissionError("Only the assigned caller can control this dialer session.")
     return session
+
+
+def lock_expected_session_pilot(
+    db: Session,
+    *,
+    organization_id: UUID,
+    session_id: UUID,
+) -> UUID | None:
+    """Lock a session's D10 row before acquiring its session/leg locks."""
+
+    pilot_id = db.scalar(
+        select(ProspectingDialSession.pilot_id).where(
+            ProspectingDialSession.id == session_id,
+            ProspectingDialSession.organization_id == organization_id,
+        )
+    )
+    if pilot_id is None:
+        return None
+    pilot = db.scalar(
+        select(ProspectingDialerPilot)
+        .where(
+            ProspectingDialerPilot.id == pilot_id,
+            ProspectingDialerPilot.organization_id == organization_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if pilot is None:
+        raise ProspectingDialerConfigurationError(
+            "The dialer's D10 authorization is unavailable."
+        )
+    return pilot.id
 
 
 def safe_token_match(expected: str | None, provided: str) -> bool:
@@ -2043,10 +2294,10 @@ def validate_native_attempt_can_complete(
     lease_token: str | None,
     now: datetime,
 ) -> tuple[ProspectingDialSession | None, bool]:
-    """Lock the associated native session before the attempt completion transaction."""
+    """Lock Pilot -> Session before the attempt completion transaction."""
 
-    session = db.scalar(
-        select(ProspectingDialSession)
+    session_id = db.scalar(
+        select(ProspectingDialSession.id)
         .join(
             ProspectingDialLeg,
             ProspectingDialLeg.dial_session_id == ProspectingDialSession.id,
@@ -2057,12 +2308,13 @@ def validate_native_attempt_can_complete(
             ProspectingDialLeg.attempt_id == attempt_id,
         )
         .order_by(ProspectingDialSession.created_at.desc())
-        .with_for_update(of=ProspectingDialSession)
-        .execution_options(populate_existing=True)
     )
-    if session is not None:
-        if session.caller_user_id != principal.user_id:
-            raise PermissionError("Only the assigned caller can complete this dialer attempt.")
+    if session_id is not None:
+        session = locked_control_session(db, principal, session_id)
+        if session is None:
+            raise ProspectingDialerConfigurationError(
+                "The native dialer attempt's session disappeared while it was being locked."
+            )
         active = session.ended_at is None and session.current_attempt_id == attempt_id
         if active:
             if browser_session_id is None or lease_token is None:
@@ -2234,15 +2486,7 @@ def validate_reserved_dial_leg_policy(
     expected_call_record_id: UUID | None = None,
 ) -> None:
     require_dialer_work_permission(principal)
-    session = db.scalar(
-        select(ProspectingDialSession)
-        .where(
-            ProspectingDialSession.id == leg.dial_session_id,
-            ProspectingDialSession.organization_id == principal.organization_id,
-        )
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
+    session = locked_control_session(db, principal, leg.dial_session_id)
     if session is None:
         raise ProspectingDialerConflictError("The dialer session no longer exists.")
     locked_leg = db.scalar(
@@ -2278,8 +2522,112 @@ def validate_reserved_dial_leg_policy(
     graph = load_session_runtime_graph(db, session)
     if graph is None:
         raise ProspectingDialerConfigurationError("The dialer session setup is incomplete.")
+    _validate_locked_dial_leg_runtime_and_recipient(
+        db,
+        session,
+        leg,
+        graph,
+        settings,
+        now=now,
+    )
+
+
+def validate_in_flight_dial_leg_policy(
+    db: Session,
+    principal: Principal,
+    leg: ProspectingDialLeg,
+    settings: Settings,
+    *,
+    now: datetime,
+    expected_call_record_id: UUID,
+    expected_provider_call_id: str,
+) -> None:
+    """Revalidate a cellphone bridge after Twilio has started the staff leg.
+
+    This deliberately has a narrower state contract than the pre-provider
+    validator.  It permits only the exact in-flight root call that is waiting
+    for the staff member to press 1, then rechecks every current runtime,
+    acceptance, suppression, and recipient control before Twilio may dial the
+    seller.
+    """
+
+    require_dialer_work_permission(principal)
+    session = locked_control_session(db, principal, leg.dial_session_id)
+    if session is None:
+        raise ProspectingDialerConflictError("The dialer session no longer exists.")
+    locked_leg = db.scalar(
+        select(ProspectingDialLeg)
+        .where(
+            ProspectingDialLeg.id == leg.id,
+            ProspectingDialLeg.organization_id == principal.organization_id,
+            ProspectingDialLeg.dial_session_id == session.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_leg is None:
+        raise ProspectingDialerConflictError("The in-flight dial record no longer exists.")
+    leg = locked_leg
+    if session.caller_user_id != principal.user_id:
+        raise PermissionError("This dial record is assigned to another caller.")
+    if session.state != "dialing" or leg.status != "dialing":
+        raise ProspectingDialerConflictError(
+            "This dial record is not waiting for a staff bridge connection."
+        )
+    if (
+        session.current_prospect_id != leg.prospect_id
+        or session.current_batch_entry_id != leg.batch_entry_id
+        or session.current_attempt_id != leg.attempt_id
+    ):
+        raise ProspectingDialerConflictError("The session no longer owns this dial record.")
+    if session.lease_expires_at is None or as_utc(session.lease_expires_at) <= now:
+        raise ProspectingDialerConflictError("The dialer lease expired and must be recovered.")
+    if (
+        leg.call_record_id != expected_call_record_id
+        or leg.provider_call_id != expected_provider_call_id
+    ):
+        raise ProspectingDialerConflictError(
+            "The staff bridge does not match this dial record's provider evidence."
+        )
+    graph = load_session_runtime_graph(db, session)
+    if graph is None:
+        raise ProspectingDialerConfigurationError("The dialer session setup is incomplete.")
+    _validate_locked_dial_leg_runtime_and_recipient(
+        db,
+        session,
+        leg,
+        graph,
+        settings,
+        now=now,
+    )
+
+
+def _validate_locked_dial_leg_runtime_and_recipient(
+    db: Session,
+    session: ProspectingDialSession,
+    leg: ProspectingDialLeg,
+    graph: DialerRuntimeGraph,
+    settings: Settings,
+    *,
+    now: datetime,
+) -> None:
+    """Apply shared live policy after the session and leg are locked."""
+
     validate_runtime_policy(db, graph, settings, now=now, for_reservation=False)
+    acceptance_pilot = validate_session_acceptance_pilot(
+        db,
+        session,
+        graph,
+        settings,
+    )
     recipient = format_e164(leg.recipient)
+    if acceptance_pilot is not None:
+        from app.services.prospecting_dialer_acceptance import pilot_authorizes_recipient
+
+        if recipient is None or not pilot_authorizes_recipient(acceptance_pilot, recipient):
+            raise ProspectingDialerConfigurationError(
+                "This recipient is not authorized by the active D10 pilot stage."
+            )
     if recipient is None or is_phone_suppressed(db, session.organization_id, recipient):
         raise ProspectingDialerConflictError("This phone number is currently suppressed.")
     prospect = db.scalar(
@@ -2344,8 +2692,14 @@ def _hard_runtime_stop_reason(
         graph.line.status != "active"
         or graph.line.provider != "twilio"
         or graph.profile.voice_line_id != graph.line.id
+        or graph.line.assigned_user_id != graph.caller.id
     ):
         return "The assigned prospecting voice line was disabled"
+    if (
+        graph.organization.prospecting_dialer_acceptance_required
+        and not settings.twilio_voice_recording_configured
+    ):
+        return "Twilio call recording or retention was disabled"
     return None
 
 
@@ -2361,6 +2715,11 @@ def apply_runtime_kill_if_needed(
     except (PermissionError, ProspectingDialerConfigurationError):
         graph = None
     reason = _hard_runtime_stop_reason(graph, settings)
+    if reason is None and graph is not None:
+        try:
+            validate_session_acceptance_pilot(db, session, graph, settings)
+        except ProspectingDialerConfigurationError as exc:
+            reason = str(exc)
     if reason is None or session.state in TERMINAL_DIAL_SESSION_STATES:
         return
     leg = current_session_leg(db, session, lock=True)

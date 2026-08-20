@@ -33,6 +33,7 @@ from app.models.foundation import (
     ProspectCallingBatchEntry,
     ProspectContactPoint,
     ProspectingAttempt,
+    ProspectingDialerPilot,
     ProspectingDialerProfile,
     ProspectingDialLeg,
     ProspectingDialSession,
@@ -57,10 +58,12 @@ from app.services.prospecting_dialer import (
     advance_dial_leg_provider_state,
     as_utc,
     dial_leg_read,
+    lock_expected_session_pilot,
     reconcile_dial_session_from_leg,
     reconcile_session_current_leg,
     record_dial_provider_event,
     release_unstarted_reservation,
+    validate_in_flight_dial_leg_policy,
     validate_reserved_dial_leg_policy,
     validate_session_lease,
 )
@@ -706,6 +709,47 @@ def dispatch_prepared_voice_call(
     # explicit and prevents a retry from placing a duplicate call.
     db.commit()
 
+    # A manager can flip a company/campaign kill switch while the callback-safe
+    # marker commit releases its locks. Re-read every live D10/runtime control
+    # immediately before the provider request; never rely on the pre-commit view.
+    dispatch_graph = load_authorized_graph(db, principal, dial_leg_id, lock=True)
+    if dispatch_graph is None:
+        raise ProspectingVoiceConflictError(
+            "The dial record disappeared before provider dispatch."
+        )
+    dispatch_intent, dispatch_call = load_graph_call(db, dispatch_graph, lock=True)
+    if dispatch_intent.id != intent_id or dispatch_call.id != call_id:
+        raise ProspectingVoiceConflictError(
+            "The provider dispatch marker no longer matches this dial record."
+        )
+    try:
+        validate_reserved_dial_leg_policy(
+            db,
+            principal,
+            dispatch_graph.leg,
+            settings,
+            now=datetime.now(UTC),
+            expected_call_record_id=dispatch_call.id,
+        )
+    except (ProspectingDialerConflictError, ProspectingDialerConfigurationError) as exc:
+        mark_start_failure(
+            db,
+            dispatch_graph,
+            dispatch_intent,
+            dispatch_call,
+            f"Provider dispatch was stopped by a current runtime control: {exc}",
+        )
+        db.commit()
+        if isinstance(exc, ProspectingDialerConfigurationError):
+            raise ProspectingVoiceConfigurationError(str(exc)) from exc
+        raise ProspectingVoiceConflictError(str(exc)) from exc
+
+    # Keep the Pilot -> Session -> Leg locks acquired by load_authorized_graph
+    # through the provider start. Otherwise revocation can commit after this
+    # final policy check but before Twilio accepts the call, allowing one call
+    # to escape a kill switch. Twilio's synchronous callback may briefly wait
+    # for the transaction, and is reconciled after the provider result below.
+
     try:
         result = (provider or get_twilio_voice_call_provider()).start(
             to=forwarding_number,
@@ -1181,9 +1225,18 @@ def validate_prospecting_connect_intent(
     db: Session,
     intent: VoiceCallIntent,
     payload: dict[str, str],
+    *,
+    expected_pilot_id: UUID | None = None,
 ) -> None:
     if intent.prospect_id is None:
         return
+    require_connection_mode(intent, PROSPECTING_CELLPHONE_CONNECTION_MODE)
+    if provider_start_state(intent) != PROVIDER_START_STARTED:
+        raise ProspectingVoiceConflictError(
+            "The staff bridge has not reached its provider-start boundary."
+        )
+    if (intent.intent_metadata or {}).get("seller_bridge_authorized_at"):
+        raise ProspectingVoiceConflictError("The seller bridge was already authorized.")
     call = db.scalar(
         select(CallRecord).where(
             CallRecord.organization_id == intent.organization_id,
@@ -1195,12 +1248,96 @@ def validate_prospecting_connect_intent(
         raise ProspectingVoiceConfigurationError(
             "Prospecting call intent is not attached to an active dial leg."
         )
+    if graph.session.pilot_id != expected_pilot_id:
+        raise ProspectingVoiceConflictError(
+            "The dialer's D10 authorization changed before seller connection."
+        )
     if graph.leg.status in DIAL_LEG_TERMINAL_STATUSES | {"cancelling"}:
         raise ProspectingVoiceConflictError("The prospecting call is no longer connectable.")
     root_sid = payload.get("CallSid")
     if not root_sid:
         raise ValueError("Provider connect request is missing its root call ID.")
+    if (
+        graph.attempt.status != "in_progress"
+        or call.status != "dialing"
+        or call.ended_at is not None
+        or call.child_provider_call_id is not None
+        or intent.provider_call_id != root_sid
+        or call.provider_call_id != root_sid
+        or graph.leg.provider_call_id != root_sid
+        or graph.attempt.provider_call_id != root_sid
+    ):
+        raise ProspectingVoiceConflictError(
+            "The staff bridge does not match the active provider call."
+        )
+    principal = principal_for_user(db, graph.caller)
+    try:
+        validate_in_flight_dial_leg_policy(
+            db,
+            principal,
+            graph.leg,
+            get_settings(),
+            now=datetime.now(UTC),
+            expected_call_record_id=call.id,
+            expected_provider_call_id=root_sid,
+        )
+    except ProspectingDialerConflictError as exc:
+        raise ProspectingVoiceConflictError(str(exc)) from exc
+    except ProspectingDialerConfigurationError as exc:
+        raise ProspectingVoiceConfigurationError(str(exc)) from exc
     ensure_root_provider_call_id(db, graph, call, root_sid)
+    metadata = dict(intent.intent_metadata or {})
+    metadata["seller_bridge_authorized_at"] = datetime.now(UTC).isoformat()
+    intent.intent_metadata = metadata
+
+
+def lock_prospecting_connect_pilot(
+    db: Session,
+    intent_id: UUID,
+) -> UUID | None:
+    """Lock D10 authorization before any intent/session/leg bridge locks.
+
+    Revocation uses the same pilot-first order.  The bridge later revalidates
+    this identifier after locking its exact runtime graph, so a stale pre-read
+    can never authorize a seller connection.
+    """
+
+    identity = db.execute(
+        select(
+            VoiceCallIntent.prospect_id,
+            ProspectingDialSession.pilot_id,
+        )
+        .join(CallRecord, CallRecord.call_intent_id == VoiceCallIntent.id)
+        .join(
+            ProspectingDialLeg,
+            ProspectingDialLeg.id == CallRecord.prospecting_dial_leg_id,
+        )
+        .join(
+            ProspectingDialSession,
+            ProspectingDialSession.id == ProspectingDialLeg.dial_session_id,
+        )
+        .where(VoiceCallIntent.id == intent_id)
+    ).one_or_none()
+    if identity is None or identity.prospect_id is None or identity.pilot_id is None:
+        return None
+    pilot = db.scalar(
+        select(ProspectingDialerPilot)
+        .where(
+            ProspectingDialerPilot.id == identity.pilot_id,
+            ProspectingDialerPilot.organization_id == db.scalar(
+                select(VoiceCallIntent.organization_id).where(
+                    VoiceCallIntent.id == intent_id
+                )
+            ),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if pilot is None:
+        raise ProspectingVoiceConfigurationError(
+            "The dialer's D10 authorization is unavailable."
+        )
+    return pilot.id
 
 
 def process_browser_prospecting_outbound_request(
@@ -1324,6 +1461,15 @@ def load_authorized_graph(
     )
     if session_id is None:
         return None
+    expected_pilot_id = (
+        lock_expected_session_pilot(
+            db,
+            organization_id=principal.organization_id,
+            session_id=session_id,
+        )
+        if lock
+        else None
+    )
     if lock:
         session = db.scalar(
             select(ProspectingDialSession)
@@ -1336,6 +1482,10 @@ def load_authorized_graph(
         )
         if session is None:
             return None
+        if session.pilot_id != expected_pilot_id:
+            raise ProspectingVoiceConflictError(
+                "The dialer's D10 authorization changed while locking its call graph."
+            )
     statement = select(ProspectingDialLeg).where(
         ProspectingDialLeg.id == dial_leg_id,
         ProspectingDialLeg.organization_id == principal.organization_id,
@@ -1370,6 +1520,15 @@ def load_callback_graph(
     )
     if session_id is None:
         return None
+    expected_pilot_id = (
+        lock_expected_session_pilot(
+            db,
+            organization_id=call.organization_id,
+            session_id=session_id,
+        )
+        if lock
+        else None
+    )
     if lock:
         session = db.scalar(
             select(ProspectingDialSession)
@@ -1382,6 +1541,10 @@ def load_callback_graph(
         )
         if session is None:
             return None
+        if session.pilot_id != expected_pilot_id:
+            raise ProspectingVoiceConflictError(
+                "The dialer's D10 authorization changed while locking its call graph."
+            )
     statement = select(ProspectingDialLeg).where(
         ProspectingDialLeg.id == call.prospecting_dial_leg_id,
         ProspectingDialLeg.organization_id == call.organization_id,
@@ -1587,6 +1750,10 @@ def ensure_root_provider_call_id(
     graph.leg.provider_call_id = normalized_id
     graph.attempt.provider = graph.line.provider
     graph.attempt.provider_call_id = normalized_id
+    # Tests and production workers intentionally run with autoflush disabled.
+    # Persist the root binding before any provider-event reconciliation reloads
+    # the same leg with ``populate_existing`` and could otherwise erase it.
+    db.flush([intent, call, graph.leg, graph.attempt])
 
 
 def ensure_child_provider_call_id(

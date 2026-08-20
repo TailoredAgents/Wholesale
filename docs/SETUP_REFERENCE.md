@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: August 8, 2026
+Last verified against the repository: August 19, 2026
 
 ## Purpose
 
@@ -901,6 +901,89 @@ explicit owner acceptance.
 
 BatchDialer and its qualified-lead and appointment Zaps remain the operating bridge and rollback
 path throughout D9 and D10. D9 does not modify or disable them.
+
+### D10 Controlled Pilot And Owner Acceptance
+
+Open **Prospecting > Pilot acceptance** only after the D9 technical blockers are clear. The D10
+workflow is implemented, but Stonegate has not completed its live production acceptance. Each
+record binds the rollout to one VA, campaign, cohort, calling batch, and dedicated line. When D10
+acceptance enforcement is enabled, a matching `smoke_testing`, `running`, or owner-accepted scope
+is required before a new native dial session can start; a campaign switch by itself is not
+acceptance.
+
+Starting a draft requires one to ten unique controlled E.164 numbers from active Stonegate staff
+forwarding profiles. Each number must also belong to an eligible test prospect in the selected
+calling batch. Start moves the record to `smoke_testing`; in that state, the coordinator can reserve
+only those saved test records. Complete an answered controlled seller call with a durable call
+record, canonical signed recording, signed seller-child evidence, every root and seller-child
+provider call ID, the provider-reported charge for each ID, and provider evidence references;
+refresh the workspace and save those exact records under **Smoke test**. Only server-validated smoke
+evidence moves the exact pilot to `running` and makes the remaining eligible batch records callable.
+The selected records prove at least one answered, recorded controlled seller call; cost evidence
+must separately cover every provider-started root or child ID from the entire ended smoke stage,
+including root-only failures. Smoke is bounded at 50 reservations / 100 provider IDs, and none of
+its staff test calls count toward production-shift volume or time.
+
+The first pilot uses these non-overridable ceilings and evidence minimums:
+
+- one effective line at the runtime, company, VA, campaign, and Voice-line layers;
+- a 75-to-250-record pilot batch;
+- a daily dial cap between 25 and 50 reservations, plus no more than $10 of reserved provider spend
+  per VA local date, so the safety cap still permits the required 25-call clean shift;
+- three passing shifts on separate local dates;
+- at least 60 minutes of provider-signed right-party conversation time and 25 terminal, signed seller calls
+  in each passing shift;
+- at least 75 qualifying signed seller calls total and a manager review for every reserved attempt,
+  including safe pre-provider releases and root-only provider failures;
+- zero lost answers, unintended duplicates, stuck sessions, missing callbacks, complaints, or
+  unresolved compliance escalations;
+- complete per-call provider-started cost reconciliation, controlled-number testing, kill-switch
+  testing, a disjoint BatchDialer comparison, and a completed rollback drill.
+
+The pilot UI never accepts typed aggregate counts as proof. It derives counts and relationships from
+the persisted session, leg, attempt, callback, handoff, call-record, transcript, work-session, and
+review records. For every provider-started graph in a shift, the manager enters the provider-reported
+charge and a source reference for each distinct root and seller-child call ID from the provider
+usage export, invoice, or call-detail record. Stonegate checks one-to-one call-ID coverage and
+stores the reconciled per-ID values. A provider-documented `$0` charge is valid; a guessed or
+unreferenced zero is not. The shift remains blocked while any pilot provider graph on that local
+date is ambiguous or lacks reconciled cost evidence. It identifies other external evidence separately
+when the current BatchDialer Zap cannot verify it. All pilot reads are private/no-store, and every
+mutation uses an idempotency key plus the expected pilot revision so a stale manager tab cannot
+overwrite newer evidence.
+
+Connected seller conversations must have the canonical recording, completed transcript, and
+structured notes before their attempt review can pass. A no-answer, voicemail, wrong-party,
+canceled, or other non-contact attempt still requires a truthful terminal disposition, manager
+review, compliance check, and provider-cost reconciliation, but it does not wait for a transcript
+that should never be created.
+
+The kill-switch exercise passes only from server-observed company and campaign off-then-on audit
+pairs, stopped or drained pilot sessions, zero live sessions at capture, and an actual reservation
+denial recorded after the VA reached the daily dial cap. The later rollback rehearsal must use a
+different campaign off-then-on pair, stop or drain a real pilot session, leave zero active sessions
+and legs, preserve immutable attempt/shift evidence, and hash the still-unworked batch remainder.
+A clean passing shift must occur after that rehearsal. The separate **Rollback native pilot** action
+requires **ROLL BACK SINGLE-LINE PILOT** typed exactly. On an unstarted draft it records a
+`cancelled` pilot without pretending a live rollback occurred. On a started pilot it records
+`rolled_back`, disables the scoped native campaign, safely drains or stops its sessions, preserves
+native history, and identifies the unworked remainder. Neither action edits or enables BatchDialer
+automatically.
+
+Final approval is owner-only. The Owner or Founder/operator must type **ACCEPT SINGLE-LINE DIALER**
+to accept or **REJECT SINGLE-LINE DIALER** to reject, and provide a reason. The API recalculates all hard gates transactionally, freezes the evidence
+snapshot and digest, and refuses approval while any required evidence is failed, partial, unknown,
+or in flight. Until the real shifts pass and that decision is recorded, the native dialer is not
+production-accepted and BatchDialer remains the operating bridge.
+
+Acceptance authorizes only that frozen VA, campaign, cohort, batch, dedicated line, caps, and safety
+configuration; the organization-wide acceptance gate stays enabled. An authorized owner can stop
+the accepted scope from **Pilot acceptance** by entering a reason and typing **REVOKE SINGLE-LINE
+DIALER** exactly. Revocation disables the scope, ends or drains its sessions, and preserves all
+evidence. Every new seller bridge that has not already been authorized is blocked, while provider
+work already authorized or in progress drains safely. It does
+not reactivate BatchDialer automatically, and native calling cannot resume from that authorization:
+the terminal pilot remains visible while a manager creates and passes a new D10 pilot.
 
 ### D4 Controlled Acceptance Boundary
 

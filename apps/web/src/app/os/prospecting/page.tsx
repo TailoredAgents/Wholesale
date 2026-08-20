@@ -1,4 +1,4 @@
-import { BarChart3, ListChecks, Megaphone, SlidersHorizontal } from "lucide-react";
+import { BarChart3, ClipboardCheck, ListChecks, Megaphone, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -6,6 +6,7 @@ import {
   getCampaignManagementOverview,
   getProspectingDialerAnalytics,
   getProspectingDialerOperations,
+  getProspectingDialerPilot,
   getProspectingInboundCallbacks,
   getProspectingWorkbench,
   getWorkspaceProfile,
@@ -14,12 +15,13 @@ import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-con
 import { CampaignManagementWorkspace } from "../campaigns/campaign-management-workspace";
 import { ProspectingAnalytics } from "./prospecting-analytics";
 import { ProspectingDialerControl } from "./prospecting-dialer-control";
+import { ProspectingPilotAcceptance } from "./prospecting-pilot-acceptance";
 import { ProspectingWorkspace } from "./prospecting-workspace";
 import styles from "./prospecting.module.css";
 
 export const dynamic = "force-dynamic";
 
-type ProspectingView = "campaigns" | "dialer-control" | "my-calls" | "analytics";
+type ProspectingView = "campaigns" | "dialer-control" | "my-calls" | "analytics" | "pilot";
 
 export default async function ProspectingPage({
   searchParams,
@@ -38,7 +40,8 @@ export default async function ProspectingPage({
     ? requestedView === "my-calls" ||
       requestedView === "campaigns" ||
       requestedView === "dialer-control" ||
-      requestedView === "analytics"
+      requestedView === "analytics" ||
+      requestedView === "pilot"
       ? requestedView
       : "campaigns"
     : "my-calls";
@@ -53,18 +56,19 @@ export default async function ProspectingPage({
     dialerOperationsResult,
     callbackResult,
     analyticsResult,
+    pilotResult,
   ] =
     await Promise.all([
       view === "my-calls" || (canManage && view === "dialer-control")
         ? getProspectingWorkbench()
         : Promise.resolve({ prospecting: null, apiConnected: true }),
-      canManage && (view === "campaigns" || view === "dialer-control")
+      canManage && (view === "campaigns" || view === "dialer-control" || view === "pilot")
         ? getCampaignManagementOverview()
         : Promise.resolve({ campaignManagement: null, apiConnected: true }),
       canManage && view === "campaigns"
         ? getAcquisitionOperations()
         : Promise.resolve({ operations: null, apiConnected: true }),
-      canManage && view === "dialer-control"
+      canManage && (view === "dialer-control" || view === "pilot")
         ? getProspectingDialerOperations()
         : Promise.resolve({ dialerOperations: null, apiConnected: true }),
       view === "my-calls"
@@ -73,19 +77,24 @@ export default async function ProspectingPage({
       canManage && view === "analytics"
         ? getProspectingDialerAnalytics()
         : Promise.resolve({ dialerAnalytics: null, apiConnected: true }),
+      canManage && view === "pilot"
+        ? getProspectingDialerPilot()
+        : Promise.resolve({ dialerPilot: null, apiConnected: true }),
     ]);
   const campaignManagement = campaignResult.campaignManagement;
   const operations = operationsResult.operations;
   const dialerOperations = dialerOperationsResult.dialerOperations;
   const callbacks = callbackResult.callbacks;
   const dialerAnalytics = analyticsResult.dialerAnalytics;
+  const dialerPilot = pilotResult.dialerPilot;
   const connected =
     apiConnected &&
     campaignResult.apiConnected &&
     operationsResult.apiConnected &&
     dialerOperationsResult.apiConnected &&
     callbackResult.apiConnected &&
-    analyticsResult.apiConnected;
+    analyticsResult.apiConnected &&
+    pilotResult.apiConnected;
 
   return (
     <WorkspacePage>
@@ -95,6 +104,8 @@ export default async function ProspectingPage({
             ? "Create outreach campaigns, import prospect lists, assign calling work, and measure results."
             : view === "dialer-control"
               ? "Activate callers and campaigns, monitor live sessions, and recover stalled calling work safely."
+              : view === "pilot"
+                ? "Run a small controlled pilot, verify every shift, reconcile costs, and record the owner's final decision."
               : view === "analytics"
                 ? "Compare source economics, caller performance, data quality, and technical readiness for a controlled native-dialer pilot."
                 : "Work assigned prospects, handle callbacks, record call outcomes, and complete warm handoffs."
@@ -104,6 +115,8 @@ export default async function ProspectingPage({
             ? "Outreach management"
             : view === "dialer-control"
               ? "Dialer operations"
+              : view === "pilot"
+                ? "Controlled pilot acceptance"
               : view === "analytics"
                 ? "Performance and readiness"
                 : "Caller execution"
@@ -137,6 +150,14 @@ export default async function ProspectingPage({
             >
               <BarChart3 aria-hidden="true" size={16} />
               <span>Analytics</span>
+            </Link>
+            <Link
+              aria-current={view === "pilot" ? "page" : undefined}
+              className={view === "pilot" ? styles.activeHubNavigation : undefined}
+              href="/os/prospecting?view=pilot"
+            >
+              <ClipboardCheck aria-hidden="true" size={16} />
+              <span>Pilot acceptance</span>
             </Link>
           </>
         ) : null}
@@ -183,6 +204,13 @@ export default async function ProspectingPage({
         >
           <div />
         </SectionPanel>
+      ) : view === "pilot" && canManage ? (
+        <ProspectingPilotAcceptance
+          campaignManagement={campaignManagement}
+          dialerOperations={dialerOperations}
+          initialApiConnected={pilotResult.apiConnected}
+          initialData={dialerPilot}
+        />
       ) : prospecting ? (
         <ProspectingWorkspace
           data={prospecting}

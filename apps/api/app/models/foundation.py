@@ -49,6 +49,12 @@ class Organization(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=1,
         server_default="1",
     )
+    prospecting_dialer_acceptance_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
 
 
 class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -876,6 +882,241 @@ class ProspectingDialerProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class ProspectingDialerPilot(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Immutable-scope D10 production acceptance for one native dialer pilot."""
+
+    __tablename__ = "prospecting_dialer_pilots"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'smoke_testing', 'running', 'ready_for_owner_review', 'accepted', "
+            "'rejected', 'rolled_back', 'revoked', 'cancelled')",
+            name="ck_prospecting_dialer_pilots_status",
+        ),
+        CheckConstraint(
+            "revision >= 1",
+            name="ck_prospecting_dialer_pilots_revision",
+        ),
+        CheckConstraint(
+            "effective_line_count = 1",
+            name="ck_prospecting_dialer_pilots_one_line",
+        ),
+        CheckConstraint(
+            "length(trim(timezone)) > 0",
+            name="ck_prospecting_dialer_pilots_timezone",
+        ),
+        CheckConstraint(
+            "required_clean_shift_count >= 3 "
+            "AND minimum_attempts_per_shift >= 25 "
+            "AND minimum_productive_minutes_per_shift >= 60 "
+            "AND minimum_total_attempts >= 75 "
+            "AND minimum_total_attempts >= "
+            "required_clean_shift_count * minimum_attempts_per_shift",
+            name="ck_prospecting_dialer_pilots_thresholds",
+        ),
+        CheckConstraint(
+            "minimum_batch_size >= 75 "
+            "AND maximum_batch_size <= 250 "
+            "AND minimum_batch_size <= maximum_batch_size",
+            name="ck_prospecting_dialer_pilots_batch_bounds",
+        ),
+        CheckConstraint(
+            "daily_dial_limit BETWEEN 25 AND 50",
+            name="ck_prospecting_dialer_pilots_daily_dials",
+        ),
+        CheckConstraint(
+            "daily_spend_limit_cents BETWEEN 1 AND 1000",
+            name="ck_prospecting_dialer_pilots_daily_spend",
+        ),
+        CheckConstraint(
+            "length(configuration_fingerprint) = 64",
+            name="ck_prospecting_dialer_pilots_fingerprint",
+        ),
+        CheckConstraint(
+            "evidence_hash IS NULL OR length(evidence_hash) = 64",
+            name="ck_prospecting_dialer_pilots_evidence_hash",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'cancelled') "
+            "OR (started_at IS NOT NULL AND started_by_user_id IS NOT NULL)",
+            name="ck_prospecting_dialer_pilots_started",
+        ),
+        CheckConstraint(
+            "status NOT IN ('ready_for_owner_review', 'accepted', 'rejected', 'revoked') "
+            "OR (submitted_at IS NOT NULL AND submitted_by_user_id IS NOT NULL "
+            "AND submission_reason IS NOT NULL AND length(trim(submission_reason)) > 0 "
+            "AND evidence_hash IS NOT NULL)",
+            name="ck_prospecting_dialer_pilots_submitted",
+        ),
+        CheckConstraint(
+            "status NOT IN ('accepted', 'revoked') "
+            "OR (accepted_at IS NOT NULL AND accepted_by_user_id IS NOT NULL "
+            "AND acceptance_reason IS NOT NULL AND length(trim(acceptance_reason)) > 0)",
+            name="ck_prospecting_dialer_pilots_accepted",
+        ),
+        CheckConstraint(
+            "status <> 'rejected' "
+            "OR (rejected_at IS NOT NULL AND rejected_by_user_id IS NOT NULL "
+            "AND rejection_reason IS NOT NULL AND length(trim(rejection_reason)) > 0)",
+            name="ck_prospecting_dialer_pilots_rejected",
+        ),
+        CheckConstraint(
+            "status <> 'rolled_back' "
+            "OR (rolled_back_at IS NOT NULL AND rolled_back_by_user_id IS NOT NULL "
+            "AND rollback_reason IS NOT NULL AND length(trim(rollback_reason)) > 0 "
+            "AND evidence_hash IS NOT NULL)",
+            name="ck_prospecting_dialer_pilots_rolled_back",
+        ),
+        CheckConstraint(
+            "status <> 'revoked' "
+            "OR (revoked_at IS NOT NULL AND revoked_by_user_id IS NOT NULL "
+            "AND revocation_reason IS NOT NULL AND length(trim(revocation_reason)) > 0)",
+            name="ck_prospecting_dialer_pilots_revoked",
+        ),
+        CheckConstraint(
+            "status <> 'cancelled' "
+            "OR (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL "
+            "AND cancellation_reason IS NOT NULL "
+            "AND length(trim(cancellation_reason)) > 0)",
+            name="ck_prospecting_dialer_pilots_cancelled",
+        ),
+        Index(
+            "uq_prospecting_dialer_pilots_open_org",
+            "organization_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('draft', 'smoke_testing', 'running', 'ready_for_owner_review')"
+            ),
+            sqlite_where=text(
+                "status IN ('draft', 'smoke_testing', 'running', 'ready_for_owner_review')"
+            ),
+        ),
+        Index(
+            "uq_prospecting_dialer_pilots_accepted_scope",
+            "organization_id",
+            "caller_user_id",
+            "campaign_id",
+            "cohort_id",
+            "prospect_calling_batch_id",
+            "voice_line_id",
+            unique=True,
+            postgresql_where=text("status = 'accepted'"),
+            sqlite_where=text("status = 'accepted'"),
+        ),
+        Index("ix_prospecting_dialer_pilots_organization_id", "organization_id"),
+        Index("ix_prospecting_dialer_pilots_caller_user_id", "caller_user_id"),
+        Index("ix_prospecting_dialer_pilots_campaign_id", "campaign_id"),
+        Index("ix_prospecting_dialer_pilots_cohort_id", "cohort_id"),
+        Index(
+            "ix_prospecting_dialer_pilots_prospect_calling_batch_id",
+            "prospect_calling_batch_id",
+        ),
+        Index("ix_prospecting_dialer_pilots_voice_line_id", "voice_line_id"),
+        Index("ix_prospecting_dialer_pilots_status", "status"),
+        Index("ix_prospecting_dialer_pilots_evidence_hash", "evidence_hash"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    caller_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"))
+    cohort_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospecting_cohorts.id"))
+    prospect_calling_batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_calling_batches.id")
+    )
+    voice_line_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("voice_lines.id"))
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", server_default="draft"
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    effective_line_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    timezone: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="America/New_York", server_default="America/New_York"
+    )
+    required_clean_shift_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default="3"
+    )
+    minimum_attempts_per_shift: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=25, server_default="25"
+    )
+    minimum_productive_minutes_per_shift: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60, server_default="60"
+    )
+    minimum_total_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=75, server_default="75"
+    )
+    minimum_batch_size: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=75, server_default="75"
+    )
+    maximum_batch_size: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=250, server_default="250"
+    )
+    daily_dial_limit: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=50, server_default="50"
+    )
+    daily_spend_limit_cents: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1000, server_default="1000"
+    )
+    configuration_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    start_attestation: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    smoke_test_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    kill_switch_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    batchdialer_comparison_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    rollback_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    final_evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    evidence_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    started_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submission_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    accepted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acceptance_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    rejected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    rolled_back_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    cancelled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
 class ProspectingDialSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """Durable browser calling shift; at most one may be active for a VA."""
 
@@ -970,6 +1211,12 @@ class ProspectingDialSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     dialer_profile_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("prospecting_dialer_profiles.id"), index=True
+    )
+    pilot_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_dialer_pilots.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     caller_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
@@ -1263,6 +1510,247 @@ class ProspectingDialLeg(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=dict,
         server_default=text("'{}'"),
     )
+
+
+class ProspectingDialerPilotAttemptReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Human decision over an immutable server-built D10 attempt snapshot."""
+
+    __tablename__ = "prospecting_dialer_pilot_attempt_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'passed', 'failed')",
+            name="ck_prospecting_pilot_attempt_reviews_status",
+        ),
+        CheckConstraint(
+            "server_dial_leg_count >= 0 "
+            "AND server_terminal_leg_count >= 0 "
+            "AND server_terminal_leg_count <= server_dial_leg_count",
+            name="ck_prospecting_pilot_attempt_reviews_counts",
+        ),
+        CheckConstraint(
+            "length(evidence_hash) = 64",
+            name="ck_prospecting_pilot_attempt_reviews_hash",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL) "
+            "OR (status IN ('passed', 'failed') "
+            "AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_prospecting_pilot_attempt_reviews_decision",
+        ),
+        CheckConstraint(
+            "status <> 'failed' OR (review_reason IS NOT NULL AND length(trim(review_reason)) > 0)",
+            name="ck_prospecting_pilot_attempt_reviews_failure_reason",
+        ),
+        CheckConstraint(
+            "status <> 'passed' OR ("
+            "disposition_complete "
+            "AND (NOT recording_review_required OR recording_reviewed) "
+            "AND (NOT callback_required OR callback_reconciled) "
+            "AND (NOT handoff_required OR handoff_reconciled) "
+            "AND provider_cost_verified AND compliance_clear "
+            "AND server_terminal_leg_count = server_dial_leg_count)",
+            name="ck_prospecting_pilot_attempt_reviews_passed",
+        ),
+        UniqueConstraint(
+            "attempt_id",
+            name="uq_prospecting_pilot_attempt_reviews_attempt",
+        ),
+        Index(
+            "ix_prospecting_pilot_attempt_reviews_pilot_status",
+            "pilot_id",
+            "status",
+        ),
+        Index(
+            "ix_prospecting_pilot_attempt_reviews_org",
+            "organization_id",
+        ),
+        Index(
+            "ix_prospecting_pilot_attempt_reviews_session",
+            "dial_session_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    pilot_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospecting_dialer_pilots.id"))
+    attempt_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospecting_attempts.id"))
+    dial_session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_dial_sessions.id")
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="pending", server_default="pending"
+    )
+    server_dial_leg_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    server_terminal_leg_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    disposition_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    recording_review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    recording_reviewed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    callback_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    callback_reconciled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    handoff_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    handoff_reconciled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    provider_cost_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    compliance_clear: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class ProspectingDialerPilotShiftReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Human decision over an immutable server-built D10 shift snapshot."""
+
+    __tablename__ = "prospecting_dialer_pilot_shift_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'passed', 'failed')",
+            name="ck_prospecting_pilot_shift_reviews_status",
+        ),
+        CheckConstraint(
+            "server_attempt_count >= 0 "
+            "AND server_reviewed_attempt_count >= 0 "
+            "AND server_passed_attempt_count >= 0 "
+            "AND server_reviewed_attempt_count <= server_attempt_count "
+            "AND server_passed_attempt_count <= server_reviewed_attempt_count",
+            name="ck_prospecting_pilot_shift_reviews_counts",
+        ),
+        CheckConstraint(
+            "productive_minutes >= 0",
+            name="ck_prospecting_pilot_shift_reviews_minutes",
+        ),
+        CheckConstraint(
+            "length(trim(timezone)) > 0",
+            name="ck_prospecting_pilot_shift_reviews_timezone",
+        ),
+        CheckConstraint(
+            "length(evidence_hash) = 64",
+            name="ck_prospecting_pilot_shift_reviews_hash",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL) "
+            "OR (status IN ('passed', 'failed') "
+            "AND reviewed_by_user_id IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_prospecting_pilot_shift_reviews_decision",
+        ),
+        CheckConstraint(
+            "status <> 'failed' OR (review_reason IS NOT NULL AND length(trim(review_reason)) > 0)",
+            name="ck_prospecting_pilot_shift_reviews_failure_reason",
+        ),
+        CheckConstraint(
+            "status <> 'passed' OR ("
+            "server_reviewed_attempt_count = server_attempt_count "
+            "AND server_passed_attempt_count = server_attempt_count "
+            "AND productive_minutes > 0 "
+            "AND all_attempts_reviewed AND all_legs_terminal "
+            "AND no_duplicate_calls AND no_lost_answers AND no_stuck_sessions "
+            "AND callbacks_reconciled AND handoffs_reconciled "
+            "AND provider_billing_verified AND daily_caps_respected "
+            "AND kill_switches_verified AND recordings_reviewed AND compliance_clear)",
+            name="ck_prospecting_pilot_shift_reviews_passed",
+        ),
+        UniqueConstraint(
+            "pilot_id",
+            "shift_date",
+            name="uq_prospecting_pilot_shift_reviews_pilot_date",
+        ),
+        Index(
+            "ix_prospecting_pilot_shift_reviews_pilot_status",
+            "pilot_id",
+            "status",
+        ),
+        Index("ix_prospecting_pilot_shift_reviews_org", "organization_id"),
+        Index("ix_prospecting_pilot_shift_reviews_date", "shift_date"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    pilot_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospecting_dialer_pilots.id"))
+    dial_session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_dial_sessions.id")
+    )
+    shift_date: Mapped[date] = mapped_column(Date, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="pending", server_default="pending"
+    )
+    server_attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    server_reviewed_attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    server_passed_attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    productive_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    all_attempts_reviewed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    all_legs_terminal: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    no_duplicate_calls: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    no_lost_answers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    no_stuck_sessions: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    callbacks_reconciled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    handoffs_reconciled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    provider_billing_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    daily_caps_respected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    kill_switches_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    recordings_reviewed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    compliance_clear: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
 class ProspectingQualificationResponse(UuidPrimaryKeyMixin, TimestampMixin, Base):

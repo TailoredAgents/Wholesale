@@ -1169,6 +1169,137 @@ export type ProspectingDialerOperations = {
   }>;
 };
 
+export type ProspectingDialerPilotGate = {
+  key: string;
+  label: string;
+  status: "pass" | "warning" | "block" | "pending";
+  detail: string;
+};
+
+export type ProspectingDialerPilotAttempt = {
+  attempt_id: string;
+  dial_session_id: string;
+  acceptance_stage: "smoke_testing" | "running" | "accepted" | null;
+  counts_toward_production_shift: boolean;
+  started_at: string;
+  completed_at: string | null;
+  outcome: string | null;
+  review_status: "pending" | "passed" | "failed";
+  blocker: string | null;
+  call_record_ids: string[];
+  provider_call_ids: string[];
+  placed_call: boolean;
+  smoke_test_eligible: boolean;
+};
+
+export type ProspectingDialerPilotShift = {
+  id: string;
+  dial_session_id: string;
+  shift_date: string;
+  timezone: string;
+  status: "pending" | "passed" | "failed";
+  server_attempt_count: number;
+  server_reviewed_attempt_count: number;
+  server_passed_attempt_count: number;
+  reserved_attempt_count: number;
+  provider_started_attempt_count: number;
+  placed_call_count: number;
+  productive_minutes: number;
+  all_attempts_reviewed: boolean;
+  all_legs_terminal: boolean;
+  no_duplicate_calls: boolean;
+  no_lost_answers: boolean;
+  no_stuck_sessions: boolean;
+  callbacks_reconciled: boolean;
+  handoffs_reconciled: boolean;
+  provider_billing_verified: boolean;
+  daily_caps_respected: boolean;
+  kill_switches_verified: boolean;
+  recordings_reviewed: boolean;
+  compliance_clear: boolean;
+  reviewed_at: string;
+  reason: string;
+};
+
+export type ProspectingDialerPilotAttemptReview = {
+  id: string;
+  attempt_id: string;
+  dial_session_id: string;
+  status: "pending" | "passed" | "failed";
+  server_dial_leg_count: number;
+  server_terminal_leg_count: number;
+  disposition_complete: boolean;
+  recording_review_required: boolean;
+  recording_reviewed: boolean;
+  callback_required: boolean;
+  callback_reconciled: boolean;
+  handoff_required: boolean;
+  handoff_reconciled: boolean;
+  provider_cost_verified: boolean;
+  compliance_clear: boolean;
+  reviewed_at: string;
+  reason: string;
+};
+
+export type ProspectingDialerPilotRecord = {
+  id: string;
+  revision: number;
+  status: "draft" | "smoke_testing" | "running" | "ready_for_owner_review" | "accepted" | "rejected" | "rolled_back" | "revoked" | "cancelled";
+  caller_user_id: string;
+  caller_name: string;
+  campaign_id: string;
+  campaign_name: string;
+  cohort_id: string;
+  cohort_name: string;
+  prospect_calling_batch_id: string;
+  calling_batch_name: string;
+  voice_line_id: string;
+  voice_line_number: string;
+  effective_line_count: number;
+  timezone: string;
+  daily_dial_limit: number;
+  daily_spend_limit_cents: number;
+  required_clean_shift_count: number;
+  minimum_attempts_per_shift: number;
+  minimum_productive_minutes_per_shift: number;
+  minimum_total_attempts: number;
+  minimum_batch_size: number;
+  maximum_batch_size: number;
+  configuration_fingerprint: string;
+  smoke_test_evidence: Record<string, unknown>;
+  kill_switch_evidence: Record<string, unknown>;
+  batchdialer_comparison_evidence: Record<string, unknown>;
+  rollback_evidence: Record<string, unknown>;
+  start_attestation: Record<string, unknown>;
+  evidence_hash: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  submitted_at: string | null;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  rolled_back_at: string | null;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+};
+
+export type ProspectingDialerPilotOverview = {
+  pilot: ProspectingDialerPilotRecord | null;
+  gates: ProspectingDialerPilotGate[];
+  attempt_review_queue: ProspectingDialerPilotAttempt[];
+  attempt_reviews: ProspectingDialerPilotAttemptReview[];
+  shift_reviews: ProspectingDialerPilotShift[];
+  current_configuration_fingerprint: string | null;
+  configuration_matches: boolean;
+  batch_entry_count: number;
+  total_reviewed_attempts: number;
+  total_passed_attempts: number;
+  passed_shift_count: number;
+  allowed_actions: string[];
+};
+
 export type ProspectingDialerAnalyticsCoverage = {
   raw_attempts_basis_points: number | null;
   paid_hours_basis_points: number | null;
@@ -4814,6 +4945,31 @@ export async function getProspectingDialerOperations(): Promise<{
   } catch (error) {
     console.error("Stonegate dialer operations request failed.", error);
     return { dialerOperations: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingDialerPilot(): Promise<{
+  dialerPilot: ProspectingDialerPilotOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/dialer/pilot`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      dialerPilot: (await response.json()) as ProspectingDialerPilotOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate controlled dialer pilot request failed.", error);
+    return { dialerPilot: null, apiConnected: false };
   }
 }
 

@@ -53,7 +53,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
-| Native VA dialer | D0-D9 foundation, one-line coordinator, browser workbench, automation, evidence continuity, inbound callbacks, manager operations, outcome scorecards, explicit measurement coverage, and technical controlled-pilot readiness implemented; production feature globally available behind manager gates and an organization-wide one-line cap | Complete D10 controlled single-line production acceptance; keep BatchDialer as the live bridge and rollback path |
+| Native VA dialer | D0-D9 foundation plus the implemented D10 durable pilot, every-call review, shift review, rollback, and owner-decision workflow; one-line runtime remains scoped behind acceptance gates and is not production-accepted | Run the real D10 controlled shifts, reconcile per-call provider exports and BatchDialer evidence, obtain owner acceptance, and keep BatchDialer as the live bridge and rollback path |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -64,8 +64,8 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
 - `VA_DIALER_ROADMAP.md` owns the native Stonegate prospecting dialer target, the initial
-  D0-D9 single-line implementation and measurement sequence, the temporary BatchDialer operating
-  bridge, the remaining D10 controlled production acceptance, and the
+  D0-D9 single-line implementation and measurement sequence, the D10 controlled-acceptance
+  workflow and remaining real-world evidence, the temporary BatchDialer operating bridge, and the
   separately gated path to optional two- or three-line operation. It extends the existing
   Prospecting and Voice systems without creating a second CRM or communication history.
 - `UNDERWRITING_COMP_METHOD.md` owns the live Stonegate Valuation method, historical V2.2

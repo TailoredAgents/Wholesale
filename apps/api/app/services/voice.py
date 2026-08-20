@@ -98,6 +98,7 @@ from app.services.prospecting_callbacks import (
 from app.services.prospecting_voice import (
     ProspectingVoiceConfigurationError,
     ProspectingVoiceConflictError,
+    lock_prospecting_connect_pilot,
     process_browser_prospecting_outbound_request,
     reconcile_signed_prospecting_disclosure,
     reconcile_signed_prospecting_recording,
@@ -821,14 +822,27 @@ def process_forwarded_voice_connect(
     *,
     intent_id: UUID,
 ) -> str:
-    intent = db.get(VoiceCallIntent, intent_id)
+    expected_pilot_id = lock_prospecting_connect_pilot(db, intent_id)
+    # Serialize the press-1 bridge boundary so a provider retry cannot receive
+    # two seller-dial TwiML responses before the first child callback arrives.
+    intent = db.scalar(
+        select(VoiceCallIntent)
+        .where(VoiceCallIntent.id == intent_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if intent is None or intent.status != "started":
         raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
     if payload.get("Digits") != "1":
         return hangup_twiml()
     if intent.prospect_id is not None:
         try:
-            validate_prospecting_connect_intent(db, intent, payload)
+            validate_prospecting_connect_intent(
+                db,
+                intent,
+                payload,
+                expected_pilot_id=expected_pilot_id,
+            )
         except (ProspectingVoiceConfigurationError, ProspectingVoiceConflictError) as exc:
             raise VoiceConfigurationError(str(exc)) from exc
         db.commit()

@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 8, 2026
+Last verified against the application: August 19, 2026
 
 ## Purpose
 
@@ -588,6 +588,34 @@ require `financials:view`. An unavailable or permission-hidden value is not zero
 | Readiness check cards | Report pass, warning, or block for dedicated line, browser token, callback, recording, session, one-line cap, and worker health | Correct underlying configuration or session state in **Dialer control** |
 | **How these metrics are calculated** | Expands deterministic definitions, source records, attribution timestamp, and unavailable conditions | Use before comparing unlike sources or periods |
 | Prior confirmed snapshot notice | Retains the last successful values after a transient network or server failure | A 401 or 403 clears the prior snapshot, including financial values, because access expired or was removed |
+
+## Prospecting Pilot Acceptance
+
+Open **Prospecting > Pilot acceptance**. This manager-only view controls D10 evidence; it is not a
+replacement for **Dialer control**, and D9 technical readiness is never displayed as owner
+acceptance.
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Pilot scope | Binds one VA, campaign, cohort, calling batch, and dedicated line | Batch must contain 75-250 unique records; every line cap must be one; daily dial cap must be 25-50 reservations and daily spend cannot exceed $10 |
+| Controlled numbers | Saves one to ten active Stonegate staff forwarding numbers for the first calls | Every E.164 number must belong to an active staff profile and already be an eligible test record in the selected calling batch |
+| **Begin controlled-number smoke test** | Moves the draft to `smoke_testing`; only the saved test records can be reserved | Requires current D9/runtime readiness, valid immutable scope, controlled checks, and no other active pilot |
+| Smoke test | Selects durable answered call records and reconciles their controlled recipients, canonical recordings, provider call IDs, actual costs, and provider references | Passing evidence moves the exact pilot from `smoke_testing` to `running`; ordinary batch records stay blocked before then |
+| Attempt review queue | Requires review of every terminal pilot attempt, including failed/no-answer/voicemail | Recording, transcript, and structured notes are required only for applicable connected seller conversations; non-contact outcomes still require truthful disposition, review, compliance, and cost evidence |
+| Shift review | Recomputes provider-signed right-party conversation time, reservation coverage, incidents, and billing across every production-stage pilot session on one local date | Reconcile every root and child provider call ID to a provider-reported charge and reference, including documented $0 records. Passing requires 60 right-party conversation minutes, 25 terminal signed seller calls, 100% passed reservation reviews, and no hard incident; ringing, machines, wrong parties, and smoke-stage calls do not add productive minutes |
+| Pilot progress | Shows passing shifts, reviewed attempts, required attempts, and hard gates | Three distinct passing local dates and 75 total attempts are required |
+| BatchDialer comparison | Stores the named separate cohort/list reference, zero-overlap attestation, and comparison summary | The current Zap cannot verify BatchDialer raw attempts or cost; keep those claims unavailable unless separately supported and allow an honest inconclusive comparison |
+| Kill-switch and daily-cap drill | Verifies server-observed company/campaign off-then-on cycles, stopped or drained sessions, and one real reservation denial at the enforced daily cap | Typed confirmation alone cannot pass this gate |
+| Rollback rehearsal | Verifies a later, separate campaign switch cycle, stopped/drained session, zero live calls, immutable evidence, and the hashed unworked remainder | Must be followed by a clean shift; evidence capture does not transfer or enable a BatchDialer list |
+| **Rollback native pilot** | Closes a draft as `cancelled`, or disables a started pilot scope, stops/drains sessions, preserves evidence, and records `rolled_back` | Requires **ROLL BACK SINGLE-LINE PILOT** typed exactly; it does not automatically edit BatchDialer or allow cohort overlap |
+| **Submit for owner review** | Freezes the manager-complete review state for final recomputation | Disabled while any hard evidence is missing, failed, unknown, or in flight |
+| Owner decision | Accepts or rejects after a fresh server-side gate calculation | Owner or Founder/operator only; accept requires **ACCEPT SINGLE-LINE DIALER**, all hard gates passing, reason, and current revision; reject requires **REJECT SINGLE-LINE DIALER**, reason, and current revision |
+| **Revoke native dialer authorization** | Blocks every new seller bridge that has not already been authorized for the accepted exact scope, safely drains provider work already authorized or in progress, and preserves its evidence | Owner-only; requires a reason and **REVOKE SINGLE-LINE DIALER** typed exactly. The terminal history remains visible and a new D10 pilot is required before native calling can resume |
+
+This workflow is implemented, but no empty or test-only record represents production acceptance.
+Stonegate remains pending until the real controlled shifts pass and an authorized owner records the
+accept decision. Even after acceptance, only the frozen VA, campaign, cohort, batch, line, caps, and
+safety configuration are authorized; BatchDialer remains the fallback.
 
 ## Prospecting
 

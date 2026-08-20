@@ -51,6 +51,18 @@ from app.schemas.prospecting import (
     ProspectingVoiceCallRead,
     ProspectingWorkbenchOverview,
 )
+from app.schemas.prospecting_dialer_acceptance import (
+    ProspectingDialerPilotAttemptReviewCreate,
+    ProspectingDialerPilotCreate,
+    ProspectingDialerPilotDecision,
+    ProspectingDialerPilotEvidenceUpdate,
+    ProspectingDialerPilotOverviewRead,
+    ProspectingDialerPilotRevoke,
+    ProspectingDialerPilotRollback,
+    ProspectingDialerPilotShiftReviewCreate,
+    ProspectingDialerPilotStart,
+    ProspectingDialerPilotSubmit,
+)
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.prospecting import (
     ProspectingCompletionConflictError,
@@ -91,6 +103,19 @@ from app.services.prospecting_dialer import (
     update_campaign_dialer_switch,
     update_company_dialer_switch,
     upsert_dialer_profile,
+)
+from app.services.prospecting_dialer_acceptance import (
+    ProspectingDialerAcceptanceConflictError,
+    create_prospecting_dialer_pilot,
+    decide_prospecting_dialer_pilot,
+    get_prospecting_dialer_pilot_overview,
+    review_prospecting_dialer_pilot_attempt,
+    review_prospecting_dialer_pilot_shift,
+    revoke_prospecting_dialer_pilot,
+    rollback_prospecting_dialer_pilot,
+    start_prospecting_dialer_pilot,
+    submit_prospecting_dialer_pilot,
+    update_prospecting_dialer_pilot_evidence,
 )
 from app.services.prospecting_dialer_analytics import get_prospecting_dialer_analytics
 from app.services.prospecting_dialer_operations import (
@@ -201,6 +226,28 @@ def _raise_prospecting_operations_error(exc: Exception) -> NoReturn:
     raise exc
 
 
+def _raise_prospecting_acceptance_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, PermissionError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    if isinstance(exc, ProspectingDialerAcceptanceConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    raise exc
+
+
 @router.get("/dialer/context")
 def read_native_dialer_context(
     db: Annotated[Session, Depends(get_db)],
@@ -259,6 +306,223 @@ def read_native_dialer_analytics(
             detail=str(exc),
             headers={"Cache-Control": "private, no-store"},
         ) from exc
+
+
+@router.get("/dialer/pilot")
+def read_native_dialer_pilot(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        return get_prospecting_dialer_pilot_overview(db, principal)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+
+
+@router.post("/dialer/pilots", status_code=201)
+def create_native_dialer_pilot(
+    payload: ProspectingDialerPilotCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        return create_prospecting_dialer_pilot(db, principal, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+
+
+@router.post("/dialer/pilots/{pilot_id}/start")
+def start_native_dialer_pilot(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotStart,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = start_prospecting_dialer_pilot(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.put("/dialer/pilots/{pilot_id}/evidence")
+def update_native_dialer_pilot_evidence(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotEvidenceUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = update_prospecting_dialer_pilot_evidence(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/attempts/{attempt_id}/review")
+def review_native_dialer_pilot_attempt(
+    pilot_id: UUID,
+    attempt_id: UUID,
+    payload: ProspectingDialerPilotAttemptReviewCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = review_prospecting_dialer_pilot_attempt(
+            db,
+            principal,
+            pilot_id,
+            attempt_id,
+            payload,
+        )
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/shifts/{session_id}/review")
+def review_native_dialer_pilot_shift(
+    pilot_id: UUID,
+    session_id: UUID,
+    payload: ProspectingDialerPilotShiftReviewCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = review_prospecting_dialer_pilot_shift(
+            db,
+            principal,
+            pilot_id,
+            session_id,
+            payload,
+        )
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/submit")
+def submit_native_dialer_pilot(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotSubmit,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = submit_prospecting_dialer_pilot(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/rollback")
+def rollback_native_dialer_pilot(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotRollback,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = rollback_prospecting_dialer_pilot(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/decision")
+def decide_native_dialer_pilot(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotDecision,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = decide_prospecting_dialer_pilot(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.post("/dialer/pilots/{pilot_id}/revoke")
+def revoke_native_dialer_pilot(
+    pilot_id: UUID,
+    payload: ProspectingDialerPilotRevoke,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingDialerPilotOverviewRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = revoke_prospecting_dialer_pilot(db, principal, pilot_id, payload)
+    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+        _raise_prospecting_acceptance_error(exc)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="D10 pilot not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
 
 
 @router.get("/dialer/callbacks")

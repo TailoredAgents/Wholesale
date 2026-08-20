@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
 
+from app.core.auth import Principal
 from app.core.config import get_settings
 from app.integrations.voice_call_provider import (
     VoiceCallProviderError,
@@ -155,6 +156,38 @@ class FakeVoiceProvider:
         return VoiceCallResult(sid=call_id, status="completed")
 
 
+def test_locked_graph_rejects_changed_d10_pilot_identity(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    graph = seed_cold_call_graph(db_session, TestClient(app))
+    unexpected_pilot_id = UUID("00000000-0000-0000-0000-000000000999")
+    monkeypatch.setattr(
+        prospecting_voice_service,
+        "lock_expected_session_pilot",
+        lambda *args, **kwargs: unexpected_pilot_id,
+    )
+    principal = Principal(
+        user_id=graph.caller.id,
+        organization_id=graph.organization.id,
+        email=graph.caller.email,
+        permission_keys=frozenset(),
+    )
+
+    with pytest.raises(
+        prospecting_voice_service.ProspectingVoiceConflictError,
+        match="authorization changed",
+    ):
+        prospecting_voice_service.load_authorized_graph(
+            db_session,
+            principal,
+            graph.leg.id,
+            lock=True,
+        )
+
+
 class FailingStartProvider(FakeVoiceProvider):
     def start(
         self,
@@ -198,6 +231,9 @@ def seed_cold_call_graph(db: Session, client: TestClient) -> ColdCallGraph:
     )
     assert foundation.admin_user is not None
     foundation.organization.prospecting_dialer_enabled = True
+    # D2-D8 voice tests isolate provider/callback behavior. D10 acceptance is
+    # covered by its dedicated suite and remains fail-closed by default.
+    foundation.organization.prospecting_dialer_acceptance_required = False
     owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
     caller_id = create_user(
         client,
@@ -248,6 +284,7 @@ def seed_cold_call_graph(db: Session, client: TestClient) -> ColdCallGraph:
         label="D2 prospecting outbound",
         department_key="acquisitions",
         purpose_key="prospecting_outbound",
+        assigned_user_id=caller.id,
         status="active",
         is_default=False,
         inbound_route="conversation_owner",
@@ -1548,6 +1585,112 @@ def test_provider_dispatch_revalidates_runtime_switch_after_prepared_commit(
     assert blocked.status_code == 503, blocked.text
     assert "company prospecting dialer switch is off" in blocked.json()["detail"]
     assert provider.start_calls == []
+
+
+def test_cellphone_connect_dials_seller_once_from_exact_in_flight_root_call(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    provider = FakeVoiceProvider()
+
+    started = start_call(client, graph, monkeypatch, provider)
+
+    assert started.status_code == 201, started.text
+    intent = db_session.scalar(
+        select(VoiceCallIntent).where(
+            VoiceCallIntent.prospecting_dial_leg_id == graph.leg.id
+        )
+    )
+    assert intent is not None
+    db_session.expire_all()
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.call_intent_id == intent.id)
+    )
+    leg = db_session.get(ProspectingDialLeg, graph.leg.id)
+    attempt = db_session.get(ProspectingAttempt, graph.attempt.id)
+    assert call is not None and leg is not None and attempt is not None
+    assert {
+        "intent_status": intent.status,
+        "intent_provider": intent.provider_call_id,
+        "call_status": call.status,
+        "call_provider": call.provider_call_id,
+        "call_ended": call.ended_at,
+        "call_child": call.child_provider_call_id,
+        "leg_status": leg.status,
+        "leg_provider": leg.provider_call_id,
+        "attempt_status": attempt.status,
+        "attempt_provider": attempt.provider_call_id,
+    } == {
+        "intent_status": "started",
+        "intent_provider": ROOT_CALL_SID,
+        "call_status": "dialing",
+        "call_provider": ROOT_CALL_SID,
+        "call_ended": None,
+        "call_child": None,
+        "leg_status": "dialing",
+        "leg_provider": ROOT_CALL_SID,
+        "attempt_status": "in_progress",
+        "attempt_provider": ROOT_CALL_SID,
+    }
+    connect_path = (
+        "/api/v1/webhooks/twilio/voice/forwarded-connect"
+        f"?intent_id={intent.id}"
+    )
+    payload = {"CallSid": ROOT_CALL_SID, "Digits": "1"}
+
+    connected = post_signed(client, connect_path, payload)
+    replayed = post_signed(client, connect_path, payload)
+
+    assert connected.status_code == 200, connected.text
+    assert PROSPECT_NUMBER in connected.text
+    assert f'callerId="{PROSPECTING_NUMBER}"' in connected.text
+    assert replayed.status_code == 422, replayed.text
+    assert "already authorized" in replayed.json()["detail"]
+
+
+def test_cellphone_connect_revalidates_runtime_switch_before_dialing_seller(
+    db_session: Session,
+    api_db_override: None,
+    prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    graph = seed_cold_call_graph(db_session, client)
+    provider = FakeVoiceProvider()
+
+    started = start_call(client, graph, monkeypatch, provider)
+
+    assert started.status_code == 201, started.text
+    intent = db_session.scalar(
+        select(VoiceCallIntent).where(
+            VoiceCallIntent.prospecting_dial_leg_id == graph.leg.id
+        )
+    )
+    assert intent is not None
+    assert intent.status == "started"
+    assert provider.start_calls[0]["to"] == FORWARDING_NUMBER
+
+    # The VA's cellphone is already ringing, but the seller has not been dialed.
+    # A manager kill switch at this boundary must still stop the second leg.
+    graph.organization.prospecting_dialer_enabled = False
+    db_session.commit()
+    connect_path = (
+        "/api/v1/webhooks/twilio/voice/forwarded-connect"
+        f"?intent_id={intent.id}"
+    )
+    connected = post_signed(
+        client,
+        connect_path,
+        {"CallSid": ROOT_CALL_SID, "Digits": "1"},
+    )
+
+    assert connected.status_code == 422, connected.text
+    assert "company prospecting dialer switch is off" in connected.json()["detail"]
+    assert PROSPECT_NUMBER not in connected.text
 
 
 def test_immediate_provider_callback_completes_dispatch_marker_before_rest_response(
