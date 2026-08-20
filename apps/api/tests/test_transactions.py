@@ -2366,6 +2366,7 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
         item
         for item in assignment_detail["documents"]
         if item["contract_package_id"] == assignment_package_id
+        and item["document_type"] == "assignment_contract"
     )
     assert stored_assignment["document_type"] == "assignment_contract"
     assert "assignment agreement" in stored_assignment["title"].lower()

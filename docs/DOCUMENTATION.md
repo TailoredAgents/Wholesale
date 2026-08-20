@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 8, 2026
+Last verified against the repository: August 19, 2026
 
 ## Purpose
 
@@ -39,7 +39,7 @@ current code or canonical documentation.
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
 | `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Implemented IA1-IA10 navigation and workspace consolidation, route compatibility, and role-acceptance evidence | Owner, managers, and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
-| `VA_DIALER_ROADMAP.md` | Native Stonegate VA dialer architecture, implemented D0-D8 single-line workflow and operating controls, controlled production availability behind manager gates, remaining D9-D10 analytics and acceptance, BatchDialer rollback bridge, and optional two- or three-line activation gates | Owner, prospecting managers, and developers |
+| `VA_DIALER_ROADMAP.md` | Native Stonegate VA dialer architecture, implemented D0-D9 single-line workflow, operating controls, source/outcome analytics, measurement coverage, and technical controlled-pilot readiness; remaining D10 production acceptance; BatchDialer rollback bridge; and optional two- or three-line activation gates | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |

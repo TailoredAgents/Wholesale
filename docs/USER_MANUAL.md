@@ -279,8 +279,9 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
-local views for focused work: Campaigns and My Calls in Prospecting; Lead Queue, Pipeline, and
-Underwriting in Leads; and transaction, disposition, and finance sections inside Deals.
+local views for focused work: Campaigns, Dialer control, Analytics, and My Calls in Prospecting;
+Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
+inside Deals. Dialer control and Analytics are manager-only.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
@@ -295,6 +296,8 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Calendar | `/os/calendar` |
 | Prospecting | `/os/prospecting` |
 | Prospecting: Campaigns | `/os/prospecting?view=campaigns` |
+| Prospecting: Dialer control | `/os/prospecting?view=dialer-control` |
+| Prospecting: Analytics | `/os/prospecting?view=analytics` |
 | Prospecting: My Calls | `/os/prospecting?view=my-calls` |
 | Leads | `/os/leads` |
 | Deals | `/os/deals` |
@@ -403,6 +406,9 @@ hardware, but they must not share Stonegate or Clerk credentials.
 5. Open **Tasks > Needs Approval** and make only evidence-supported decisions.
 6. Review exceptions in **Transactions**, **Dispositions**, and **Finance**.
 7. Review **Marketing** source economics at least weekly.
+8. Review **Prospecting > Analytics** for attributable outcomes, missing evidence, caller quality,
+   and controlled-pilot technical blockers. Never treat **Ready for controlled pilot** as D10 owner
+   acceptance.
 
 ### Lead Manager
 
@@ -422,7 +428,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### VA Caller
 
-1. Open **Prospecting > Work queue**.
+1. Open **Prospecting > My Calls > Work queue**.
 2. Work one assigned record at a time.
 3. Follow the displayed approved script.
 4. Record every attempt and outcome.
@@ -858,12 +864,13 @@ managed in Stonegate unless a later connector explicitly supports those changes.
 recordings remain in BatchDialer during this first integration phase; a recording should not be
 assumed available to Stonegate AI until the provider exposes and we verify a stable recording URL.
 
-### Stonegate One-By-One Contingency Prospecting
+### Stonegate Controlled Native Prospecting
 
-Use this only when BatchDialer is unavailable or a manager intentionally assigns a controlled
-one-by-one batch. Open **Prospecting**. Managers first see **Campaigns** and may switch to **My Calls**. Caller-only
-accounts open **My Calls** directly and do not receive campaign-management controls. My Calls
-contains:
+Use this only when a manager intentionally activates an approved, non-overlapping native campaign
+or BatchDialer is unavailable and a controlled one-by-one batch is assigned. Open **Prospecting**.
+Managers see **Campaigns**, **Dialer control**, **Analytics**, and **My Calls**. Caller-only accounts
+open **My Calls** directly and do not receive campaign, dialer-control, or analytics controls. My
+Calls contains:
 
 - **Work queue**
 - **Call quality**
@@ -909,6 +916,51 @@ appointment, and attribution history. The Lead Manager can accept the handoff, r
 submission with a structured correction type and explanation, or terminally reject a non-lead with
 a structured rejection type and explanation. Only accepted handoffs with complete right-party,
 interest, follow-up-permission, and required-answer evidence count as accepted warm leads.
+
+### Review Prospecting Analytics
+
+Managers use **Prospecting > Analytics** to compare operating results and determine whether the
+native dialer is technically eligible for a D10 controlled pilot. Callers do not receive this
+company-wide reporting view. Managers without Finance-view (`financials:view`) permission can
+review operating and readiness evidence, but cost, revenue, and profit values remain hidden.
+
+1. Select the start and end dates. Both dates are included and interpreted in UTC.
+2. Optionally narrow the report by source, campaign, cohort, VA/caller, or dial mode, then select
+   **Apply filters**. Operating filters apply only where the durable record carries that dimension;
+   clear them when comparing an external lead source without it. Use **Reset** to return to the
+   original 30-date window and all sources.
+3. Review the funnel from entered leads and attempts through human conversations, right-party
+   contacts, qualified sellers, appointments, accepted handoffs, signed contracts, and closed
+   assignment-strategy transactions.
+4. Review **Cost and profit** and **Calling productivity**. A value labeled **Unavailable** means
+   required evidence is missing; it does not mean zero.
+5. Compare **Native Stonegate**, **BatchDialer**, and **Paid ads** using outcomes all included
+   sources can support. **Other** attribution stays separate. BatchDialer, paid-ad, and other raw
+   attempt rates can remain unavailable even when their accepted handoffs, contracts, closes, and
+   attributed economics are measurable. A paid acquisition later worked in BatchDialer can appear
+   in both source rows, so source rows are attribution views and must not be added together.
+6. Change **Break down by** to review VA, campaign, cohort, list, or dial-mode scorecards.
+7. Review quality, reputation, daily movement, and **Metric coverage**. Coverage identifies whether
+   raw attempts, paid hours, provider costs, appointment outcomes, profit attribution, and number
+   reputation have supporting records.
+8. Open **How these metrics are calculated** before comparing an unfamiliar metric. It states the
+   source records, attribution timestamp, and condition that makes the value unavailable.
+9. Review every blocker and warning under **Controlled-pilot readiness**. Correct the underlying
+   line, token, callback, recording, session, cap, or worker issue in **Dialer control** rather than
+   trying to clear the analytics display.
+
+The best D9 status is **Ready for controlled pilot**. It confirms technical checks only. It does
+not make the native dialer generally Active or Accepted. D10 still requires one VA, one small
+non-overlapping campaign, controlled numbers, review of every call, verification of caps and
+provider billing, multiple clean shifts, a BatchDialer comparison, and explicit owner acceptance.
+BatchDialer remains the operating bridge and rollback path until that separate acceptance is done.
+The selected period identifies when the originating activity entered the cohort: native dial start,
+paid/other lead creation, the first durable BatchDialer handoff touch, or BatchDialer lead creation
+when no durable handoff exists. A contract or close
+completed later remains attributed to that originating work and is shown as of the dashboard
+timestamp; it is not silently moved out of its original acquisition cohort. The all-source summary
+de-duplicates overlapping source rows. Collected gross revenue and approved-reconciliation company
+profit are separate evidence and should not be treated as the same number.
 
 An assigned-only caller cannot open another caller's prospect. Enabling **Cold calling** adds the
 Prospecting work permission; it does not grant unrelated tabs or override the permissions from the

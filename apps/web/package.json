@@ -17,6 +17,7 @@
     "audit:prospecting-wrap-up": "node --test scripts/prospecting-wrap-up-contract.test.mjs",
     "audit:prospecting-evidence": "node --test scripts/prospecting-call-evidence-contract.test.mjs",
     "audit:prospecting-operations": "node --test scripts/prospecting-dialer-operations-contract.test.mjs",
+    "audit:prospecting-analytics": "node --test scripts/prospecting-analytics-contract.test.mjs",
     "baseline:ia": "node scripts/os-ia-baseline.mjs",
     "audit:os": "node scripts/os-quality-audit.mjs",
     "audit:help": "node scripts/help-bubble-audit.mjs",

@@ -1169,6 +1169,158 @@ export type ProspectingDialerOperations = {
   }>;
 };
 
+export type ProspectingDialerAnalyticsCoverage = {
+  raw_attempts_basis_points: number | null;
+  paid_hours_basis_points: number | null;
+  provider_cost_basis_points: number | null;
+  appointment_outcomes_basis_points: number | null;
+  profit_basis_points: number | null;
+  reputation_basis_points: number | null;
+  warnings: string[];
+};
+
+export type ProspectingDialerScorecardMetrics = {
+  entered_leads: number;
+  attempts: number | null;
+  answered_calls: number | null;
+  human_conversations: number | null;
+  conversations_over_60_seconds: number | null;
+  right_party_contacts: number | null;
+  qualified_sellers: number | null;
+  appointments_set: number | null;
+  appointments_held: number | null;
+  submitted_handoffs: number | null;
+  accepted_handoffs: number | null;
+  signed_contracts: number | null;
+  closed_assignments: number | null;
+  paid_minutes: number | null;
+  productive_calling_minutes: number | null;
+  labor_cost_cents: number | null;
+  provider_cost_cents: number | null;
+  list_cost_cents: number | null;
+  other_cost_cents: number | null;
+  total_cost_cents: number | null;
+  gross_revenue_cents: number | null;
+  contribution_profit_cents: number | null;
+  attempts_per_paid_hour_x100: number | null;
+  human_conversations_per_paid_hour_x100: number | null;
+  profit_per_paid_hour_cents: number | null;
+  cost_per_qualified_seller_cents: number | null;
+  cost_per_contract_cents: number | null;
+  human_contact_rate_basis_points: number | null;
+  right_party_contact_rate_basis_points: number | null;
+  qualified_seller_rate_basis_points: number | null;
+  accepted_handoff_rate_basis_points: number | null;
+  appointment_held_rate_basis_points: number | null;
+  contract_rate_basis_points: number | null;
+  close_rate_basis_points: number | null;
+  short_calls: number | null;
+  silent_or_dead_air_calls: number | null;
+  blocked_or_failed_calls: number | null;
+  no_answer_calls: number | null;
+  voicemail_calls: number | null;
+  duplicate_call_incidents: number | null;
+  seller_complaints: number | null;
+  dnc_requests: number | null;
+  abandoned_calls: number | null;
+  average_connection_time_seconds: number | null;
+  number_reputation_score: number | null;
+  answer_rate_trend_basis_points: number | null;
+  coverage: ProspectingDialerAnalyticsCoverage;
+  status_by_key?: Record<
+    string,
+    "known" | "partial" | "unknown" | "not_applicable"
+  >;
+};
+
+export type ProspectingDialerDimensionScorecard = {
+  dimension_type: "va" | "campaign" | "cohort" | "list" | "dial_mode" | "source";
+  dimension_id: string | null;
+  dimension_name: string;
+  source: string | null;
+  dial_mode: string | null;
+  entry_stage?: string | null;
+  external_key?: string | null;
+  metrics: ProspectingDialerScorecardMetrics;
+};
+
+export type ProspectingDialerAnalytics = {
+  period: {
+    date_from: string;
+    date_to: string;
+    timezone: "UTC";
+    start_at: string;
+    end_at_exclusive: string;
+    report_mode?: "activity_window";
+    as_of?: string;
+  };
+  filters: {
+    cohort_id: string | null;
+    source: string | null;
+    campaign_id: string | null;
+    caller_user_id: string | null;
+    dial_mode: string | null;
+  };
+  filter_options: {
+    sources: string[];
+    campaigns: Array<{ id: string; name: string }>;
+    cohorts: Array<{ id: string; name: string }>;
+    callers: Array<{ id: string; name: string }>;
+    dial_modes: string[];
+  };
+  summary: ProspectingDialerScorecardMetrics;
+  by_va: ProspectingDialerDimensionScorecard[];
+  by_campaign: ProspectingDialerDimensionScorecard[];
+  by_cohort: ProspectingDialerDimensionScorecard[];
+  by_list: ProspectingDialerDimensionScorecard[];
+  by_dial_mode: ProspectingDialerDimensionScorecard[];
+  by_source: ProspectingDialerDimensionScorecard[];
+  daily_trend: Array<{
+    date: string;
+    attempts: number | null;
+    human_conversations: number | null;
+    right_party_contacts: number | null;
+    accepted_handoffs: number | null;
+    answer_rate_basis_points: number | null;
+    blocked_or_failed_calls: number | null;
+  }>;
+  readiness: {
+    status: "blocked" | "needs_review" | "ready_for_controlled_pilot";
+    controlled_pilot_ready: boolean;
+    d10_acceptance_required: true;
+    observed_at?: string;
+    checks: Array<{
+      key: string;
+      label: string;
+      status: "pass" | "warning" | "block";
+      detail: string;
+    }>;
+    blockers: string[];
+    warnings: string[];
+  };
+  metric_definitions: Array<{
+    key: string;
+    label: string;
+    definition: string;
+    source_records: string[];
+    attribution_timestamp: string;
+    unavailable_when: string | null;
+  }>;
+  attribution_model_version?: string;
+  profit_formula_version?: string;
+  financials_visible?: boolean;
+};
+
+export type ProspectingDialerAnalyticsQuery = {
+  date_from?: string;
+  date_to?: string;
+  cohort_id?: string;
+  source?: string;
+  campaign_id?: string;
+  caller_user_id?: string;
+  dial_mode?: string;
+};
+
 export type ProspectingVoiceSession = {
   can_initialize: boolean;
   dial_session_id: string;
@@ -4662,6 +4814,39 @@ export async function getProspectingDialerOperations(): Promise<{
   } catch (error) {
     console.error("Stonegate dialer operations request failed.", error);
     return { dialerOperations: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingDialerAnalytics(
+  query: ProspectingDialerAnalyticsQuery = {},
+): Promise<{
+  dialerAnalytics: ProspectingDialerAnalytics | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value) search.set(key, value);
+  }
+  const suffix = search.size ? `?${search.toString()}` : "";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/dialer/analytics${suffix}`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      dialerAnalytics: (await response.json()) as ProspectingDialerAnalytics,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate dialer analytics request failed.", error);
+    return { dialerAnalytics: null, apiConnected: false };
   }
 }
 

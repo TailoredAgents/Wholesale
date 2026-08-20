@@ -1,9 +1,10 @@
-import { ListChecks, Megaphone, SlidersHorizontal } from "lucide-react";
+import { BarChart3, ListChecks, Megaphone, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
 import {
   getAcquisitionOperations,
   getCampaignManagementOverview,
+  getProspectingDialerAnalytics,
   getProspectingDialerOperations,
   getProspectingInboundCallbacks,
   getProspectingWorkbench,
@@ -11,13 +12,14 @@ import {
 } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { CampaignManagementWorkspace } from "../campaigns/campaign-management-workspace";
+import { ProspectingAnalytics } from "./prospecting-analytics";
 import { ProspectingDialerControl } from "./prospecting-dialer-control";
 import { ProspectingWorkspace } from "./prospecting-workspace";
 import styles from "./prospecting.module.css";
 
 export const dynamic = "force-dynamic";
 
-type ProspectingView = "campaigns" | "dialer-control" | "my-calls";
+type ProspectingView = "campaigns" | "dialer-control" | "my-calls" | "analytics";
 
 export default async function ProspectingPage({
   searchParams,
@@ -35,7 +37,8 @@ export default async function ProspectingPage({
   const view: ProspectingView = canManage
     ? requestedView === "my-calls" ||
       requestedView === "campaigns" ||
-      requestedView === "dialer-control"
+      requestedView === "dialer-control" ||
+      requestedView === "analytics"
       ? requestedView
       : "campaigns"
     : "my-calls";
@@ -49,6 +52,7 @@ export default async function ProspectingPage({
     operationsResult,
     dialerOperationsResult,
     callbackResult,
+    analyticsResult,
   ] =
     await Promise.all([
       view === "my-calls" || (canManage && view === "dialer-control")
@@ -66,17 +70,22 @@ export default async function ProspectingPage({
       view === "my-calls"
         ? getProspectingInboundCallbacks()
         : Promise.resolve({ callbacks: null, apiConnected: true }),
+      canManage && view === "analytics"
+        ? getProspectingDialerAnalytics()
+        : Promise.resolve({ dialerAnalytics: null, apiConnected: true }),
     ]);
   const campaignManagement = campaignResult.campaignManagement;
   const operations = operationsResult.operations;
   const dialerOperations = dialerOperationsResult.dialerOperations;
   const callbacks = callbackResult.callbacks;
+  const dialerAnalytics = analyticsResult.dialerAnalytics;
   const connected =
     apiConnected &&
     campaignResult.apiConnected &&
     operationsResult.apiConnected &&
     dialerOperationsResult.apiConnected &&
-    callbackResult.apiConnected;
+    callbackResult.apiConnected &&
+    analyticsResult.apiConnected;
 
   return (
     <WorkspacePage>
@@ -86,14 +95,18 @@ export default async function ProspectingPage({
             ? "Create outreach campaigns, import prospect lists, assign calling work, and measure results."
             : view === "dialer-control"
               ? "Activate callers and campaigns, monitor live sessions, and recover stalled calling work safely."
-              : "Work assigned prospects, handle callbacks, record call outcomes, and complete warm handoffs."
+              : view === "analytics"
+                ? "Compare source economics, caller performance, data quality, and technical readiness for a controlled native-dialer pilot."
+                : "Work assigned prospects, handle callbacks, record call outcomes, and complete warm handoffs."
         }
         eyebrow={
           view === "campaigns"
             ? "Outreach management"
             : view === "dialer-control"
               ? "Dialer operations"
-              : "Caller execution"
+              : view === "analytics"
+                ? "Performance and readiness"
+                : "Caller execution"
         }
         meta={connected ? (canManage ? "Campaigns and assigned calls" : "Assigned records only") : "API unavailable"}
         title="Prospecting"
@@ -116,6 +129,14 @@ export default async function ProspectingPage({
             >
               <SlidersHorizontal aria-hidden="true" size={16} />
               <span>Dialer control</span>
+            </Link>
+            <Link
+              aria-current={view === "analytics" ? "page" : undefined}
+              className={view === "analytics" ? styles.activeHubNavigation : undefined}
+              href="/os/prospecting?view=analytics"
+            >
+              <BarChart3 aria-hidden="true" size={16} />
+              <span>Analytics</span>
             </Link>
           </>
         ) : null}
@@ -151,6 +172,15 @@ export default async function ProspectingPage({
         />
       ) : view === "dialer-control" && canManage ? (
         <SectionPanel description="Dialer operations could not be loaded from the API." title="Dialer control unavailable">
+          <div />
+        </SectionPanel>
+      ) : view === "analytics" && canManage && dialerAnalytics ? (
+        <ProspectingAnalytics initialData={dialerAnalytics} />
+      ) : view === "analytics" && canManage ? (
+        <SectionPanel
+          description="No performance or readiness values are shown because the analytics API could not be reached."
+          title="Prospecting analytics unavailable"
+        >
           <div />
         </SectionPanel>
       ) : prospecting ? (

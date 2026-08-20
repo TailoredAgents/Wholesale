@@ -964,3 +964,164 @@ class ProspectingWorkbenchOverview(BaseModel):
     returned_handoffs: list[ProspectHandoffRead]
     scorecards: list[ProspectingScorecardRead]
     copilot: ProspectingCopilotOverview
+
+
+class ProspectingAnalyticsPeriodRead(BaseModel):
+    date_from: date
+    date_to: date
+    timezone: Literal["UTC"] = "UTC"
+    start_at: datetime
+    end_at_exclusive: datetime
+    report_mode: Literal["activity_window"] = "activity_window"
+    as_of: datetime
+
+
+class ProspectingAnalyticsFiltersRead(BaseModel):
+    cohort_id: UUID | None
+    source: str | None
+    campaign_id: UUID | None
+    caller_user_id: UUID | None
+    dial_mode: str | None
+
+
+class ProspectingAnalyticsFilterOptionRead(BaseModel):
+    id: UUID
+    name: str
+
+
+class ProspectingAnalyticsFilterOptionsRead(BaseModel):
+    sources: list[str]
+    campaigns: list[ProspectingAnalyticsFilterOptionRead]
+    cohorts: list[ProspectingAnalyticsFilterOptionRead]
+    callers: list[ProspectingAnalyticsFilterOptionRead]
+    dial_modes: list[str]
+
+
+class ProspectingMetricCoverageRead(BaseModel):
+    raw_attempts_basis_points: int | None
+    paid_hours_basis_points: int | None
+    provider_cost_basis_points: int | None
+    appointment_outcomes_basis_points: int | None
+    profit_basis_points: int | None
+    reputation_basis_points: int | None
+    warnings: list[str]
+
+
+class ProspectingDialerScorecardMetricsRead(BaseModel):
+    entered_leads: int
+    attempts: int | None
+    answered_calls: int | None
+    human_conversations: int | None
+    conversations_over_60_seconds: int | None
+    right_party_contacts: int | None
+    qualified_sellers: int | None
+    appointments_set: int
+    appointments_held: int | None
+    submitted_handoffs: int | None
+    accepted_handoffs: int | None
+    signed_contracts: int
+    closed_assignments: int
+    paid_minutes: int | None
+    productive_calling_minutes: int | None
+    labor_cost_cents: int | None
+    provider_cost_cents: int | None
+    list_cost_cents: int | None
+    other_cost_cents: int | None
+    total_cost_cents: int | None
+    gross_revenue_cents: int | None
+    contribution_profit_cents: int | None
+    attempts_per_paid_hour_x100: int | None
+    human_conversations_per_paid_hour_x100: int | None
+    profit_per_paid_hour_cents: int | None
+    cost_per_qualified_seller_cents: int | None
+    cost_per_contract_cents: int | None
+    human_contact_rate_basis_points: int | None
+    right_party_contact_rate_basis_points: int | None
+    qualified_seller_rate_basis_points: int | None
+    accepted_handoff_rate_basis_points: int | None
+    appointment_held_rate_basis_points: int | None
+    contract_rate_basis_points: int | None
+    close_rate_basis_points: int | None
+    short_calls: int | None
+    silent_or_dead_air_calls: int | None
+    blocked_or_failed_calls: int | None
+    no_answer_calls: int | None
+    voicemail_calls: int | None
+    duplicate_call_incidents: int | None
+    seller_complaints: int | None
+    dnc_requests: int | None
+    abandoned_calls: int | None
+    average_connection_time_seconds: int | None
+    number_reputation_score: int | None
+    answer_rate_trend_basis_points: int | None
+    status_by_key: dict[
+        str,
+        Literal["known", "partial", "unknown", "not_applicable"],
+    ]
+    coverage: ProspectingMetricCoverageRead
+
+
+class ProspectingDialerDimensionScorecardRead(BaseModel):
+    dimension_type: Literal["va", "campaign", "cohort", "list", "dial_mode", "source"]
+    dimension_id: UUID | None
+    dimension_name: str
+    external_key: str
+    entry_stage: str
+    source: str | None
+    dial_mode: str | None
+    metrics: ProspectingDialerScorecardMetricsRead
+
+
+class ProspectingDialerDailyPointRead(BaseModel):
+    date: date
+    attempts: int | None
+    human_conversations: int | None
+    right_party_contacts: int | None
+    accepted_handoffs: int | None
+    answer_rate_basis_points: int | None
+    blocked_or_failed_calls: int | None
+
+
+class ProspectingDialerReadinessCheckRead(BaseModel):
+    key: str
+    label: str
+    status: Literal["pass", "warning", "block"]
+    detail: str
+
+
+class ProspectingDialerLaunchReadinessRead(BaseModel):
+    status: Literal["blocked", "needs_review", "ready_for_controlled_pilot"]
+    controlled_pilot_ready: bool
+    d10_acceptance_required: Literal[True] = True
+    observed_at: datetime
+    checks: list[ProspectingDialerReadinessCheckRead]
+    blockers: list[str]
+    warnings: list[str]
+
+
+class ProspectingMetricDefinitionRead(BaseModel):
+    key: str
+    label: str
+    definition: str
+    source_records: list[str]
+    attribution_timestamp: str
+    unavailable_when: str | None
+
+
+class ProspectingDialerAnalyticsRead(BaseModel):
+    attribution_model_version: str
+    profit_formula_version: str
+    financials_visible: bool
+    period: ProspectingAnalyticsPeriodRead
+    filters: ProspectingAnalyticsFiltersRead
+    filter_options: ProspectingAnalyticsFilterOptionsRead
+    summary: ProspectingDialerScorecardMetricsRead
+    by_va: list[ProspectingDialerDimensionScorecardRead]
+    by_campaign: list[ProspectingDialerDimensionScorecardRead]
+    by_cohort: list[ProspectingDialerDimensionScorecardRead]
+    by_list: list[ProspectingDialerDimensionScorecardRead]
+    by_dial_mode: list[ProspectingDialerDimensionScorecardRead]
+    by_source: list[ProspectingDialerDimensionScorecardRead]
+    daily_trend: list[ProspectingDialerDailyPointRead]
+    readiness: ProspectingDialerLaunchReadinessRead
+    metric_definitions: list[ProspectingMetricDefinitionRead]

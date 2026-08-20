@@ -803,6 +803,105 @@ bridge and rollback path and are not replaced, disabled, or modified by native-d
 6. Monitor worker health, fresh session heartbeats, active legs, waiting callbacks, missed-call
    tasks, and sanitized operational errors from **Dialer control** before and during a pilot.
 
+### D9 Analytics, Cost Evidence, And Technical Readiness
+
+**Prospecting > Analytics** is visible only to users with acquisition-management authority. It
+loads from `GET /api/v1/prospecting/dialer/analytics` with private, no-store response handling and
+does not expose browser Voice tokens or provider credentials. Cost, revenue, and profit values are
+returned only when that manager also has `financials:view`; otherwise the operating metrics
+remain available and financial values are explicitly hidden.
+
+The report defaults to the most recent 30 UTC dates. A manager can select an inclusive UTC start
+and end date, up to 366 dates, then optionally filter by source, campaign, cohort, VA/caller, and
+dial mode. Use UTC dates when reconciling a shift that crosses midnight in the employee's local
+timezone. Source choices normalize native Stonegate, BatchDialer, paid ads, and other
+attribution. Campaign, cohort, VA/caller, and dial-mode filters apply only to durable records that
+carry those Stonegate operating dimensions. Native activity and attributed BatchDialer work or cost
+can carry them; a raw external lead-source record usually does not. Clear those filters before a
+cross-source comparison when the external source has no matching operating dimension.
+
+The D9 window selects the originating activity, not the date every later outcome happened. Native
+work enters by dial start; paid-ad and other acquisition enters by lead creation; BatchDialer
+activity enters on the first durable BatchDialer handoff touch, including a match to an existing
+lead, or at lead creation for a BatchDialer-created lead that has no durable handoff touch; costs
+enter by incurred date; and paid time enters by work date. A later contract or close
+remains attributed to that originating record and is reported as of the timestamp shown on the
+dashboard. A paid lead that is later worked through BatchDialer can appear in both source rows.
+Those rows are separate attribution views and must not be added together; the all-source summary
+de-duplicates the same lead and downstream record.
+
+The API rejects a report that would materialize more than 50,000 origin records. Narrow the UTC
+dates or select a campaign, cohort, caller, or source instead of treating that response as an empty
+report.
+Collected gross revenue comes from collected revenue records. Contribution profit comes separately
+from approved reconciliation company-profit evidence rather than an estimated assignment fee. A
+closed transaction counts as a closed assignment only when its recorded strategy is assignment.
+
+#### Record Cost And Time Evidence
+
+1. Open **Prospecting > Campaigns**, select the exact campaign, and open **Costs**.
+2. Link every cost to the measurement cohort when one is known. Use the actual **Incurred on** date
+   so it falls inside the intended UTC analysis window.
+3. For VA labor, choose the VA labor category, select the worker, and enter paid hours and hourly
+   rate. This produces the labor amount and paid-time evidence used by per-hour metrics.
+4. Record the actual list purchase against the matching cohort or import.
+5. Record dialer license, phone-number, and voice-usage charges as provider costs. Record
+   enrichment, software, or another category only under the category that describes the real
+   expense.
+6. Add the vendor and a short audit note. Do not enter a Finance payment merely to make a
+   prospecting metric appear.
+7. Record each expense once. Do not copy the same Twilio usage amount into both call-leg evidence
+   and campaign voice usage; D9 prevents known provider-cost overlap, but duplicate manual ledger
+   entries are still duplicate business costs.
+
+An empty ledger is not treated as free. Paid time, provider cost, list cost, total cost, unit cost,
+and profit-dependent values display **Unavailable** until their required records exist. A collected
+revenue record supports gross revenue; a completed deal does not produce contribution profit until
+its downstream reconciliation is approved.
+
+#### Read The D9 Readiness Result
+
+The readiness result is one of **Blocked**, **Needs review**, or **Ready for controlled pilot**.
+Individual checks report pass, warning, or block for the dedicated prospecting line, browser token
+configuration, callback routing, recording policy, current session health, organization-wide
+one-line cap, and worker health.
+
+**Ready for controlled pilot** means only that the technical checks passed at the observed time.
+It does not activate a campaign, authorize broad calling, verify provider billing, or complete
+production acceptance. D10 still requires the owner-controlled numbers, one VA, one small
+non-overlapping campaign, call-by-call review, multiple clean shifts, provider-billing review, and
+explicit owner acceptance.
+
+#### Troubleshooting And Recovery
+
+- **Analytics unavailable:** keep the prior confirmed snapshot, confirm API health and the signed-in
+  manager's `operations:manage` permission, then reload once. Do not infer zero performance from a
+  failed request.
+- **Unexpected empty report:** confirm the inclusive UTC dates, remove optional filters one at a
+  time, and verify the campaign, cohort, caller, dial mode, and source attribution on the original
+  records.
+- **BatchDialer or paid-ad rows show unavailable attempts or rates:** this is expected when
+  Stonegate has attributable leads and outcomes but no raw provider-attempt evidence. Compare the
+  common business outcomes rather than inventing dial volume.
+- **Costs or paid-hour metrics are unavailable:** record the actual campaign cost and work-session
+  evidence with the correct worker, campaign, cohort, and date. Never estimate a value only to
+  clear a coverage warning.
+- **Appointments, contracts, closes, revenue, or profit are missing:** verify the warm handoff points
+  to the correct lead, appointment outcomes are final, the deal and transaction remain linked to
+  that lead, assignment strategy is recorded for a closed-assignment count, gross revenue is marked
+  collected, and the funded transaction's reconciliation is approved for contribution profit.
+- **Readiness is blocked:** open **Prospecting > Dialer control** and address the named failed check.
+  Use safe drain, cancel unanswered call, provider reconciliation, or untouched-orphan recovery
+  only for the matching session condition. Never interrupt a connected seller to clear a dashboard.
+- **Worker check is stale:** verify the communications worker is live and its heartbeat advances
+  before permitting another shift.
+- **Rollback:** pause the native campaign, safely end native sessions, and return only the unworked
+  non-overlapping cohort to BatchDialer. Keep native evidence read-only and never work the same
+  active cohort in both systems.
+
+BatchDialer and its qualified-lead and appointment Zaps remain the operating bridge and rollback
+path throughout D9 and D10. D9 does not modify or disable them.
+
 ### D4 Controlled Acceptance Boundary
 
 Complete an isolated test-number or approved non-overlapping campaign acceptance before broad
@@ -837,9 +936,9 @@ production use:
 9. Confirm no cold call creates a fake warm Contact, Lead, Inbox conversation, or communication
    record, and confirm the existing cellphone-forwarding Voice and BatchDialer handoff workflows
    remain unchanged.
-10. Return all native-dialer gates to off after the controlled test. Production remains inactive
-    until the D5-D10 workflow and acceptance gates are complete and the owner explicitly approves
-    activation.
+10. Return all native-dialer gates to off after the controlled test. D0-D9 are implemented, but
+    production acceptance remains incomplete until the D10 controlled shifts pass and the owner
+    explicitly approves activation.
 
 ## SignWell
 

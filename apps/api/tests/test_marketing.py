@@ -359,6 +359,16 @@ def test_marketing_overview_and_offline_export_generation(
     lead_id = intake_response.json()["lead_id"]
     lead = db_session.get(Lead, UUID(lead_id))
     assert lead is not None
+    original_touch_created_at = db_session.scalar(
+        select(AttributionTouch.created_at)
+        .where(
+            AttributionTouch.lead_id == lead.id,
+            AttributionTouch.touch_type == "lead_creation",
+        )
+        .order_by(AttributionTouch.created_at.asc(), AttributionTouch.id.asc())
+        .limit(1)
+    )
+    assert original_touch_created_at is not None
     db_session.add(
         AttributionTouch(
             organization_id=lead.organization_id,
@@ -368,6 +378,7 @@ def test_marketing_overview_and_offline_export_generation(
             medium="duplicate_medium",
             campaign="duplicate_campaign",
             landing_page="/duplicate",
+            created_at=original_touch_created_at + timedelta(seconds=1),
         )
     )
     db_session.commit()

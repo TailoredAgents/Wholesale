@@ -59,7 +59,7 @@ is relevant and the required permission is present.
 | Inbox | Lead Manager, Acquisitions | `communications:view_conversations` |
 | Tasks | Administrator, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
 | Calendar | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned` |
+| Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Dialer control and Analytics require `operations:manage` |
 | Leads | Administrator, Lead Manager, Acquisitions | `leads:view` |
 | Deals | Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
 | Buyers | Dispositions | `buyers:view` |
@@ -67,9 +67,10 @@ is relevant and the required permission is present.
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | Settings | Owner, Administrator | At least one administration permission |
 
-Campaigns and My Calls are local Prospecting views. Lead Queue, Pipeline, and Underwriting are
-local Leads views. Approvals are in Tasks; transaction and disposition work is in Deals;
-administration is in Settings. My Setup remains available to every signed-in employee.
+Campaigns, Dialer control, Analytics, and My Calls are local Prospecting views. Dialer control and
+Analytics are hidden from caller-only accounts. Lead Queue, Pipeline, and Underwriting are local
+Leads views. Approvals are in Tasks; transaction and disposition work is in Deals; administration
+is in Settings. My Setup remains available to every signed-in employee.
 
 ## Public Website
 
@@ -551,11 +552,48 @@ Open **Prospecting > Campaigns**. Managers see **Overview**, **Import**, **Costs
 | Committed file row | Selects an import and shows source/list plus new and matched counts | Requires prior import |
 | Row-level results | Shows exactly why each row imported, matched, failed, or was excluded plus relationship state and contact count | Read-only evidence |
 
+## Prospecting Analytics
+
+Open **Prospecting > Analytics**. This manager-only view compares attributable business outcomes,
+cost, quality, evidence coverage, and technical controlled-pilot readiness. Financial values also
+require `financials:view`. An unavailable or permission-hidden value is not zero, and
+**Ready for controlled pilot** is not D10 production acceptance.
+
+### Filters And Scorecards
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Start date / End date | Selects an inclusive UTC reporting window | Both required; end cannot precede start and the range cannot exceed 366 dates |
+| Source | Limits evidence to native Stonegate, BatchDialer, paid ads, or other attribution | The four canonical choices remain available even when one has no records in the period |
+| Campaign / Cohort | Limits the report to durable records carrying the selected operating campaign or measurement cohort | Clear to compare an external source whose raw lead records do not carry that dimension |
+| VA / caller | Limits work and linked cost evidence to one current or historical caller | Clear to compare an external source whose raw lead records do not carry that caller |
+| Dial mode | Limits records carrying a stored cohort, batch, work, cost, or attempt dial mode | Clear to compare a source without that operating evidence |
+| **Reset** | Restores the initial 30-date window and clears optional filters | Manager only |
+| **Apply filters** | Reloads the private, no-store analytics result | Disabled while loading; invalid dates show an error |
+| Funnel cards | Show attempts, human conversations, right-party contacts, qualified sellers, appointments set and held, accepted handoffs, contracts, and closed assignment-strategy transactions | Missing raw source evidence displays **Unavailable** |
+| Cost and profit | Shows labor, provider, list, other/marketing, total cost, collected gross revenue, approved-reconciliation contribution profit, and unit economics | Requires `financials:view` plus linked cost, time, collected revenue, transaction, and approved reconciliation evidence as applicable |
+| Calling productivity | Shows paid and productive time, per-hour output, and contact/conversion rates | Per-hour values require paid-time evidence |
+| Source comparison | Compares native Stonegate, BatchDialer, paid ads, and separate other-attribution rows on attributable outcomes | Rows can overlap when paid acquisition later receives a BatchDialer handoff and must not be added together; raw dial metrics remain unavailable without attempt evidence |
+| Break down by | Changes operating scorecards among VA/caller, campaign, cohort, list, and dial mode | Read-only selection |
+| Quality and reputation | Shows duration, failed/no-answer/voicemail, duplicate, complaint, DNC, abandonment, connection-time, reputation, and trend indicators | Each item remains unavailable until its source evidence exists |
+| Metric coverage | Shows evidence completeness for raw attempts, paid hours, provider cost, appointment outcomes, profit attribution, and number reputation | Warnings identify missing evidence; they do not synthesize values |
+| Daily movement | Shows daily UTC attempt, contact, handoff, answer-rate, and failure evidence | Empty when the period has no attributable daily records |
+
+### Technical Readiness And Definitions
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Controlled-pilot readiness | Summarizes technical status as **Blocked**, **Needs review**, or **Ready for controlled pilot** | Technical observation only; D10 acceptance is always still required |
+| Blocking issues / Review before pilot | Lists specific conditions that must be fixed or reviewed | Never bypass a blocker to make the display green |
+| Readiness check cards | Report pass, warning, or block for dedicated line, browser token, callback, recording, session, one-line cap, and worker health | Correct underlying configuration or session state in **Dialer control** |
+| **How these metrics are calculated** | Expands deterministic definitions, source records, attribution timestamp, and unavailable conditions | Use before comparing unlike sources or periods |
+| Prior confirmed snapshot notice | Retains the last successful values after a transient network or server failure | A 401 or 403 clears the prior snapshot, including financial values, because access expired or was removed |
+
 ## Prospecting
 
-Prospecting has **Campaigns** for authorized managers and **My Calls** for assigned callers.
-Within My Calls, views are **Work queue**, **Call quality**, **Handoff review** for managers,
-**Performance**, and **Caller scripts** for managers.
+Prospecting has **Campaigns**, **Dialer control**, and **Analytics** for authorized managers plus
+**My Calls** for assigned callers. Within My Calls, views are **Work queue**, **Call quality**,
+**Handoff review** for managers, **Performance**, and **Caller scripts** for managers.
 
 ### Work Queue And Attempt
 

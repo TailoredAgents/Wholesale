@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal, NoReturn
 from uuid import UUID
 
@@ -22,6 +23,7 @@ from app.schemas.prospecting import (
     ProspectingCopilotAnalyzeRequest,
     ProspectingCopilotReviewRead,
     ProspectingCopilotReviewRequest,
+    ProspectingDialerAnalyticsRead,
     ProspectingDialerOperationsRead,
     ProspectingDialerProfileRead,
     ProspectingDialerProfileUpsert,
@@ -90,6 +92,7 @@ from app.services.prospecting_dialer import (
     update_company_dialer_switch,
     upsert_dialer_profile,
 )
+from app.services.prospecting_dialer_analytics import get_prospecting_dialer_analytics
 from app.services.prospecting_dialer_operations import (
     ProspectingDialerOperationsConflictError,
     get_prospecting_dialer_operations,
@@ -120,6 +123,24 @@ def _mark_sensitive_response_no_store(response: Response) -> None:
     """Prevent browser/proxy storage of responses containing leases or Voice JWTs."""
 
     response.headers["Cache-Control"] = "private, no-store"
+
+
+def _parse_analytics_date(value: str | None, parameter: str) -> date | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{parameter} must be a valid YYYY-MM-DD date.") from exc
+
+
+def _parse_analytics_uuid(value: str | None, parameter: str) -> UUID | None:
+    if value is None:
+        return None
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise ValueError(f"{parameter} must be a valid UUID.") from exc
 
 
 def _raise_prospecting_voice_error(exc: Exception) -> NoReturn:
@@ -204,6 +225,40 @@ def read_native_dialer_operations(
 ) -> ProspectingDialerOperationsRead:
     _mark_sensitive_response_no_store(response)
     return get_prospecting_dialer_operations(db, principal)
+
+
+@router.get("/dialer/analytics")
+def read_native_dialer_analytics(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+    date_from: str | None = None,
+    date_to: str | None = None,
+    cohort_id: str | None = None,
+    source: str | None = None,
+    campaign_id: str | None = None,
+    caller_user_id: str | None = None,
+    dial_mode: str | None = None,
+) -> ProspectingDialerAnalyticsRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        return get_prospecting_dialer_analytics(
+            db,
+            principal,
+            date_from=_parse_analytics_date(date_from, "date_from"),
+            date_to=_parse_analytics_date(date_to, "date_to"),
+            cohort_id=_parse_analytics_uuid(cohort_id, "cohort_id"),
+            source=source,
+            campaign_id=_parse_analytics_uuid(campaign_id, "campaign_id"),
+            caller_user_id=_parse_analytics_uuid(caller_user_id, "caller_user_id"),
+            dial_mode=dial_mode,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
 
 
 @router.get("/dialer/callbacks")

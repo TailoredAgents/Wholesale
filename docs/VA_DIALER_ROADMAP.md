@@ -598,7 +598,7 @@ The phase table is the progress ledger. Update the status in this file as work s
 | D6 | Dispositions, cadence, handoff, and appointment automation | Implemented; available to approved native campaigns |
 | D7 | Recording, transcript, AI notes, and evidence continuity | Implemented; available to approved native campaigns |
 | D8 | Inbound callbacks, manager controls, and operational health | Implemented; available under manager gates |
-| D9 | Analytics, quality, cost, and launch readiness | Planned |
+| D9 | Analytics, quality, cost, and launch readiness | Implemented; technical controlled-pilot readiness only |
 | D10 | Controlled single-line production acceptance | Planned |
 | D11 | Optional two-line pilot | Planned |
 | D12 | Optional three-line or adaptive pacing pilot | Planned |
@@ -1062,29 +1062,75 @@ Implementation record (2026-08-19):
   voicemail and missed-task, manager control, stop and recovery, warm Voice regression, frontend
   contract, type, lint, and production-build coverage protect the D8 operating boundary
 - BatchDialer and its existing Zaps remain unchanged as the production bridge and rollback path;
-  D9 analytics and D10 controlled single-line acceptance are still required before broad rollout
+  D9 analytics is implemented, but D10 controlled single-line acceptance is still required before
+  broad rollout
 
 ### D9. Analytics, Quality, Cost, And Launch Readiness
 
-Implementation:
+Implementation record (2026-08-19):
 
-- build per-VA, campaign, cohort, list, and dial-mode scorecards
-- connect VA labor and provider costs
-- report call funnel through accepted handoff, contract, close, and contribution profit
-- report quality and reputation indicators
-- add readiness checks for line, token, callback, recording, session, cap, and worker health
-- document troubleshooting and manager recovery
+- add the manager-only **Prospecting > Analytics** workspace and a private, no-store analytics API;
+  cost, revenue, and profit values remain hidden without `financials:view`
+- filter by an inclusive UTC start and end date plus optional source, campaign, cohort, VA/caller,
+  and dial mode; the default window is the most recent 30 UTC dates and a request cannot exceed
+  366 dates
+- use a versioned activity-cohort attribution model: native work enters at dial start, paid-ad and
+  other acquisition enters at lead creation, and BatchDialer activity enters at the first durable
+  BatchDialer handoff touch even when it matched an existing CRM lead, with lead creation as the
+  fallback for a BatchDialer-created lead that has no durable handoff touch; cost enters at incurred
+  date and work time at work date; later downstream outcomes remain attributed to that originating
+  work and are reported as of the response timestamp
+- preserve paid/other acquisition attribution when that lead later receives a BatchDialer handoff.
+  Source scorecards can therefore overlap and are explicitly non-additive, while the all-source
+  summary de-duplicates the same lead and downstream record
+- build scorecards by VA, campaign, cohort, imported list, dial mode, and source, with daily UTC
+  trend evidence
+- compare native Stonegate, BatchDialer, and paid-ad sources on attributable business outcomes,
+  with other attribution kept in its own bucket; raw dial rates remain unavailable for a source
+  that does not provide raw attempt evidence
+- connect recorded VA work sessions and campaign-cost records to paid time, VA labor, list,
+  provider, other, and total cost; preserve unavailable values when the underlying evidence is
+  absent instead of displaying an invented zero
+- trace qualified native prospecting work through submitted and accepted handoff, appointment set
+  and held, signed seller contract, closed assignment-strategy transaction, collected gross revenue,
+  and contribution profit; gross comes from collected revenue records, while the versioned
+  contribution-profit formula uses approved reconciliation company-profit evidence
+- report calling efficiency, contact and conversion rates, short calls, blocked or failed calls,
+  no-answer and voicemail outcomes, duplicate-call incidents, seller complaints, DNC requests,
+  abandoned calls, connection time, number reputation, and answer-rate trend when their supporting
+  evidence exists
+- expose explicit coverage for raw attempts, paid hours, provider cost, appointment outcomes,
+  profit attribution, and number reputation; every nullable metric renders as **Unavailable** when
+  the required source record is missing
+- publish the deterministic definition, source records, attribution timestamp, and unavailable
+  rule for each material metric in **How these metrics are calculated**
+- reject analytics windows that would materialize more than 50,000 origin records and require the
+  manager to narrow the date or operating filters
+- add pass, warning, or block checks for the dedicated line, browser token configuration, callback
+  routing, recording policy, session health, organization-wide one-line cap, and worker health
+- label the best possible D9 result **Ready for controlled pilot**. This is a technical status only;
+  it never marks the native dialer Active or Accepted and always retains the D10 requirement
+- document cost entry, troubleshooting, safe recovery, and BatchDialer rollback procedures in the
+  setup and operating references
 
 Tests:
 
-- deterministic metric definitions
-- cohort and date boundaries
-- no-answer, contact, handoff, contract, and profit attribution
-- readiness blocker accuracy
+- deterministic metric definitions and nullable coverage behavior
+- inclusive UTC cohort and date boundaries plus scoped filter validation
+- no-answer, human contact, qualified seller, handoff, appointment, contract, close, and reconciled
+  profit attribution
+- provider-cost de-duplication and labor-cost linkage
+- readiness blocker accuracy, including stale sessions, line/token/callback/recording configuration,
+  the hard one-line cap, and worker health
+- manager-only API and navigation access plus frontend contract, type, lint, and build coverage
 
 Exit criteria:
 
-- management can compare native Stonegate, BatchDialer, and paid-ad cohorts on business outcomes
+- management can compare native Stonegate, BatchDialer, and paid-ad cohorts on attributable business
+  outcomes without mistaking missing evidence for zero
+- a manager can identify technical blockers and the exact missing measurement coverage before a
+  controlled pilot
+- D10 remains Planned and mandatory; D9 output alone cannot authorize general production use
 
 ### D10. Controlled Single-Line Production Acceptance
 
