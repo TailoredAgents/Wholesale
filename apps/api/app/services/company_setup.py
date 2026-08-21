@@ -46,6 +46,7 @@ MANUAL_BY_ROLE = {
     "owner": "owner",
     "founder_operator": "owner",
     "ceo": "owner",
+    "operations_assistant": "operations_assistant",
     "acquisition_manager": "lead_manager",
     "acquisition_rep": "closer",
     "prospecting_caller": "va_caller",

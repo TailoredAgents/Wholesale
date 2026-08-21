@@ -46,6 +46,7 @@ export function NewLeadControl({
           "administrator",
           "acquisition_manager",
           "acquisition_rep",
+          "operations_assistant",
         ].includes(role),
       ),
   );

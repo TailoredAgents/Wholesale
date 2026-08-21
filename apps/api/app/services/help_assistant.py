@@ -20,6 +20,7 @@ TRANSACTION_ROLES = frozenset({"transaction_coordinator"})
 FINANCE_ROLES = frozenset({"finance_accounting"})
 MARKETING_ROLES = frozenset({"marketing_manager"})
 PROSPECTING_ROLES = frozenset({"prospecting_caller", "acquisition_manager"})
+OPERATIONS_ASSISTANT_ROLES = frozenset({"operations_assistant"})
 
 ALL_STAFF_DOCUMENTS = (
     "USER_MANUAL.md",
@@ -39,9 +40,15 @@ OWNER_DOCUMENTS = (
     "DESIGN_SYSTEM.md",
 )
 SPECIALIST_DOCUMENTS: dict[str, frozenset[str]] = {
-    "LEAD_MANAGER_USER_MANUAL.md": OWNER_ROLES | ACQUISITIONS_ROLES,
-    "UNDERWRITING_COMP_METHOD.md": OWNER_ROLES | ACQUISITIONS_ROLES,
-    "GEORGIA_CONTRACT_PACKET.md": OWNER_ROLES | ACQUISITIONS_ROLES | TRANSACTION_ROLES,
+    "LEAD_MANAGER_USER_MANUAL.md": (
+        OWNER_ROLES | ACQUISITIONS_ROLES | OPERATIONS_ASSISTANT_ROLES
+    ),
+    "UNDERWRITING_COMP_METHOD.md": (
+        OWNER_ROLES | ACQUISITIONS_ROLES | OPERATIONS_ASSISTANT_ROLES
+    ),
+    "GEORGIA_CONTRACT_PACKET.md": (
+        OWNER_ROLES | ACQUISITIONS_ROLES | TRANSACTION_ROLES | OPERATIONS_ASSISTANT_ROLES
+    ),
     "SIGNWELL_COUNSEL_BRIEF.md": OWNER_ROLES | TRANSACTION_ROLES,
 }
 
@@ -87,15 +94,21 @@ TOPIC_RULES: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
     ),
     (
         frozenset({"buyer", "buyers", "disposition", "dispositions", "dealmachine"}),
-        OWNER_ROLES | DISPOSITION_ROLES | TRANSACTION_ROLES,
+        OWNER_ROLES | DISPOSITION_ROLES | TRANSACTION_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         frozenset({"underwriting", "comp", "comps", "arv", "repair", "offer"}),
-        OWNER_ROLES | ACQUISITIONS_ROLES,
+        OWNER_ROLES | ACQUISITIONS_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         frozenset({"contract", "signwell", "signature", "transaction", "closing"}),
-        OWNER_ROLES | ACQUISITIONS_ROLES | TRANSACTION_ROLES | DISPOSITION_ROLES,
+        (
+            OWNER_ROLES
+            | ACQUISITIONS_ROLES
+            | TRANSACTION_ROLES
+            | DISPOSITION_ROLES
+            | OPERATIONS_ASSISTANT_ROLES
+        ),
     ),
     (
         frozenset({"campaign", "marketing", "attribution", "conversion"}),
@@ -103,7 +116,7 @@ TOPIC_RULES: tuple[tuple[frozenset[str], frozenset[str]], ...] = (
     ),
     (
         frozenset({"prospecting", "calling", "caller", "va", "handoff"}),
-        OWNER_ROLES | PROSPECTING_ROLES | ACQUISITIONS_ROLES,
+        OWNER_ROLES | PROSPECTING_ROLES | ACQUISITIONS_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         frozenset(
@@ -136,15 +149,21 @@ SECTION_RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
     ),
     (
         ("disposition", "buyers"),
-        OWNER_ROLES | DISPOSITION_ROLES | TRANSACTION_ROLES,
+        OWNER_ROLES | DISPOSITION_ROLES | TRANSACTION_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         ("underwriting", "acquisitions closer", "appointment workspace"),
-        OWNER_ROLES | ACQUISITIONS_ROLES,
+        OWNER_ROLES | ACQUISITIONS_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         ("transaction", "contract", "signwell"),
-        OWNER_ROLES | ACQUISITIONS_ROLES | TRANSACTION_ROLES | DISPOSITION_ROLES,
+        (
+            OWNER_ROLES
+            | ACQUISITIONS_ROLES
+            | TRANSACTION_ROLES
+            | DISPOSITION_ROLES
+            | OPERATIONS_ASSISTANT_ROLES
+        ),
     ),
     (
         ("marketing", "campaign"),
@@ -152,7 +171,7 @@ SECTION_RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
     ),
     (
         ("prospecting", "va caller"),
-        OWNER_ROLES | PROSPECTING_ROLES,
+        OWNER_ROLES | PROSPECTING_ROLES | OPERATIONS_ASSISTANT_ROLES,
     ),
     (
         ("operating model", "ai control", "render", "domains and dns", "clerk"),
@@ -384,6 +403,14 @@ def suggested_questions(role_keys: frozenset[str]) -> list[str]:
                 "How do I add and train a new employee?",
                 "How do I verify Resend email?",
                 "What still needs production acceptance?",
+            ]
+        )
+    elif role_keys & OPERATIONS_ASSISTANT_ROLES:
+        questions.extend(
+            [
+                "How do I process and follow up with a new seller lead?",
+                "How do I schedule an appointment and hand off the next action?",
+                "How do I update a deal or buyer record without approving it?",
             ]
         )
     elif role_keys & PROSPECTING_ROLES:

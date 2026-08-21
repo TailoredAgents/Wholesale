@@ -98,6 +98,93 @@ def test_owner_can_create_another_full_access_owner(
     assert "integrations:manage_credentials" in profile.json()["permissions"]
 
 
+def test_operations_assistant_has_broad_work_access_without_sensitive_authority(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    assistant_email = "assistant@example.com"
+    assistant_headers = {"X-Dev-User-Email": assistant_email}
+
+    assistant = create_user(
+        client,
+        owner_headers,
+        assistant_email,
+        "operations_assistant",
+    )
+    assert assistant["role_keys"] == ["operations_assistant"]
+
+    profile_response = client.get("/api/v1/me", headers=assistant_headers)
+    assert profile_response.status_code == 200, profile_response.text
+    permissions = set(profile_response.json()["permissions"])
+    assert permissions == {
+        "buyers:edit",
+        "buyers:view",
+        "communications:access_recordings",
+        "communications:place_calls",
+        "communications:send_email",
+        "communications:send_sms",
+        "communications:view_conversations",
+        "calling_lists:work_assigned",
+        "deals:edit",
+        "deals:view",
+        "leads:edit",
+        "leads:view",
+        "operations:view",
+        "underwriting:edit",
+    }
+
+    acceptance_response = client.post(
+        "/api/v1/operating-model/setup/role-acceptances",
+        headers=owner_headers,
+        json={
+            "user_id": assistant["id"],
+            "role_key": "operations_assistant",
+            "manual_key": "operations_assistant",
+            "manual_version": "2026.08",
+        },
+    )
+    assert acceptance_response.status_code == 201, acceptance_response.text
+    assert acceptance_response.json()["status"] == "assigned"
+
+    lead = create_lead(client, assistant_headers, "303 Operations Assistant Way")
+    for path in (
+        "/api/v1/inbox/conversations",
+        "/api/v1/tasks/workspace",
+        "/api/v1/operations",
+        "/api/v1/prospecting",
+        "/api/v1/deals",
+        "/api/v1/buyers",
+    ):
+        response = client.get(path, headers=assistant_headers)
+        assert response.status_code == 200, f"{path}: {response.text}"
+
+    dashboard = client.get("/api/v1/dashboard/summary", headers=assistant_headers)
+    assert dashboard.status_code == 200, dashboard.text
+    assert dashboard.json()["source_performance"] == []
+    assert dashboard.json()["collected_revenue_cents"] == 0
+
+    for path in ("/api/v1/finance", "/api/v1/marketing"):
+        response = client.get(path, headers=assistant_headers)
+        assert response.status_code == 403, f"{path}: {response.text}"
+
+    user_admin = client.post(
+        "/api/v1/operations/users",
+        headers=assistant_headers,
+        json={
+            "email": "unauthorized@example.com",
+            "display_name": "Unauthorized",
+            "role_key": "operations_assistant",
+        },
+    )
+    assert user_admin.status_code == 403, user_admin.text
+
+    archive = client.delete(f"/api/v1/leads/{lead['id']}", headers=assistant_headers)
+    assert archive.status_code == 403, archive.text
+
+
 def test_phase_two_acquisition_workflow(
     db_session: Session,
     api_db_override: None,

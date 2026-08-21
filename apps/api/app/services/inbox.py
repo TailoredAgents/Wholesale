@@ -98,6 +98,7 @@ ELIGIBLE_ACQUISITION_ROLE_KEYS = {
     "ceo",
     "acquisition_manager",
     "acquisition_rep",
+    "operations_assistant",
 }
 ELIGIBLE_ASSIGNMENT_ROLE_KEYS = {
     *ELIGIBLE_ACQUISITION_ROLE_KEYS,

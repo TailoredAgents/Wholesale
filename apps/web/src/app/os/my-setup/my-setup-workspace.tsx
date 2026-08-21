@@ -10,6 +10,11 @@ import { labelize } from "../os-utils";
 import styles from "./my-setup.module.css";
 
 const manualStandards: Record<string, string[]> = {
+  operations_assistant: [
+    "Process routine leads, communications, appointments, property research, deals, and buyer records.",
+    "Escalate offer approvals, contracts, financial decisions, marketing changes, and system administration.",
+    "Do not export, archive, permanently delete, or bypass a blocked governed action.",
+  ],
   owner: [
     "Set policy, staffing, approval authority, and market priorities.",
     "Approve employee setup only after testing access and restrictions.",

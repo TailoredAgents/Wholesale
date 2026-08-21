@@ -25,6 +25,7 @@ const tabs: Array<{ key: OperationsTab; label: string }> = [
 const accessRoles = [
   { key: "owner", label: "Owner / full access" },
   { key: "administrator", label: "Administrator" },
+  { key: "operations_assistant", label: "Operations assistant" },
   { key: "prospecting_caller", label: "VA caller" },
   { key: "acquisition_rep", label: "Acquisitions rep" },
   { key: "acquisition_manager", label: "Acquisitions manager" },
@@ -92,7 +93,9 @@ export function OperationsWorkspace({
   const selectedList = operations.calling_lists.find((item) => item.id === selectedListId);
   const activeUsers = operations.users.filter((user) => user.is_active);
   const acquisitionUsers = activeUsers.filter((user) =>
-    user.role_keys.some((role) => ["administrator", "acquisition_manager", "acquisition_rep"].includes(role)),
+    user.role_keys.some((role) =>
+      ["administrator", "acquisition_manager", "acquisition_rep", "operations_assistant"].includes(role),
+    ),
   );
   const openLeadOptions = leads.filter((lead) => !lead.archived_at);
   const pendingDuplicates = operations.duplicate_candidates.filter(

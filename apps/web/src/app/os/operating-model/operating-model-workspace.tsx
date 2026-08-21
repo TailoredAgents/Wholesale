@@ -261,6 +261,7 @@ export function OperatingModelWorkspace({
     const data = new FormData(form);
     const roleKey = formValue(data, "role_key");
     const manualByRole: Record<string, string> = {
+      operations_assistant: "operations_assistant",
       acquisition_manager: "lead_manager",
       acquisition_rep: "closer",
       prospecting_caller: "va_caller",
@@ -425,7 +426,7 @@ export function OperatingModelWorkspace({
             </div>
             <form className={styles.planForm} onSubmit={assignAcceptance}>
               <label><span>Team member</span><select name="user_id" required><option value="">Select person</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
-              <label><span>Assigned role</span><select name="role_key" required><option value="acquisition_manager">Lead manager</option><option value="acquisition_rep">Acquisitions closer</option><option value="prospecting_caller">VA caller</option><option value="disposition_manager">Disposition manager</option><option value="disposition_rep">Disposition representative</option><option value="transaction_coordinator">Transaction coordinator</option><option value="finance_accounting">Finance and accounting</option><option value="marketing_manager">Marketing manager</option><option value="owner">Owner</option></select></label>
+              <label><span>Assigned role</span><select name="role_key" required><option value="operations_assistant">Operations assistant</option><option value="acquisition_manager">Lead manager</option><option value="acquisition_rep">Acquisitions closer</option><option value="prospecting_caller">VA caller</option><option value="disposition_manager">Disposition manager</option><option value="disposition_rep">Disposition representative</option><option value="transaction_coordinator">Transaction coordinator</option><option value="finance_accounting">Finance and accounting</option><option value="marketing_manager">Marketing manager</option><option value="owner">Owner</option></select></label>
               <label><span>Manual version</span><input defaultValue="2026.07" name="manual_version" required /></label>
               <button type="submit">Assign role setup</button>
             </form>

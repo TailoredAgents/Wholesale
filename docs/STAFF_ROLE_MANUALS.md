@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last verified: August 19, 2026
+Last verified: August 21, 2026
 
 ## How To Use This Guide
 
@@ -72,6 +72,21 @@ views inside **Settings**.
   provider work already authorized or in progress, preserves the evidence, and requires a new D10
   pilot before native calling can resume.
 - Deactivate departing users immediately and reassign their open work.
+
+## Operations Assistant
+
+Main pages: Home, Inbox, Tasks, Calendar, Prospecting, Leads, Deals, and Buyers.
+
+- Process and update seller leads, notes, tasks, appointments, property research, and underwriting
+  drafts without approving ARV or offer authority.
+- Handle one-to-one calls, texts, emails, recordings, and assigned prospecting work from the
+  company record.
+- Maintain routine deal and buyer details, then hand governed decisions to the authorized owner,
+  closer, transaction, or disposition role.
+- Close out dead or disqualified leads through the normal lead workflow; do not archive,
+  permanently delete, or bulk-export company records.
+- Do not access Finance, Marketing, Settings, provider administration, user access, contract
+  sending or modification, offer approval, or recording deletion.
 
 ## Prospecting Manager
 

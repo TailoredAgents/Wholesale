@@ -92,6 +92,7 @@ OPERATIONAL_ROLE_KEYS = {
     "administrator",
     "acquisition_manager",
     "acquisition_rep",
+    "operations_assistant",
     "prospecting_caller",
     "disposition_manager",
     "disposition_rep",
@@ -776,7 +777,8 @@ def create_operations_user(
         display_name=payload.display_name.strip(),
         external_auth_id=None,
         is_active=True,
-        calling_enabled=payload.calling_enabled or role.key == "prospecting_caller",
+        calling_enabled=payload.calling_enabled
+        or role.key in {"operations_assistant", "prospecting_caller"},
     )
     db.add(user)
     db.flush()
@@ -873,7 +875,10 @@ def update_operations_user(
         user.calling_enabled = payload.calling_enabled
     if payload.role_key is not None:
         role = validate_operational_role(db, principal.organization_id, payload.role_key)
-        if role.key == "prospecting_caller" and payload.calling_enabled is None:
+        if (
+            role.key in {"operations_assistant", "prospecting_caller"}
+            and payload.calling_enabled is None
+        ):
             user.calling_enabled = True
         for assignment in db.scalars(
             select(RoleAssignment).where(

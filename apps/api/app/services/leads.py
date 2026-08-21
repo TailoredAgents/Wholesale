@@ -3669,15 +3669,24 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
             Deal.stage_key == "under_contract",
         ),
     )
-    collected_revenue_cents = int(
-        db.scalar(
-            select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
-                RevenueRecord.organization_id == principal.organization_id,
-                RevenueRecord.status == "collected",
-            )
-        )
-        or 0
+    can_view_financials = PermissionKeys.VIEW_FINANCIALS in principal.permission_keys
+    can_view_marketing = not principal.permission_keys.isdisjoint(
+        {
+            PermissionKeys.VIEW_FINANCIALS,
+            PermissionKeys.SEND_BULK_COMMUNICATIONS,
+        }
     )
+    collected_revenue_cents = 0
+    if can_view_financials:
+        collected_revenue_cents = int(
+            db.scalar(
+                select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
+                    RevenueRecord.organization_id == principal.organization_id,
+                    RevenueRecord.status == "collected",
+                )
+            )
+            or 0
+        )
     pipeline_rows = db.execute(
         select(Lead.stage_key, func.count(Lead.id))
         .where(
@@ -3698,7 +3707,7 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
             PipelineStageCount(stage_key=str(stage_key), count=int(count))
             for stage_key, count in pipeline_rows
         ],
-        source_performance=get_source_performance(db, principal),
+        source_performance=get_source_performance(db, principal) if can_view_marketing else [],
     )
 
 

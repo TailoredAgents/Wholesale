@@ -173,7 +173,9 @@ export default async function Home() {
   );
   const roleLabel = profile ? primaryRoleLabel(profile) : "Workspace user";
   const showTeamExceptions = !profile || isOwnerProfile(profile) ||
-    profile.role_keys.some((role) => ["administrator", "acquisition_manager"].includes(role));
+    profile.role_keys.some((role) =>
+      ["administrator", "operations_assistant", "acquisition_manager"].includes(role),
+    );
 
   return (
     <WorkspacePage>

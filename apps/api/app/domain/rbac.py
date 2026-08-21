@@ -351,6 +351,17 @@ ROLES: tuple[RoleDefinition, ...] = (
         (*ACQUISITION_KEYS, PermissionKeys.VIEW_ACQUISITION_OPERATIONS),
     ),
     RoleDefinition(
+        "operations_assistant",
+        "Operations assistant",
+        (
+            *ACQUISITION_KEYS,
+            PermissionKeys.EDIT_DEALS,
+            PermissionKeys.VIEW_BUYERS,
+            PermissionKeys.EDIT_BUYERS,
+            PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+        ),
+    ),
+    RoleDefinition(
         "prospecting_caller",
         "Prospecting caller",
         (

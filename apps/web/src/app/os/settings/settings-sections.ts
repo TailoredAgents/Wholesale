@@ -2,6 +2,7 @@ import type { WorkspaceProfile } from "../../lib/api";
 import { isOwnerProfile } from "../os-navigation";
 
 export type SettingsSection = {
+  allowedRoles?: string[];
   description: string;
   href: string;
   key: string;
@@ -60,6 +61,7 @@ export const settingsSections: SettingsSection[] = [
     label: "Data & Quality",
     href: "/os/settings/data-quality",
     description: "Duplicate review, record quality, and valuation calibration.",
+    allowedRoles: ["administrator", "acquisition_manager", "acquisition_rep"],
     permissions: [
       "operations:manage",
       "records:delete_or_archive",
@@ -91,7 +93,9 @@ export function canAccessSettingsSection(
   return Boolean(
     profile &&
       (isOwnerProfile(profile) ||
-        section.permissions.some((permission) => profile.permissions.includes(permission))),
+        ((!section.allowedRoles ||
+          section.allowedRoles.some((role) => profile.role_keys.includes(role))) &&
+          section.permissions.some((permission) => profile.permissions.includes(permission)))),
   );
 }
 

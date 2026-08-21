@@ -177,6 +177,7 @@ Supported role keys and intended use:
 | --- | --- |
 | `owner`, `founder_operator`, `ceo` | Full company authority and cross-role coverage |
 | `administrator` | Broad platform administration without automatic owner-only authority |
+| `operations_assistant` | Broad day-to-day CRM work without Finance, Marketing, Settings, approvals, contracts, exports, or deletion authority |
 | `acquisition_manager` | Lead Manager, team coordination, qualification, and acquisitions oversight |
 | `acquisition_rep` | Acquisitions closer and seller appointment execution |
 | `prospecting_caller` | Restricted VA calling assigned prospect records |
@@ -233,6 +234,7 @@ Role-specific default routes include:
 - Finance: `/os/finance`
 - Marketing: `/os/marketing`
 - restricted partners or vendors: `/os/deals`
+- Operations Assistant: `/os`
 - owner and administrator roles: `/os`
 
 ## 6. Public Seller Website

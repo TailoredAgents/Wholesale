@@ -143,6 +143,11 @@ test("target role visibility is complete, bounded, and least-privilege for servi
     ["prospecting"],
   );
   assert.deepEqual(
+    targetRoleExperiences.find((experience) => experience.role === "operations_assistant")
+      ?.destinations,
+    ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "deals", "buyers"],
+  );
+  assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "ai_service")?.destinations,
     [],
   );
@@ -268,7 +273,10 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(transactionWorkspace, /RecordTimeline/);
   assert.doesNotMatch(buyerPage, /DealJourney/);
   assert.doesNotMatch(prospectingPage, /AcquisitionJourney/);
-  assert.match(prospectingPage, /view === "my-calls"\s*\? getProspectingWorkbench\(\)/);
+  assert.match(
+    prospectingPage,
+    /view === "my-calls" \|\| \(canManage && view === "dialer-control"\)\s*\? getProspectingWorkbench\(\)/,
+  );
   assert.match(prospectingPage, /canManage && view === "campaigns"/);
 });
 
@@ -492,6 +500,17 @@ test("Calendar owns one quick appointment workflow with contextual entry points"
   assert.match(fieldCalendar, /Appointment color legend/);
   assert.match(leadRecord, /view=appointment&schedule=1&lead=/);
   assert.match(inbox, /view=appointment&schedule=1&lead=/);
+});
+
+test("Operations Assistant cannot enter Settings through underwriting permission", () => {
+  const source = readFileSync(resolve(osSourceRoot, "settings/settings-sections.ts"), "utf8");
+  const dataQuality = source.slice(
+    source.indexOf('key: "data-quality"'),
+    source.indexOf('key: "finance-policy"'),
+  );
+  assert.match(dataQuality, /allowedRoles:\s*\["administrator", "acquisition_manager", "acquisition_rep"\]/);
+  assert.doesNotMatch(dataQuality, /operations_assistant/);
+  assert.match(source, /section\.allowedRoles\.some\(\(role\) => profile\.role_keys\.includes\(role\)\)/);
 });
 
 test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {

@@ -37,6 +37,7 @@ const dispositionRoles = ["disposition_manager", "disposition_rep"];
 
 const homeRoles = [
   "administrator",
+  "operations_assistant",
   ...acquisitionRoles,
   ...dispositionRoles,
   "transaction_coordinator",
@@ -45,6 +46,7 @@ const homeRoles = [
 ];
 const workRoles = [
   "administrator",
+  "operations_assistant",
   ...acquisitionRoles,
   ...dispositionRoles,
   "transaction_coordinator",
@@ -116,7 +118,13 @@ export const osNavGroups: OsNavGroup[] = [
         href: "/os/prospecting",
         label: "Prospecting",
         icon: PhoneCall,
-        roles: ["administrator", "acquisition_manager", "prospecting_caller", "marketing_manager"],
+        roles: [
+          "administrator",
+          "acquisition_manager",
+          "operations_assistant",
+          "prospecting_caller",
+          "marketing_manager",
+        ],
         anyPermissions: [
           "operations:manage",
           "calling_lists:work_assigned",
@@ -128,7 +136,7 @@ export const osNavGroups: OsNavGroup[] = [
         href: "/os/leads",
         label: "Leads",
         icon: UsersRound,
-        roles: ["administrator", ...acquisitionRoles],
+        roles: ["administrator", "operations_assistant", ...acquisitionRoles],
         anyPermissions: ["leads:view", "leads:view_assigned"],
         activePaths: ["/os/lead-manager", "/os/pipeline", "/os/underwriting"],
       },
@@ -138,6 +146,7 @@ export const osNavGroups: OsNavGroup[] = [
         icon: Handshake,
         roles: [
           "administrator",
+          "operations_assistant",
           "acquisition_rep",
           ...dispositionRoles,
           "transaction_coordinator",
@@ -152,7 +161,7 @@ export const osNavGroups: OsNavGroup[] = [
         href: "/os/buyers",
         label: "Buyers",
         icon: Building2,
-        roles: ["administrator", ...dispositionRoles],
+        roles: ["administrator", "operations_assistant", ...dispositionRoles],
         anyPermissions: ["buyers:view"],
       },
     ],
@@ -229,6 +238,7 @@ export function visibleNavGroups(profile: WorkspaceProfile) {
 
 export function defaultRouteForProfile(profile: WorkspaceProfile) {
   if (isOwnerProfile(profile) || profile.role_keys.includes("administrator")) return "/os";
+  if (profile.role_keys.includes("operations_assistant")) return "/os";
   if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting?view=my-calls";
   if (profile.role_keys.includes("acquisition_manager")) return "/os/leads?view=queue";
   if (profile.role_keys.includes("acquisition_rep")) return "/os/calendar?view=day";
@@ -300,6 +310,7 @@ export function primaryRoleLabel(profile: WorkspaceProfile) {
     founder_operator: "Founder / Operator",
     ceo: "CEO",
     administrator: "Administrator",
+    operations_assistant: "Operations Assistant",
     acquisition_manager: "Lead Manager",
     acquisition_rep: "Acquisitions Closer",
     prospecting_caller: "VA Caller",

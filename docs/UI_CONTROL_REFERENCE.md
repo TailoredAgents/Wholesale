@@ -55,14 +55,14 @@ is relevant and the required permission is present.
 
 | Workspace | Typical authorized roles | Permission signal |
 | --- | --- | --- |
-| Home | Administrator, Lead Manager, Acquisitions, Dispositions, Finance, Marketing | Relevant role permission |
-| Inbox | Lead Manager, Acquisitions | `communications:view_conversations` |
-| Tasks | Administrator, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
-| Calendar | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Dialer control and Analytics require `operations:manage` |
-| Leads | Administrator, Lead Manager, Acquisitions | `leads:view` |
-| Deals | Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
-| Buyers | Dispositions | `buyers:view` |
+| Home | Administrator, Operations Assistant, Lead Manager, Acquisitions, Dispositions, Finance, Marketing | Relevant role permission |
+| Inbox | Operations Assistant, Lead Manager, Acquisitions | `communications:view_conversations` |
+| Tasks | Administrator, Operations Assistant, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
+| Calendar | Operations Assistant, Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
+| Prospecting | Operations Assistant, Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Dialer control and Analytics require `operations:manage` |
+| Leads | Administrator, Operations Assistant, Lead Manager, Acquisitions | `leads:view` |
+| Deals | Operations Assistant, Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
+| Buyers | Operations Assistant, Dispositions | `buyers:view` |
 | Finance | Finance / Accounting | `financials:view` or `compensation:view` |
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | Settings | Owner, Administrator | At least one administration permission |
@@ -436,8 +436,8 @@ plans in **Settings > Workflows**.
 | Existing user's access-role menu | Changes an existing person's OS role without recreating the login | Selecting Owner / full access grants company-wide access |
 | **Cold calling** | Allows this user to receive calling batches and opens their assigned Prospecting queue | Does not change the user's main role or grant unrelated pages |
 | Name / Email | Creates the Stonegate-side user identity | Must match the person's Clerk sign-in email |
-| Access role | VA, Acquisitions rep/manager, Dispositions rep, Transaction Coordinator, or Owner / full access | Choose Owner only for company-wide access equal to the primary Owner |
-| Allow assigned cold calling | Enables Prospecting when the new person may also cold call | VA Caller accounts are enabled automatically |
+| Access role | Operations Assistant, VA, Acquisitions rep/manager, Dispositions rep, Transaction Coordinator, or Owner / full access | Operations Assistant covers routine CRM work but excludes Finance, Marketing, Settings, approvals, contracts, exports, and deletion; choose Owner only for company-wide access equal to the primary Owner |
+| Allow assigned cold calling | Enables Prospecting when the new person may also cold call | Operations Assistant and VA Caller accounts are enabled automatically; an administrator can turn it off later |
 | **Create user** | Creates the individual Stonegate user | Does not create or share a password |
 | Add member | Chooses an active user for a team | Requires a team |
 | Membership role | Member or Manager | Manager role carries team responsibility |
