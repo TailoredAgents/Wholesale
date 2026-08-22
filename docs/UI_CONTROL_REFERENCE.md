@@ -257,7 +257,7 @@ An **API fallback view** warning means counts are empty fallback data, not proof
 | Next action | Names the replacement primary action | Required for an active source |
 | Action type / Due / Priority | Classifies and schedules the replacement action | Due is required for an active source |
 | Source already closed | Requests completion without a successor | API rejects this unless the source is terminal |
-| Approve / Reject | Records a direct governed decision | Only shown when the approval can be safely decided in Tasks |
+| Approve / Reject | Records a direct governed decision | Only shown when the approval can be safely decided in Tasks; BatchDialer **Approve** is hidden for hard conflicts and requires a written reason for explicitly overridable uncertainty |
 | AI result panel | Shows the summary, next step, missing qualification facts, questions, risks, confidence, and evidence | Appears after the governed model run finishes |
 | **Accept brief** | Adds the reviewed AI brief as an internal seller note and completes the AI work item | Does not message the seller, overwrite lead facts, or complete the human task |
 | AI **Reject** | Records that the draft should not be used | Preserves the run and review evidence without changing the seller |
@@ -624,9 +624,13 @@ Prospecting has **Campaigns** and **Analytics** for authorized managers plus **M
 assigned callers. Dialer Control and Pilot Acceptance are dormant. Within My Calls, views are **Work queue**, **Call quality**,
 **Handoff review** for managers, **Performance**, and **Caller scripts** for managers.
 
-The direct BatchDialer worker creates eligible warm Leads automatically. My Calls remains for
-separately assigned manual CRM records, corrections, and historical evidence. Starting or saving a
-My Calls record must not recreate a Lead that already arrived from the same provider CDR.
+The direct BatchDialer worker creates evidence-accepted warm Leads automatically. A qualifying
+disposition alone is only a candidate: transcript evidence must show a live two-way conversation and
+explicit seller interest, plus explicit appointment agreement for **Appointment Set**. Delayed or
+unclear evidence retries and then appears as an approval item in Tasks without first creating a
+Lead. My Calls remains for separately assigned manual CRM records, corrections, and historical
+evidence. Starting or saving a My Calls record must not recreate a Lead that already arrived from
+the same provider CDR.
 
 ### Work Queue And Attempt
 

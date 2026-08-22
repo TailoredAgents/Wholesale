@@ -319,7 +319,7 @@ services:
       - key: BATCHDIALER_SCAN_DAYS
         value: 2
       - key: BATCHDIALER_ACCOUNT_TIMEZONE
-        value: America/New_York
+        value: America/Chicago
       - key: BATCHDIALER_PAGE_LENGTH
         value: 100
       - key: BATCHDIALER_MAX_PAGES_PER_DAY
@@ -612,7 +612,7 @@ services:
       - key: BATCHDIALER_SCAN_DAYS
         value: 2
       - key: BATCHDIALER_ACCOUNT_TIMEZONE
-        value: America/New_York
+        value: America/Chicago
       - key: BATCHDIALER_PAGE_LENGTH
         value: 100
       - key: BATCHDIALER_MAX_PAGES_PER_DAY

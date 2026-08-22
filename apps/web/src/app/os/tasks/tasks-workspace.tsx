@@ -162,6 +162,18 @@ function aiConfidence(item: TaskWorkspaceItem) {
   return typeof raw === "number" ? raw : null;
 }
 
+function approvalCanApprove(item: TaskWorkspaceItem) {
+  if (item.task_type === "batchdialer_lead_qualification") {
+    return (item.approval_metadata ?? {}).can_approve === true;
+  }
+  return true;
+}
+
+function approvalEffect(item: TaskWorkspaceItem) {
+  const raw = (item.approval_metadata ?? {}).approval_effect;
+  return typeof raw === "string" ? raw : "";
+}
+
 export function TasksWorkspace({
   initialItemId,
   initialView,
@@ -250,6 +262,8 @@ export function TasksWorkspace({
     null;
   const selectedAiNextTask = selected ? aiNextTask(selected) : null;
   const selectedAiConfidence = selected ? aiConfidence(selected) : null;
+  const selectedApprovalCanApprove = selected ? approvalCanApprove(selected) : false;
+  const selectedApprovalEffect = selected ? approvalEffect(selected) : "";
   const openItems = workspace.items.filter((item) => item.due_status !== "completed");
   const metrics = {
     primary: openItems.filter((item) => item.work_kind === "primary_next_action").length,
@@ -362,13 +376,21 @@ export function TasksWorkspace({
 
   async function decideApproval(decision: "approved" | "rejected") {
     if (!selected?.approval_id || status === "saving") return;
-    const notes = window.prompt(
-      decision === "approved"
+    const requiresApprovalReason =
+      decision === "approved" &&
+      selected.task_type === "batchdialer_lead_qualification";
+    const promptText = requiresApprovalReason
+      ? "Why should this call become a real seller Lead?"
+      : decision === "approved"
         ? "Optional decision notes"
-        : "Why is this request being rejected?",
-      "",
-    );
+        : "Why is this request being rejected?";
+    const notes = window.prompt(promptText, "");
     if (notes === null) return;
+    if (requiresApprovalReason && !notes.trim()) {
+      setStatus("error");
+      setError("Explain why this call should become a Lead before approving it.");
+      return;
+    }
     setStatus("saving");
     setError("");
     try {
@@ -539,6 +561,15 @@ export function TasksWorkspace({
                   </div>
                 </section>
               ) : null}
+              {selected.item_type === "approval" && selectedApprovalEffect ? (
+                <section className={styles.attention}>
+                  <AlertTriangle aria-hidden="true" size={17} />
+                  <div>
+                    <strong>Decision effect</strong>
+                    <span>{selectedApprovalEffect}</span>
+                  </div>
+                </section>
+              ) : null}
               {selected.item_type === "ai_work" && Object.keys(selected.ai_output ?? {}).length ? (
                 <section className={styles.aiOutput}>
                   <header>
@@ -653,14 +684,16 @@ export function TasksWorkspace({
                 selected.can_decide &&
                 !selected.review_url ? (
                   <>
-                    <button
-                      className={styles.primaryButton}
-                      disabled={status === "saving"}
-                      onClick={() => void decideApproval("approved")}
-                      type="button"
-                    >
-                      Approve
-                    </button>
+                    {selectedApprovalCanApprove ? (
+                      <button
+                        className={styles.primaryButton}
+                        disabled={status === "saving"}
+                        onClick={() => void decideApproval("approved")}
+                        type="button"
+                      >
+                        Approve
+                      </button>
+                    ) : null}
                     <button
                       disabled={status === "saving"}
                       onClick={() => void decideApproval("rejected")}

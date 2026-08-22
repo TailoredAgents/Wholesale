@@ -490,7 +490,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
   guidance.
 - VAs place cold calls and work dialing cadence in BatchDialer. The direct worker creates the warm
-  Lead from an eligible completed-call result. My Calls remains available for separately assigned
+  Lead only after an eligible disposition passes the transcript evidence gate. My Calls remains available for separately assigned
   manual CRM records, corrections, and historical evidence without a native dialer lease; it must
   not duplicate a direct handoff.
 - Appointment Set creates an urgent manual-entry task. The VA creates the real appointment in
@@ -726,17 +726,22 @@ redirect to their new owners.
    campaigns assigned to that person's separate BatchDialer Agent login.
 2. The VA places calls, works cadence, and selects the truthful result in BatchDialer. Stonegate's
    native call execution and pilot controls remain dormant.
-3. The official direct API retrieves bounded completed-call evidence. Eligible exact results create
-   or update the Stonegate warm Lead. My Calls remains a manual CRM workbench for separately
+3. The official direct API retrieves bounded completed-call evidence. Eligible exact results are
+   candidates only; transcript evidence of a live two-way conversation and explicit seller interest
+   is required, plus explicit appointment agreement for **Appointment Set**. My Calls remains a manual CRM workbench for separately
    assigned records and corrections; it does not recreate the direct handoff.
 4. Ordinary attempts and call-center activity stay with BatchDialer. The
    qualified handoff preserves the originating campaign, VA, disposition, notes, seller facts,
    and provider identifiers in Stonegate.
 5. Wrong numbers, DNC, redial cadence, and number management remain in BatchDialer for cold work;
    Stonegate continues enforcing its own local communication suppressions after handoff.
-6. Only the exact reviewed **Qualified Seller - Follow Up** or **Appointment Set** result creates a
-   structured Stonegate handoff. Appointment Set creates one urgent task, and the VA manually
-   enters the agreed appointment in Stonegate; cold-call DNC remains in BatchDialer.
+6. Only the exact reviewed **Qualified Seller - Follow Up** or **Appointment Set** result can become
+   a structured Stonegate handoff after evidence acceptance. Delayed evidence retries and then
+   routes to visible Tasks approval review. Human approval is limited to enumerated uncertainty,
+   requires a written reason, and is bound to the exact evidence fingerprint; hard conflicts and
+   unknown future reasons fail closed. Out-of-market property remains eligible, and permission
+   remains unknown unless separately proven. Appointment Set creates one urgent task, and the VA
+   manually enters the agreed appointment in Stonegate; cold-call DNC remains in BatchDialer.
 7. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
 
 ### 8.3 Warm Handoff And Lead Creation
@@ -1531,7 +1536,7 @@ telemarketing, recording, or real-estate advice.
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
-| BatchDialer direct API | VA completed-call evidence and qualified seller handoff | Fixed-host authenticated client, durable polling/checkpoint, idempotent handoff processing, optional transcript enrichment, and manual-appointment task implemented and repository-verified | Controlled qualified/appointment results and 24-hour reconciliation pending |
+| BatchDialer direct API | VA completed-call evidence and qualified seller handoff | Fixed-host authenticated client, durable polling/checkpoint, pre-lead transcript evidence gate, bounded readiness retries, visible Tasks approval review, idempotent accepted-handoff processing, and manual-appointment task implemented and repository-verified | Controlled qualified/appointment/review results and 24-hour reconciliation pending |
 | Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented intentionally secretless endpoint with Page/form restrictions, burst and daily circuits, payload limits, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; residual caller-provenance risk is monitored |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Prior controlled delivery exists; repeat acceptance is pending after the worker credential correction |
 | Twilio inbound-message staff alerts | Assigned-owner/fallback cellphone notification with Inbox link; unknown seller/buyer sender capture and loop protection | Implemented with independent per-employee opt-in, durable deduplication, retries, and delivery callbacks | Controlled production acceptance pending |

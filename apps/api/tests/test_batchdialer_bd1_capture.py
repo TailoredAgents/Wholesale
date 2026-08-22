@@ -54,7 +54,7 @@ def test_direct_sync_configuration_is_worker_safe_and_active_when_key_is_present
     assert configured.batchdialer_configured is True
     assert configured.batchdialer_configuration_blockers == ()
     assert configured.batchdialer_api_base_url == "https://app.batchdialer.com/api"
-    assert configured.batchdialer_account_timezone == "America/New_York"
+    assert configured.batchdialer_account_timezone == "America/Chicago"
     assert API_KEY not in repr(configured)
 
     with pytest.raises(ValidationError, match="official"):

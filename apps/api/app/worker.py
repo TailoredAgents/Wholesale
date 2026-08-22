@@ -138,6 +138,13 @@ def run_worker(stop_event: threading.Event) -> None:
             settings.batchdialer_configuration_blockers
         ),
         batchdialer_direct_poll_seconds=settings.batchdialer_poll_seconds,
+        batchdialer_account_timezone=settings.batchdialer_account_timezone,
+        batchdialer_qualification_transcript_required=(
+            settings.batchdialer_transcript_sync_enabled
+        ),
+        batchdialer_qualification_ai_configured=bool(
+            settings.ai_enabled and settings.openai_api_key
+        ),
         staff_lead_alert_sms_mode=settings.staff_lead_alert_sms_mode,
         staff_lead_alert_configured=not staff_alert_blockers,
         staff_lead_alert_configuration_blockers=staff_alert_blockers,

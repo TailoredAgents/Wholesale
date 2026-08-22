@@ -93,8 +93,9 @@ Main pages: **Prospecting > Campaigns**, **Analytics**, and **My Calls**.
   lists they are authorized to work.
 - Monitor the sole direct API sync, exact disposition labels, failures, and quarantined results.
   Do not create another transport or ask a VA to recreate a handoff manually.
-- Confirm every Qualified Seller and Appointment Set result creates or updates exactly one Lead,
-  has the correct campaign/VA attribution and call evidence, and reaches the Lead Manager.
+- Confirm every transcript-backed Qualified Seller and Appointment Set result creates or updates
+  exactly one Lead, has the correct campaign/VA attribution and call evidence, and reaches the Lead
+  Manager. Review unresolved candidates in Tasks; a disposition alone is not a Lead.
 - Confirm Appointment Set creates an urgent manual-entry task and no automatic Appointment. Require
   the VA to enter the real appointment in Stonegate with the correct owner, time, type, and location.
 - Keep cold-call DNC, cadence, line usage, and number reputation in BatchDialer. Stonegate local
@@ -309,8 +310,9 @@ facts visible so Austin can prepare.
 ## VA Caller Daily Procedure
 
 Each VA has an individual BatchDialer Agent login and sees only assigned external campaigns. The
-direct API creates eligible warm Leads in Stonegate. **My Calls** is not a dialer and must not be
-used to recreate an already imported BatchDialer handoff.
+direct API creates evidence-accepted warm Leads in Stonegate. Delayed or unclear transcript evidence
+may appear in Tasks for approval instead. **My Calls** is not a dialer and must not be used to
+recreate an already imported BatchDialer handoff.
 
 ### Start Of Shift
 
@@ -345,8 +347,12 @@ Enter useful notes. Do not choose **Interested** merely to improve performance.
 2. Record what the seller actually said.
 3. Confirm the preferred follow-up method and time.
 4. In BatchDialer, complete the required lead sheet and select the exact approved result.
-5. Allow the direct sync its normal polling interval, then confirm the seller appears once in
-   Stonegate with the provider notes and attribution. Add only genuinely missing or corrective facts.
+5. Allow the direct sync and transcript-readiness retries their normal interval, then confirm the
+   evidence-accepted seller appears once in Stonegate with the provider notes and attribution. If
+   the evidence is unresolved, use the visible Tasks review rather than creating the Lead manually.
+   Add only genuinely missing or corrective facts. **Approve** appears only for allowed uncertainty
+   cases and requires a written reason; hard negative or missing evidence must be rejected or
+   corrected in BatchDialer.
 6. If an appointment was agreed, open **Enter/verify Stonegate appointment**, create the real
    Appointment, and confirm the task clears.
 7. Confirm the handoff reached the Lead Manager.

@@ -558,7 +558,7 @@ class Settings(BaseSettings):
         validation_alias="BATCHDIALER_SCAN_DAYS",
     )
     batchdialer_account_timezone: str = Field(
-        default="America/New_York",
+        default="America/Chicago",
         validation_alias="BATCHDIALER_ACCOUNT_TIMEZONE",
     )
     batchdialer_page_length: int = Field(

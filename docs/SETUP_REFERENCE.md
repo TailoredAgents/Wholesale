@@ -1168,7 +1168,7 @@ the Render Blueprint to the API and worker services:
 - `BATCHDIALER_API_KEY` (secret)
 - `BATCHDIALER_POLL_SECONDS=120`
 - `BATCHDIALER_SCAN_DAYS=2`
-- `BATCHDIALER_ACCOUNT_TIMEZONE=America/New_York`
+- `BATCHDIALER_ACCOUNT_TIMEZONE=America/Chicago`
 - `BATCHDIALER_PAGE_LENGTH=100`
 - `BATCHDIALER_MAX_PAGES_PER_DAY=50`
 - `BATCHDIALER_HTTP_TIMEOUT_SECONDS=15`
@@ -1208,16 +1208,25 @@ The API key is sent as the raw `X-ApiKey` value to the fixed official host. Do n
    - **No Answer/Voicemail**: remain inside the BatchDialer cadence.
 
 Stonegate recognizes only the exact reviewed **Qualified Seller - Follow Up** and **Appointment
-Set** labels as warm handoffs. A changed, unknown, or conflicting label is held for review. Do not
-broaden the automatic mapping from a similar-looking label. BatchDialer's optional **Mark As Lead**
-rule may organize records inside BatchDialer, but Stonegate does not use it as an integration
-transport or eligibility substitute.
+Set** labels as candidate warm handoffs. A label alone cannot create a Lead. Transcript evidence
+must prove a live two-way conversation and explicit seller interest; **Appointment Set** must also
+prove explicit appointment agreement. A changed, unknown, conflicting, unavailable, or
+inconclusive result is held for visible review. Do not broaden the automatic mapping from a
+similar-looking label. BatchDialer's optional **Mark As Lead** rule may organize records inside
+BatchDialer, but Stonegate does not use it as an integration transport or eligibility substitute.
 
 Current operating boundary:
 
 - VAs place calls, work cadence, manage cold-call DNC, and choose results in BatchDialer.
-- The direct worker retrieves eligible completed-call records and creates or updates the Stonegate
-  warm handoff once.
+- The direct worker retrieves candidate completed-call records, retries delayed transcripts, and
+  creates or updates the Stonegate warm handoff only after the evidence gate accepts it.
+- Unavailable, contradictory, or inconclusive evidence routes to visible approval review in Tasks;
+  it does not trigger a Lead, staff alert, property research, or seller call timeline first.
+- Tasks shows **Approve** only for explicitly overridable uncertainty. Approval requires a written
+  reason and applies only to the exact evidence fingerprint. Voicemail, wrong-party, DNC,
+  not-interested, missing/invalid evidence, and unrecognized reasons are reject-or-correct only.
+- Out-of-market properties remain eligible after evidence acceptance. Permission remains unknown
+  unless a separate valid source proves it.
 - Stonegate My Calls/lead records retain manual qualification, notes, outcome review, follow-up,
   and acquisitions handoff without a native dialer lease.
 - When **Appointment Set** is selected, the VA creates the actual appointment manually in
@@ -1234,9 +1243,9 @@ Version one uses only:
 | --- | --- |
 | `GET /campaigns` | Refresh active provider campaign identity and status |
 | `GET /v2/cdrs` | Retrieve completed calls by bounded date and cursor |
-| `GET /contact/{contactID}` | Enrich a reviewed warm result with seller/contact facts |
+| `GET /contact/{contactID}` | Enrich a candidate warm result with seller/contact facts |
 | `POST /cdrs/by-lead-id` | Optional call history when a nonblank vendor-contact ID exists |
-| `GET /cdrs/{cdrID}/transcription` | Optional transcript enrichment after handoff |
+| `GET /cdrs/{cdrID}/transcription` | Pre-lead evidence for candidate qualified and appointment-set results, with bounded readiness retries |
 
 Do not use `/v2/cdrs/last`, calendar endpoints, provider write operations, or interface scraping.
 Appointments and cold-call DNC remain in their authoritative systems: appointments in Stonegate,

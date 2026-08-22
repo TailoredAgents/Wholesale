@@ -39,7 +39,7 @@ def test_client_uses_raw_api_key_and_opaque_cursor() -> None:
     assert requests[0].url.host == "app.batchdialer.com"
     assert requests[0].headers["X-ApiKey"] == "test-key-that-is-long-enough"
     assert requests[0].url.params["next_page"] == "opaque+/=cursor"
-    assert requests[0].url.params["callDate"] == "2026-08-18T00:00:00-04:00"
+    assert requests[0].url.params["callDate"] == "2026-08-18T00:00:00-05:00"
     assert "authorization" not in requests[0].headers
 
 

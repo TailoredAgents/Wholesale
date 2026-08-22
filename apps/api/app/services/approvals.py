@@ -14,6 +14,7 @@ from app.models.foundation import (
     AuditEvent,
     Lead,
     OfferNegotiationPlan,
+    ProspectingProviderEvent,
     UnderwritingVersion,
 )
 from app.schemas.approvals import ApprovalDecision, ApprovalRequestRead
@@ -35,6 +36,7 @@ APPROVAL_REQUEST_PERMISSIONS = {
     "ai_tool_call": PermissionKeys.CHANGE_AI_PROMPTS,
     "follow_up_sms": PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
     "follow_up_email": PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+    "batchdialer_lead_qualification": PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
 }
 APPROVAL_DECISION_PERMISSION_KEYS = frozenset(APPROVAL_REQUEST_PERMISSIONS.values())
 
@@ -108,6 +110,21 @@ def decide_approval_request(
         if lead is None:
             raise ValueError("The approval's seller lead is unavailable.")
         require_lead_open_for_work(lead)
+    if (
+        request_identity.request_type == "batchdialer_lead_qualification"
+        and request_identity.entity_id is not None
+    ):
+        # BatchDialer workers lock provider evidence before touching its approval.
+        # Keep the same event -> approval lock order here to avoid lost overrides
+        # and cross-transaction deadlocks.
+        db.scalar(
+            select(ProspectingProviderEvent)
+            .where(
+                ProspectingProviderEvent.organization_id == principal.organization_id,
+                ProspectingProviderEvent.id == request_identity.entity_id,
+            )
+            .with_for_update(of=ProspectingProviderEvent)
+        )
     request = db.scalar(
         approval_decision_lock_statement(
             principal.organization_id,
@@ -147,6 +164,16 @@ def decide_approval_request(
             request,
             payload.status,
             payload.decision_notes,
+        )
+    elif request.request_type == "batchdialer_lead_qualification":
+        from app.services.batchdialer_direct import apply_batchdialer_qualification_decision
+
+        apply_batchdialer_qualification_decision(
+            db,
+            approval=request,
+            status=payload.status,
+            reviewer_user_id=principal.user_id,
+            decision_notes=payload.decision_notes,
         )
     previous_status = request.status
     request.status = payload.status

@@ -64,6 +64,11 @@ The account observation confirms:
 - a cursor can be passed from the first CDR page to a second request; and
 - a four-segment JSON transcript can be retrieved for the selected numeric CDR ID.
 
+Production reconciliation on August 22, 2026 also showed that the account's completed-call date
+queries return records under `America/Chicago`; the same bounded date returned no records under
+`America/New_York` or `UTC`. Stonegate therefore configures the BatchDialer account timezone as
+`America/Chicago` while leaving other company timezone settings unchanged.
+
 These are partial observations, not permission to enable production polling. The manifest marks
 only the first-page cursor scenario captured and leaves `ready_for_bd2` false.
 
@@ -205,10 +210,19 @@ enforced:
 - fail a scan visibly on a repeated cursor or maximum-page boundary;
 - match only the exact reviewed **Qualified Seller - Follow Up** and **Appointment Set** labels;
 - quarantine every unknown, renamed, incomplete, or conflicting result instead of guessing;
-- preserve a qualified handoff even when property or permission facts are incomplete, without
-  manufacturing consent or running research against a placeholder property;
-- treat contact history, recording access, and transcripts as optional enrichment that cannot gate
-  lead creation; and
+- treat those labels as candidates rather than proof: transcript evidence must show a live two-way
+  conversation and explicit seller interest, and **Appointment Set** must also show explicit
+  appointment agreement;
+- retry a delayed transcript within a bounded window, then create a visible Tasks approval review
+  for unavailable, contradictory, or inconclusive evidence without creating a Lead;
+- allow approval only for explicitly enumerated uncertainty reasons, require a written decision
+  reason, bind it to the exact evidence fingerprint, and fail closed for hard conflicts or any new
+  unrecognized reason code;
+- preserve an evidence-accepted handoff even when property or permission facts are incomplete or
+  the property is outside the current market, without manufacturing consent or running research
+  against a placeholder property;
+- run Lead creation, staff alerts, property research, attribution, and seller call-timeline work
+  only after evidence acceptance; and
 - never poll provider calendar data or create an Appointment automatically.
 
 The historical manifest remains `ready_for_bd2=false` because it records provider-proof
@@ -224,7 +238,10 @@ live scenario.
 
 The official API is the sole BatchDialer integration. Stonegate uses bounded overlapping date scans,
 exact result labels, durable evidence, idempotent business actions, and visible quarantine for every
-unproven variation. It does not consume the stateful latest-CDR watermark, provider calendar data,
-or undocumented private operations. Appointments remain manual in Stonegate. Production credential
+unproven variation. Candidate qualifying dispositions pass a transcript-backed evidence gate before
+they can create a Lead; delayed or unclear evidence retries and then routes to visible Tasks approval
+review. Consent remains unknown unless separately proven, and out-of-market property is not a
+rejection rule. It does not consume the stateful latest-CDR watermark, provider calendar data, or
+undocumented private operations. Appointments remain manual in Stonegate. Production credential
 entry and controlled acceptance remain explicit owner actions; this document never authorizes code
 to inspect, reveal, rotate, or replace a credential.
