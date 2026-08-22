@@ -31,14 +31,21 @@ from app.schemas.prospecting import ProspectingDialSessionStart
 from app.schemas.prospecting_dialer_acceptance import (
     ProspectingDialerPilotAttemptReviewCreate,
     ProspectingDialerPilotCreate,
+    ProspectingDialerPilotDecision,
     ProspectingDialerPilotProviderCostItem,
     ProspectingDialerPilotRevoke,
     ProspectingDialerPilotRollback,
     ProspectingDialerPilotShiftReviewCreate,
     ProspectingDialerPilotStart,
 )
-from app.services.prospecting_dialer import load_runtime_graph, start_dial_session
+from app.services.prospecting_dialer import (
+    ProspectingDialerConfigurationError,
+    load_runtime_graph,
+    start_dial_session,
+)
 from app.services.prospecting_dialer_acceptance import (
+    PILOT_ACCEPTANCE_PHRASE,
+    PILOT_REJECTION_PHRASE,
     PILOT_REVOKE_PHRASE,
     PILOT_ROLLBACK_PHRASE,
     ProspectingDialerAcceptanceConflictError,
@@ -53,6 +60,7 @@ from app.services.prospecting_dialer_acceptance import (
     _recording_matches_pilot_leg,
     _shift_snapshot,
     create_prospecting_dialer_pilot,
+    decide_prospecting_dialer_pilot,
     matching_active_pilot,
     pilot_configuration_fingerprint,
     review_prospecting_dialer_pilot_attempt,
@@ -559,6 +567,99 @@ def test_draft_rollback_is_a_durable_cancel_and_allows_replacement(
     replacement = _create_pilot(db_session, graph, d10_settings, key="draft-two")
     assert replacement.status == "draft"
     assert replacement.id != pilot.id
+
+
+def test_dormant_flag_blocks_pilot_activation_but_retains_terminal_cleanup(
+    db_session: Session,
+    d10_settings: Settings,
+) -> None:
+    graph, _, _ = _d10_graph(db_session)
+    manager = _manager_principal(graph)
+    owner = _owner_principal(graph)
+    dormant_settings = d10_settings.model_copy(update={"prospecting_native_dialer_enabled": False})
+
+    with pytest.raises(ProspectingDialerConfigurationError, match="dialer is dormant"):
+        create_prospecting_dialer_pilot(
+            db_session,
+            manager,
+            _create_payload(db_session, graph, key="dormant-create-blocked"),
+            settings=dormant_settings,
+        )
+
+    draft = _create_pilot(db_session, graph, d10_settings, key="dormant-rollback")
+    rolled_back = rollback_prospecting_dialer_pilot(
+        db_session,
+        manager,
+        draft.id,
+        ProspectingDialerPilotRollback(
+            expected_revision=draft.revision,
+            idempotency_key="dormant-rollback-cleanup",
+            confirmation_phrase=PILOT_ROLLBACK_PHRASE,
+            return_unworked_cohort_to_batchdialer=True,
+            preserve_native_evidence_read_only=True,
+            reason="Close the draft while the native runtime remains dormant.",
+        ),
+        settings=dormant_settings,
+    )
+    assert rolled_back is not None
+    assert rolled_back.pilot is not None
+    assert rolled_back.pilot.status == "cancelled"
+
+    review_ready = _accepted_pilot(db_session, graph, d10_settings)
+    review_ready.status = "ready_for_owner_review"
+    review_ready.accepted_by_user_id = None
+    review_ready.accepted_at = None
+    review_ready.acceptance_reason = None
+    db_session.commit()
+
+    with pytest.raises(ProspectingDialerConfigurationError, match="dialer is dormant"):
+        decide_prospecting_dialer_pilot(
+            db_session,
+            owner,
+            review_ready.id,
+            ProspectingDialerPilotDecision(
+                expected_revision=review_ready.revision,
+                idempotency_key="dormant-accept-blocked",
+                decision="accept",
+                confirmation_phrase=PILOT_ACCEPTANCE_PHRASE,
+                reason="This acceptance must fail while the runtime is dormant.",
+            ),
+            settings=dormant_settings,
+        )
+
+    rejected = decide_prospecting_dialer_pilot(
+        db_session,
+        owner,
+        review_ready.id,
+        ProspectingDialerPilotDecision(
+            expected_revision=review_ready.revision,
+            idempotency_key="dormant-reject-cleanup",
+            decision="reject",
+            confirmation_phrase=PILOT_REJECTION_PHRASE,
+            reason="Reject the pending authorization while the runtime is dormant.",
+        ),
+        settings=dormant_settings,
+    )
+    assert rejected is not None
+    assert rejected.pilot is not None
+    assert rejected.pilot.status == "rejected"
+
+    accepted = _accepted_pilot(db_session, graph, d10_settings)
+    revoked = revoke_prospecting_dialer_pilot(
+        db_session,
+        owner,
+        accepted.id,
+        ProspectingDialerPilotRevoke(
+            expected_revision=accepted.revision,
+            idempotency_key="dormant-revoke-cleanup",
+            confirmation_phrase=PILOT_REVOKE_PHRASE,
+            reason="Revoke the prior authorization while the runtime is dormant.",
+        ),
+        settings=dormant_settings,
+    )
+    assert revoked is not None
+    assert revoked.pilot is not None
+    assert revoked.pilot.status == "revoked"
 
 
 def test_smoke_number_must_be_current_active_staff_and_runtime_rechecks_ownership(

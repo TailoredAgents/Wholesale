@@ -1722,6 +1722,9 @@ def test_immediate_provider_callback_completes_dispatch_marker_before_rest_respo
     intent.intent_metadata = metadata
     db_session.commit()
 
+    monkeypatch.setenv("PROSPECTING_NATIVE_DIALER_ENABLED", "false")
+    get_settings.cache_clear()
+
     status_path = f"/api/v1/webhooks/twilio/voice/status?intent_id={intent.id}"
     callback = post_signed(
         client,
@@ -2364,6 +2367,7 @@ def test_callback_recording_is_retained_without_creating_a_malformed_warm_transc
     db_session: Session,
     api_db_override: None,
     prospecting_voice_settings: None,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     client = TestClient(app)
     graph = seed_cold_call_graph(db_session, client)
@@ -2397,6 +2401,9 @@ def test_callback_recording_is_retained_without_creating_a_malformed_warm_transc
         "RecordingChannels": "2",
         "RecordingSource": "DialVerb",
     }
+
+    monkeypatch.setenv("PROSPECTING_NATIVE_DIALER_ENABLED", "false")
+    get_settings.cache_clear()
 
     recorded = post_signed(client, recording_path, recording_payload)
     replay = post_signed(client, recording_path, recording_payload)

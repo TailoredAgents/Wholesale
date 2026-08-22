@@ -37,6 +37,7 @@ from app.services.request_rate_limit import FixedWindowRateLimiter
 PAGE_ID = "123456789"
 PROVIDER_LEAD_ID = "987654321012345"
 ENDPOINT = "/api/v1/webhooks/zapier/facebook-leads"
+BATCHDIALER_ZAPIER_ENDPOINT = "/api/v1/webhooks/zapier/batchdialer"
 
 
 @pytest.fixture
@@ -100,6 +101,12 @@ def webhook_payload(lead_id: str = PROVIDER_LEAD_ID) -> dict[str, object]:
 
 def post_lead(client: TestClient, payload: dict[str, object]) -> Response:
     return cast(Response, client.post(ENDPOINT, json=payload))
+
+
+def test_batchdialer_zapier_transport_is_removed() -> None:
+    response = TestClient(app).post(BATCHDIALER_ZAPIER_ENDPOINT, json={})
+
+    assert response.status_code == 404
 
 
 class FakePropertyRecordClient:

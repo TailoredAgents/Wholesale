@@ -142,6 +142,12 @@ work_dependency = require_any_permission(
 )
 manage_dependency = require_permission(PermissionKeys.MANAGE_ACQUISITION_OPERATIONS)
 recording_dependency = require_permission(PermissionKeys.ACCESS_RECORDINGS)
+_PROSPECTING_ACCEPTANCE_ERRORS = (
+    PermissionError,
+    ProspectingDialerAcceptanceConflictError,
+    ProspectingDialerConfigurationError,
+    ValueError,
+)
 
 
 def _mark_sensitive_response_no_store(response: Response) -> None:
@@ -239,6 +245,12 @@ def _raise_prospecting_acceptance_error(exc: Exception) -> NoReturn:
             detail=str(exc),
             headers={"Cache-Control": "private, no-store"},
         ) from exc
+    if isinstance(exc, ProspectingDialerConfigurationError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
     if isinstance(exc, ValueError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -317,7 +329,7 @@ def read_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         return get_prospecting_dialer_pilot_overview(db, principal)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
 
 
@@ -331,7 +343,7 @@ def create_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         return create_prospecting_dialer_pilot(db, principal, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
 
 
@@ -346,7 +358,7 @@ def start_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         result = start_prospecting_dialer_pilot(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -368,7 +380,7 @@ def update_native_dialer_pilot_evidence(
     _mark_sensitive_response_no_store(response)
     try:
         result = update_prospecting_dialer_pilot_evidence(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -397,7 +409,7 @@ def review_native_dialer_pilot_attempt(
             attempt_id,
             payload,
         )
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -426,7 +438,7 @@ def review_native_dialer_pilot_shift(
             session_id,
             payload,
         )
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -448,7 +460,7 @@ def submit_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         result = submit_prospecting_dialer_pilot(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -470,7 +482,7 @@ def rollback_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         result = rollback_prospecting_dialer_pilot(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -492,7 +504,7 @@ def decide_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         result = decide_prospecting_dialer_pilot(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -514,7 +526,7 @@ def revoke_native_dialer_pilot(
     _mark_sensitive_response_no_store(response)
     try:
         result = revoke_prospecting_dialer_pilot(db, principal, pilot_id, payload)
-    except (PermissionError, ProspectingDialerAcceptanceConflictError, ValueError) as exc:
+    except _PROSPECTING_ACCEPTANCE_ERRORS as exc:
         _raise_prospecting_acceptance_error(exc)
     if result is None:
         raise HTTPException(
@@ -591,11 +603,8 @@ def configure_native_dialer_profile(
 ) -> ProspectingDialerProfileRead:
     try:
         profile = upsert_dialer_profile(db, principal, user_id, payload)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from exc
+    except (PermissionError, ProspectingDialerConfigurationError, ValueError) as exc:
+        _raise_prospecting_dialer_error(exc)
     if profile is None:
         raise HTTPException(status_code=404, detail="Cold-calling user not found.")
     return profile

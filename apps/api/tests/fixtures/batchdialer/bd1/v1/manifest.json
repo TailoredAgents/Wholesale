@@ -1,0 +1,443 @@
+{
+  "schema_version": "batchdialer_bd1_evidence_v1",
+  "status": "controlled_capture_pending",
+  "ready_for_bd2": false,
+  "acceptance_blockers": [
+    "The initial read-only account fixtures were captured and reviewed, but complete-property, outcome, rename, and update scenarios remain missing.",
+    "A stable qualifying-result identity and rename behavior have not been proven.",
+    "Cursor continuity was observed, but empty-page termination, deterministic ordering, an incremental overlap boundary, and provider rate/retry policy remain unproven.",
+    "The controlled contact returned a blank vendor-contact ID, so the optional call-history endpoint and its notes/attachments contract were not observed.",
+    "Undocumented provider response properties were quarantined by fingerprint and require an explicit compatibility policy before production use."
+  ],
+  "updated_at": "2026-08-22T16:48:07Z",
+  "official_sources": [
+    {
+      "id": "developer_portal",
+      "url": "https://developer.batchdialer.com/",
+      "provenance": "official_documentation",
+      "proves": [
+        "Broad API coverage for campaigns, contacts, phone numbers, and call data",
+        "Broad retrieve and update capability"
+      ]
+    },
+    {
+      "id": "getting_started",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/f4e6fa31af431-getting-started",
+      "provenance": "official_documentation",
+      "proves": [
+        "Production base URL",
+        "X-ApiKey authentication contract"
+      ]
+    },
+    {
+      "id": "get_campaigns",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/h2xkp24zesogx-get-campaigns",
+      "provenance": "official_documentation",
+      "proves": [
+        "The active-campaign response shape is documented"
+      ]
+    },
+    {
+      "id": "campaign_search",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/rw0nq2fp5bu7a-search",
+      "provenance": "official_documentation",
+      "proves": [
+        "Campaign search filters, paging, and sorting are documented"
+      ]
+    },
+    {
+      "id": "contact_by_id",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/q2v2uqf6v4uig-get-single-contact-by-id",
+      "provenance": "official_documentation",
+      "proves": [
+        "Single-contact retrieval by provider contact ID is documented"
+      ]
+    },
+    {
+      "id": "contact_retrieval",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/u4lhivm8hts8x-get-contacts",
+      "provenance": "official_documentation",
+      "proves": [
+        "Contact retrieval and date-based bulk filters are documented"
+      ]
+    },
+    {
+      "id": "cdr_pagination",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+      "provenance": "official_documentation",
+      "proves": [
+        "Cursor-paginated CDR retrieval is documented"
+      ]
+    },
+    {
+      "id": "cdr_latest_poll",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/l30xoc2l3ziml-get-latest-cd-rs-since-last-poll",
+      "provenance": "official_documentation",
+      "proves": [
+        "A stateful operation returns up to 100 CDRs newer than the integration watermark"
+      ]
+    },
+    {
+      "id": "vendor_contact_call_history",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/j8znbe36cqcm6-get-recent-calls-by-vendor-contact-id",
+      "provenance": "official_documentation",
+      "proves": [
+        "Vendor-contact call history includes notes and attachments"
+      ]
+    },
+    {
+      "id": "transcript_json",
+      "url": "https://developer.batchdialer.com/docs/batchdialer/1ipr1j1l9zkyn-get-transcription-json",
+      "provenance": "official_documentation",
+      "proves": [
+        "JSON transcript retrieval by numeric CDR ID is documented"
+      ]
+    },
+    {
+      "id": "pricing",
+      "url": "https://batchdialer.com/pricing",
+      "provenance": "official_documentation",
+      "proves": [
+        "BatchDialer plans advertise API integration availability"
+      ]
+    },
+    {
+      "id": "api_key_integration_help",
+      "url": "https://help.getbatch.co/en/articles/9792924-how-to-sync-batchleads-and-batchdialer-and-push-lists",
+      "provenance": "official_documentation",
+      "proves": [
+        "BatchDialer exposes an API key for an official integration workflow"
+      ]
+    }
+  ],
+  "reviewed_observations": [
+    {
+      "id": "20260822_campaigns_active",
+      "operation": "campaigns_active",
+      "review_status": "reviewed",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/campaigns_active.json",
+      "sha256": "85a4b33c38ba902d06d52fbedbe8382d92e319778d7034aa78bc7ccc11e3957e",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/h2xkp24zesogx-get-campaigns",
+      "captured_at": "2026-08-22T16:47:14.272932Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-001"
+      },
+      "schema_drift_fingerprints": []
+    },
+    {
+      "id": "20260822_campaign_search_page_one",
+      "operation": "campaign_search_page_one",
+      "review_status": "reviewed",
+      "provenance": "account_schema_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/campaign_search_page_one.json",
+      "sha256": "aaab401107e663c2d12239338a35269515d5602517489031155a0a69bc2bb7d3",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/rw0nq2fp5bu7a-search",
+      "captured_at": "2026-08-22T16:47:14.357138Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-002"
+      },
+      "schema_drift_fingerprints": [
+        "183923be84e1",
+        "755f7debf3d0"
+      ]
+    },
+    {
+      "id": "20260822_campaign_search_page_two",
+      "operation": "campaign_search_page_two",
+      "review_status": "reviewed",
+      "provenance": "account_schema_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/campaign_search_page_two.json",
+      "sha256": "4d15f4f76c3cb9b6cec32cc40d3140e1b2993581bef13fedd2d12d01d50b700e",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/rw0nq2fp5bu7a-search",
+      "captured_at": "2026-08-22T16:47:14.452490Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-003"
+      },
+      "schema_drift_fingerprints": [
+        "183923be84e1",
+        "755f7debf3d0"
+      ]
+    },
+    {
+      "id": "20260822_target_contact",
+      "operation": "target_contact",
+      "review_status": "reviewed",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/target_contact.json",
+      "sha256": "65b78025a265c6454e1324aa70d463aeb22edbdea989fc701fbb4faa6fb1da20",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/q2v2uqf6v4uig-get-single-contact-by-id",
+      "captured_at": "2026-08-22T16:47:14.484192Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-004"
+      },
+      "schema_drift_fingerprints": [
+        "013f54400c82",
+        "37a8eec1ce19",
+        "37d8527a9997",
+        "41cf6794ba42",
+        "5fdfe109b373",
+        "62484e22a6a5",
+        "7678d8c8b176",
+        "7ba8cd39a2a4",
+        "82a3537ff0db",
+        "97bb44facd57",
+        "a97b0931730e",
+        "ab530a13e459",
+        "f3c7807d4750",
+        "f734824c464c"
+      ]
+    },
+    {
+      "id": "20260822_cdr_cursor_page_one",
+      "operation": "cdr_cursor_page_one",
+      "review_status": "reviewed",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/cdr_cursor_page_one.json",
+      "sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+      "captured_at": "2026-08-22T16:47:14.519626Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-005"
+      },
+      "schema_drift_fingerprints": []
+    },
+    {
+      "id": "20260822_cdr_cursor_page_two",
+      "operation": "cdr_cursor_page_two",
+      "review_status": "reviewed",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/cdr_cursor_page_two.json",
+      "sha256": "784a534a7df9f4be828bf01f8aebb5783482991e484f6feb71a395344a9913c6",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+      "captured_at": "2026-08-22T16:47:14.551136Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-006"
+      },
+      "schema_drift_fingerprints": []
+    },
+    {
+      "id": "20260822_target_transcript",
+      "operation": "target_transcript",
+      "review_status": "reviewed",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/target_transcript.json",
+      "sha256": "552acdfc45d058fe042426ac9654f7f5a34a1131519907d60abf3674f7341638",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/1ipr1j1l9zkyn-get-transcription-json",
+      "captured_at": "2026-08-22T16:47:14.704708Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-007"
+      },
+      "schema_drift_fingerprints": [
+        "44ad63f60af0"
+      ]
+    }
+  ],
+  "required_scenarios": [
+    {
+      "id": "qualified_seller_follow_up",
+      "description": "Qualified Seller - Follow Up result with linked campaign, contact, call, agent, notes, and property data",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "appointment_set",
+      "description": "Appointment Set result without importing a provider calendar event",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "callback",
+      "description": "Callback result and any supported callback due-time evidence",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "ordinary_non_lead_result",
+      "description": "No Answer or Voicemail result that must not create a Stonegate lead",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "unknown_result",
+      "description": "Previously unseen result that must be quarantined for mapping review",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "result_before_rename",
+      "description": "Result identity and label before a controlled rename",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "result_after_rename",
+      "description": "Same result identity and revised label after a controlled rename",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "pagination_page_one",
+      "description": "First page of a result set with a documented next-page boundary",
+      "evidence_status": "captured",
+      "provenance": "controlled_account_observation",
+      "fixture_path": "captured/20260822T164713Z-83ec9c25/cdr_cursor_page_one.json",
+      "sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+      "captured_at": "2026-08-22T16:47:14.519626Z",
+      "http_status": 200,
+      "response_headers": {
+        "date": "[REDACTED PROVIDER DATE]",
+        "content-type": "application/json",
+        "x-request-id": "request-005"
+      }
+    },
+    {
+      "id": "pagination_page_two",
+      "description": "Second page proving continuity and termination behavior",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "record_before_update",
+      "description": "Provider record before a controlled update",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "record_after_update",
+      "description": "Same provider record after an update, including timestamp or revision evidence",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "incomplete_record",
+      "description": "Provider record with intentionally missing optional seller or property fields",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "authentication_failure",
+      "description": "401 or 403 response with a sanitized, secret-free body",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "rate_limit",
+      "description": "429 response with only allowlisted rate-limit and request headers",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    },
+    {
+      "id": "temporary_provider_failure",
+      "description": "Temporary 5xx response used to prove bounded retry behavior",
+      "evidence_status": "not_captured",
+      "provenance": null,
+      "fixture_path": null,
+      "sha256": null,
+      "endpoint_documentation_url": null,
+      "captured_at": null,
+      "http_status": null,
+      "response_headers": {}
+    }
+  ]
+}

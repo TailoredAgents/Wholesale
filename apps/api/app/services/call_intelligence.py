@@ -451,21 +451,27 @@ def process_next_call_transcript(
             }
             exhausted_legacy_jobs = True
             continue
-        eligibility = prospecting_transcript_eligibility(db, item_recording)
-        if eligibility.state == "pending":
-            continue
-        if eligibility.state in {"invalid", "ineligible"}:
-            item.status = "exhausted"
-            item.error_message = eligibility.reason
-            item.transcript_metadata = {
-                **(item.transcript_metadata or {}),
-                "permanent_failure": True,
-                "eligibility_state": eligibility.state,
-                "exhausted_at": now.isoformat(),
-                "next_retry_at": None,
-            }
-            exhausted_legacy_jobs = True
-            continue
+        provider_transcript_ready = bool(
+            item.provider == "batchdialer"
+            and item_recording.provider == "batchdialer"
+            and (item.transcript_text or "").strip()
+        )
+        if not provider_transcript_ready:
+            eligibility = prospecting_transcript_eligibility(db, item_recording)
+            if eligibility.state == "pending":
+                continue
+            if eligibility.state in {"invalid", "ineligible"}:
+                item.status = "exhausted"
+                item.error_message = eligibility.reason
+                item.transcript_metadata = {
+                    **(item.transcript_metadata or {}),
+                    "permanent_failure": True,
+                    "eligibility_state": eligibility.state,
+                    "exhausted_at": now.isoformat(),
+                    "next_retry_at": None,
+                }
+                exhausted_legacy_jobs = True
+                continue
         metadata = item.transcript_metadata or {}
         attempts = int(metadata.get("attempts", 0))
         if attempts >= settings.call_transcription_max_attempts:

@@ -1,0 +1,40 @@
+{
+  "schema_version": "batchdialer_bd1_capture_v1",
+  "capture_tool_version": "1.4",
+  "capture_run_id": "20260822T164713Z-83ec9c25",
+  "sanitization_profile": "stonegate_bd1_strict_v1",
+  "official_source_id": "cdr_pagination",
+  "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+  "captured_at": "2026-08-22T16:47:14.551136Z",
+  "review_status": "reviewed",
+  "reviewed_at": "2026-08-22T16:48:07Z",
+  "reviewer": "Codex",
+  "controlled_campaign_confirmed": true,
+  "provenance": "controlled_account_observation",
+  "operation": "cdr_cursor_page_two",
+  "request": {
+    "method": "GET",
+    "path_template": "/v2/cdrs",
+    "params": {
+      "pagelength": 5,
+      "callDate": "2026-08-18T00:00:00-05:00",
+      "next_page": "cursor-001"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "[REDACTED PROVIDER DATE]",
+      "content-type": "application/json",
+      "x-request-id": "request-006"
+    },
+    "schema_drift": {
+      "undocumented_property_fingerprints": []
+    },
+    "body": {
+      "items": [],
+      "nextPage": "cursor-002"
+    }
+  }
+}

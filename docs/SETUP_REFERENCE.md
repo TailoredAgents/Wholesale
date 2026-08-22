@@ -665,8 +665,9 @@ After campaign approval and direct-number configuration:
 - `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
-keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode, but they are
-required for the D4 browser softphone described under **Native VA Dialer Foundation**.
+keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode. They supported
+the historical D4 browser softphone, which is dormant and must not be reactivated through Voice
+configuration.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
 The disclosure is optional. Stonegate's Owner-selected Georgia-only one-party mode leaves it unset
@@ -708,11 +709,18 @@ All paths use `https://api.stonegatehb.com` as the base.
     stopped state, then select **Retry call intelligence** and verify the audited retry succeeds on
     the same call record.
 
-## Native VA Dialer Foundation And Browser Softphone
+## Dormant Native VA Dialer Foundation And Historical Browser Softphone
+
+BatchDialer is Stonegate's production VA calling system. The native D0-D10 implementation is
+retained for history, analytics, late signed callbacks, and safe cleanup, but its call execution,
+softphone, activation controls, and pilot controls are dormant. The repository and Render
+Blueprint change are prepared; the live environment is not considered dormant until the company
+and campaign switches are off, every session/call is drained, the release is deployed, and the
+production no-call check passes.
 
 ### Variables
 
-- `PROSPECTING_NATIVE_DIALER_ENABLED=true` in the Render API and worker services
+- `PROSPECTING_NATIVE_DIALER_ENABLED=false` in the prepared Render API and worker configuration
 - `PROSPECTING_NATIVE_DIALER_MAX_LINES=1`
 - `PROSPECTING_NATIVE_DIALER_LEASE_SECONDS=90`
 - `PROSPECTING_NATIVE_DIALER_STALE_AFTER_SECONDS=180`
@@ -734,12 +742,10 @@ source, documentation, screenshots, URLs, browser storage, or frontend environme
 - `TWILIO_TWIML_APP_SID`
 - `TWILIO_VOICE_TOKEN_TTL_SECONDS`
 
-The application setting remains fail-closed by default in unconfigured local and test environments,
-while the Render production blueprint explicitly enables the native VA dialer. The schema can
-preserve requested limits from one to three lines so a later controlled pilot does not require
-another data-model redesign, but the current implementation and production configuration are
-hard-capped at one line across the entire organization. A production value above `1` is rejected
-during application startup.
+The application remains fail-closed by default in local and test environments. The prepared
+production Blueprint also sets the launch flag to `false`. The schema and historical records keep
+their one-to-three-line design, but they do not authorize a live line. A production maximum above
+`1` remains rejected during application startup.
 
 Phases D1-D7 install the data foundation, controlled server-side cold-call provider boundary,
 durable one-line coordinator, browser softphone, VA workbench, disposition automation, and evidence
@@ -760,14 +766,17 @@ and routes inbound callbacks on that line through the D8 cold-prospect callback 
 recent same-line dial match opens the assigned prospect context; ambiguous or unknown callers remain
 isolated for review and never manufacture a warm seller lead.
 
-Production sets `PROSPECTING_NATIVE_DIALER_ENABLED=true`, but that global availability does not start
-calls. Company and campaign switches, an active caller profile, an active dedicated prospecting
-line, calling windows, suppression checks, and the one-line feature cap remain independent
-fail-closed boundaries. Enable only an approved, non-overlapping campaign through the manager
-controls. BatchDialer and its existing qualified-lead and appointment Zaps remain the production
-bridge and rollback path and are not replaced, disabled, or modified by native-dialer activation.
+Dormant production requires `PROSPECTING_NATIVE_DIALER_ENABLED=false` in both API and worker, the
+company and all campaign native switches off, no active caller profile that can extend calling, no
+open native pilot, and zero active sessions, legs, or provider calls. Do not turn a database switch
+back on or use a historical direct URL as a substitute for owner authorization. BatchDialer remains
+the calling system. My Calls remains available for manual qualification, notes, outcomes, and warm
+handoffs without a native dialer lease; agreed appointments are entered manually in Stonegate.
 
-### D4 Twilio Browser Setup
+### Historical D4 Twilio Browser Setup
+
+Do not perform this activation procedure while the native dialer is dormant. It is retained only
+to explain the implemented architecture and support authorized cleanup or audit work.
 
 1. Confirm the production API and worker both report the native-dialer environment flag on and a
    maximum of one line. Leave company and campaign switches off until the dedicated test setup is
@@ -785,13 +794,20 @@ bridge and rollback path and are not replaced, disabled, or modified by native-d
 6. Deploy with the one-line production feature available. Configuration alone does not authorize a
    caller or campaign; use the manager controls only for the approved isolated rollout.
 
-### D8 Manager Controls And Callback Routing
+### Historical D8 Manager Controls And Callback Routing
+
+The normal Dialer Control and native callback panels are hidden in dormant mode. The recovery
+behavior described below remains relevant only to an authorized drain, rollback, revocation, or
+late-callback investigation; it is not an activation procedure.
+
+Historical procedure — do not execute while dormant:
 
 1. In **Settings > Communications**, create or edit the dedicated Acquisitions number and set
    **Line purpose** to **Prospecting outbound and callbacks**. Configure an approved primary or
    fallback manager for return-call coverage.
-2. Open **Prospecting > Dialer control**. Configure each approved caller's dedicated line, active
-   status, and optional daily dial and spend limits. The effective limit remains one live line.
+2. The former process opened **Prospecting > Dialer control** to configure each approved caller's
+   dedicated line, active status, and optional daily dial and spend limits. The effective limit
+   remained one live line.
 3. Create a calling-hours and approved-script policy, then turn on the company switch and only the
    isolated campaign approved for the pilot. A switch change requires an audit reason.
 4. Use **Sessions and recovery** to safely drain a caller after the current call, cancel an
@@ -803,7 +819,7 @@ bridge and rollback path and are not replaced, disabled, or modified by native-d
 6. Monitor worker health, fresh session heartbeats, active legs, waiting callbacks, missed-call
    tasks, and sanitized operational errors from **Dialer control** before and during a pilot.
 
-### D9 Analytics, Cost Evidence, And Technical Readiness
+### Historical Analytics And Evidence
 
 **Prospecting > Analytics** is visible only to users with acquisition-management authority. It
 loads from `GET /api/v1/prospecting/dialer/analytics` with private, no-store response handling and
@@ -890,21 +906,29 @@ explicit owner acceptance.
   to the correct lead, appointment outcomes are final, the deal and transaction remain linked to
   that lead, assignment strategy is recorded for a closed-assignment count, gross revenue is marked
   collected, and the funded transaction's reconciliation is approved for contribution profit.
-- **Readiness is blocked:** open **Prospecting > Dialer control** and address the named failed check.
-  Use safe drain, cancel unanswered call, provider reconciliation, or untouched-orphan recovery
-  only for the matching session condition. Never interrupt a connected seller to clear a dashboard.
+- **Historical native readiness is blocked:** do not reactivate Dialer Control. Escalate the named
+  old session, line, callback, or worker condition for authorized drain, cancellation,
+  reconciliation, or untouched-orphan recovery. Never interrupt a connected seller to clear a
+  dashboard.
 - **Worker check is stale:** verify the communications worker is live and its heartbeat advances
   before permitting another shift.
 - **Rollback:** pause the native campaign, safely end native sessions, and return only the unworked
   non-overlapping cohort to BatchDialer. Keep native evidence read-only and never work the same
   active cohort in both systems.
 
-BatchDialer and its qualified-lead and appointment Zaps remain the operating bridge and rollback
-path throughout D9 and D10. D9 does not modify or disable them.
+The former D9/D10 native pilot never became the production calling path. Today, BatchDialer is the
+production calling system, its official direct API is the sole CRM integration, and appointments
+are entered manually in Stonegate.
 
-### D10 Controlled Pilot And Owner Acceptance
+### Historical D10 Controlled Pilot And Owner Acceptance
 
-Open **Prospecting > Pilot acceptance** only after the D9 technical blockers are clear. The D10
+The native pilot screen and activation workflow are dormant. Existing pilot records remain
+readable for audit, and rollback/revocation remains available for cleanup, but no new pilot may be
+created, advanced, submitted, or accepted. The details below preserve the former acceptance design
+and do not authorize its use.
+
+Historical procedure — do not execute while dormant: the former process opened **Prospecting >
+Pilot acceptance** only after the D9 technical blockers were clear. The D10
 workflow is implemented, but Stonegate has not completed its live production acceptance. Each
 record binds the rollout to one VA, campaign, cohort, calling batch, and dedicated line. When D10
 acceptance enforcement is enabled, a matching `smoke_testing`, `running`, or owner-accepted scope
@@ -947,8 +971,9 @@ charge and a source reference for each distinct root and seller-child call ID fr
 usage export, invoice, or call-detail record. Stonegate checks one-to-one call-ID coverage and
 stores the reconciled per-ID values. A provider-documented `$0` charge is valid; a guessed or
 unreferenced zero is not. The shift remains blocked while any pilot provider graph on that local
-date is ambiguous or lacks reconciled cost evidence. It identifies other external evidence separately
-when the current BatchDialer Zap cannot verify it. All pilot reads are private/no-store, and every
+date is ambiguous or lacks reconciled cost evidence. It identifies other external evidence
+separately when the direct BatchDialer CDR evidence does not prove it. All pilot reads are
+private/no-store, and every
 mutation uses an idempotency key plus the expected pilot revision so a stale manager tab cannot
 overwrite newer evidence.
 
@@ -974,7 +999,7 @@ Final approval is owner-only. The Owner or Founder/operator must type **ACCEPT S
 to accept or **REJECT SINGLE-LINE DIALER** to reject, and provide a reason. The API recalculates all hard gates transactionally, freezes the evidence
 snapshot and digest, and refuses approval while any required evidence is failed, partial, unknown,
 or in flight. Until the real shifts pass and that decision is recorded, the native dialer is not
-production-accepted and BatchDialer remains the operating bridge.
+production-accepted and BatchDialer remains the production calling system.
 
 Acceptance authorizes only that frozen VA, campaign, cohort, batch, dedicated line, caps, and safety
 configuration; the organization-wide acceptance gate stays enabled. An authorized owner can stop
@@ -983,9 +1008,12 @@ DIALER** exactly. Revocation disables the scope, ends or drains its sessions, an
 evidence. Every new seller bridge that has not already been authorized is blocked, while provider
 work already authorized or in progress drains safely. It does
 not reactivate BatchDialer automatically, and native calling cannot resume from that authorization:
-the terminal pilot remains visible while a manager creates and passes a new D10 pilot.
+the terminal pilot remains visible for audit. Dormant mode does not permit a replacement pilot.
 
-### D4 Controlled Acceptance Boundary
+### Historical D4 Controlled Acceptance Boundary
+
+This checklist records the former controlled-test boundary. Do not execute it as a current setup
+step while the native dialer is dormant.
 
 Complete an isolated test-number or approved non-overlapping campaign acceptance before broad
 production use:
@@ -1124,159 +1152,139 @@ current maximum credit use. Acceptance must compare estimated and actual credits
 result quality, multi-select field mapping, DNC-safe contact suggestion, scoring, candidate review,
 import, duplicates, and cost before recurring dependence.
 
-## BatchDialer VA Handoff Through Zapier
+## BatchDialer Direct API Integration
 
 BatchDialer is the VA cold-calling workspace; Stonegate is the system of record after a seller is
-qualified. The first production connection deliberately uses BatchDialer's supported Zapier app
-instead of assuming a private provider API. The intake URL is:
-
-`POST https://api.stonegatehb.com/api/v1/webhooks/zapier/batchdialer`
+qualified. The official direct API is the sole BatchDialer-to-Stonegate integration. A bounded
+worker poll retrieves provider campaigns, completed-call records, eligible contacts, and optional
+transcript evidence. There is no public BatchDialer intake webhook or external automation step.
 
 ### Variables
 
-Keep the integration disabled until the mapping and signature have passed a controlled test. Add
-the following to both the Render API and worker services where the Blueprint requests them:
+The integration becomes active when its required API key is present. Add the values requested by
+the Render Blueprint to the API and worker services:
 
-- `ZAPIER_BATCHDIALER_ENABLED=false`, then `true` for acceptance
-- `ZAPIER_BATCHDIALER_WEBHOOK_SECRET`: a private random secret generated and stored by the owner
-- `ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS`: comma-separated BatchDialer campaign IDs approved to
-  create Stonegate events
-- `ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES`
-- `ZAPIER_BATCHDIALER_BURST_LIMIT`
-- `ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS`
-- `ZAPIER_BATCHDIALER_MAX_ATTEMPTS`
-- `ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS`
+- `BATCHDIALER_API_BASE_URL=https://app.batchdialer.com/api`
+- `BATCHDIALER_API_KEY` (secret)
+- `BATCHDIALER_POLL_SECONDS=120`
+- `BATCHDIALER_SCAN_DAYS=2`
+- `BATCHDIALER_ACCOUNT_TIMEZONE=America/New_York`
+- `BATCHDIALER_PAGE_LENGTH=100`
+- `BATCHDIALER_MAX_PAGES_PER_DAY=50`
+- `BATCHDIALER_HTTP_TIMEOUT_SECONDS=15`
+- `BATCHDIALER_HTTP_MAX_ATTEMPTS=3`
+- `BATCHDIALER_EVENT_MAX_ATTEMPTS=8`
+- `BATCHDIALER_EVENT_RETRY_BASE_SECONDS=30`
+- `BATCHDIALER_CAMPAIGN_REFRESH_SECONDS=3600`
+- `BATCHDIALER_CHECKPOINT_LEASE_SECONDS=90`
+- `BATCHDIALER_TRANSCRIPT_SYNC_ENABLED=true`
 
-Do not paste the BatchDialer integration key or Stonegate webhook secret into chat, source code,
-documentation, or screenshots. The BatchDialer integration key belongs only in Zapier. The
-Stonegate webhook secret belongs only in Render and the private signing step in Zapier.
+Use the Blueprint defaults unless a measured provider limit or production incident requires an
+approved change. Keep `PROSPECTING_NATIVE_DIALER_ENABLED=false` in both API and worker.
+
+Do not paste the BatchDialer key into chat, source code, documentation, logs, URLs, commands, or
+screenshots. Do not inspect, rotate, delete, or replace it as part of ordinary integration work. The
+owner enters it manually in the requested Render secret fields.
+
+The API key is sent as the raw `X-ApiKey` value to the fixed official host. Do not prefix it with
+`Bearer`. Stonegate rejects redirects and bounds response bytes, timeouts, pages, and retries.
 
 ### BatchDialer Configuration
 
 1. In BatchDialer, open **Settings > Integrations > Integration Keys**, add a key named
-   **Stonegate Zapier**, and connect the BatchDialer Zapier app.
+   **Stonegate Direct API**, and place it only in the authorized Render secret fields.
 2. Give each VA an individual **Agent** login and only the campaign access needed for their work.
 3. Build one required lead sheet with owner verification, full property address, motivation,
    timeline, condition, occupancy, asking price, mortgage or lien context, best callback time,
    authorized follow-up channels, appointment, and notes.
 4. Configure these call results:
-   - **Qualified Seller - Follow Up**: **Mark As Lead** and **Do Not Redial Contact**.
-   - **Appointment Set**: **Mark As Lead** and **Do Not Redial Contact**.
-   - **Callback**: schedule the callback; mark as lead only when the seller is also qualified.
+   - **Qualified Seller - Follow Up**: use this exact label and **Do Not Redial Contact**.
+   - **Appointment Set**: use this exact label and **Do Not Redial Contact**.
+   - **Callback**: schedule the callback; use a qualified label only when the seller is genuinely
+     qualified.
    - **Not Interested**: stop redialing the contact.
    - **Do Not Call**: add DNC.
    - **Wrong Number**: stop redialing that number.
    - **No Answer/Voicemail**: remain inside the BatchDialer cadence.
 
-Only **New Lead Created** is allowed to create a Stonegate seller lead. Do not also create leads
-from **New Call Disposition Events**, because one qualified call could then create two handoffs.
+Stonegate recognizes only the exact reviewed **Qualified Seller - Follow Up** and **Appointment
+Set** labels as warm handoffs. A changed, unknown, or conflicting label is held for review. Do not
+broaden the automatic mapping from a similar-looking label. BatchDialer's optional **Mark As Lead**
+rule may organize records inside BatchDialer, but Stonegate does not use it as an integration
+transport or eligibility substitute.
 
-### Canonical Event Body
+Current operating boundary:
 
-Every Zap sends one flat JSON object. Common fields are:
+- VAs place calls, work cadence, manage cold-call DNC, and choose results in BatchDialer.
+- The direct worker retrieves eligible completed-call records and creates or updates the Stonegate
+  warm handoff once.
+- Stonegate My Calls/lead records retain manual qualification, notes, outcome review, follow-up,
+  and acquisitions handoff without a native dialer lease.
+- When **Appointment Set** is selected, the VA creates the actual appointment manually in
+  Stonegate from the urgent **Enter/verify Stonegate appointment** task. BatchDialer calendar data
+  is not imported.
+- BatchDialer remains authoritative for its cold-calling suppression. Stonegate still enforces
+  opt-outs for communications sent from Stonegate.
 
-| Stonegate field | Requirement | Meaning |
-| --- | --- | --- |
-| `event_id` | Required | Stable unique BatchDialer/Zap event identity used for replay safety |
-| `event_type` | Required | `lead.created`, `calendar.created`, or `dnc.added` |
-| `occurred_at` | Required | Provider event time with timezone |
-| `campaign_id` | Required | Must appear in the Render campaign allowlist |
-| `campaign_name` | Optional | Human-readable campaign name |
-| `provider_contact_id` | Required | Stable BatchDialer contact identity |
-| `provider_call_id` | Optional | Originating call identity |
-| `provider_recording_id` | Optional | Reference only; it does not prove recording access |
-| `provider_agent_id` | Optional | Stable VA/agent identity |
-| `va_name`, `va_email` | Optional | Human-readable VA attribution |
-| `related_lead_event_id` | Recommended after lead | Links appointment or DNC to the accepted lead event |
+### Supported Direct Operations
 
-If a BatchDialer trigger does not expose a separate event ID, construct a deterministic value in
-the Code step from the event type, provider contact/appointment ID, and provider-created timestamp.
-Never use a newly generated random UUID: Zapier retries must reproduce the same `event_id` so
-Stonegate can recognize the replay.
+Version one uses only:
 
-For `lead.created`, also send:
+| Provider operation | Stonegate use |
+| --- | --- |
+| `GET /campaigns` | Refresh active provider campaign identity and status |
+| `GET /v2/cdrs` | Retrieve completed calls by bounded date and cursor |
+| `GET /contact/{contactID}` | Enrich a reviewed warm result with seller/contact facts |
+| `POST /cdrs/by-lead-id` | Optional call history when a nonblank vendor-contact ID exists |
+| `GET /cdrs/{cdrID}/transcription` | Optional transcript enrichment after handoff |
 
-- `full_name`, `phone`, and optional `email`
-- `property_address`, `property_city`, `property_state`, and `property_zip_code` for houses
-- optional land APN/county/state where a street address does not exist
-- lead-sheet qualification fields and notes when the provider exposes them
-- `disposition=interested` or `disposition=appointment_set`
-- `follow_up_permission` as one of `phone`, `email`, `sms`, `phone_and_email`, `phone_and_sms`,
-  `email_and_sms`, or `phone_email_and_sms`
+Do not use `/v2/cdrs/last`, calendar endpoints, provider write operations, or interface scraping.
+Appointments and cold-call DNC remain in their authoritative systems: appointments in Stonegate,
+cold-call DNC in BatchDialer.
 
-`follow_up_permission` is required and must describe what the seller actually authorized. Values
-containing `sms` are the only ones that create seller SMS permission in Stonegate.
+### Polling, Evidence, And Replay Safety
 
-For `calendar.created`, send `provider_appointment_id`, `appointment_start_at`, optional end time,
-meeting type, location, notes, and owner email. Link it with `related_lead_event_id`; otherwise the
-worker falls back to `provider_contact_id`. This is an initial one-way appointment handoff. Manage
-later reschedules and cancellations in Stonegate until an update/cancel provider event is proven.
+The worker scans the configured rolling date window from page one. Overlap is intentional because
+the provider's stateful latest-CDR watermark and deterministic tie-breaking are not accepted for
+version one.
 
-For `dnc.added`, send the phone and optional `dnc_reason`, preferably linked with
-`related_lead_event_id`. Stonegate records a phone suppression and revokes matching phone/SMS
-permission; it does not erase the audit history.
+- Each CDR revision is archived before the checkpoint records success.
+- An empty item list ends the bounded date scan even if another cursor is present; Stonegate records
+  the anomaly.
+- A repeated cursor or page-cap boundary makes the scan visibly failed or incomplete.
+- Provider replay, overlapping scans, and service restarts must not duplicate a Lead, alert,
+  attribution touch, research run, call record, or appointment task.
+- A 401/403 surfaces an authentication blocker without exposing the key.
+- A 429 or temporary provider failure uses bounded retry and durable catch-up.
+- Unknown or renamed result labels are quarantined instead of guessed.
 
-### HMAC Signing In Zapier
+The raw CDR, contact, campaign, and transcript shapes remain provider evidence. Stonegate's normal
+models are the business records. A provider phone number never proves SMS permission, and an
+incomplete property must not be sent to research until staff supply a usable identity.
 
-The request must include `X-Stonegate-BatchDialer-Signature`. Its value is the lowercase
-HMAC-SHA256 of the exact raw JSON body using `ZAPIER_BATCHDIALER_WEBHOOK_SECRET`. Stonegate accepts
-either the 64-character hex digest or `sha256=` followed by that digest.
+### Direct Acceptance
 
-Use **Code by Zapier** immediately before **Webhooks by Zapier > Custom Request**. Build the final
-object, stringify it once, and sign that same string:
+Run one controlled qualified call and one controlled appointment-set call, then confirm:
 
-```javascript
-const crypto = require("crypto");
-const body = JSON.stringify({
-  event_id: inputData.event_id,
-  event_type: inputData.event_type,
-  occurred_at: inputData.occurred_at,
-  campaign_id: inputData.campaign_id,
-  provider_contact_id: inputData.provider_contact_id,
-  full_name: inputData.full_name,
-  phone: inputData.phone,
-  property_address: inputData.property_address,
-  property_city: inputData.property_city,
-  property_state: inputData.property_state,
-  property_zip_code: inputData.property_zip_code,
-  disposition: inputData.disposition,
-  follow_up_permission: inputData.follow_up_permission,
-});
-const signature = crypto
-  .createHmac("sha256", inputData.webhook_secret)
-  .update(body, "utf8")
-  .digest("hex");
-return { body, signature };
-```
+- direct health shows configured, a current worker heartbeat, and a successful poll;
+- active provider campaigns appear in the discovered campaign evidence;
+- **Qualified Seller - Follow Up** creates or updates one Lead with BatchDialer source, VA/campaign
+  attribution, provider call evidence, normal Lead Manager work, and one staff alert;
+- a qualified seller with unknown permission is preserved without creating an SMS consent record;
+- a qualified seller with an incomplete property receives visible data-quality work and does not
+  trigger research against a placeholder;
+- **Appointment Set** creates one Lead plus one urgent **Enter/verify Stonegate appointment** task
+  and no Appointment;
+- the VA creates the real appointment in Stonegate and the task/warning clears;
+- rescanning the same provider call creates no duplicate business action;
+- an altered result label is held for review;
+- no-answer, voicemail, wrong-number, not-interested, and ordinary callback activity does not enter
+  Leads;
+- BatchDialer retains expected cold-call DNC/redial behavior; and
+- optional transcript or recording absence never blocks the handoff.
 
-In the Custom Request action, send the Code step's `body` as the unmodified raw request body with
-`Content-Type: application/json`, and set `X-Stonegate-BatchDialer-Signature` to the Code step's
-`signature`. Do not rebuild or unflatten the JSON in the webhook step; changing the bytes after
-signing causes an invalid-signature response. Add optional fields to the object only after they
-appear in an actual BatchDialer trigger sample.
-
-### Three Zaps And Acceptance
-
-1. **New Lead Created -> `lead.created`**: the only lead-creation Zap.
-2. **New Calendar Events -> `calendar.created`**: creates one initial appointment associated with
-   the prior provider lead/contact.
-3. **New DNC Numbers -> `dnc.added`**: records the suppression; never creates a lead.
-
-The lead and calendar Zaps may arrive out of order. Stonegate safely retries the calendar event
-and automatically revives it when the matching lead event arrives, even if the earlier retries had
-already exhausted. A DNC event must always include the exact phone number being suppressed.
-
-Run one controlled qualified call first and inspect the trigger's **Data out** before mapping
-optional fields. Then confirm:
-
-- a supported allowed-campaign event is accepted and later processed;
-- the seller appears once in **Leads** with source **BatchDialer**, VA/campaign attribution,
-  property research, normal Lead Manager work, and a staff new-lead SMS;
-- replaying the same `event_id` creates nothing new;
-- a disallowed campaign, invalid signature, oversized body, and unsupported event type are rejected;
-- an initial appointment appears once and a DNC event suppresses the matching phone;
-- no-answer, voicemail, and ordinary callback activity remains in BatchDialer;
-- recordings remain playable in BatchDialer and are not promised in Stonegate v1.
+After activation, reconcile provider CDR identities and eligible results against Stonegate for at
+least 24 hours. Acceptance requires zero eligible misses, duplicate actions, or wrong-contact merges.
 
 ## Marketing Conversion Delivery
 

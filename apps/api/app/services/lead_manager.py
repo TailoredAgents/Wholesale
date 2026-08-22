@@ -142,6 +142,7 @@ def ensure_inbound_case(
     lead: Lead,
     submitted_at: datetime,
     sla_minutes: int,
+    source_label: str = "Website",
 ) -> LeadManagementCase | None:
     existing = db.scalar(select(LeadManagementCase).where(LeadManagementCase.lead_id == lead.id))
     if existing is not None:
@@ -168,7 +169,7 @@ def ensure_inbound_case(
             assigned_user_id=assignee.id,
             previous_queue_key=previous_queue_key,
             queue_key="qualified",
-            reason="Website inquiry routed to the Lead Manager queue.",
+            reason=f"{source_label} inquiry routed to the Lead Manager queue.",
         )
     )
     add_automatic_owner_watchers(db, conversation)
@@ -198,8 +199,8 @@ def ensure_inbound_case(
         organization_id=organization_id,
         recipient_user_id=assignee.id,
         notification_type="lead_manager_inbound",
-        title="New website lead awaiting acceptance",
-        body="A seller submitted property information and needs immediate follow-up.",
+        title=f"New {source_label} lead awaiting acceptance",
+        body=f"A {source_label} seller lead needs immediate follow-up.",
         entity_type="lead_management_case",
         entity_id=case.id,
         action_url="/os/lead-manager",

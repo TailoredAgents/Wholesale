@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 19, 2026
+Last updated: August 21, 2026
 
 ## Purpose
 
@@ -53,7 +53,8 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
-| Native VA dialer | D0-D9 foundation plus the implemented D10 durable pilot, every-call review, shift review, rollback, and owner-decision workflow; one-line runtime remains scoped behind acceptance gates and is not production-accepted | Run the real D10 controlled shifts, reconcile per-call provider exports and BatchDialer evidence, obtain owner acceptance, and keep BatchDialer as the live bridge and rollback path |
+| Native VA dialer | D0-D10 foundation is implemented but was not production-accepted; the owner selected BatchDialer as the production dialer | Execute BD0 dormancy without deleting native records, evidence, migrations, or shared communication behavior |
+| BatchDialer direct integration | Direct-only implementation and repository verification complete: fixed-host client, durable polling, handoff processing, manual-appointment task, and health visibility | Deploy with the owner-managed key, run controlled qualified/appointment results, and reconcile provider CDRs for 24 hours |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -63,11 +64,12 @@ Do not mark a phase finished from code alone when its exit criteria require prod
   the existing platform without authorizing a second CRM or duplicate business records.
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
-- `VA_DIALER_ROADMAP.md` owns the native Stonegate prospecting dialer target, the initial
-  D0-D9 single-line implementation and measurement sequence, the D10 controlled-acceptance
-  workflow and remaining real-world evidence, the temporary BatchDialer operating bridge, and the
-  separately gated path to optional two- or three-line operation. It extends the existing
-  Prospecting and Voice systems without creating a second CRM or communication history.
+- `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` owns the approved production-dialer architecture,
+  native-dialer dormancy, constrained official API contract, sole direct synchronization, manual
+  Stonegate appointment boundary, health, reconciliation, and production acceptance.
+- `VA_DIALER_ROADMAP.md` preserves the implemented D0-D10 native-dialer architecture and evidence
+  as historical engineering context. It no longer authorizes native production acceptance or the
+  optional D11/D12 pilots.
 - `UNDERWRITING_COMP_METHOD.md` owns the live Stonegate Valuation method, historical V2.2
   compatibility, and ongoing measured calibration.
 
@@ -78,17 +80,20 @@ communications history, or AI system.
 
 The practical order from the current state is:
 
-1. Execute the CRM information-architecture roadmap while preserving current route compatibility.
-2. Finish F8 Resend controlled acceptance.
-3. Complete F2 actual staff setup as people join.
-4. Finish F4 SignWell and contract acceptance before the first live seller agreement.
-5. Resume F9 with direct-number seller SMS and shared-line Voice acceptance.
-6. Run F5 buyer and disposition acceptance as the first contract approaches.
-7. Run F1 restore and access-revocation checks before broad employee use.
-8. Begin F7 outcome collection with every reviewed analysis.
-9. Complete F6 accounting acceptance before relying on the first closed period.
-10. Review F3 outreach and recording policy before broad campaigns or recording activation.
-11. Run F10 Copilot pilots after the underlying human workflows have real operating volume.
+1. Deploy the completed BD0 native-dialer dormancy and direct BatchDialer runtime under the
+   constrained BD1 contract. The official API is the sole BatchDialer integration.
+2. Configure the owner-managed direct credential, run controlled qualified and appointment-set
+   acceptance, and reconcile provider CDR identities against Stonegate for at least 24 hours.
+3. Finish F8 Resend controlled acceptance.
+4. Complete F2 actual staff setup as people join.
+5. Finish F4 SignWell and contract acceptance before the first live seller agreement.
+6. Resume F9 with direct-number seller SMS and shared-line Voice acceptance.
+7. Run F5 buyer and disposition acceptance as the first contract approaches.
+8. Run F1 restore and access-revocation checks before broad employee use.
+9. Begin F7 outcome collection with every reviewed analysis.
+10. Complete F6 accounting acceptance before relying on the first closed period.
+11. Review F3 outreach and recording policy before broad campaigns or recording activation.
+12. Run F10 Copilot pilots after the underlying human workflows have real operating volume.
 
 Some phases overlap. Their exit criteria remain independent.
 

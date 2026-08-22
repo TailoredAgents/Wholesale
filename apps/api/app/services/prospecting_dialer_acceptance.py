@@ -72,6 +72,7 @@ from app.services.prospecting_dialer import (
     candidate_entry_statement,
     load_runtime_graph,
     release_unstarted_reservation,
+    require_native_dialer_activation_enabled,
     runtime_policy_blockers,
     select_ranked_phone,
 )
@@ -929,6 +930,7 @@ def create_prospecting_dialer_pilot(
 ) -> ProspectingDialerPilotOverviewRead:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     organization = db.scalar(
         select(Organization)
         .where(Organization.id == principal.organization_id)
@@ -1048,6 +1050,7 @@ def start_prospecting_dialer_pilot(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     replay = _idempotent_pilot_replay(
         db,
@@ -1211,6 +1214,7 @@ def update_prospecting_dialer_pilot_evidence(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     replay = _idempotent_pilot_replay(
         db,
@@ -1383,6 +1387,7 @@ def review_prospecting_dialer_pilot_attempt(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     context = {"pilot_id": str(pilot_id), "attempt_id": str(attempt_id)}
     replay = _idempotent_pilot_replay(
@@ -1508,6 +1513,7 @@ def review_prospecting_dialer_pilot_shift(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     context = {"pilot_id": str(pilot_id), "session_id": str(session_id)}
     replay = _idempotent_pilot_replay(
@@ -1671,6 +1677,7 @@ def submit_prospecting_dialer_pilot(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_manager(principal)
     active_settings = settings or get_settings()
+    require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     replay = _idempotent_pilot_replay(
         db,
@@ -1818,6 +1825,8 @@ def decide_prospecting_dialer_pilot(
 ) -> ProspectingDialerPilotOverviewRead | None:
     _require_owner(db, principal)
     active_settings = settings or get_settings()
+    if payload.decision == "accept":
+        require_native_dialer_activation_enabled(active_settings)
     current = _as_utc(now or datetime.now(UTC))
     replay = _idempotent_pilot_replay(
         db,

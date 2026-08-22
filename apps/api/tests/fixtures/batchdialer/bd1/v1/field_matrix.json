@@ -1,0 +1,338 @@
+{
+  "schema_version": "batchdialer_bd1_field_matrix_v1",
+  "status": "controlled_capture_pending",
+  "controlled_evidence": {
+    "call.resource": {
+      "fixture_sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "json_path": "$.response.body.items[0]",
+      "reviewed_at": "2026-08-22T16:48:07Z",
+      "reviewer": "Codex",
+      "scenario_id": "pagination_page_one"
+    },
+    "call.stable_id": {
+      "fixture_sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "json_path": "$.response.body.items[0].id",
+      "reviewed_at": "2026-08-22T16:48:07Z",
+      "reviewer": "Codex",
+      "scenario_id": "pagination_page_one"
+    },
+    "call.status_timestamps_duration_and_numbers": {
+      "fixture_sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "json_path": "$.response.body.items[0].callStartTime",
+      "reviewed_at": "2026-08-22T16:48:07Z",
+      "reviewer": "Codex",
+      "scenario_id": "pagination_page_one"
+    },
+    "call.contact_campaign_agent_and_result_links": {
+      "fixture_sha256": "2c5471c7292976d4135937ebc8485e6db0ac955b75e561995729ac2c1e418a02",
+      "json_path": "$.response.body.items[0].contact.id",
+      "reviewed_at": "2026-08-22T16:48:07Z",
+      "reviewer": "Codex",
+      "scenario_id": "pagination_page_one"
+    }
+  },
+  "availability_values": [
+    "supported",
+    "unsupported",
+    "ambiguous"
+  ],
+  "fields": [
+    {
+      "key": "authentication.api_key_available",
+      "category": "authentication",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Authorize a future worker-only provider client",
+      "evidence_source_ids": ["pricing", "api_key_integration_help"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "authentication.request_header_format",
+      "category": "authentication",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Construct authenticated requests without credential leakage",
+      "evidence_source_ids": ["getting_started"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "authentication.scope_and_account_identifier",
+      "category": "authentication",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Bind retrieval to the correct BatchDialer account and permissions",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "transport.base_url",
+      "category": "transport",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Use only a documented production API host",
+      "evidence_source_ids": ["getting_started"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "campaign.resource",
+      "category": "campaign",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Discover and review calling campaigns",
+      "evidence_source_ids": ["developer_portal"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "campaign.stable_id",
+      "category": "campaign",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Persist campaign policy without matching on a mutable name",
+      "evidence_source_ids": ["campaign_search"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "campaign.name_status_and_search",
+      "category": "campaign",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Display campaign identity and discover eligible campaign states",
+      "evidence_source_ids": ["campaign_search"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "campaign.updated_at_or_revision",
+      "category": "campaign",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Detect provider-side campaign changes without name matching",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.resource",
+      "category": "contact",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Retrieve a qualified seller record",
+      "evidence_source_ids": ["developer_portal"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.stable_id",
+      "category": "contact",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Create a durable provider-contact link and idempotency key",
+      "evidence_source_ids": ["contact_retrieval"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.name_phone_and_email",
+      "category": "contact",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Create and safely match the Stonegate contact",
+      "evidence_source_ids": ["contact_retrieval"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.property_address_fields",
+      "category": "contact",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Create or match the subject property without guessing address parts",
+      "evidence_source_ids": ["contact_retrieval"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.custom_fields_and_lead_sheet_answers",
+      "category": "contact",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Populate qualification context and research hints",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "contact.created_at_updated_at_or_revision",
+      "category": "contact",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Support deterministic incremental retrieval and late updates",
+      "evidence_source_ids": ["contact_retrieval"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "phone_number.resource",
+      "category": "phone_number",
+      "availability": "supported",
+      "criticality": "optional",
+      "stonegate_use": "Interpret multiple contact numbers without changing BatchDialer DNC authority",
+      "evidence_source_ids": ["developer_portal"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call.resource",
+      "category": "call",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Retrieve the provider call associated with a qualifying outcome",
+      "evidence_source_ids": ["developer_portal"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call.stable_id",
+      "category": "call",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Prevent duplicate call evidence and link notes to the correct call",
+      "evidence_source_ids": ["cdr_pagination"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call.status_timestamps_duration_and_numbers",
+      "category": "call",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Build an accurate external-call timeline",
+      "evidence_source_ids": ["cdr_pagination"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call.contact_campaign_agent_and_result_links",
+      "category": "call",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Attribute a qualifying result without phone-only guessing",
+      "evidence_source_ids": ["cdr_pagination"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call.created_at_updated_at_or_revision",
+      "category": "call",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Incrementally retrieve new and revised results",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call_result.stable_id",
+      "category": "call_result",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Map dispositions by immutable identity instead of label text",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "call_result.label_and_rename_behavior",
+      "category": "call_result",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Detect renamed or unknown dispositions and quarantine safely",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "note.resource_and_revision",
+      "category": "note",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Preserve VA notes and provider AI summaries",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "agent.stable_id_name_and_email",
+      "category": "agent",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Attribute the VA while allowing unknown agents to enter review",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "callback.due_time_and_identity",
+      "category": "callback",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Record callback evidence without importing BatchDialer cadence control",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "recording.reference_and_access_contract",
+      "category": "recording",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Link or ingest recording evidence only when officially supported",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "transcript.text_segments_and_access_contract",
+      "category": "transcript",
+      "availability": "supported",
+      "criticality": "optional",
+      "stonegate_use": "Import transcript evidence only when officially supported",
+      "evidence_source_ids": ["transcript_json"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "pagination.mode_page_size_and_termination",
+      "category": "pagination",
+      "availability": "supported",
+      "criticality": "required",
+      "stonegate_use": "Retrieve all eligible records within a bounded page cap",
+      "evidence_source_ids": ["campaign_search", "contact_retrieval", "cdr_pagination"],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "pagination.sort_and_tie_breaker",
+      "category": "pagination",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Avoid missed or duplicated records at page boundaries",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "filter.updated_since_or_cursor",
+      "category": "incremental_sync",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Select a deterministic watermark and overlap strategy",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "rate_limit.headers_retry_after_and_frequency",
+      "category": "rate_limit",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Choose a safe poll interval and bounded retry policy",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "error.request_id_and_retry_guidance",
+      "category": "error",
+      "availability": "ambiguous",
+      "criticality": "required",
+      "stonegate_use": "Log supportable failures without exposing credentials or payload PII",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    },
+    {
+      "key": "consent.follow_up_permission_evidence",
+      "category": "consent",
+      "availability": "ambiguous",
+      "criticality": "optional",
+      "stonegate_use": "Avoid fabricating SMS consent while still accepting a warm handoff",
+      "evidence_source_ids": [],
+      "controlled_observation_required": true
+    }
+  ]
+}

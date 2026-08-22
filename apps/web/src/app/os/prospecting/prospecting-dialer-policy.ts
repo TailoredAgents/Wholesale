@@ -15,6 +15,10 @@ export type ProspectingDialerLeadership =
 const RETRYABLE_AUDIO_STATES = new Set(["idle", "ready", "ended", "error"]);
 const PRECONNECT_LEG_STATES = new Set(["queued", "dialing", "ringing", "cancelling"]);
 
+export function isManualProspectingMode(context: ProspectingDialerContext | null) {
+  return context?.feature_enabled === false;
+}
+
 export function isNativeDialerFeatureReady(context: ProspectingDialerContext | null) {
   return Boolean(
     context?.feature_enabled &&

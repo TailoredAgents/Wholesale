@@ -1,10 +1,15 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_permission
 from app.core.config import get_settings
+from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.models.foundation import BatchDialerCampaign, BatchDialerSyncCheckpoint
 from app.schemas.integrations import IntegrationStatusListResponse, IntegrationStatusRead
 
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
@@ -19,6 +24,9 @@ def _status(
     mode: str,
     enabled: bool,
     blockers: list[str],
+    runtime_status: str | None = None,
+    last_success_at: datetime | None = None,
+    details: list[str] | None = None,
 ) -> IntegrationStatusRead:
     return IntegrationStatusRead(
         key=key,
@@ -28,12 +36,16 @@ def _status(
         enabled=enabled,
         configured=enabled and not blockers,
         blockers=blockers,
+        runtime_status=runtime_status,
+        last_success_at=last_success_at,
+        details=details or [],
     )
 
 
 @router.get("/status")
 def read_integration_status(
-    _: Annotated[Principal, Depends(integration_manager_dependency)],
+    principal: Annotated[Principal, Depends(integration_manager_dependency)],
+    db: Annotated[Session, Depends(get_db)],
 ) -> IntegrationStatusListResponse:
     settings = get_settings()
 
@@ -51,7 +63,34 @@ def read_integration_status(
 
     voice_blockers = list(settings.twilio_voice_configuration_blockers)
     call_intelligence_blockers = list(settings.call_intelligence_configuration_blockers)
-    batchdialer_blockers = list(settings.zapier_batchdialer_configuration_blockers)
+    batchdialer_blockers = list(settings.batchdialer_configuration_blockers)
+    batchdialer_checkpoint = db.scalar(
+        select(BatchDialerSyncCheckpoint).where(
+            BatchDialerSyncCheckpoint.organization_id == principal.organization_id,
+            BatchDialerSyncCheckpoint.stream == "cdrs",
+        )
+    )
+    batchdialer_campaign_count = len(
+        db.scalars(
+            select(BatchDialerCampaign.id).where(
+                BatchDialerCampaign.organization_id == principal.organization_id,
+                BatchDialerCampaign.is_active.is_(True),
+            )
+        ).all()
+    )
+    batchdialer_runtime_status = (
+        batchdialer_checkpoint.status
+        if batchdialer_checkpoint is not None
+        else ("not_started" if not batchdialer_blockers else "not_configured")
+    )
+    batchdialer_details = [f"{batchdialer_campaign_count} active campaign(s) discovered"]
+    if batchdialer_checkpoint is not None:
+        batchdialer_details.append(
+            f"{batchdialer_checkpoint.archived_event_count} new CDR event(s) archived"
+        )
+        batchdialer_details.append(
+            f"{batchdialer_checkpoint.quarantined_event_count} unknown result(s) quarantined"
+        )
 
     buyer_blockers = []
     if settings.buyer_data_provider != "dealmachine":
@@ -143,12 +182,19 @@ def read_integration_status(
                 blockers=call_intelligence_blockers,
             ),
             _status(
-                key="batchdialer-zapier",
-                name="BatchDialer VA handoff",
+                key="batchdialer",
+                name="BatchDialer direct sync",
                 category="Prospecting",
-                mode="zapier" if settings.zapier_batchdialer_enabled else "disabled",
-                enabled=settings.zapier_batchdialer_enabled,
+                mode="direct_api",
+                enabled=True,
                 blockers=batchdialer_blockers,
+                runtime_status=batchdialer_runtime_status,
+                last_success_at=(
+                    batchdialer_checkpoint.last_success_at
+                    if batchdialer_checkpoint is not None
+                    else None
+                ),
+                details=batchdialer_details,
             ),
             _status(
                 key="signwell",

@@ -240,7 +240,7 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
     api_values = render_service_environment_values(blueprint, "oakwell-api")
     worker_values = render_service_environment_values(blueprint, "oakwell-worker")
     for service_values in (api_values, worker_values):
-        assert service_values["PROSPECTING_NATIVE_DIALER_ENABLED"] == "true"
+        assert service_values["PROSPECTING_NATIVE_DIALER_ENABLED"] == "false"
         assert service_values["PROSPECTING_NATIVE_DIALER_MAX_LINES"] == "1"
 
 

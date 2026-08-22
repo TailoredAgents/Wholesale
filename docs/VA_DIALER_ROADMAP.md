@@ -1,10 +1,20 @@
-# Stonegate Native VA Dialer Implementation Roadmap
+# Stonegate Native VA Dialer Historical Implementation Roadmap
 
-Last updated: August 19, 2026
+Last updated: August 21, 2026
+
+> **Current status: implemented foundation, planned dormant.** D0-D10 document the native
+> Stonegate dialer that was built but never production-accepted. The current production strategy
+> is BatchDialer with a direct Stonegate integration, defined in
+> `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`. This file preserves architecture, tests, and audit
+> history; it does not authorize native-dialer activation or the optional D11/D12 pilots. The BD0
+> repository and Blueprint changes do not make production dormant until the live switches,
+> sessions, calls, and pilot state are drained, the release is deployed, and no-call verification
+> passes.
 
 ## 1. Purpose And Authority
 
-This is the canonical implementation plan for Stonegate's VA prospecting dialer.
+This is the historical implementation plan and technical record for Stonegate's native VA
+prospecting dialer.
 
 It defines:
 
@@ -20,23 +30,25 @@ Application code and database migrations remain the truth about what exists toda
 describes the approved destination and must not be treated as proof that a planned capability is
 already live.
 
-## 2. Current Decision
+## 2. Historical Decision Through D10
 
-Stonegate will build a native prospecting dialer inside the existing Prospecting workspace.
+The decision below governed implementation through D10. It was superseded on August 21, 2026 by
+the direct BatchDialer integration and native-dialer dormancy plan.
 
-The first production version will be a browser-based, single-line power dialer. Every VA will use
+Stonegate built a native prospecting dialer inside the existing Prospecting workspace.
+
+The intended first production version was a browser-based, single-line power dialer. Every VA was
+expected to use
 the same Stonegate application but receive a private, assignment-scoped dashboard containing only
 the calling batches and prospects they are authorized to work.
 
-The architecture will support a configurable maximum of one to three simultaneous outbound dial
-legs per VA. Production will remain hard-capped at one line until the single-line system is stable,
-measured, and accepted. Two- and three-line operation will be separate, feature-flagged pilots,
-not an automatic consequence of shipping version one.
+The architecture supports a configurable maximum of one to three simultaneous outbound dial legs
+per VA, although production was hard-capped at one line and never accepted. The optional two- and
+three-line pilots are no longer on the active implementation path.
 
-BatchDialer remains active as the short-term operating bridge and rollback path while Stonegate's
-native dialer is built and accepted. The existing BatchDialer-to-Stonegate lead and appointment
-handoffs remain valid. Stonegate will not cancel the provider or remove the integration until the
-native workflow has passed production acceptance.
+BatchDialer remained the production calling system during the native build. It is now the selected
+production dialer, its official direct API is the sole Stonegate integration, and Stonegate's
+native runtime is retained in a dormant state.
 
 ## 3. Desired Business Outcome
 
@@ -86,19 +98,22 @@ Version one should use one dedicated prospecting number assigned to each active 
 manager-approved one-to-one line assignment. Future parallel dialing may use a controlled line
 pool, but no number rotation may be designed to evade carrier protections or spam labeling.
 
-### 4.3 BatchDialer Boundary During Migration
+### 4.3 Historical BatchDialer Boundary During Native Migration
 
-BatchDialer remains the production bridge and rollback path. The native system is globally
-available for controlled one-line use, but only manager-approved, non-overlapping campaigns may be
-activated before D10 acceptance.
+This boundary governed the former D0-D10 migration. BatchDialer remained the production calling
+system while the native system was available only for controlled, non-overlapping test scope
+before D10 acceptance. That native activation path is now superseded by dormancy.
 
-During migration:
+During that historical migration:
 
-- one calling list or cohort must never be worked simultaneously in both dialers
-- the existing qualified-lead and appointment Zaps remain enabled
-- BatchDialer data remains provider-attributed
-- native Stonegate campaigns write directly to Stonegate and do not use Zapier
-- management may return a campaign to BatchDialer if the native dialer is paused
+- one calling list or cohort could not be worked simultaneously in both dialers;
+- the then-current qualified-lead and appointment handoff automations remained enabled;
+- BatchDialer data remained provider-attributed;
+- native Stonegate campaigns wrote directly to Stonegate; and
+- management could return a test cohort to BatchDialer if the native dialer was paused.
+
+Current operations use BatchDialer for all VA calling, the official direct API as the sole CRM
+integration, and urgent-task-driven manual Stonegate entry for agreed appointments.
 
 ## 5. Existing Foundation To Reuse
 
@@ -608,7 +623,7 @@ The phase table is the progress ledger. Update the status in this file as work s
 Deliverables:
 
 - record the native-dialer decision
-- preserve BatchDialer as the bridge and rollback
+- preserve BatchDialer as the production calling baseline during the historical native build
 - define the VA dashboard and qualification behavior
 - identify current data-model constraints
 - define implementation and activation gates
@@ -776,8 +791,8 @@ Implementation record (2026-08-19):
   preservation, and queued orphan release alongside the D1 and D2 regression suites
 - D3's coordinator is production-available through the completed browser workbench, while company,
   campaign, caller-profile, and dedicated-line gates remain fail-closed until a manager approves an
-  isolated rollout. Effective organization-wide concurrency remains one, and BatchDialer stays the
-  production bridge and rollback path through D10 acceptance
+  isolated rollout. Effective organization-wide concurrency remained one, and BatchDialer stayed
+  the production calling system through D10 acceptance
 
 ### D4. Browser Softphone And Single-Line Call Controls
 
@@ -847,10 +862,10 @@ Implementation record (2026-08-19):
 - a full browser reload cannot reattach JavaScript audio to a call already in progress. After such
   a reload the UI restores durable server state and offers a server-side hang-up; it must never
   claim that live browser audio resumed
-- the production feature is globally available, its effective concurrency is still exactly one
-  line across the organization, company and campaign activation switches remain independent
-  fail-closed gates, and BatchDialer remains the production bridge and rollback path through
-  controlled D10 acceptance
+- the production feature was globally available, its effective concurrency remained exactly one
+  line across the organization, company and campaign activation switches remained independent
+  fail-closed gates, and BatchDialer remained the production calling system through controlled D10
+  acceptance
 - focused backend coverage exercises lease-bound token issuance, no-cache controls, idempotent
   preparation, stale lease and duplicate-browser rejection, root-versus-child status truth,
   exact lost-response recovery replay, pre-provider retry/cancel/expiry, provider cancel/hang-up,
@@ -903,8 +918,8 @@ Implementation record (2026-08-19):
 - responsive and accessible workbench behavior plus focused backend and frontend tests cover the
   pinned scripts, four states, authorization, autosave/retry/conflict behavior, refresh recovery,
   assignment scope, and stale-form protection
-- the native dialer is available only to manager-approved one-line campaigns pending D10
-  acceptance; the BatchDialer bridge remains unchanged as the active rollback path
+- the native dialer was available only to manager-approved one-line campaigns pending D10
+  acceptance; BatchDialer remained the production calling system
 
 ### D6. Dispositions, Cadence, Handoff, And Appointment Automation
 
@@ -931,7 +946,8 @@ Tests:
 
 Exit criteria:
 
-- the native dialer produces the same or stronger CRM handoff guarantees as the BatchDialer bridge
+- the native dialer was required to produce the same or stronger CRM handoff guarantees as the
+  then-current BatchDialer workflow
 
 Implementation record (2026-08-19):
 
@@ -956,10 +972,10 @@ Implementation record (2026-08-19):
   failures their own action, confirms only server-returned automation, preserves exact-payload retry,
   and keeps manager monitoring read-only
 - focused D6 contracts plus the complete prospecting coordinator, workbench, Voice lifecycle,
-  migration, and BatchDialer bridge regressions cover replay, cadence exhaustion, callbacks,
+  migration, and provider-handoff regressions cover replay, cadence exhaustion, callbacks,
   qualification enforcement, appointment uniqueness, ranked fallback, and exact-number suppression
-- the native dialer is available only to manager-approved one-line campaigns pending D10
-  acceptance; the current BatchDialer bridge and its rollback path remain unchanged
+- the native dialer was available only to manager-approved one-line campaigns pending D10
+  acceptance; BatchDialer remained the production calling system
 
 ### D7. Recording, Transcript, AI Notes, And Evidence Continuity
 
@@ -1061,9 +1077,9 @@ Implementation record (2026-08-19):
 - focused migration, model, callback matching and routing, provider replay, access isolation,
   voicemail and missed-task, manager control, stop and recovery, warm Voice regression, frontend
   contract, type, lint, and production-build coverage protect the D8 operating boundary
-- BatchDialer and its existing Zaps remain unchanged as the production bridge and rollback path;
-  D9 analytics is implemented, but D10 controlled single-line acceptance is still required before
-  broad rollout
+- BatchDialer remained the production calling system during this historical phase; D9 analytics
+  was implemented, but D10 controlled single-line acceptance was still required before broad
+  rollout
 
 ### D9. Analytics, Quality, Cost, And Launch Readiness
 
@@ -1076,8 +1092,8 @@ Implementation record (2026-08-19):
   366 dates
 - use a versioned activity-cohort attribution model: native work enters at dial start, paid-ad and
   other acquisition enters at lead creation, and BatchDialer activity enters at the first durable
-  BatchDialer handoff touch even when it matched an existing CRM lead, with lead creation as the
-  fallback for a BatchDialer-created lead that has no durable handoff touch; cost enters at incurred
+  BatchDialer handoff touch even when it matched an existing CRM lead, with lead creation used as a
+  secondary attribution timestamp when no durable handoff touch exists; cost enters at incurred
   date and work time at work date; later downstream outcomes remain attributed to that originating
   work and are reported as of the response timestamp
 - preserve paid/other acquisition attribution when that lead later receives a BatchDialer handoff.
@@ -1110,8 +1126,8 @@ Implementation record (2026-08-19):
   routing, recording policy, session health, organization-wide one-line cap, and worker health
 - label the best possible D9 result **Ready for controlled pilot**. This is a technical status only;
   it never marks the native dialer Active or Accepted and always retains the D10 requirement
-- document cost entry, troubleshooting, safe recovery, and BatchDialer rollback procedures in the
-  setup and operating references
+- document cost entry, troubleshooting, safe recovery, and the historical non-overlapping
+  cohort-return procedure in the setup and operating references
 
 Tests:
 
@@ -1187,7 +1203,8 @@ Implementation record (2026-08-19):
   remains enabled. An Owner or Founder/operator can type **REVOKE SINGLE-LINE DIALER** with a reason
   to block every new seller bridge that has not already been authorized for that accepted scope,
   safely drain provider work already authorized or in progress, and preserve its evidence; the
-  terminal history remains visible while native calling waits for a new D10 pilot.
+  terminal history remains visible. Under the current dormant plan, that history cannot be used to
+  create or resume a replacement D10 pilot.
 
 Rollout:
 
@@ -1284,7 +1301,7 @@ The native single-line dialer is not done until all of the following are true:
 - metrics connect dials to conversations, appointments, contracts, cost, and profit
 - automated tests cover security, concurrency, recovery, and provider replay
 - a controlled production pilot has passed
-- BatchDialer remains a safe fallback until a later owner decision
+- BatchDialer remains the production calling system; the native runtime is dormant
 
 ## 13. Explicitly Deferred From Version One
 

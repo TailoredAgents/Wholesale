@@ -31,7 +31,7 @@ def test_integration_status_is_secret_free(
         "resend",
         "twilio-sms",
         "twilio-voice",
-        "batchdialer-zapier",
+        "batchdialer",
         "signwell",
         "dealmachine",
         "land-property-research",
@@ -40,3 +40,7 @@ def test_integration_status_is_secret_free(
     assert "sk-" not in serialized
     assert "AC000" not in serialized
     assert "Bearer " not in serialized
+    batchdialer = next(item for item in payload["items"] if item["key"] == "batchdialer")
+    assert batchdialer["mode"] == "direct_api"
+    assert batchdialer["runtime_status"] in {"not_configured", "not_started"}
+    assert batchdialer["last_success_at"] is None

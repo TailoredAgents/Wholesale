@@ -279,9 +279,9 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
-local views for focused work: Campaigns, Dialer control, Analytics, Pilot acceptance, and My Calls in Prospecting;
+local views for focused work: Campaigns, Analytics, and My Calls in Prospecting;
 Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
-inside Deals. Dialer control, Analytics, and Pilot acceptance are manager-only.
+inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
@@ -296,9 +296,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Calendar | `/os/calendar` |
 | Prospecting | `/os/prospecting` |
 | Prospecting: Campaigns | `/os/prospecting?view=campaigns` |
-| Prospecting: Dialer control | `/os/prospecting?view=dialer-control` |
 | Prospecting: Analytics | `/os/prospecting?view=analytics` |
-| Prospecting: Pilot acceptance | `/os/prospecting?view=pilot` |
 | Prospecting: My Calls | `/os/prospecting?view=my-calls` |
 | Leads | `/os/leads` |
 | Deals | `/os/deals` |
@@ -408,8 +406,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 6. Review exceptions in **Transactions**, **Dispositions**, and **Finance**.
 7. Review **Marketing** source economics at least weekly.
 8. Review **Prospecting > Analytics** for attributable outcomes, missing evidence, caller quality,
-   and controlled-pilot technical blockers. Never treat **Ready for controlled pilot** as D10 owner
-   acceptance.
+   and retained historical evidence. Never treat an old native readiness label as authorization.
 
 ### Lead Manager
 
@@ -834,8 +831,9 @@ blocked.
 ### BatchDialer VA Prospecting
 
 BatchDialer is the normal workspace for high-volume VA cold calling. Stonegate becomes the source
-of truth when the owner is genuinely interested, an initial appointment is created, or the owner
-requests no more calls. Do not copy every dial, voicemail, or no-answer into Stonegate.
+of truth when the owner is genuinely interested and the warm handoff begins. BatchDialer remains
+the authority for raw calling cadence, cold-call DNC, phone-number operations, and ordinary call
+results. Do not copy every dial, voicemail, or no-answer into Stonegate.
 
 ### Work A BatchDialer Campaign
 
@@ -845,9 +843,9 @@ requests no more calls. Do not copy every dial, voicemail, or no-answer into Sto
 3. Confirm the property and right party before recording seller facts.
 4. Select the truthful call result after every call:
    - **Qualified Seller - Follow Up**: use only when the seller is interested and agrees Stonegate
-     may follow up. This result must have **Mark As Lead** and **Do Not Redial Contact** enabled.
-   - **Appointment Set**: use when an actual time is agreed. This result must have **Mark As Lead**
-     and **Do Not Redial Contact** enabled.
+     may follow up. Use the exact approved label and stop redialing the contact.
+   - **Appointment Set**: use when an actual time is agreed. Use the exact approved label and stop
+     redialing the contact.
    - **Callback**: schedule the callback in BatchDialer. Do not mark it as a Stonegate lead unless
      the seller is also qualified and has agreed to follow-up.
    - **Not Interested**: stop redialing the contact.
@@ -857,73 +855,46 @@ requests no more calls. Do not copy every dial, voicemail, or no-answer into Sto
 5. For a qualified seller, complete owner verification, property address, motivation, timeline,
    condition, occupancy, asking price, mortgage or lien context, best callback time, appointment,
    and clear notes before saving the result.
-6. Confirm the qualified seller appears once in **Stonegate > Leads** and that the staff lead alert
-   is sent. Do not submit the same seller again merely because Zapier is still polling.
+6. Allow the direct sync its normal polling interval, then confirm the qualified seller appears once
+   in **Stonegate > Leads** and the staff lead alert is sent. Do not submit the same seller again or
+   create a second Lead while the direct worker is processing.
+7. If the result is **Appointment Set**, open the urgent **Enter/verify Stonegate appointment** task,
+   create the appointment with the real owner, time, type, and location, and confirm the task clears.
 
-The initial appointment can flow into Stonegate, but later reschedules and cancellations are
-managed in Stonegate unless a later connector explicitly supports those changes. BatchDialer call
-recordings remain in BatchDialer during this first integration phase; a recording should not be
-assumed available to Stonegate AI until the provider exposes and we verify a stable recording URL.
+Appointments are created and managed in Stonegate. BatchDialer call recordings remain in
+BatchDialer until the official API exposes and Stonegate verifies stable recording access; do not
+assume that its recording or transcript is available to Stonegate AI.
 
-### Stonegate Controlled Native Prospecting
+### Review A Direct BatchDialer Handoff
 
-Use this only when a manager intentionally activates an approved, non-overlapping native campaign
-or BatchDialer is unavailable and a controlled one-by-one batch is assigned. Open **Prospecting**.
-Managers see **Campaigns**, **Dialer control**, **Analytics**, and **My Calls**. Caller-only accounts
-open **My Calls** directly and do not receive campaign, dialer-control, or analytics controls. My
-Calls contains:
+Stonegate's native browser dialer, softphone, Dialer Control, and Pilot Acceptance are dormant.
+They are not another calling path when BatchDialer is unavailable. The direct worker creates the
+warm Lead from the eligible provider result; staff must not recreate that handoff manually.
 
-- **Work queue**
-- **Call quality**
-- **Handoff review** for managers
-- **Performance**
-- **Caller scripts** for managers
+1. Open the new Lead from **Leads**, the staff notification, or the urgent task.
+2. Confirm seller identity, phone, campaign, VA, raw result, provider call time, and available notes
+   match the BatchDialer record.
+3. Correct missing property or qualification facts only from a real source. Do not invent an address,
+   consent, motivation, timeline, condition, or occupancy answer.
+4. If the property is incomplete, finish the visible data-quality task before running research.
+5. If the provider agent did not map cleanly, leave the preserved provider attribution intact and
+   escalate the mapping warning; do not discard the seller.
+6. For **Appointment Set**, open **Enter/verify Stonegate appointment**, create the real Appointment,
+   and confirm the task and warning clear.
+7. Continue follow-up, Inbox communication, qualification, underwriting, and pipeline work in
+   Stonegate after the handoff.
 
-### Work A Record
-
-1. Open **Due now** for normal shift work. Corrections and due callbacks appear before untouched
-   records.
-2. Use **Callbacks**, **Corrections**, **Scheduled**, **Waiting**, or **All assigned** when you need
-   a specific queue.
-3. Select the seller row. Once a call is started, finish that outcome before opening another row.
-4. Review the campaign, batch, seller, property, ranked contact methods, prior attempts, notes,
-   qualification answers, and next commitment.
-5. Confirm the calling state shows **One-by-one calling**. Call only the selected assigned owner
-   and finish that result before moving to another record.
-6. Select **Start prospect**.
-7. Use the exact approved script displayed for the attempt.
-8. Select the accurate outcome. Qualification fields appear for callbacks, follow-up, interested
-   sellers, and appointments.
-9. Record answers exactly as provided. Do not invent missing answers.
-10. For a callback, choose the exact date/time or use the one-hour, tomorrow, or three-day shortcut.
-11. Save notes, appointments, acquisition owner, or escalation facts when the selected outcome
-    requires them.
-12. Select **Save outcome**. The next due assigned record becomes the working context.
-
-Typical outcomes include no answer, voicemail, callback requested, follow-up, interested,
-appointment set, not interested, wrong number, and Do Not Contact.
-
-### Submit A Warm Handoff
-
-1. Select **Interested** or **Appointment set**.
-2. Complete the required ownership, motivation, timeline, condition, occupancy, access, and
-   decision-maker questions.
-3. Choose the acquisitions owner.
-4. Confirm any scheduled appointment.
-5. Submit the handoff.
-
-The system creates one CRM lead and retains the campaign, attempt, qualification, conversation,
-appointment, and attribution history. The Lead Manager can accept the handoff, return a fixable
-submission with a structured correction type and explanation, or terminally reject a non-lead with
-a structured rejection type and explanation. Only accepted handoffs with complete right-party,
-interest, follow-up-permission, and required-answer evidence count as accepted warm leads.
+**Prospecting > My Calls** remains available for separately assigned manual CRM records and
+historical native evidence. It does not receive a native dialing lease, and it must not be used to
+create a second Lead for a direct BatchDialer handoff.
 
 ### Review Prospecting Analytics
 
-Managers use **Prospecting > Analytics** to compare operating results and determine whether the
-native dialer is technically eligible for a D10 controlled pilot. Callers do not receive this
-company-wide reporting view. Managers without Finance-view (`financials:view`) permission can
-review operating and readiness evidence, but cost, revenue, and profit values remain hidden.
+Managers use **Prospecting > Analytics** to compare BatchDialer handoffs, paid acquisition,
+historical native evidence, operating quality, and attributable business outcomes. The report is
+read-only and does not activate the dormant native dialer. Callers do not receive this company-wide
+reporting view. Managers without Finance-view (`financials:view`) permission can review operating
+evidence, but cost, revenue, and profit values remain hidden.
 
 1. Select the start and end dates. Both dates are included and interpreted in UTC.
 2. Optionally narrow the report by source, campaign, cohort, VA/caller, or dial mode, then select
@@ -946,15 +917,13 @@ review operating and readiness evidence, but cost, revenue, and profit values re
    reputation have supporting records.
 8. Open **How these metrics are calculated** before comparing an unfamiliar metric. It states the
    source records, attribution timestamp, and condition that makes the value unavailable.
-9. Review every blocker and warning under **Controlled-pilot readiness**. Correct the underlying
-   line, token, callback, recording, session, cap, or worker issue in **Dialer control** rather than
-   trying to clear the analytics display.
+9. Treat native-readiness blockers as historical evidence or cleanup signals. Escalate an old live
+   session, callback, recording, or worker issue through an authorized recovery path; do not reopen
+   Dialer Control merely to clear the display.
 
-The best D9 status is **Ready for controlled pilot**. It confirms technical checks only. It does
-not make the native dialer generally Active or Accepted. D10 still requires one VA, one small
-non-overlapping campaign, controlled numbers, review of every call, verification of caps and
-provider billing, multiple clean shifts, a BatchDialer comparison, and explicit owner acceptance.
-BatchDialer remains the operating bridge and rollback path until that separate acceptance is done.
+Any historical **Ready for controlled pilot** status is retained technical evidence only. It does
+not make the native dialer Active or Accepted and does not override dormant mode. BatchDialer is
+the production calling system.
 The selected period identifies when the originating activity entered the cohort: native dial start,
 paid/other lead creation, the first durable BatchDialer handoff touch, or BatchDialer lead creation
 when no durable handoff exists. A contract or close
@@ -963,11 +932,17 @@ timestamp; it is not silently moved out of its original acquisition cohort. The 
 de-duplicates overlapping source rows. Collected gross revenue and approved-reconciliation company
 profit are separate evidence and should not be treated as the same number.
 
-### Run The D10 Single-Line Pilot
+### Historical D10 Single-Line Pilot — Dormant, Do Not Run
 
-Managers use **Prospecting > Pilot acceptance** after D9 is technically ready. This screen is an
-evidence workflow, not an extra dialer on/off switch. The workflow exists in Stonegate, but the
-native dialer is not production-accepted until the live evidence and owner decision are complete.
+The instructions below preserve the former D10 acceptance design for audit and engineering
+history. Dialer Control and Pilot Acceptance are hidden in dormant production, and the server must
+reject new native sessions, activation, pilot creation/advancement, and acceptance. Do not follow
+these steps as an operating procedure. Existing records may be read, rolled back, revoked, or
+cleaned up through authorized recovery paths; late signed callbacks remain processable.
+
+The former D10 process used **Prospecting > Pilot acceptance** after D9 was technically ready. It
+was an evidence workflow, not an extra dialer on/off switch. The retained description below is
+historical only and cannot authorize production calling.
 
 1. Create one pilot by selecting exactly one VA, enabled native campaign, non-overlapping cohort,
    75-to-250-record calling batch, and dedicated prospecting line. Keep the company, campaign, VA,
@@ -977,9 +952,9 @@ native dialer is not production-accepted until the live evidence and owner decis
 2. Add one to ten unique controlled E.164 numbers from active Stonegate staff forwarding profiles.
    Each number must also exist as an eligible test record in this selected calling batch. Attest
    that the external
-   BatchDialer list is separate. Stonegate can verify its own records; it cannot inspect every raw
-   BatchDialer record through the current Zapier bridge, so the external export/list digest remains
-   a named human attestation.
+   BatchDialer list is separate. The direct integration archives supported completed-call records,
+   but it does not prove the complete original list membership. The external export/list digest
+   therefore remains a named human attestation.
 3. Select **Begin controlled-number smoke test** only after the screen shows no starting blocker.
    The pilot enters `smoke_testing`, where the coordinator can reserve only the saved test records.
    Complete answered controlled seller calls with durable call records, canonical recordings, and
@@ -1008,9 +983,10 @@ native dialer is not production-accepted until the live evidence and owner decis
    signed seller calls total. Review every reservation, including safe pre-provider releases and
    root-only provider failures.
 7. Name the comparable, disjoint BatchDialer cohort or list, attest that overlap is zero, and record
-   an honest comparison summary. The current Zap does not verify BatchDialer raw attempts or cost,
-   so leave unsupported rates or economics unavailable. It is acceptable for the comparison to be
-   inconclusive; it is not acceptable to invent a rate or claim superiority.
+   an honest comparison summary. The direct API can support only the CDR and campaign evidence it
+   actually retrieved; it does not prove list cost or every attempted contact. Leave unsupported
+   rates or economics unavailable. It is acceptable for the comparison to be inconclusive; it is
+   not acceptable to invent a rate or claim superiority.
 8. Exercise the company and campaign switches on a real controlled pilot session, then reach the
    configured daily dial limit, which must be between 25 and 50, and attempt one more reservation.
    The gate passes only when the
@@ -1028,14 +1004,10 @@ native dialer is not production-accepted until the live evidence and owner decis
     reason. The server recomputes all evidence before freezing the decision; managers cannot
     override a failed or unknown hard gate.
 
-If the pilot is rolled back, leave its evidence in Stonegate. Do not delete attempts or run the
-same active cohort in both systems. Acceptance authorizes only the frozen pilot scope and safety
-configuration. To stop an accepted authorization, an Owner or Founder/operator enters a reason and
-types **REVOKE SINGLE-LINE DIALER** exactly. Stonegate blocks every new seller bridge that has not
-already been authorized, safely drains provider work already authorized or in progress, and retains
-the evidence. The terminal pilot remains
-visible while a manager creates the new D10 pilot required before native calling can resume. BatchDialer remains
-available throughout D10 and after revocation as the fallback.
+Leave every historical pilot and attempt in Stonegate. Do not delete evidence. An Owner or
+Founder/operator may still use the authorized rollback/revocation path to drain and close an old
+scope, but no new D10 pilot may be created or resumed while dormant. BatchDialer is the production
+calling system.
 
 An assigned-only caller cannot open another caller's prospect. Enabling **Cold calling** adds the
 Prospecting work permission; it does not grant unrelated tabs or override the permissions from the

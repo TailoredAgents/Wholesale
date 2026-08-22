@@ -818,7 +818,7 @@ export const controlReferenceSections = [
   { heading: "Campaigns", owner: "prospecting" },
   { heading: "Prospecting", owner: "prospecting" },
   { heading: "Prospecting Analytics", owner: "prospecting" },
-  { heading: "Prospecting Pilot Acceptance", owner: "prospecting" },
+  { heading: "Historical Prospecting Pilot Acceptance — Dormant", owner: "prospecting" },
   { heading: "Leads: Lead Queue", owner: "seller-leads" },
   { heading: "Inbox", owner: "inbox" },
   { heading: "Appointment Workspace", owner: "calendar" },

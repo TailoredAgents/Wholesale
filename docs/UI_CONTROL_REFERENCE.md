@@ -59,7 +59,7 @@ is relevant and the required permission is present.
 | Inbox | Operations Assistant, Lead Manager, Acquisitions | `communications:view_conversations` |
 | Tasks | Administrator, Operations Assistant, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
 | Calendar | Operations Assistant, Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Prospecting | Operations Assistant, Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Dialer control and Analytics require `operations:manage` |
+| Prospecting | Operations Assistant, Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Analytics requires `operations:manage`; native Dialer Control and Pilot Acceptance are dormant |
 | Leads | Administrator, Operations Assistant, Lead Manager, Acquisitions | `leads:view` |
 | Deals | Operations Assistant, Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
 | Buyers | Operations Assistant, Dispositions | `buyers:view` |
@@ -67,8 +67,8 @@ is relevant and the required permission is present.
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | Settings | Owner, Administrator | At least one administration permission |
 
-Campaigns, Dialer control, Analytics, and My Calls are local Prospecting views. Dialer control and
-Analytics are hidden from caller-only accounts. Lead Queue, Pipeline, and Underwriting are local
+Campaigns, Analytics, and My Calls are the active local Prospecting views. Analytics is hidden from
+caller-only accounts; Dialer Control and Pilot Acceptance are dormant. Lead Queue, Pipeline, and Underwriting are local
 Leads views. Approvals are in Tasks; transaction and disposition work is in Deals; administration
 is in Settings. My Setup remains available to every signed-in employee.
 
@@ -555,9 +555,9 @@ Open **Prospecting > Campaigns**. Managers see **Overview**, **Import**, **Costs
 ## Prospecting Analytics
 
 Open **Prospecting > Analytics**. This manager-only view compares attributable business outcomes,
-cost, quality, evidence coverage, and technical controlled-pilot readiness. Financial values also
-require `financials:view`. An unavailable or permission-hidden value is not zero, and
-**Ready for controlled pilot** is not D10 production acceptance.
+cost, quality, evidence coverage, and retained historical dialer evidence. Financial values also
+require `financials:view`. An unavailable or permission-hidden value is not zero. A historical
+**Ready for controlled pilot** label does not activate or authorize the dormant native dialer.
 
 ### Filters And Scorecards
 
@@ -583,17 +583,19 @@ require `financials:view`. An unavailable or permission-hidden value is not zero
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Controlled-pilot readiness | Summarizes technical status as **Blocked**, **Needs review**, or **Ready for controlled pilot** | Technical observation only; D10 acceptance is always still required |
-| Blocking issues / Review before pilot | Lists specific conditions that must be fixed or reviewed | Never bypass a blocker to make the display green |
-| Readiness check cards | Report pass, warning, or block for dedicated line, browser token, callback, recording, session, one-line cap, and worker health | Correct underlying configuration or session state in **Dialer control** |
+| Historical controlled-pilot readiness | Preserves the prior **Blocked**, **Needs review**, or **Ready for controlled pilot** technical result | Read-only historical evidence; never authorizes native calling |
+| Blocking issues / historical review | Lists the conditions captured by the former native readiness model | Use for audit or cleanup; do not reactivate controls to make the display green |
+| Readiness check cards | Preserve dedicated-line, browser-token, callback, recording, session, one-line-cap, and worker evidence | Investigate old live work through an authorized cleanup path; Dialer Control is dormant |
 | **How these metrics are calculated** | Expands deterministic definitions, source records, attribution timestamp, and unavailable conditions | Use before comparing unlike sources or periods |
 | Prior confirmed snapshot notice | Retains the last successful values after a transient network or server failure | A 401 or 403 clears the prior snapshot, including financial values, because access expired or was removed |
 
-## Prospecting Pilot Acceptance
+## Historical Prospecting Pilot Acceptance — Dormant
 
-Open **Prospecting > Pilot acceptance**. This manager-only view controls D10 evidence; it is not a
-replacement for **Dialer control**, and D9 technical readiness is never displayed as owner
-acceptance.
+Pilot Acceptance and Dialer Control are hidden from normal production navigation in dormant mode.
+Direct URLs must not permit a manager to create, start, advance, submit, or accept a native pilot.
+The table below preserves the historical control contract for audit and cleanup only. Existing
+evidence remains readable; authorized rollback/revocation, safe session cleanup, and late signed
+provider callbacks remain available. Do not use these controls to reactivate calling.
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -604,33 +606,36 @@ acceptance.
 | Attempt review queue | Requires review of every terminal pilot attempt, including failed/no-answer/voicemail | Recording, transcript, and structured notes are required only for applicable connected seller conversations; non-contact outcomes still require truthful disposition, review, compliance, and cost evidence |
 | Shift review | Recomputes provider-signed right-party conversation time, reservation coverage, incidents, and billing across every production-stage pilot session on one local date | Reconcile every root and child provider call ID to a provider-reported charge and reference, including documented $0 records. Passing requires 60 right-party conversation minutes, 25 terminal signed seller calls, 100% passed reservation reviews, and no hard incident; ringing, machines, wrong parties, and smoke-stage calls do not add productive minutes |
 | Pilot progress | Shows passing shifts, reviewed attempts, required attempts, and hard gates | Three distinct passing local dates and 75 total attempts are required |
-| BatchDialer comparison | Stores the named separate cohort/list reference, zero-overlap attestation, and comparison summary | The current Zap cannot verify BatchDialer raw attempts or cost; keep those claims unavailable unless separately supported and allow an honest inconclusive comparison |
+| BatchDialer comparison | Stores the named separate cohort/list reference, zero-overlap attestation, and comparison summary | Direct CDR evidence supports only the calls actually retrieved; original list membership, provider cost, and any missing attempt class remain unavailable unless separately evidenced. An honest inconclusive comparison is valid |
 | Kill-switch and daily-cap drill | Verifies server-observed company/campaign off-then-on cycles, stopped or drained sessions, and one real reservation denial at the enforced daily cap | Typed confirmation alone cannot pass this gate |
 | Rollback rehearsal | Verifies a later, separate campaign switch cycle, stopped/drained session, zero live calls, immutable evidence, and the hashed unworked remainder | Must be followed by a clean shift; evidence capture does not transfer or enable a BatchDialer list |
 | **Rollback native pilot** | Closes a draft as `cancelled`, or disables a started pilot scope, stops/drains sessions, preserves evidence, and records `rolled_back` | Requires **ROLL BACK SINGLE-LINE PILOT** typed exactly; it does not automatically edit BatchDialer or allow cohort overlap |
 | **Submit for owner review** | Freezes the manager-complete review state for final recomputation | Disabled while any hard evidence is missing, failed, unknown, or in flight |
 | Owner decision | Accepts or rejects after a fresh server-side gate calculation | Owner or Founder/operator only; accept requires **ACCEPT SINGLE-LINE DIALER**, all hard gates passing, reason, and current revision; reject requires **REJECT SINGLE-LINE DIALER**, reason, and current revision |
-| **Revoke native dialer authorization** | Blocks every new seller bridge that has not already been authorized for the accepted exact scope, safely drains provider work already authorized or in progress, and preserves its evidence | Owner-only; requires a reason and **REVOKE SINGLE-LINE DIALER** typed exactly. The terminal history remains visible and a new D10 pilot is required before native calling can resume |
+| **Revoke native dialer authorization** | Blocks every new seller bridge that has not already been authorized for the accepted exact scope, safely drains provider work already authorized or in progress, and preserves its evidence | Owner-only cleanup path; the terminal history remains visible, but dormant native calling cannot resume through a new pilot |
 
-This workflow is implemented, but no empty or test-only record represents production acceptance.
-Stonegate remains pending until the real controlled shifts pass and an authorized owner records the
-accept decision. Even after acceptance, only the frozen VA, campaign, cohort, batch, line, caps, and
-safety configuration are authorized; BatchDialer remains the fallback.
+This historical workflow was implemented but never production-accepted. BatchDialer is the
+production calling system. Restoring a route or changing a stored switch does not authorize native
+calling.
 
 ## Prospecting
 
-Prospecting has **Campaigns**, **Dialer control**, and **Analytics** for authorized managers plus
-**My Calls** for assigned callers. Within My Calls, views are **Work queue**, **Call quality**,
+Prospecting has **Campaigns** and **Analytics** for authorized managers plus **My Calls** for
+assigned callers. Dialer Control and Pilot Acceptance are dormant. Within My Calls, views are **Work queue**, **Call quality**,
 **Handoff review** for managers, **Performance**, and **Caller scripts** for managers.
+
+The direct BatchDialer worker creates eligible warm Leads automatically. My Calls remains for
+separately assigned manual CRM records, corrections, and historical evidence. Starting or saving a
+My Calls record must not recreate a Lead that already arrived from the same provider CDR.
 
 ### Work Queue And Attempt
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Due now / Callbacks / Corrections / Scheduled / Waiting / All assigned | Filters the caller's complete assigned shift without changing ownership | Caller sees only assigned records; managers can review the broader operation |
-| Campaign and batch strip | Shows ready, callback, correction, active, and waiting workload plus dialing connection state | Read-only |
+| Campaign and batch strip | Shows ready, callback, correction, active, and waiting CRM workload | Read-only |
 | Assigned seller row | Loads that seller into the three-panel calling context | Disabled for another row while the caller has an active attempt |
-| One-by-one calling | Confirms this Stonegate contingency workflow contacts one assigned owner at a time | BatchDialer is the separate production VA workspace; do not work the same list in both systems |
+| Manual CRM work | Confirms Stonegate is tracking one separately assigned prospect or correction at a time | Place the actual call in BatchDialer; My Calls does not load the native softphone, require a native lease, or duplicate a direct handoff |
 | Ranked phone and email methods | Shows all validated imported contact methods in source rank order | Based on imported contact evidence |
 | Prior attempt details | Expands notes, callback commitment, and structured qualification answers | Read-only history |
 | Assigned priority row | Selects the current assigned prospect | Caller sees assigned work only |
@@ -640,17 +645,17 @@ Prospecting has **Campaigns**, **Dialer control**, and **Analytics** for authori
 | **Correct** | Opens correction editing | Requires a generated recommendation |
 | **Save correction** | Saves corrected summary and review evidence | Available while correcting |
 | **Reject** | Records that the draft should not be used | Requires a generated recommendation |
-| **Start prospect** | Locks the assigned record to the caller and starts an attempt | Requires an approved active caller script |
+| **Start prospect** | Locks a separately assigned record for manual qualification, notes, outcome, and correction work | Requires an approved active caller script; it does not dial the seller and must not be used to recreate a direct provider handoff |
 | Qualification questions | Records motivation, timeline, condition, occupancy, price, and mortgage answers | Required questions depend on approved script |
 | Disposition buttons | Records the truthful call outcome without using a long menu | Required |
 | Callback date and time | Schedules callback work | Required for callback or follow-up outcomes |
 | In 1 hour / Tomorrow / In 3 days | Sets a common callback time quickly | Caller can still enter an exact date and time |
 | Acquisitions owner | Chooses warm handoff recipient | Required for interested or appointment-set outcomes |
-| Appointment date and time | Creates seller appointment | Required for Appointment set |
-| Meeting type / location | Defines property, phone, video, or office appointment | Used for Appointment set |
+| Appointment date and time | Records an agreed time on a manual record | For a direct Appointment Set result, use the urgent task to create and verify the authoritative appointment in Stonegate |
+| Meeting type / location | Defines property, phone, video, or office context | Enter the agreed details in the manual Stonegate Appointment |
 | Call notes | Records objections, commitments, and next action | Strongly recommended |
 | Compliance flags | Records seller complaint, unclear identity, policy uncertainty, or recording issue | Select only when observed |
-| **Save outcome** | Completes the attempt and creates follow-up, handoff, appointment, or suppression effects | Required fields vary by disposition |
+| **Save outcome** | Completes a separately assigned manual CRM attempt and applicable follow-up | Required fields vary by disposition; it must not duplicate a direct BatchDialer Lead. Appointments remain manual in Stonegate and cold-call DNC remains in BatchDialer |
 
 ### Handoff Review
 

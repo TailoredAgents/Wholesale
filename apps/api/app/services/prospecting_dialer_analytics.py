@@ -2767,14 +2767,14 @@ def _launch_readiness(
         "connected-seller gates remain server enforced.",
     )
     add(
-        "batchdialer_fallback",
-        "BatchDialer fallback",
-        settings.zapier_batchdialer_configured,
+        "batchdialer_direct",
+        "BatchDialer direct integration",
+        settings.batchdialer_configured,
         (
-            "The existing BatchDialer handoff remains configured as the rollback path."
-            if settings.zapier_batchdialer_configured
-            else "Fallback warning: "
-            + ", ".join(settings.zapier_batchdialer_configuration_blockers)
+            "BatchDialer is connected directly to Stonegate through the official API."
+            if settings.batchdialer_configured
+            else "Direct integration warning: "
+            + ", ".join(settings.batchdialer_configuration_blockers)
         ),
         warning=True,
     )

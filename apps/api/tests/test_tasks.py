@@ -88,6 +88,58 @@ def test_primary_action_requires_successor_and_updates_shared_truth(
     assert len(open_primary) == 1
 
 
+def test_batchdialer_manual_appointment_task_opens_appointment_tab(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    assert create_response.status_code == 201, create_response.text
+    lead_id = UUID(create_response.json()["id"])
+    organization = db_session.scalar(select(Organization))
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert organization is not None and owner is not None
+    task = Task(
+        organization_id=organization.id,
+        lead_id=lead_id,
+        deal_id=None,
+        prospecting_inbound_callback_id=None,
+        prospect_id=None,
+        call_record_id=None,
+        responsible_user_id=owner.id,
+        task_type="batchdialer_manual_appointment",
+        work_kind="supporting",
+        title="Enter and verify the BatchDialer seller appointment",
+        status="open",
+        priority="urgent",
+        due_at=datetime.now(UTC) + timedelta(minutes=5),
+        completed_at=None,
+        completed_by_user_id=None,
+        outcome=None,
+        completion_notes=None,
+        successor_task_id=None,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    workspace_response = client.get(
+        "/api/v1/tasks/workspace",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert workspace_response.status_code == 200, workspace_response.text
+    item = next(
+        entry
+        for entry in workspace_response.json()["items"]
+        if entry["id"] == f"task:{task.id}"
+    )
+    assert item["source_url"] == f"/os/leads/{lead_id}?tab=appointments"
+
+
 def test_task_workspace_aggregates_approval_without_changing_authority(
     db_session: Session,
     api_db_override: None,

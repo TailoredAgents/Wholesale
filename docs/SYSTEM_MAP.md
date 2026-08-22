@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 19, 2026
+Last verified against the repository: August 21, 2026
 
 ## 1. Document Authority
 
@@ -69,6 +69,8 @@ must use Stonegate Home Buyers.
 | DealMachine buyer discovery | Legacy optional adapter; disabled and removable after subscription cancellation |
 | Internal accounting | Implemented; CPA acceptance and first real close remain |
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
+| BatchDialer outbound calling | Selected production calling system for VAs; official direct API is the sole Stonegate integration, with implementation complete and controlled production acceptance pending |
+| Native Stonegate VA dialer | Dormant-mode repository and Blueprint change prepared; production company/campaign drain, deployment, and no-call verification remain pending. Historical evidence, analytics, late callbacks, and safe cleanup are retained |
 
 “Implemented” does not mean an external provider is active. Provider status is visible separately
 so staff are not misled by a control that exists but lacks production credentials.
@@ -467,8 +469,9 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   appearance history.
 - Refreshes match existing people, contact methods, properties, and source IDs without resetting
   prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
-- Prospecting cohorts preserve source, list type, market, script, date range, and call window for
-  both BatchDialer campaigns and Stonegate's native one-line workflow.
+- Prospecting cohorts preserve source, list type, market, script, date range, call window, and
+  historical calling-method attribution. BatchDialer is the active calling system; a cohort does
+  not authorize native Stonegate calling.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 - The selected campaign, local section, and deep-link context are preserved with `campaign`,
@@ -479,59 +482,34 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 
 **Prospecting > My Calls (`/os/prospecting?view=my-calls`)**
 
-- Assigned-caller workbench for VAs and any other staff explicitly enabled for cold calling.
+- Assigned manual CRM workbench for VAs and any other staff explicitly enabled for cold calling.
 - Caller-only accounts open directly to My Calls and cannot load campaign management.
 - Shows the complete assigned shift through due, callback, correction, scheduled, waiting, and
   all-assigned queue views while one selected prospect remains the active calling context.
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
   commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
   guidance.
-- The native workbench uses the browser Twilio softphone, a server-reserved queue, short-lived
-  browser ownership, one controlled outbound line, structured qualification, and deterministic
-  wrap-up automation. It does not use the device `tel:` handler.
-- New native sessions require the company, campaign, caller, line, schedule, and compliance gates.
-  When D10 enforcement is enabled, the exact VA, campaign, cohort, batch, line, caps, and safety
-  configuration must also match a `smoke_testing`, `running`, or owner-accepted pilot. The smoke
-  state authorizes only its saved controlled records.
-- BatchDialer remains the production bridge and rollback path while the real D10 pilot gathers
-  evidence. Its qualified-lead, initial-appointment, and DNC events continue to enter Stonegate
-  through the authenticated, idempotent Zapier intake.
+- VAs place cold calls and work dialing cadence in BatchDialer. The direct worker creates the warm
+  Lead from an eligible completed-call result. My Calls remains available for separately assigned
+  manual CRM records, corrections, and historical evidence without a native dialer lease; it must
+  not duplicate a direct handoff.
+- Appointment Set creates an urgent manual-entry task. The VA creates the real appointment in
+  Stonegate, while BatchDialer remains authoritative for cold-call DNC, redial cadence, and number
+  management.
+- The prepared dormant release removes the native browser softphone and coordination loop from
+  normal work. The live environment is not considered dormant until the production drain,
+  deployment, and verification checklist is complete.
 
 **Prospecting > Pilot acceptance (`/os/prospecting?view=pilot`)**
 
-- Manager-only D10 workspace kept separate from the D9 technical-readiness dashboard.
-- Defines one immutable pilot scope: one VA, campaign, cohort, calling batch, and dedicated line.
-- Starting a draft moves it to `smoke_testing` with one to ten active Stonegate staff forwarding
-  numbers that must already be eligible test records in the exact batch. Only those records can be
-  reserved until answered seller-call records, canonical recordings, signed seller-child evidence,
-  exact root and child provider costs, and provider references pass the durable smoke-evidence
-  check and advance the pilot to `running`. The selected records prove successful controlled calls,
-  while billing covers every provider-started ID in the ended smoke stage. Smoke attempts remain
-  outside production-shift volume and timing.
-- Records controlled-number, kill-switch, billing, BatchDialer comparison, rollback, per-attempt,
-  and clean-shift evidence without accepting manually entered aggregate totals as proof.
-- Shift billing reconciles every distinct root and seller-child call ID from every provider-started
-  graph to its provider-reported charge and external usage-export, invoice, or call-detail reference
-  before the server accepts the review. A referenced provider-reported `$0` is valid.
-- Daily dial-cap evidence counts every reservation, provider billing counts every exact
-  provider-started root/child graph, and seller volume, timing, outcomes, and duplicate checks count
-  only terminal calls with signed seller-child evidence.
-- The daily-cap and rollback gates rely on separate server-observed switch cycles, stopped/drained
-  sessions, an actual cap-denied reservation, zero live calls, preserved review hashes, and the
-  hashed unworked remainder; a clean shift must follow the rollback rehearsal.
-- The terminal close control requires **ROLL BACK SINGLE-LINE PILOT**. It records an unstarted
-  draft as `cancelled`; a started pilot becomes `rolled_back` with its scope disabled and evidence
-  retained.
-- Final acceptance requires every server-recomputed hard gate, an Owner or Founder/operator role,
-  **ACCEPT SINGLE-LINE DIALER** typed exactly, and a reason; rejection requires **REJECT SINGLE-LINE
-  DIALER** typed exactly plus its reason. Acceptance authorizes only that frozen
-  scope. The signed evidence snapshot and digest remain retained; a material configuration change
-  invalidates the runtime match. An owner can type **REVOKE SINGLE-LINE DIALER** with a reason to
-  block every new seller bridge that has not already been authorized, safely drain provider work
-  already authorized or in progress, and stop the accepted scope; terminal history remains visible
-  while resuming native calls waits for a new pilot.
-- The workflow is implemented, but the production decision remains pending until three reviewed
-  shifts pass on separate local dates and an authorized owner records acceptance.
+- The D10 control surface is dormant and is not part of normal production navigation. A direct URL
+  must not allow a manager to create, start, advance, submit, or accept a native pilot.
+- Existing pilot records and evidence remain retained for audit. Read-only history, explicit
+  rollback/revocation, session cleanup, and late signed provider callbacks remain available through
+  their authorized recovery paths.
+- Restoring the old screen or changing a database switch does not authorize native calling. Any
+  future reactivation would require a new owner decision, code/configuration review, and controlled
+  acceptance plan.
 
 **Leads (`/os/leads`)**
 
@@ -738,34 +716,37 @@ redirect to their new owners.
 5. A CSV is validated with a saved mapping before import.
 6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
-7. For the BatchDialer path, the approved export is loaded into its matching external campaign and
-   assigned to an individual VA seat. For a manager-approved native pilot, a separate,
-   non-overlapping cohort enters a Stonegate calling batch assigned to one VA.
+7. The approved export is loaded into its matching BatchDialer campaign and assigned to an
+   individual VA seat. A Stonegate calling batch may retain assignment and measurement context,
+   but it does not activate the dormant native dialer.
 
 ### 8.2 Prospecting
 
-1. A non-manager caller sees only assigned Stonegate calling batches in **My Calls** and only the
-   external campaigns assigned to that person's separate BatchDialer Agent login.
-2. A list must be active in only one dialer. Managers use the D10 pilot scope and explicit
-   BatchDialer comparison evidence to keep the native and external cohorts separate.
-3. In the native path, the approved script and live qualification checklist guide the call; the
-   server records the attempt, provider leg, disposition, callback, recording, transcript,
-   qualification, and any warm handoff directly in Stonegate.
-4. In the BatchDialer path, ordinary attempts and call-center activity stay with BatchDialer. The
+1. A non-manager caller sees only assigned Stonegate records in **My Calls** and only the external
+   campaigns assigned to that person's separate BatchDialer Agent login.
+2. The VA places calls, works cadence, and selects the truthful result in BatchDialer. Stonegate's
+   native call execution and pilot controls remain dormant.
+3. The official direct API retrieves bounded completed-call evidence. Eligible exact results create
+   or update the Stonegate warm Lead. My Calls remains a manual CRM workbench for separately
+   assigned records and corrections; it does not recreate the direct handoff.
+4. Ordinary attempts and call-center activity stay with BatchDialer. The
    qualified handoff preserves the originating campaign, VA, disposition, notes, seller facts,
    and provider identifiers in Stonegate.
-5. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
-6. Only a truthful call result configured with BatchDialer's **Mark As Lead** rule creates a
-   structured Stonegate handoff. A separate initial-calendar trigger and DNC trigger do not create
-   duplicate leads.
+5. Wrong numbers, DNC, redial cadence, and number management remain in BatchDialer for cold work;
+   Stonegate continues enforcing its own local communication suppressions after handoff.
+6. Only the exact reviewed **Qualified Seller - Follow Up** or **Appointment Set** result creates a
+   structured Stonegate handoff. Appointment Set creates one urgent task, and the VA manually
+   enters the agreed appointment in Stonegate; cold-call DNC remains in BatchDialer.
 7. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
 
 ### 8.3 Warm Handoff And Lead Creation
 
-1. An authenticated, idempotent BatchDialer handoff creates or updates one CRM lead without losing
-   campaign attribution. Replayed Zapier deliveries do not create another seller.
-2. Contact, property, conversation, qualification answers, attempts, and appointment context are
-   preserved.
+1. An authenticated, idempotent direct BatchDialer observation creates or updates one CRM Lead
+   without losing campaign attribution. Overlapping polls, provider replay, and revised CDRs do not
+   create another seller or repeat business automation.
+2. Contact, property, conversation, qualification answers, attempts, and notes are preserved. An
+   agreed appointment is entered manually in Stonegate Calendar so it has one authoritative owner,
+   time, type, and location.
 3. The lead is assigned to acquisitions; owners can become watchers.
 4. The original caller loses prospect editing access after handoff but the original activity
    remains attributable.
@@ -1516,8 +1497,8 @@ Core boundaries include:
 - organization-scoped reads and writes
 - individual employee accounts
 - restricted VA, vendor, partner, finance, recording, and mailbox access
-- signed Resend, Twilio, and organization-bound SignWell webhooks, plus a documented secretless
-  Zapier exception with bounded ingress and acceptance controls
+- signed Resend, Twilio, and organization-bound SignWell webhooks, plus the documented Meta Lead
+  Ads secretless Zapier exception with bounded ingress and acceptance controls
 - production client-IP rate-limit keys derived from the edge-owned Cloudflare address while caller
   `X-Forwarded-For` is ignored, with a hard bound on process-local limiter keys
 - event and dispatch idempotency
@@ -1550,6 +1531,7 @@ telemarketing, recording, or real-estate advice.
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
+| BatchDialer direct API | VA completed-call evidence and qualified seller handoff | Fixed-host authenticated client, durable polling/checkpoint, idempotent handoff processing, optional transcript enrichment, and manual-appointment task implemented and repository-verified | Controlled qualified/appointment results and 24-hour reconciliation pending |
 | Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented intentionally secretless endpoint with Page/form restrictions, burst and daily circuits, payload limits, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; residual caller-provenance risk is monitored |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Prior controlled delivery exists; repeat acceptance is pending after the worker credential correction |
 | Twilio inbound-message staff alerts | Assigned-owner/fallback cellphone notification with Inbox link; unknown seller/buyer sender capture and loop protection | Implemented with independent per-employee opt-in, durable deduplication, retries, and delivery callbacks | Controlled production acceptance pending |
@@ -1690,8 +1672,8 @@ acceptance and evidence:
 - supervised Copilot pilots using redacted Stonegate cases
 - PropStream production export acceptance using Stonegate's implemented source membership,
   ranked-contact, refresh-safe, and deterministic cohort workflow
-- real-VA acceptance of the BatchDialer calling and idempotent Stonegate warm-handoff workflow;
-  Stonegate one-by-one calling remains the migration fallback
+- real-VA acceptance of BatchDialer calling, sole direct API synchronization, idempotent Stonegate
+  warm handoff, and urgent manual-appointment task; the native Stonegate dialer remains dormant
 - real backup restoration and optional monitoring-provider configuration
 - one real Facebook-form-to-CRM-to-property-research-to-staff-alert acceptance run using the
   production form allowlist, plus continued monitoring of the secretless-ingress residual risk

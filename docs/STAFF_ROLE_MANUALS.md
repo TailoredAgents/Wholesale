@@ -63,14 +63,11 @@ views inside **Settings**.
 - Cover open operational seats without hiding which job was performed.
 - Approve role setup only after testing the employee's normal access and restrictions.
 - Review exceptions and approvals; do not silently change historical evidence.
-- Use **Prospecting > Pilot acceptance** for the final D10 decision. Technical readiness is not
-  business acceptance: review the frozen evidence, type **ACCEPT SINGLE-LINE DIALER** exactly, and
-  accept only the exact one-VA, one-campaign, one-cohort, one-batch, one-line scope that passed every
-  gate. To reject instead, type **REJECT SINGLE-LINE DIALER** exactly and record the reason.
-- If an accepted scope must stop, enter a reason and type **REVOKE SINGLE-LINE DIALER** exactly.
-  Revocation blocks every new seller bridge that has not already been authorized, safely drains
-  provider work already authorized or in progress, preserves the evidence, and requires a new D10
-  pilot before native calling can resume.
+- Keep BatchDialer as the production VA calling system. Do not authorize native calling through a
+  historical route, stored switch, caller profile, or pilot record.
+- If old native work remains open, authorize only the bounded drain, rollback, revocation, or
+  evidence-preservation action needed to close it safely. Never delete the history or interrupt a
+  connected provider call merely to make a dashboard look clean.
 - Deactivate departing users immediately and reassign their open work.
 
 ## Operations Assistant
@@ -90,41 +87,23 @@ Main pages: Home, Inbox, Tasks, Calendar, Prospecting, Leads, Deals, and Buyers.
 
 ## Prospecting Manager
 
-Main pages: **Prospecting > Campaigns**, **Dialer control**, **Analytics**, and **Pilot
-acceptance**.
+Main pages: **Prospecting > Campaigns**, **Analytics**, and **My Calls**.
 
-- Keep native and BatchDialer cohorts separate; one record must never be active in both systems.
-- Start only the D10 scope displayed in Pilot acceptance and keep every company, caller, campaign,
-  and line cap at one during the single-line pilot.
-- Before broad pilot calling, use only active Stonegate staff forwarding numbers and add those same
-  numbers as eligible test records in the selected batch. During `smoke_testing`, only those saved
-  records may be called; answered seller-call records, canonical recordings, signed seller-child
-  evidence, every root and child provider charge, and provider references must pass before the exact
-  pilot moves to `running`. Reconcile the whole ended smoke stage, including root-only failures;
-  the selected answered records prove the successful controlled call. Smoke is limited to 50
-  reservations / 100 provider IDs and does not count toward production-shift totals.
-- Review every pilot attempt, including no-answer, voicemail, canceled, and failed calls, then
-  review each complete local day against the linked server evidence. Recording, transcript, and
-  structured notes are required for applicable connected seller conversations; non-contact calls
-  still need a disposition and review but do not need a nonexistent transcript. Reconcile every
-  distinct root and seller-child provider call ID to its provider-reported charge and usage-export,
-  invoice, or call-detail reference. A documented `$0` charge is valid.
-- Record controlled-number, BatchDialer comparison, and the server-observed safety drills. The
-  daily-cap gate must include an actual denied reservation; the later rollback drill must use a
-  separate switch cycle, leave no live calls, preserve evidence, identify unworked rows, and be
-  followed by a clean shift.
-- Submit only after three clean shifts on distinct local dates, at least 25 terminal signed seller
-  calls and 60 minutes of provider-signed right-party conversation time per shift, and at least 75 qualifying
-  signed seller calls in total. Every reserved attempt still requires review.
-- Roll back through the Pilot acceptance control if the scope, provider, safety policy, or evidence
-  becomes unreliable; type **ROLL BACK SINGLE-LINE PILOT** exactly. Closing an unstarted draft is
-  recorded as `cancelled`, while stopping a started pilot is recorded as `rolled_back`. Never
-  reactivate the cohort in BatchDialer until the native campaign and sessions are stopped and the
-  unworked records have been reconciled.
-- A Prospecting Manager may prepare and submit the evidence but cannot make the owner decision
-  unless that person also holds the Owner or Founder/operator role.
-- After a rejected, rolled-back, revoked, or cancelled pilot, use the new-pilot form above the
-  retained terminal history to draft the next isolated scope.
+- BatchDialer is the production calling system. Assign each VA only the external campaigns and
+  lists they are authorized to work.
+- Monitor the sole direct API sync, exact disposition labels, failures, and quarantined results.
+  Do not create another transport or ask a VA to recreate a handoff manually.
+- Confirm every Qualified Seller and Appointment Set result creates or updates exactly one Lead,
+  has the correct campaign/VA attribution and call evidence, and reaches the Lead Manager.
+- Confirm Appointment Set creates an urgent manual-entry task and no automatic Appointment. Require
+  the VA to enter the real appointment in Stonegate with the correct owner, time, type, and location.
+- Keep cold-call DNC, cadence, line usage, and number reputation in BatchDialer. Stonegate local
+  communication suppressions still apply after handoff.
+- Review source performance and historical native evidence in Analytics. A historical native
+  readiness or pilot record does not authorize calling.
+- Dialer Control and Pilot Acceptance are dormant. Do not attempt to enable a company, campaign,
+  caller profile, line, or pilot through a saved URL. Escalate an old active session/pilot for
+  authorized drain, rollback, or revocation instead of deleting evidence.
 
 ## Lead Manager
 
@@ -329,19 +308,21 @@ facts visible so Austin can prepare.
 
 ## VA Caller Daily Procedure
 
-Each VA has an individual BatchDialer Agent login and sees only assigned external campaigns.
-Stonegate **My Calls** is the native one-line workflow for a manager-approved D10 cohort. The same
-list must never be open in both dialers.
+Each VA has an individual BatchDialer Agent login and sees only assigned external campaigns. The
+direct API creates eligible warm Leads in Stonegate. **My Calls** is not a dialer and must not be
+used to recreate an already imported BatchDialer handoff.
 
 ### Start Of Shift
 
-1. Confirm with the manager whether this shift uses BatchDialer or Stonegate **My Calls**.
-2. Open only that dialer and confirm the correct assigned campaign, list or batch, script, and call
-   window.
-3. Test the approved headset, microphone, and company calling line.
-4. Confirm the manager has explained the exact **Mark As Lead**, callback, wrong-number, not
+1. Open the assigned BatchDialer campaign. Open Stonegate for new Leads, tasks, and any separately
+   assigned manual CRM work.
+2. Confirm the campaign, list or batch, approved script, and call window match before dialing.
+3. Test the approved headset, microphone, and BatchDialer calling line.
+4. Confirm the manager has explained the exact qualified, appointment, callback, wrong-number, not
    interested, and DNC results before dialing.
-5. Work the assigned campaign in the selected dialer. Do not open the same list in the other one.
+5. Place calls, complete the lead sheet, and select provider results only in BatchDialer. Use
+   Stonegate after the direct handoff arrives to correct missing facts, manage follow-up, and enter
+   appointments; do not create the Lead twice.
 
 ### After Every Attempt
 
@@ -349,8 +330,9 @@ Choose the accurate result:
 
 - No answer or voicemail: leave the record in its approved retry cadence
 - Callback: save a real callback date and time
-- Qualified Seller - Follow Up: create the approved warm handoff and stop ordinary retries
-- Appointment Set: create the approved handoff and appointment once
+- Qualified Seller - Follow Up: complete the approved lead sheet/result and stop ordinary retries
+- Appointment Set: complete the approved lead sheet/result, then enter the appointment once from
+  Stonegate's urgent task
 - Not interested: stop redialing the contact
 - Wrong number: stop redialing that number
 - Do not call: apply DNC immediately
@@ -362,22 +344,25 @@ Enter useful notes. Do not choose **Interested** merely to improve performance.
 1. Complete the displayed qualification prompts.
 2. Record what the seller actually said.
 3. Confirm the preferred follow-up method and time.
-4. In BatchDialer, complete the required lead sheet and select the approved **Mark As Lead**
-   result. In Stonegate, complete the native structured disposition. Either path creates one warm
-   lead; do not manually create a duplicate.
-5. If authorized and appropriate, schedule the appointment.
-6. Confirm the handoff reached the Lead Manager.
+4. In BatchDialer, complete the required lead sheet and select the exact approved result.
+5. Allow the direct sync its normal polling interval, then confirm the seller appears once in
+   Stonegate with the provider notes and attribution. Add only genuinely missing or corrective facts.
+6. If an appointment was agreed, open **Enter/verify Stonegate appointment**, create the real
+   Appointment, and confirm the task clears.
+7. Confirm the handoff reached the Lead Manager.
 
 After handoff, the VA should not continue changing the acquisitions record except to correct their
 own disposition through the allowed workflow.
 
 ### End Of Shift
 
-1. Finish or safely release the active record, then end the selected dialer shift.
+1. Finish any active Stonegate correction or appointment task, then end the BatchDialer shift.
 2. Confirm every attempt has a truthful call result.
-3. Confirm every callback has a saved date and time in the system used for that cohort.
-4. Confirm qualified sellers and initial appointments arrived once in Stonegate.
-5. Report script, number, list, Zapier, or handoff problems to the manager.
+3. Confirm every callback has a saved date and time in BatchDialer and any required Stonegate
+   follow-up work is present.
+4. Confirm qualified sellers arrived once and every agreed appointment was manually entered once
+   in Stonegate.
+5. Report script, number, list, direct-sync, quarantine, or handoff problems to the manager.
 6. Sign out on shared devices.
 
 ### VA Must Never

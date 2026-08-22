@@ -1,0 +1,89 @@
+{
+  "schema_version": "batchdialer_bd1_capture_v1",
+  "capture_tool_version": "1.4",
+  "capture_run_id": "20260822T164713Z-83ec9c25",
+  "sanitization_profile": "stonegate_bd1_strict_v1",
+  "official_source_id": "cdr_pagination",
+  "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/kjto0ggvaavor-get-recent-contacts-v2",
+  "captured_at": "2026-08-22T16:47:14.519626Z",
+  "review_status": "reviewed",
+  "reviewed_at": "2026-08-22T16:48:07Z",
+  "reviewer": "Codex",
+  "controlled_campaign_confirmed": true,
+  "provenance": "controlled_account_observation",
+  "operation": "cdr_cursor_page_one",
+  "request": {
+    "method": "GET",
+    "path_template": "/v2/cdrs",
+    "params": {
+      "pagelength": 5,
+      "callDate": "2026-08-18T00:00:00-05:00"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "[REDACTED PROVIDER DATE]",
+      "content-type": "application/json",
+      "x-request-id": "request-005"
+    },
+    "schema_drift": {
+      "undocumented_property_fingerprints": []
+    },
+    "body": {
+      "items": [
+        {
+          "id": 9000008,
+          "direction": "Observed Enum 1",
+          "callStartTime": "2000-01-01T00:00:07Z",
+          "callEndTime": "2000-01-01T00:00:08Z",
+          "did": "+12025550101",
+          "customerNumber": "+12025550100",
+          "disposition": "Qualified Seller – Follow Up",
+          "mood": "Observed Enum 1",
+          "duration": 0,
+          "status": "Observed Enum 1",
+          "agent": {
+            "id": 9000009,
+            "firstname": "Fictional Person 5",
+            "lastname": "Fictional Person 6"
+          },
+          "contact": {
+            "id": 9000003,
+            "firstname": "Fictional Person 3",
+            "lastname": "Fictional Person 4",
+            "address": "",
+            "city": "",
+            "state": "GA",
+            "zip": "",
+            "status": "active",
+            "email": "seller3@example.com"
+          },
+          "campaign": {
+            "id": 9000001,
+            "name": "Fictional Person 1"
+          },
+          "client": {
+            "id": 9000006,
+            "name": "Fictional Person 7"
+          },
+          "callid": "call-002",
+          "voicemailid": null,
+          "recordingenabled": 0,
+          "callRecordUrl": "[REDACTED URL]",
+          "comments": [
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]",
+            "[REDACTED CONTROLLED TEXT]"
+          ]
+        }
+      ],
+      "nextPage": "cursor-001"
+    }
+  }
+}

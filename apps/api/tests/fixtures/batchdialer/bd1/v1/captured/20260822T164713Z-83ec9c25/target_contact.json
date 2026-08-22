@@ -1,0 +1,109 @@
+{
+  "schema_version": "batchdialer_bd1_capture_v1",
+  "capture_tool_version": "1.4",
+  "capture_run_id": "20260822T164713Z-83ec9c25",
+  "sanitization_profile": "stonegate_bd1_strict_v1",
+  "official_source_id": "contact_retrieval",
+  "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/q2v2uqf6v4uig-get-single-contact-by-id",
+  "captured_at": "2026-08-22T16:47:14.484192Z",
+  "review_status": "reviewed",
+  "reviewed_at": "2026-08-22T16:48:07Z",
+  "reviewer": "Codex",
+  "controlled_campaign_confirmed": true,
+  "provenance": "controlled_account_observation",
+  "operation": "target_contact",
+  "request": {
+    "method": "GET",
+    "path_template": "/contact/{contactID}",
+    "params": {},
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "[REDACTED PROVIDER DATE]",
+      "content-type": "application/json",
+      "x-request-id": "request-004"
+    },
+    "schema_drift": {
+      "undocumented_property_fingerprints": [
+        "013f54400c82",
+        "37a8eec1ce19",
+        "37d8527a9997",
+        "41cf6794ba42",
+        "5fdfe109b373",
+        "62484e22a6a5",
+        "7678d8c8b176",
+        "7ba8cd39a2a4",
+        "82a3537ff0db",
+        "97bb44facd57",
+        "a97b0931730e",
+        "ab530a13e459",
+        "f3c7807d4750",
+        "f734824c464c"
+      ]
+    },
+    "body": {
+      "id": 9000003,
+      "lists": [
+        {
+          "id": 9000004,
+          "campaignscount": 0,
+          "status": "active",
+          "dateadded": "2000-01-01T00:00:04Z"
+        }
+      ],
+      "vendorcontactid": "",
+      "phonenumbers": [
+        {
+          "id": 9000005,
+          "clientid": 9000006,
+          "contactid": 9000001,
+          "numberid": 9000007,
+          "phonenumber": "+12025550100",
+          "numbertype": "Mobile",
+          "dnc": 0,
+          "tested": 0,
+          "reachable": 0
+        }
+      ],
+      "title": "",
+      "firstname": "Fictional Person 3",
+      "middlename": "",
+      "lastname": "Fictional Person 4",
+      "address": "",
+      "city": "",
+      "state": "GA",
+      "postalcode": "",
+      "country": "",
+      "mailingaddress": "",
+      "mailingcity": "",
+      "mailingstate": "",
+      "mailingpostalcode": "",
+      "gender": "",
+      "dateofbirth": "",
+      "email": "seller3@example.com",
+      "comments": "",
+      "customfields": {},
+      "addressurls": null,
+      "score": 0,
+      "recalcscore": 0,
+      "lastcallid": 9000001,
+      "currentagentid": null,
+      "campaignscount": 0,
+      "listscount": 0,
+      "numbertype": null,
+      "status": "active",
+      "datelasttouched": "2000-01-01T00:00:05Z",
+      "dialedcount": 0,
+      "federaldnc": 0,
+      "dateadded": "2000-01-01T00:00:04Z",
+      "datemodified": "2000-01-01T00:00:06Z",
+      "phonenumber1": "+12025550100",
+      "stats": {
+        "answered": 0,
+        "voicemail": "seller2@example.com"
+      }
+    }
+  }
+}

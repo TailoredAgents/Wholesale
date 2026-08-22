@@ -118,6 +118,16 @@ class ProspectingDialerConfigurationError(RuntimeError):
     """A hard dialer policy or launch control prevents the requested action."""
 
 
+def require_native_dialer_activation_enabled(settings: Settings) -> None:
+    """Fail closed for mutations that could activate or extend native calling."""
+
+    if not settings.prospecting_native_dialer_enabled:
+        raise ProspectingDialerConfigurationError(
+            "Native prospecting dialer is dormant because its launch flag is off. "
+            "Use the approved external dialer workflow."
+        )
+
+
 @dataclass(frozen=True)
 class DialerRuntimeGraph:
     organization: Organization
@@ -144,6 +154,7 @@ def start_dial_session(
     active_settings = settings or get_settings()
     current = as_utc(now or datetime.now(UTC))
     require_dialer_work_permission(principal)
+    require_native_dialer_activation_enabled(active_settings)
 
     existing = db.scalar(
         select(ProspectingDialSession).where(
@@ -410,6 +421,7 @@ def resume_dial_session(
 ) -> ProspectingDialSessionControlRead | None:
     active_settings = settings or get_settings()
     current = as_utc(now or datetime.now(UTC))
+    require_native_dialer_activation_enabled(active_settings)
     session = locked_control_session(db, principal, session_id)
     if session is None:
         return None
@@ -565,6 +577,7 @@ def recover_dial_session(
 ) -> ProspectingDialSessionControlRead | None:
     active_settings = settings or get_settings()
     current = as_utc(now or datetime.now(UTC))
+    require_native_dialer_activation_enabled(active_settings)
     session = locked_control_session(db, principal, session_id)
     if session is None:
         return None
@@ -672,6 +685,7 @@ def reserve_next_dial_record(
 ) -> ProspectingDialSessionControlRead | None:
     active_settings = settings or get_settings()
     current = as_utc(now or datetime.now(UTC))
+    require_native_dialer_activation_enabled(active_settings)
     session = locked_control_session(db, principal, session_id)
     if session is None:
         return None
@@ -737,10 +751,13 @@ def update_company_dialer_switch(
     principal: Principal,
     payload: ProspectingDialerSwitchUpdate,
     *,
+    settings: Settings | None = None,
     now: datetime | None = None,
 ) -> ProspectingDialerSwitchRead | None:
     if not can_manage_dialer(principal):
         raise PermissionError("Only an acquisition manager can change the company dialer switch.")
+    if payload.enabled:
+        require_native_dialer_activation_enabled(settings or get_settings())
     current = as_utc(now or datetime.now(UTC))
     organization = db.scalar(
         select(Organization).where(Organization.id == principal.organization_id).with_for_update()
@@ -786,10 +803,13 @@ def update_campaign_dialer_switch(
     campaign_id: UUID,
     payload: ProspectingDialerSwitchUpdate,
     *,
+    settings: Settings | None = None,
     now: datetime | None = None,
 ) -> ProspectingDialerSwitchRead | None:
     if not can_manage_dialer(principal):
         raise PermissionError("Only an acquisition manager can change a campaign dialer switch.")
+    if payload.enabled:
+        require_native_dialer_activation_enabled(settings or get_settings())
     current = as_utc(now or datetime.now(UTC))
     campaign = db.scalar(
         select(Campaign)
@@ -3157,6 +3177,8 @@ def upsert_dialer_profile(
     settings: Settings | None = None,
 ) -> ProspectingDialerProfileRead | None:
     active_settings = settings or get_settings()
+    if payload.status == "active":
+        require_native_dialer_activation_enabled(active_settings)
     user = db.scalar(
         select(User).where(
             User.id == user_id,

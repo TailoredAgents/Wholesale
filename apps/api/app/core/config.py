@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -535,47 +536,82 @@ class Settings(BaseSettings):
         le=100_000,
         validation_alias="ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT",
     )
-    zapier_batchdialer_enabled: bool = Field(
-        default=False,
-        validation_alias="ZAPIER_BATCHDIALER_ENABLED",
+    batchdialer_api_base_url: str = Field(
+        default="https://app.batchdialer.com/api",
+        validation_alias="BATCHDIALER_API_BASE_URL",
     )
-    zapier_batchdialer_webhook_secret: str | None = Field(
+    batchdialer_api_key: str | None = Field(
         default=None,
-        validation_alias="ZAPIER_BATCHDIALER_WEBHOOK_SECRET",
+        validation_alias="BATCHDIALER_API_KEY",
+        repr=False,
     )
-    zapier_batchdialer_allowed_campaign_ids_raw: str = Field(
-        default="",
-        validation_alias="ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS",
-    )
-    zapier_batchdialer_max_payload_bytes: int = Field(
-        default=65_536,
-        ge=4096,
-        le=1_000_000,
-        validation_alias="ZAPIER_BATCHDIALER_MAX_PAYLOAD_BYTES",
-    )
-    zapier_batchdialer_burst_limit: int = Field(
-        default=60,
-        ge=1,
-        le=1000,
-        validation_alias="ZAPIER_BATCHDIALER_BURST_LIMIT",
-    )
-    zapier_batchdialer_burst_window_seconds: int = Field(
-        default=60,
-        ge=1,
+    batchdialer_poll_seconds: int = Field(
+        default=120,
+        ge=30,
         le=3600,
-        validation_alias="ZAPIER_BATCHDIALER_BURST_WINDOW_SECONDS",
+        validation_alias="BATCHDIALER_POLL_SECONDS",
     )
-    zapier_batchdialer_max_attempts: int = Field(
-        default=5,
+    batchdialer_scan_days: int = Field(
+        default=2,
         ge=1,
-        le=20,
-        validation_alias="ZAPIER_BATCHDIALER_MAX_ATTEMPTS",
+        le=7,
+        validation_alias="BATCHDIALER_SCAN_DAYS",
     )
-    zapier_batchdialer_retry_base_seconds: int = Field(
+    batchdialer_account_timezone: str = Field(
+        default="America/New_York",
+        validation_alias="BATCHDIALER_ACCOUNT_TIMEZONE",
+    )
+    batchdialer_page_length: int = Field(
+        default=100,
+        ge=1,
+        le=100,
+        validation_alias="BATCHDIALER_PAGE_LENGTH",
+    )
+    batchdialer_max_pages_per_day: int = Field(
+        default=50,
+        ge=1,
+        le=250,
+        validation_alias="BATCHDIALER_MAX_PAGES_PER_DAY",
+    )
+    batchdialer_http_timeout_seconds: float = Field(
+        default=15.0,
+        ge=2.0,
+        le=60.0,
+        validation_alias="BATCHDIALER_HTTP_TIMEOUT_SECONDS",
+    )
+    batchdialer_http_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        validation_alias="BATCHDIALER_HTTP_MAX_ATTEMPTS",
+    )
+    batchdialer_event_max_attempts: int = Field(
+        default=8,
+        ge=1,
+        le=25,
+        validation_alias="BATCHDIALER_EVENT_MAX_ATTEMPTS",
+    )
+    batchdialer_event_retry_base_seconds: int = Field(
         default=30,
         ge=5,
         le=3600,
-        validation_alias="ZAPIER_BATCHDIALER_RETRY_BASE_SECONDS",
+        validation_alias="BATCHDIALER_EVENT_RETRY_BASE_SECONDS",
+    )
+    batchdialer_campaign_refresh_seconds: int = Field(
+        default=3600,
+        ge=300,
+        le=86_400,
+        validation_alias="BATCHDIALER_CAMPAIGN_REFRESH_SECONDS",
+    )
+    batchdialer_checkpoint_lease_seconds: int = Field(
+        default=90,
+        ge=30,
+        le=900,
+        validation_alias="BATCHDIALER_CHECKPOINT_LEASE_SECONDS",
+    )
+    batchdialer_transcript_sync_enabled: bool = Field(
+        default=True,
+        validation_alias="BATCHDIALER_TRANSCRIPT_SYNC_ENABLED",
     )
     public_intake_rate_limit_enabled: bool = Field(
         default=False,
@@ -877,6 +913,35 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_app_environment(cls, value: object) -> object:
         return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("batchdialer_api_base_url")
+    @classmethod
+    def validate_batchdialer_api_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        parsed = urlparse(normalized)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "app.batchdialer.com"
+            or parsed.path != "/api"
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "BATCHDIALER_API_BASE_URL must use the official "
+                "https://app.batchdialer.com/api endpoint."
+            )
+        return normalized
+
+    @field_validator("batchdialer_account_timezone")
+    @classmethod
+    def validate_batchdialer_account_timezone(cls, value: str) -> str:
+        normalized = value.strip()
+        try:
+            ZoneInfo(normalized)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("BATCHDIALER_ACCOUNT_TIMEZONE must be a valid IANA timezone.") from exc
+        return normalized
 
     @field_validator("database_url")
     @classmethod
@@ -1199,29 +1264,15 @@ class Settings(BaseSettings):
             )
 
     @property
-    def zapier_batchdialer_allowed_campaign_ids(self) -> frozenset[str]:
-        return frozenset(
-            campaign_id.strip()
-            for campaign_id in self.zapier_batchdialer_allowed_campaign_ids_raw.split(",")
-            if campaign_id.strip()
-        )
-
-    @property
-    def zapier_batchdialer_configuration_blockers(self) -> tuple[str, ...]:
+    def batchdialer_configuration_blockers(self) -> tuple[str, ...]:
         blockers: list[str] = []
-        if not self.zapier_batchdialer_enabled:
-            blockers.append("ZAPIER_BATCHDIALER_ENABLED=true")
-            return tuple(blockers)
-        secret = (self.zapier_batchdialer_webhook_secret or "").strip()
-        if len(secret) < 32:
-            blockers.append("ZAPIER_BATCHDIALER_WEBHOOK_SECRET (at least 32 characters)")
-        if not self.zapier_batchdialer_allowed_campaign_ids:
-            blockers.append("ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS")
+        if len((self.batchdialer_api_key or "").strip()) < 16:
+            blockers.append("BATCHDIALER_API_KEY")
         return tuple(blockers)
 
     @property
-    def zapier_batchdialer_configured(self) -> bool:
-        return not self.zapier_batchdialer_configuration_blockers
+    def batchdialer_configured(self) -> bool:
+        return not self.batchdialer_configuration_blockers
 
     @property
     def facebook_address_enrichment_configuration_blockers(self) -> tuple[str, ...]:

@@ -611,45 +611,55 @@ silently import or contact every result.
 ## BatchDialer For VA Cold Calling
 
 Use BatchDialer for the raw cold list and daily VA dialing. Use Stonegate after a seller becomes a
-real opportunity. Do not import every no-answer into Leads.
+real opportunity. Do not import every no-answer into Leads. The official direct API is the sole
+BatchDialer-to-Stonegate integration. Stonegate's native browser dialer is dormant and must not be
+used as another calling path.
 
 ### One-Time Setup
 
 1. In BatchDialer, open **Settings > Integrations > Integration Keys** and create a key named
-   **Stonegate Zapier**. Put that key only into Zapier.
+   **Stonegate Direct API**. Do not paste the key into chat, source code, documentation, or a
+   screenshot.
 2. Create an individual BatchDialer **Agent** login for each VA. Do not give a VA the owner/admin
    login.
 3. Create the required lead sheet and the approved results **Qualified Seller - Follow Up**,
    **Appointment Set**, **Callback**, **Not Interested**, **Wrong Number**, and **Do Not Call**.
-4. Enable BatchDialer's **Mark As Lead** rule only for the two qualified results. No-answer,
-   voicemail, ordinary callbacks, and non-leads stay in BatchDialer.
-5. In Render, add the BatchDialer Zapier variables listed in
-   [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#batchdialer-va-handoff-through-zapier) to the API and
-   worker without changing any other credential. Leave the integration disabled until testing.
-6. In Zapier, create the three Zaps for **New Lead Created**, **New Calendar Events**, and
-   **New DNC Numbers**. Use the exact field map and HMAC signing step in the setup reference.
-7. Put only approved campaign IDs in `ZAPIER_BATCHDIALER_ALLOWED_CAMPAIGN_IDS`, switch
-   `ZAPIER_BATCHDIALER_ENABLED=true` on API and worker, and redeploy both services.
+4. Configure the two qualified results to stop redialing the contact. No-answer, voicemail,
+   ordinary callbacks, and non-leads remain in BatchDialer's cadence. BatchDialer remains the
+   cold-call DNC authority.
+5. In Render, enter `BATCHDIALER_API_KEY` only in the secret fields requested by the Blueprint.
+   Keep `BATCHDIALER_API_BASE_URL=https://app.batchdialer.com/api` and the bounded polling values
+   listed in [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#batchdialer-direct-api-integration).
+6. Redeploy the API and worker. Under **Settings > Integrations**, confirm BatchDialer reports a
+   configured credential, a healthy worker, a successful direct poll, and discovered campaigns.
+7. Confirm the exact provider labels match the reviewed Stonegate labels. A spelling or punctuation
+   change must appear for review instead of creating a Lead.
+8. Do not configure any BatchDialer calendar automation. VAs enter agreed appointments in
+   Stonegate from the urgent task created by an **Appointment Set** handoff.
 
 ### Live Acceptance
 
 1. Use one controlled seller/contact in one pilot campaign.
 2. Select **Qualified Seller - Follow Up** and confirm one Stonegate lead, one staff SMS, property
    research, AI preparation, Lead Manager work, and BatchDialer attribution.
-3. Replay the Zap and confirm it does not create another lead or alert.
-4. Create one initial appointment and confirm it appears once in Stonegate Calendar.
-5. Apply DNC to the controlled number and confirm Stonegate records the phone suppression.
-6. Verify ordinary calls, no answers, and voicemails did not enter Stonegate.
-7. Start with one VA for 80 hours over four weeks. Record the list, dialer license, phone/usage,
+3. Let the direct worker rescan the same provider call and confirm it does not create another Lead,
+   alert, attribution touch, call record, research run, or task.
+4. Select **Appointment Set** and confirm Stonegate creates one Lead plus one urgent
+   **Enter/verify Stonegate appointment** task, but no Appointment.
+5. Open the task, enter the real appointment in Stonegate, and confirm the task and warning clear.
+6. Apply DNC to the controlled number in BatchDialer and confirm its cold-calling cadence stops.
+7. Verify ordinary calls, no answers, voicemails, and cold callbacks did not enter Leads.
+8. Confirm an unknown or altered result label is held for review instead of creating a Lead.
+9. Reconcile the controlled provider CDR identities against Stonegate after the first 24 hours.
+10. Start with one VA for 80 hours over four weeks. Record the list, dialer license, phone/usage,
    and VA labor costs under **Prospecting > Campaigns > Costs**.
-8. Compare completed seller conversations, qualified sellers, held appointments, signed contracts,
+11. Compare completed seller conversations, qualified sellers, held appointments, signed contracts,
    closed assignments, and net contribution profit against Meta. Do not scale from dial count or
    provider connection rate alone.
 
-BatchDialer recordings stay in BatchDialer during the first integration phase. Appointment
-creation is initially one-way; later changes are made in Stonegate. Use Zapier Professional or
-higher when the lead polling delay must be close to two minutes; slower polling can delay the
-handoff even when both systems are healthy.
+BatchDialer recordings stay in BatchDialer unless the official API returns supported transcript or
+recording evidence that Stonegate has tested. Optional transcript enrichment must never delay a
+qualified handoff. Appointments are created and maintained only in Stonegate.
 
 ## Website And Facebook Lead Staff Text Alerts
 

@@ -5,6 +5,7 @@ import {
   getAcquisitionOperations,
   getCampaignManagementOverview,
   getProspectingDialerAnalytics,
+  getProspectingDialerContext,
   getProspectingDialerOperations,
   getProspectingDialerPilot,
   getProspectingInboundCallbacks,
@@ -33,15 +34,20 @@ export default async function ProspectingPage({
   }>;
 }) {
   const params = await searchParams;
-  const profile = await getWorkspaceProfile();
+  const [profile, dialerContextResult] = await Promise.all([
+    getWorkspaceProfile(),
+    getProspectingDialerContext(),
+  ]);
   const canManage = Boolean(profile?.permissions.includes("operations:manage"));
+  const dialerContext = dialerContextResult.dialerContext;
+  const nativeDialerEnabled = dialerContext?.feature_enabled === true;
   const requestedView = Array.isArray(params?.view) ? params.view[0] : params?.view;
   const view: ProspectingView = canManage
     ? requestedView === "my-calls" ||
       requestedView === "campaigns" ||
-      requestedView === "dialer-control" ||
       requestedView === "analytics" ||
-      requestedView === "pilot"
+      (nativeDialerEnabled &&
+        (requestedView === "dialer-control" || requestedView === "pilot"))
       ? requestedView
       : "campaigns"
     : "my-calls";
@@ -71,7 +77,7 @@ export default async function ProspectingPage({
       canManage && (view === "dialer-control" || view === "pilot")
         ? getProspectingDialerOperations()
         : Promise.resolve({ dialerOperations: null, apiConnected: true }),
-      view === "my-calls"
+      view === "my-calls" && nativeDialerEnabled
         ? getProspectingInboundCallbacks()
         : Promise.resolve({ callbacks: null, apiConnected: true }),
       canManage && view === "analytics"
@@ -89,6 +95,7 @@ export default async function ProspectingPage({
   const dialerPilot = pilotResult.dialerPilot;
   const connected =
     apiConnected &&
+    dialerContextResult.apiConnected &&
     campaignResult.apiConnected &&
     operationsResult.apiConnected &&
     dialerOperationsResult.apiConnected &&
@@ -135,14 +142,16 @@ export default async function ProspectingPage({
               <Megaphone aria-hidden="true" size={16} />
               <span>Campaigns</span>
             </Link>
-            <Link
-              aria-current={view === "dialer-control" ? "page" : undefined}
-              className={view === "dialer-control" ? styles.activeHubNavigation : undefined}
-              href="/os/prospecting?view=dialer-control"
-            >
-              <SlidersHorizontal aria-hidden="true" size={16} />
-              <span>Dialer control</span>
-            </Link>
+            {nativeDialerEnabled ? (
+              <Link
+                aria-current={view === "dialer-control" ? "page" : undefined}
+                className={view === "dialer-control" ? styles.activeHubNavigation : undefined}
+                href="/os/prospecting?view=dialer-control"
+              >
+                <SlidersHorizontal aria-hidden="true" size={16} />
+                <span>Dialer control</span>
+              </Link>
+            ) : null}
             <Link
               aria-current={view === "analytics" ? "page" : undefined}
               className={view === "analytics" ? styles.activeHubNavigation : undefined}
@@ -151,14 +160,16 @@ export default async function ProspectingPage({
               <BarChart3 aria-hidden="true" size={16} />
               <span>Analytics</span>
             </Link>
-            <Link
-              aria-current={view === "pilot" ? "page" : undefined}
-              className={view === "pilot" ? styles.activeHubNavigation : undefined}
-              href="/os/prospecting?view=pilot"
-            >
-              <ClipboardCheck aria-hidden="true" size={16} />
-              <span>Pilot acceptance</span>
-            </Link>
+            {nativeDialerEnabled ? (
+              <Link
+                aria-current={view === "pilot" ? "page" : undefined}
+                className={view === "pilot" ? styles.activeHubNavigation : undefined}
+                href="/os/prospecting?view=pilot"
+              >
+                <ClipboardCheck aria-hidden="true" size={16} />
+                <span>Pilot acceptance</span>
+              </Link>
+            ) : null}
           </>
         ) : null}
         <Link
@@ -214,8 +225,11 @@ export default async function ProspectingPage({
       ) : prospecting ? (
         <ProspectingWorkspace
           data={prospecting}
+          dialerContext={dialerContext}
           initialCallbacks={callbacks ?? { items: [], total: 0 }}
-          initialCallbacksAvailable={callbackResult.apiConnected && callbacks !== null}
+          initialCallbacksAvailable={
+            nativeDialerEnabled && callbackResult.apiConnected && callbacks !== null
+          }
           key={
             prospecting.current_entry
               ? `${prospecting.current_entry.id}:${prospecting.current_entry.status}:${prospecting.current_entry.attempt_count}:${prospecting.current_entry.active_attempt?.id ?? "ready"}`

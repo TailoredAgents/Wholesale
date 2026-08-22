@@ -1811,10 +1811,211 @@ class ProspectingQualificationResponse(UuidPrimaryKeyMixin, TimestampMixin, Base
     )
 
 
+class BatchDialerSyncCheckpoint(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Durable polling state and health for one organization/provider stream."""
+
+    __tablename__ = "batchdialer_sync_checkpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "stream",
+            name="uq_batchdialer_sync_checkpoints_org_stream",
+        ),
+        Index(
+            "ix_batchdialer_sync_checkpoints_due",
+            "stream",
+            "next_poll_at",
+        ),
+        Index(
+            "ix_batchdialer_sync_checkpoints_lease",
+            "stream",
+            "lease_expires_at",
+        ),
+        CheckConstraint(
+            "length(trim(stream)) > 0",
+            name="ck_batchdialer_sync_checkpoints_stream",
+        ),
+        CheckConstraint(
+            "(lease_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL) OR "
+            "(lease_token IS NOT NULL AND lease_owner IS NOT NULL "
+            "AND lease_expires_at IS NOT NULL)",
+            name="ck_batchdialer_sync_checkpoints_lease",
+        ),
+        CheckConstraint(
+            "consecutive_failure_count >= 0 AND poll_count >= 0 "
+            "AND success_count >= 0 AND failure_count >= 0 "
+            "AND fetched_cdr_count >= 0 AND archived_event_count >= 0 "
+            "AND updated_event_count >= 0 AND qualified_event_count >= 0 "
+            "AND quarantined_event_count >= 0",
+            name="ck_batchdialer_sync_checkpoints_counters",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    stream: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="cdrs",
+        server_default="cdrs",
+    )
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="idle",
+        server_default="idle",
+    )
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scan_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_page_cursor: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_campaign_refresh_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consecutive_failure_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    poll_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    success_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    failure_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    fetched_cdr_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    archived_event_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    updated_event_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    qualified_event_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    quarantined_event_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    sync_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+
+
+class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Latest provider campaign snapshot plus cumulative direct-sync counters."""
+
+    __tablename__ = "batchdialer_campaigns"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider_campaign_id",
+            name="uq_batchdialer_campaigns_org_provider",
+        ),
+        Index(
+            "ix_batchdialer_campaigns_org_active_status",
+            "organization_id",
+            "is_active",
+            "status",
+        ),
+        Index(
+            "ix_batchdialer_campaigns_org_last_cdr",
+            "organization_id",
+            "last_cdr_at",
+        ),
+        CheckConstraint(
+            "length(trim(provider_campaign_id)) > 0 AND length(trim(name)) > 0",
+            name="ck_batchdialer_campaigns_identity",
+        ),
+        CheckConstraint(
+            "recycle_count >= 0 AND hierarchy_level >= 0 AND contact_count >= 0 "
+            "AND cdr_seen_count >= 0 AND qualified_cdr_count >= 0 "
+            "AND imported_lead_count >= 0",
+            name="ck_batchdialer_campaigns_counters",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_campaign_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    parent_campaign_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_campaign_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    recycle_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    hierarchy_level: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    contact_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    cdr_seen_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    qualified_cdr_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    imported_lead_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    provider_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_cdr_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+
+
 class ProspectingProviderCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """Provider-neutral campaign archive retained by migration 0075.
 
-    The current BatchDialer/Zapier intake does not assume a private campaign API,
+    The BatchDialer direct API intake does not assume a private campaign API,
     so these records remain optional until an explicit outbound sync is enabled.
     """
 

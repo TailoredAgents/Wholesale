@@ -411,7 +411,11 @@ def task_workspace_item(row: Any, principal: Principal, now: datetime) -> TaskWo
     source_url = (
         f"/os/deals?deal={deal.id}"
         if deal is not None
-        else f"/os/leads/{lead.id}"
+        else (
+            f"/os/leads/{lead.id}?tab=appointments"
+            if task.task_type == "batchdialer_manual_appointment"
+            else f"/os/leads/{lead.id}"
+        )
         if lead is not None
         else None
     )

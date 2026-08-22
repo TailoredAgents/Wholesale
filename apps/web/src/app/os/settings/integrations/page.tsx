@@ -33,6 +33,15 @@ export default async function IntegrationSettingsPage() {
                 <strong>{integration.configured ? "Ready" : integration.enabled ? "Needs setup" : "Off"}</strong>
               </header>
               <small>Mode: {integration.mode}</small>
+              {integration.runtime_status ? (
+                <small>Runtime: {integration.runtime_status.replaceAll("_", " ")}</small>
+              ) : null}
+              {integration.last_success_at ? (
+                <small>Last successful sync: {new Date(integration.last_success_at).toLocaleString()}</small>
+              ) : null}
+              {(integration.details ?? []).map((detail) => (
+                <small key={detail}>{detail}</small>
+              ))}
               {integration.blockers.length ? (
                 <div className={styles.blockers}>
                   {integration.blockers.map((blocker) => (

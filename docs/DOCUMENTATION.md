@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 19, 2026
+Last verified against the repository: August 21, 2026
 
 ## Purpose
 
@@ -24,9 +24,14 @@ When sources disagree, use this order:
 4. **`CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`** describes the approved private-OS
    reorganization target and migration sequence.
 5. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
-6. **Domain references** define approved operating policy and specialist methods.
-7. **User manuals** explain how staff should perform current workflows.
-8. **Git history** preserves completed phase plans and prior decisions for forensic review only.
+6. **`BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`** describes the approved outbound-calling
+   architecture, sole direct provider integration, manual Stonegate appointment workflow, and
+   native-dialer dormancy plan.
+7. **`BATCHDIALER_API_CONTRACT.md`** records the official provider evidence, unresolved behavior,
+   and conservative constraints governing the owner-approved direct implementation.
+8. **Domain references** define approved operating policy and specialist methods.
+9. **User manuals** explain how staff should perform current workflows.
+10. **Git history** preserves completed phase plans and prior decisions for forensic review only.
 
 Never use an old commit, completed phase document, or provider application draft to override the
 current code or canonical documentation.
@@ -39,7 +44,9 @@ current code or canonical documentation.
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
 | `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Implemented IA1-IA10 navigation and workspace consolidation, route compatibility, and role-acceptance evidence | Owner, managers, and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
-| `VA_DIALER_ROADMAP.md` | Native Stonegate VA dialer architecture, implemented D0-D9 single-line workflow, implemented D10 acceptance workflow and runtime boundary, operating controls, source/outcome analytics, measurement coverage, live-pilot evidence still required for production acceptance, the BatchDialer rollback bridge, and optional two- or three-line activation gates | Owner, prospecting managers, and developers |
+| `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` | Current production-dialer decision, sole direct BatchDialer API integration, urgent manual Stonegate appointment task, production acceptance, and native-dialer dormancy | Owner, prospecting managers, and developers |
+| `BATCHDIALER_API_CONTRACT.md` | Official BatchDialer API surface, controlled evidence, unresolved assumptions, and constrained direct-version rules | Owner and developers |
+| `VA_DIALER_ROADMAP.md` | Historical D0-D10 native Stonegate dialer architecture, implementation evidence, and inactive D11/D12 concepts; not an activation plan | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |
@@ -111,8 +118,8 @@ nontechnical owner procedure while `SETUP_REFERENCE.md` remains the exact mainta
 ### Future Work
 
 `FINISHING_ROADMAP.md`, `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`,
-`PUBLIC_SITE_CONVERSION_ROADMAP.md`, `VA_DIALER_ROADMAP.md`, and
-`AI_AUTOMATION_ROADMAP.md` answer:
+`PUBLIC_SITE_CONVERSION_ROADMAP.md`, `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`, the historical
+`VA_DIALER_ROADMAP.md`, and `AI_AUTOMATION_ROADMAP.md` answer:
 
 - What is incomplete?
 - What requires credentials, provider approval, production evidence, or human acceptance?

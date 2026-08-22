@@ -13,7 +13,10 @@ from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.ai_operations import process_next_ai_operation
-from app.services.batchdialer_zapier import process_next_batchdialer_event
+from app.services.batchdialer_direct import (
+    poll_batchdialer_direct,
+    process_next_batchdialer_direct_event,
+)
 from app.services.call_intelligence import (
     process_next_call_transcript,
     process_next_pending_call_note_approval,
@@ -60,7 +63,8 @@ WorkerOperation = Callable[[Session, Settings], UUID | None]
 
 WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("prospecting_dialer_recovery", process_next_prospecting_dialer_recovery),
-    ("batchdialer_zapier", process_next_batchdialer_event),
+    ("batchdialer_direct_poll", poll_batchdialer_direct),
+    ("batchdialer_direct_events", process_next_batchdialer_direct_event),
     ("meta_lead_ads", process_next_meta_lead_event),
     ("staff_lead_alerts", process_next_staff_lead_alert),
     ("twilio_mms_media", process_next_twilio_mms_media),
@@ -120,6 +124,7 @@ def run_worker(stop_event: threading.Event) -> None:
         service=COMMUNICATIONS_WORKER,
         transcription_enabled=settings.call_transcription_enabled,
         poll_seconds=settings.call_transcription_poll_seconds,
+        native_prospecting_dialer_enabled=settings.prospecting_native_dialer_enabled,
         marketing_conversion_mode=meta_runtime_metadata["marketing_conversion_mode"],
         meta_conversion_configured=meta_runtime_metadata["meta_configured"],
         meta_conversion_configuration_blockers=(
@@ -128,14 +133,11 @@ def run_worker(stop_event: threading.Event) -> None:
         meta_pixel_id_fingerprint=meta_runtime_metadata["meta_pixel_id_fingerprint"],
         meta_access_token_present=meta_runtime_metadata["meta_access_token_present"],
         meta_test_mode_enabled=meta_runtime_metadata["meta_test_mode_enabled"],
-        batchdialer_zapier_enabled=settings.zapier_batchdialer_enabled,
-        batchdialer_zapier_configured=settings.zapier_batchdialer_configured,
-        batchdialer_zapier_configuration_blockers=list(
-            settings.zapier_batchdialer_configuration_blockers
+        batchdialer_direct_configured=settings.batchdialer_configured,
+        batchdialer_direct_configuration_blockers=list(
+            settings.batchdialer_configuration_blockers
         ),
-        batchdialer_zapier_allowed_campaign_count=len(
-            settings.zapier_batchdialer_allowed_campaign_ids
-        ),
+        batchdialer_direct_poll_seconds=settings.batchdialer_poll_seconds,
         staff_lead_alert_sms_mode=settings.staff_lead_alert_sms_mode,
         staff_lead_alert_configured=not staff_alert_blockers,
         staff_lead_alert_configuration_blockers=staff_alert_blockers,

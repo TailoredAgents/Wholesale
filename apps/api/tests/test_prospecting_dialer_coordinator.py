@@ -869,6 +869,61 @@ def test_pause_resume_and_end_release_an_unstarted_reservation(
 
 
 @pytest.mark.parametrize("operation", ["resume", "reserve", "recover"])
+def test_dormant_flag_blocks_caller_control_reactivation(
+    db_session: Session,
+    settings_factory: Callable[..., Settings],
+    operation: str,
+) -> None:
+    graph = seed_coordinator_graph(db_session)
+    active_settings = settings_factory()
+    now = datetime.now(UTC)
+    start_payload = session_start(graph, suffix=f"dormant-{operation}")
+    started = start_dial_session(
+        db_session,
+        graph.principal,
+        start_payload,
+        settings=active_settings,
+        now=now,
+    )
+    assert started is not None
+    assert started.lease_token is not None
+    dormant_settings = settings_factory(enabled=False)
+
+    with pytest.raises(ProspectingDialerConfigurationError, match="dialer is dormant"):
+        if operation == "resume":
+            resume_dial_session(
+                db_session,
+                graph.principal,
+                started.snapshot.session.id,
+                lease_command(start_payload, started.lease_token),
+                settings=dormant_settings,
+                now=now + timedelta(seconds=1),
+            )
+        elif operation == "reserve":
+            reserve_next_dial_record(
+                db_session,
+                graph.principal,
+                started.snapshot.session.id,
+                lease_command(start_payload, started.lease_token),
+                settings=dormant_settings,
+                now=now + timedelta(seconds=1),
+            )
+        else:
+            recover_dial_session(
+                db_session,
+                graph.principal,
+                started.snapshot.session.id,
+                ProspectingDialSessionRecoveryCommand(
+                    previous_browser_session_id=start_payload.browser_session_id,
+                    new_browser_session_id=f"browser-dormant-{operation}",
+                    lease_token=started.lease_token,
+                ),
+                settings=dormant_settings,
+                now=now + timedelta(seconds=1),
+            )
+
+
+@pytest.mark.parametrize("operation", ["resume", "reserve", "recover"])
 def test_session_mutations_revalidate_d10_pilot_identity_before_control(
     db_session: Session,
     settings_factory: Callable[..., Settings],

@@ -1645,6 +1645,28 @@ def create_lead_appointment(
     }:
         lead.stage_key = "appointment_scheduled"
 
+    if payload.status in ACTIVE_APPOINTMENT_STATUSES:
+        batchdialer_tasks = db.scalars(
+            select(Task).where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == lead.id,
+                Task.task_type == "batchdialer_manual_appointment",
+                Task.status.in_(("open", "in_progress")),
+            )
+        ).all()
+        for task in batchdialer_tasks:
+            task.status = "completed"
+            task.completed_at = datetime.now(UTC)
+            task.completed_by_user_id = principal.user_id
+            task.outcome = "appointment_entered"
+            task.completion_notes = (
+                "Resolved automatically when the active Stonegate appointment was saved."
+            )
+        if batchdialer_tasks:
+            qualification_context = dict(lead.qualification_context or {})
+            qualification_context.pop("batchdialer_appointment_pending_entry", None)
+            lead.qualification_context = qualification_context
+
     db.flush()
     from app.services.marketing import enqueue_meta_schedule_conversion
 

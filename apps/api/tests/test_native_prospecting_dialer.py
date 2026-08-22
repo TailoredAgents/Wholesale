@@ -546,6 +546,91 @@ def test_manager_profile_controls_va_context_and_workspace_guards(
         get_settings.cache_clear()
 
 
+def test_dormant_flag_blocks_activation_but_allows_disable_controls(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROSPECTING_NATIVE_DIALER_ENABLED", "false")
+    get_settings.cache_clear()
+    try:
+        graph = seed_dialer_graph(db_session)
+        graph.va.calling_enabled = True
+        graph.organization.prospecting_dialer_enabled = False
+        graph.campaign.prospecting_dialer_enabled = False
+        profile = add_profile(db_session, graph, graph.va, line_count=1)
+        db_session.commit()
+
+        client = TestClient(app)
+        owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+        reason = "Keep the native dialer dormant during BatchDialer operation."
+
+        for url in (
+            "/api/v1/prospecting/dialer/switches/company",
+            f"/api/v1/prospecting/dialer/switches/campaigns/{graph.campaign.id}",
+        ):
+            response = client.put(
+                url,
+                headers=owner_headers,
+                json={"enabled": True, "reason": reason},
+            )
+            assert response.status_code == 503, response.text
+            assert "dormant" in response.json()["detail"].lower()
+
+        activation = client.put(
+            f"/api/v1/prospecting/dialer/profiles/{graph.va.id}",
+            headers=owner_headers,
+            json={
+                "status": "active",
+                "voice_line_id": None,
+                "default_line_count": 1,
+                "max_line_count": 1,
+                "recording_policy": "company_policy",
+                "daily_dial_limit": 50,
+                "daily_spend_limit_cents": 1000,
+                "metadata": {},
+            },
+        )
+        assert activation.status_code == 503, activation.text
+        assert "dormant" in activation.json()["detail"].lower()
+
+        graph.organization.prospecting_dialer_enabled = True
+        graph.campaign.prospecting_dialer_enabled = True
+        db_session.commit()
+        for url in (
+            "/api/v1/prospecting/dialer/switches/company",
+            f"/api/v1/prospecting/dialer/switches/campaigns/{graph.campaign.id}",
+        ):
+            response = client.put(
+                url,
+                headers=owner_headers,
+                json={"enabled": False, "reason": reason},
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["enabled"] is False
+
+        deactivation = client.put(
+            f"/api/v1/prospecting/dialer/profiles/{graph.va.id}",
+            headers=owner_headers,
+            json={
+                "status": "inactive",
+                "voice_line_id": None,
+                "default_line_count": 1,
+                "max_line_count": 1,
+                "recording_policy": "company_policy",
+                "daily_dial_limit": 50,
+                "daily_spend_limit_cents": 1000,
+                "metadata": {},
+            },
+        )
+        assert deactivation.status_code == 200, deactivation.text
+        assert deactivation.json()["status"] == "inactive"
+        db_session.refresh(profile)
+        assert profile.status == "inactive"
+    finally:
+        get_settings.cache_clear()
+
+
 def test_only_one_active_session_per_va_and_terminal_session_releases_lock(
     db_session: Session,
     api_db_override: None,

@@ -1,0 +1,75 @@
+{
+  "schema_version": "batchdialer_bd1_capture_v1",
+  "capture_tool_version": "1.4",
+  "capture_run_id": "20260822T164713Z-83ec9c25",
+  "sanitization_profile": "stonegate_bd1_strict_v1",
+  "official_source_id": "campaign_search",
+  "endpoint_documentation_url": "https://developer.batchdialer.com/docs/batchdialer/rw0nq2fp5bu7a-search",
+  "captured_at": "2026-08-22T16:47:14.452490Z",
+  "review_status": "reviewed",
+  "reviewed_at": "2026-08-22T16:48:07Z",
+  "reviewer": "Codex",
+  "controlled_campaign_confirmed": true,
+  "provenance": "account_schema_observation",
+  "operation": "campaign_search_page_two",
+  "request": {
+    "method": "POST",
+    "path_template": "/campaigns/search",
+    "params": {},
+    "body": {
+      "sortfield": "[REDACTED]",
+      "sortdir": "[REDACTED]",
+      "pagelength": 1,
+      "page": 2
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "[REDACTED PROVIDER DATE]",
+      "content-type": "application/json",
+      "x-request-id": "request-003"
+    },
+    "schema_drift": {
+      "undocumented_property_fingerprints": [
+        "183923be84e1",
+        "755f7debf3d0"
+      ]
+    },
+    "body": [
+      {
+        "id": 9000002,
+        "name": "Fictional Person 2",
+        "mode": "Observed Enum 1",
+        "deals": 0,
+        "answered": 0,
+        "voicemail": "seller2@example.com",
+        "abandon": 0,
+        "agents": 0,
+        "redials": 0,
+        "agentslist": [
+          "Fictional Agent 1"
+        ],
+        "contacts": 0,
+        "status": "active",
+        "dateadded": "2000-01-01T00:00:03Z",
+        "parentid": null,
+        "answermode": 0,
+        "ringtone": "",
+        "dnc": 0,
+        "dnr": 0,
+        "newleads": 0,
+        "scrubcompany": 0,
+        "scrubfederal": 0,
+        "dialerstatus": "[REDACTED]",
+        "worktime": 946684800002,
+        "companydnccount": 0,
+        "recyclecount": 0,
+        "level": 0,
+        "updating": false,
+        "parents": null,
+        "externalid": ""
+      }
+    ]
+  }
+}

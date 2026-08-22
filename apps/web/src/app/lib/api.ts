@@ -38,6 +38,9 @@ export type IntegrationStatus = {
   enabled: boolean;
   configured: boolean;
   blockers: string[];
+  runtime_status?: string | null;
+  last_success_at?: string | null;
+  details?: string[];
 };
 
 export type LeadListItem = {
@@ -4920,6 +4923,31 @@ export async function getProspectingWorkbench(): Promise<{
   } catch (error) {
     console.error("Stonegate prospecting workbench request failed.", error);
     return { prospecting: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingDialerContext(): Promise<{
+  dialerContext: ProspectingDialerContext | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/prospecting/dialer/context`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      dialerContext: (await response.json()) as ProspectingDialerContext,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate native dialer context request failed.", error);
+    return { dialerContext: null, apiConnected: false };
   }
 }
 

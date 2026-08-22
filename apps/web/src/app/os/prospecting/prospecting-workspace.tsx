@@ -36,6 +36,7 @@ import type {
   ProspectingCallQualityOutput,
   ProspectingCopilotOutput,
   ProspectingCopilotRecommendation,
+  ProspectingDialerContext,
   ProspectingEntry,
   ProspectingInboundCallback,
   ProspectingInboundCallbackList,
@@ -46,12 +47,14 @@ import type {
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
-import {
-  ProspectingDialer,
-  type ActiveProspectingDialerLease,
-  type ProspectingDialerRuntime,
+import type {
+  ActiveProspectingDialerLease,
+  ProspectingDialerRuntime,
 } from "./prospecting-dialer";
-import type { ProspectingDialerLeadership } from "./prospecting-dialer-policy";
+import {
+  isManualProspectingMode,
+  type ProspectingDialerLeadership,
+} from "./prospecting-dialer-policy";
 import { ProspectingQualificationChecklist as LiveQualificationChecklist } from "./prospecting-qualification-checklist";
 import { pruneQualificationOverrides } from "./prospecting-qualification-state";
 import {
@@ -82,6 +85,11 @@ const ProspectingCallEvidence = dynamic(
     ),
     ssr: false,
   },
+);
+
+const ProspectingDialer = dynamic(
+  () => import("./prospecting-dialer").then((module) => module.ProspectingDialer),
+  { ssr: false },
 );
 
 type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
@@ -195,15 +203,20 @@ function CompletedAttemptHistoryItem({ attempt }: { attempt: ProspectingAttempt 
 
 export function ProspectingWorkspace({
   data,
+  dialerContext,
   initialCallbacks,
   initialCallbacksAvailable,
 }: {
   data: ProspectingWorkbenchOverview;
+  dialerContext: ProspectingDialerContext | null;
   initialCallbacks: ProspectingInboundCallbackList;
   initialCallbacksAvailable: boolean;
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
+  const nativeDialerEnabled = dialerContext?.feature_enabled === true;
+  const manualAttemptAuthority = isManualProspectingMode(dialerContext);
+  const attemptAuthorityKnown = dialerContext !== null;
   const [view, setView] = useState<View>("workbench");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
@@ -263,7 +276,7 @@ export function ProspectingWorkspace({
   );
 
   const refreshCallbacks = useCallback(async () => {
-    if (document.visibilityState === "hidden") return;
+    if (!nativeDialerEnabled || document.visibilityState === "hidden") return;
     const requestSequence = callbackRefreshSequenceRef.current + 1;
     callbackRefreshSequenceRef.current = requestSequence;
     callbackRefreshControllerRef.current?.abort();
@@ -300,9 +313,10 @@ export function ProspectingWorkspace({
         callbackRefreshControllerRef.current = null;
       }
     }
-  }, [apiBaseUrl, devUserEmail, getToken]);
+  }, [apiBaseUrl, devUserEmail, getToken, nativeDialerEnabled]);
 
   useEffect(() => {
+    if (!nativeDialerEnabled) return;
     const interval = window.setInterval(() => void refreshCallbacks(), 20_000);
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void refreshCallbacks();
@@ -316,7 +330,7 @@ export function ProspectingWorkspace({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [refreshCallbacks]);
+  }, [nativeDialerEnabled, refreshCallbacks]);
   const queueEntries = useMemo(
     () =>
       data.queue_entries.map((candidate) => {
@@ -372,9 +386,11 @@ export function ProspectingWorkspace({
   }, [callbackOpenBlocked]);
   const ownsAttemptMutationAuthority = Boolean(
     entryAssignedToCurrentUser &&
-      ((dialerLeadership === "leader" &&
-        (!nativeDialerAvailable || dialerLease)) ||
-        (dialerLeadership === "unsupported" && !nativeDialerAvailable)),
+      (manualAttemptAuthority ||
+        (nativeDialerEnabled &&
+          ((dialerLeadership === "leader" &&
+            (!nativeDialerAvailable || dialerLease)) ||
+            (dialerLeadership === "unsupported" && !nativeDialerAvailable)))),
   );
   const qualificationOutcomeBlocked = qualificationBlocking;
   const requiresCallback = ["callback_requested", "follow_up"].includes(outcome);
@@ -887,7 +903,8 @@ export function ProspectingWorkspace({
         <div><span>Handoffs waiting</span><strong>{data.queue.handoff_pending}</strong></div>
       </section>
 
-      <section aria-labelledby="callback-heading" className={styles.callbackPanel}>
+      {nativeDialerEnabled ? (
+        <section aria-labelledby="callback-heading" className={styles.callbackPanel}>
           <header>
             <div>
               <span>Inbound call routing</span>
@@ -964,7 +981,8 @@ export function ProspectingWorkspace({
               <p className={styles.dialerEmptyState}>No recent callbacks are waiting for this caller.</p>
             ) : null}
           </div>
-      </section>
+        </section>
+      ) : null}
 
       <nav className={styles.viewTabs} aria-label="Prospecting views">
         {availableViews.map((item) => (
@@ -984,17 +1002,19 @@ export function ProspectingWorkspace({
         <p className={status === "error" ? styles.error : styles.notice}>{message}</p>
       ) : null}
 
-      <ProspectingDialer
-        currentUserId={data.current_user_id}
-        entries={queueEntries}
-        onEntryChange={selectEntry}
-        onLeaseChange={setDialerLease}
-        onNativeModeChange={setNativeDialerAvailable}
-        onOwnershipChange={setDialerLeadership}
-        onRuntimeChange={setDialerRuntime}
-        onWorkspaceRefresh={refreshWorkspace}
-        selectedEntry={entry}
-      />
+      {nativeDialerEnabled ? (
+        <ProspectingDialer
+          currentUserId={data.current_user_id}
+          entries={queueEntries}
+          onEntryChange={selectEntry}
+          onLeaseChange={setDialerLease}
+          onNativeModeChange={setNativeDialerAvailable}
+          onOwnershipChange={setDialerLeadership}
+          onRuntimeChange={setDialerRuntime}
+          onWorkspaceRefresh={refreshWorkspace}
+          selectedEntry={entry}
+        />
+      ) : null}
 
       {lastWrapUp ? <WrapUpReceipt receipt={lastWrapUp} /> : null}
 
@@ -1043,16 +1063,17 @@ export function ProspectingWorkspace({
             <WorkbenchView
               activeAttempt={activeAttempt}
               acquisitionUsers={data.acquisition_users}
-              canMutateAttempt={Boolean(
-                entryAssignedToCurrentUser &&
-                  (!activeAttempt || ownsAttemptMutationAuthority),
-              )}
+              attemptAuthorityKnown={attemptAuthorityKnown}
+              canMutateAttempt={ownsAttemptMutationAuthority}
               canAutosaveQualification={ownsAttemptMutationAuthority}
               dialerLease={dialerLease}
               entry={entry}
+              entryAssignedToCurrentUser={entryAssignedToCurrentUser}
               isAppointment={isAppointment}
               isWarm={isWarm}
+              manualAttemptAuthority={manualAttemptAuthority}
               nativeDialerAvailable={nativeDialerAvailable}
+              nativeDialerEnabled={nativeDialerEnabled}
               nativeDialerLeaseActive={Boolean(dialerLease)}
               nativeWrapUpReady={dialerRuntime.wrapUpReady}
               onComplete={completeCurrent}
@@ -1581,13 +1602,17 @@ function WrapUpReceipt({ receipt }: { receipt: ProspectingWrapUpReceipt }) {
 function WorkbenchView({
   activeAttempt,
   acquisitionUsers,
+  attemptAuthorityKnown,
   canMutateAttempt,
   canAutosaveQualification,
   dialerLease,
   entry,
+  entryAssignedToCurrentUser,
   isAppointment,
   isWarm,
+  manualAttemptAuthority,
   nativeDialerAvailable,
+  nativeDialerEnabled,
   nativeDialerLeaseActive,
   nativeWrapUpReady,
   onComplete,
@@ -1606,13 +1631,17 @@ function WorkbenchView({
 }: {
   activeAttempt: ProspectingEntry["active_attempt"];
   acquisitionUsers: ProspectingWorkbenchOverview["acquisition_users"];
+  attemptAuthorityKnown: boolean;
   canMutateAttempt: boolean;
   canAutosaveQualification: boolean;
   dialerLease: ActiveProspectingDialerLease | null;
   entry: ProspectingEntry | null;
+  entryAssignedToCurrentUser: boolean;
   isAppointment: boolean;
   isWarm: boolean;
+  manualAttemptAuthority: boolean;
   nativeDialerAvailable: boolean;
+  nativeDialerEnabled: boolean;
   nativeDialerLeaseActive: boolean;
   nativeWrapUpReady: boolean;
   onComplete: (event: FormEvent<HTMLFormElement>) => void;
@@ -1709,11 +1738,15 @@ function WorkbenchView({
       <div className={styles.scriptPanel}>
         <div className={styles.scriptVersion}><span>Approved script</span><strong>v{activeScript.version_number} · {activeScript.title}</strong></div>
         <blockquote>{activeScript.opening_script}</blockquote>
-        {!activeAttempt ? !canMutateAttempt ? (
+        {!activeAttempt ? !entryAssignedToCurrentUser ? (
           <div className={styles.startAction}>
             <p>This record is assigned to {entry.assigned_user_name}. Manager monitoring is read-only.</p>
           </div>
-        ) : nativeDialerAvailable ? (
+        ) : !attemptAuthorityKnown ? (
+          <div className={styles.startAction}>
+            <p>Calling mode could not be confirmed. Refresh before starting this prospect.</p>
+          </div>
+        ) : nativeDialerEnabled ? (
           <div className={styles.startAction}>
             <p>
               {nativeDialerLeaseActive
@@ -1721,8 +1754,12 @@ function WorkbenchView({
                 : "Use Start Calling above. The native dialer will lock the selected record and open its qualification form."}
             </p>
           </div>
-        ) : (
+        ) : manualAttemptAuthority ? (
           <div className={styles.startAction}><p>Start locks this record to you until an outcome is saved.</p><button className={styles.primaryButton} disabled={saving} onClick={onStart} type="button">Start prospect</button></div>
+        ) : (
+          <div className={styles.startAction}>
+            <p>Calling is unavailable until Stonegate can confirm the approved calling mode.</p>
+          </div>
         ) : (
           <LiveQualificationChecklist
             attemptId={activeAttempt.id}
