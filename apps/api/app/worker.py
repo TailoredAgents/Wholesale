@@ -13,6 +13,9 @@ from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.ai_operations import process_next_ai_operation
+from app.services.batchdialer_call_facts import (
+    backfill_next_batchdialer_call_fact_batch,
+)
 from app.services.batchdialer_direct import (
     poll_batchdialer_direct,
     process_next_batchdialer_direct_event,
@@ -82,6 +85,7 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("lead_manager_escalations", process_next_escalation),
     ("marketing_conversions", process_next_marketing_conversion),
     ("property_intelligence_backfill", backfill_next_property_snapshot),
+    ("batchdialer_call_fact_backfill", backfill_next_batchdialer_call_fact_batch),
 )
 
 

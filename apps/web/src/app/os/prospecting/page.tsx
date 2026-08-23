@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import {
   getAcquisitionOperations,
+  getBatchDialerAgentMappings,
+  getBatchDialerVaPerformance,
   getCampaignManagementOverview,
   getProspectingDialerAnalytics,
   getProspectingDialerContext,
@@ -14,6 +16,7 @@ import {
 } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { CampaignManagementWorkspace } from "../campaigns/campaign-management-workspace";
+import { BatchDialerVaPerformanceSection } from "./batchdialer-va-performance";
 import { ProspectingAnalytics } from "./prospecting-analytics";
 import { ProspectingDialerControl } from "./prospecting-dialer-control";
 import { ProspectingPilotAcceptance } from "./prospecting-pilot-acceptance";
@@ -62,6 +65,8 @@ export default async function ProspectingPage({
     dialerOperationsResult,
     callbackResult,
     analyticsResult,
+    batchDialerPerformanceResult,
+    batchDialerMappingsResult,
     pilotResult,
   ] =
     await Promise.all([
@@ -83,6 +88,12 @@ export default async function ProspectingPage({
       canManage && view === "analytics"
         ? getProspectingDialerAnalytics()
         : Promise.resolve({ dialerAnalytics: null, apiConnected: true }),
+      canManage && view === "analytics"
+        ? getBatchDialerVaPerformance()
+        : Promise.resolve({ vaPerformance: null, apiConnected: true }),
+      canManage && view === "analytics"
+        ? getBatchDialerAgentMappings()
+        : Promise.resolve({ agentMappings: null, apiConnected: true }),
       canManage && view === "pilot"
         ? getProspectingDialerPilot()
         : Promise.resolve({ dialerPilot: null, apiConnected: true }),
@@ -92,6 +103,8 @@ export default async function ProspectingPage({
   const dialerOperations = dialerOperationsResult.dialerOperations;
   const callbacks = callbackResult.callbacks;
   const dialerAnalytics = analyticsResult.dialerAnalytics;
+  const batchDialerPerformance = batchDialerPerformanceResult.vaPerformance;
+  const batchDialerMappings = batchDialerMappingsResult.agentMappings;
   const dialerPilot = pilotResult.dialerPilot;
   const connected =
     apiConnected &&
@@ -206,15 +219,26 @@ export default async function ProspectingPage({
         <SectionPanel description="Dialer operations could not be loaded from the API." title="Dialer control unavailable">
           <div />
         </SectionPanel>
-      ) : view === "analytics" && canManage && dialerAnalytics ? (
-        <ProspectingAnalytics initialData={dialerAnalytics} />
       ) : view === "analytics" && canManage ? (
-        <SectionPanel
-          description="No performance or readiness values are shown because the analytics API could not be reached."
-          title="Prospecting analytics unavailable"
-        >
-          <div />
-        </SectionPanel>
+        <>
+          {dialerAnalytics ? (
+            <ProspectingAnalytics initialData={dialerAnalytics} />
+          ) : (
+            <SectionPanel
+              description="No native-dialer performance or readiness values are shown because the analytics API could not be reached."
+              title="Native prospecting analytics unavailable"
+            >
+              <div />
+            </SectionPanel>
+          )}
+          <BatchDialerVaPerformanceSection
+            initialApiConnected={
+              batchDialerPerformanceResult.apiConnected && batchDialerMappingsResult.apiConnected
+            }
+            initialData={batchDialerPerformance}
+            initialMappings={batchDialerMappings}
+          />
+        </>
       ) : view === "pilot" && canManage ? (
         <ProspectingPilotAcceptance
           campaignManagement={campaignManagement}

@@ -85,7 +85,7 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
     second = client.post("/api/v1/ai/runtime/install", headers=HEADERS).json()
 
     assert first["created_runtime_policy"] is True
-    assert first["created_capability_policy_count"] == 16
+    assert first["created_capability_policy_count"] == 17
     assert first["runtime"]["status"] == "disabled"
     assert first["runtime"]["policy"]["external_actions_enabled"] is False
     assert second["created_runtime_policy"] is False

@@ -7,6 +7,18 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import worker
 from app.core.config import Settings
+from app.services.batchdialer_call_facts import (
+    backfill_next_batchdialer_call_fact_batch,
+)
+
+
+def test_worker_registers_batchdialer_call_fact_backfill() -> None:
+    operation = (
+        "batchdialer_call_fact_backfill",
+        backfill_next_batchdialer_call_fact_batch,
+    )
+    assert operation in worker.WORKER_OPERATIONS
+    assert worker.WORKER_OPERATIONS[-1] == operation
 
 
 def test_worker_cycle_services_each_queue_before_restarting_priority(

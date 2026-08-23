@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 21, 2026
+Last verified against the repository: August 22, 2026
 
 ## Purpose
 

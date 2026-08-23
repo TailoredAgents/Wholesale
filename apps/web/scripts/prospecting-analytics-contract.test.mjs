@@ -21,7 +21,8 @@ test("analytics is a manager-only Prospecting view backed by the private endpoin
   assert.match(page, /requestedView === "analytics"/);
   assert.match(page, /canManage && view === "analytics"[\s\S]*getProspectingDialerAnalytics/);
   assert.match(page, /href="\/os\/prospecting\?view=analytics"/);
-  assert.match(page, /view === "analytics" && canManage && dialerAnalytics/);
+  assert.match(page, /view === "analytics" && canManage/);
+  assert.match(page, /\{dialerAnalytics \? \(/);
   assert.match(api, /\/api\/v1\/prospecting\/dialer\/analytics/);
   assert.match(api, /cache: "no-store"/);
   assert.match(analytics, /export function ProspectingAnalytics/);

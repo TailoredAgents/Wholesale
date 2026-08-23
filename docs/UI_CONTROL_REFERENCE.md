@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 19, 2026
+Last verified against the application: August 22, 2026
 
 ## Purpose
 
@@ -588,6 +588,27 @@ require `financials:view`. An unavailable or permission-hidden value is not zero
 | Readiness check cards | Preserve dedicated-line, browser-token, callback, recording, session, one-line-cap, and worker evidence | Investigate old live work through an authorized cleanup path; Dialer Control is dormant |
 | **How these metrics are calculated** | Expands deterministic definitions, source records, attribution timestamp, and unavailable conditions | Use before comparing unlike sources or periods |
 | Prior confirmed snapshot notice | Retains the last successful values after a transient network or server failure | A 401 or 403 clears the prior snapshot, including financial values, because access expired or was removed |
+
+### BatchDialer VA Performance
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Today / Last 7 days / Last 30 days | Reloads normalized direct BatchDialer call facts in the provider account timezone | Manager only; the migration and worker fact backfill must be deployed |
+| Archive evidence boundary | Shows the earliest call currently archived and the provider rolling scan window | Earlier dates may be incomplete rather than zero; this observation does not prove continuous historical coverage |
+| Agent | Shows one provider agent or the all-agent summary | Agents remain visible under provider identity until explicitly mapped |
+| Calls / human contacts / recorded duration | Shows completed CDR volume, detected-person calls, and the provider's generic duration field | Duration is not asserted to be talk-only time; missing duration is excluded and shown through coverage |
+| Unique contacts / contact-ID coverage | Counts distinct provider contact IDs and shows the share of calls that supplied one | Calls without a provider contact ID are excluded rather than guessed to be different people |
+| Candidate / evidence-accepted / verified-handoff / false-positive metrics | Separates provider-selected qualifying results, evidence-gate acceptance, new-lead Stonegate handoffs, and failed evidence gates | Acceptance rate uses all evidence-accepted candidates; repeated accepted calls on an existing lead do not inflate new handoffs; unresolved candidates are excluded from accepted and false-positive totals |
+| Appointment / contract / closed outcomes | Attributes later Stonegate outcomes to the original evidence-accepted lead-creating call | Appointment-entry rate counts handoffs with at least one appointment, so multiple appointments cannot push it above 100%; a provider appointment result creates an urgent manual-entry task, not an automatic Appointment |
+| First observed / last observed / observed span | Describes clusters of completed-call activity with long idle gaps removed | Call-derived only; never paid hours, login time, break time, or a timeclock |
+| Hourly activity / Daily activity | Shows when completed records occurred | Uses the configured BatchDialer account timezone |
+| Campaign performance | Compares direct provider campaigns | Agent filtering does not alter campaign-wide rows |
+| Stonegate user / **Save mapping** | Explicitly links an observed provider agent identity to an active Stonegate user | A mapping is never guessed and one Stonegate user cannot be actively mapped to multiple provider identities |
+| **Prepare coaching draft** | Generates or reuses an evidence-cited AI manager review for the selected agent and exact period | Requires AI configuration and call evidence; output is draft-only and may be retried after a provider failure |
+| Coaching evidence references | Shows the metric keys and provider-event IDs supporting each statement | Manager must inspect the source evidence before acting |
+
+The VA Performance Coach may recommend call review or next-shift coaching. It cannot change CRM or
+BatchDialer state and cannot make discipline, pay, or employment decisions.
 
 ## Historical Prospecting Pilot Acceptance — Dormant
 

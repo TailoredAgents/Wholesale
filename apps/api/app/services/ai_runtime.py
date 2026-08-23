@@ -89,6 +89,7 @@ CAPABILITY_STATUSES = {"enabled", "disabled"}
 DRAFT_ONLY_ENABLED_CAPABILITIES = {
     "lead.next_action",
     "prospecting.prioritize",
+    "prospecting.va_performance_coach",
     "call.quality_coach",
     "appointment.brief",
     "underwriting.analyze",
@@ -892,6 +893,42 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
             )
             created_capabilities += 1
 
+    prospecting_agent = agents.get("prospecting_intelligence")
+    if prospecting_agent is not None:
+        # Imported lazily to keep the generic runtime module independent at import time.
+        from app.services.va_performance_coach import VA_PERFORMANCE_COACH_OUTPUT_SCHEMA
+
+        coach_key = "prospecting.va_performance_coach"
+        existing_coach = existing_capabilities.get(coach_key)
+        if existing_coach is not None:
+            existing_coach.output_schema = VA_PERFORMANCE_COACH_OUTPUT_SCHEMA
+            existing_coach.updated_by_user_id = principal.user_id
+        else:
+            db.add(
+                AiCapabilityRuntimePolicy(
+                    organization_id=principal.organization_id,
+                    agent_definition_id=prospecting_agent.id,
+                    capability_key=coach_key,
+                    status="enabled",
+                    model_route="default",
+                    output_schema=VA_PERFORMANCE_COACH_OUTPUT_SCHEMA,
+                    allowed_tool_keys=[],
+                    allowed_knowledge_keys=[
+                        "operating_model",
+                        "prospecting_scripts",
+                        "ai_agent_policy",
+                    ],
+                    max_output_tokens=1800,
+                    max_cost_microusd_per_run=min(
+                        prospecting_agent.max_cost_microusd_per_run,
+                        100_000,
+                    ),
+                    requires_human_review=True,
+                    updated_by_user_id=principal.user_id,
+                )
+            )
+            created_capabilities += 1
+
     updated_knowledge = 0
     knowledge_sources = db.scalars(
         select(AiKnowledgeSource).where(
@@ -1059,7 +1096,7 @@ def execute_runtime(
     if prompt is None:
         raise ValueError("The capability needs an active prompt.")
 
-    block_reason = _runtime_block_reason(db, principal, runtime, capability, settings.ai_enabled)
+    block_reason = runtime_block_reason(db, principal, runtime, capability, settings.ai_enabled)
     if block_reason:
         return _record_blocked_run(db, principal, payload, agent, prompt, capability, block_reason)
     if not settings.openai_api_key:
@@ -1100,7 +1137,7 @@ def execute_runtime(
             "Runtime context exceeds the organization limit.",
         )
 
-    model_name = _model_for_route(runtime, capability.model_route)
+    model_name = model_for_runtime_route(runtime, capability.model_route)
     started_monotonic = time.perf_counter()
     client = OpenAIResponsesClient(
         api_key=settings.openai_api_key,
@@ -1135,7 +1172,7 @@ def execute_runtime(
 
     latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
     if parsed is None:
-        _record_runtime_failure(runtime)
+        record_runtime_failure(runtime)
         run = _new_runtime_run(
             principal,
             payload,
@@ -1174,8 +1211,7 @@ def execute_runtime(
     else:
         status = "needs_review"
         budget_status = "within_budget"
-    runtime.consecutive_failure_count = 0
-    runtime.circuit_open_until = None
+    record_runtime_success(runtime)
     output_summary = _redacted_json(parsed)
     run = _new_runtime_run(
         principal,
@@ -1421,7 +1457,7 @@ def _require_runtime_policy(db: Session, principal: Principal) -> AiRuntimePolic
     return policy
 
 
-def _runtime_block_reason(
+def runtime_block_reason(
     db: Session,
     principal: Principal,
     runtime: Any,
@@ -1437,8 +1473,15 @@ def _runtime_block_reason(
         return "This capability runtime is disabled."
     if runtime.external_actions_enabled:
         return "Unsafe runtime configuration: external actions must remain disabled."
-    if runtime.circuit_open_until and runtime.circuit_open_until > now:
-        return "The OpenAI circuit breaker is open."
+    circuit_open_until = runtime.circuit_open_until
+    if circuit_open_until is not None:
+        # SQLite drops timezone metadata on round-trip while PostgreSQL keeps
+        # it. Treat a naive persisted circuit timestamp as UTC so the same
+        # governed gate behaves consistently in tests and production.
+        if circuit_open_until.tzinfo is None:
+            circuit_open_until = circuit_open_until.replace(tzinfo=UTC)
+        if circuit_open_until > now:
+            return "The OpenAI circuit breaker is open."
     minute_ago = now - timedelta(minutes=1)
     recent_runs = int(
         db.scalar(
@@ -2592,7 +2635,7 @@ def _record_blocked_run(
     reason: str,
 ) -> AiRunRead:
     runtime = _require_runtime_policy(db, principal)
-    model_name = _model_for_route(runtime, capability.model_route)
+    model_name = model_for_runtime_route(runtime, capability.model_route)
     run = _new_runtime_run(
         principal,
         payload,
@@ -2662,7 +2705,7 @@ def _new_runtime_run(
     )
 
 
-def _record_runtime_failure(policy: AiRuntimePolicy) -> None:
+def record_runtime_failure(policy: AiRuntimePolicy) -> None:
     policy.consecutive_failure_count += 1
     if policy.consecutive_failure_count >= policy.circuit_failure_threshold:
         policy.circuit_open_until = datetime.now(UTC) + timedelta(
@@ -2670,7 +2713,12 @@ def _record_runtime_failure(policy: AiRuntimePolicy) -> None:
         )
 
 
-def _model_for_route(policy: AiRuntimePolicy, route: str) -> str:
+def record_runtime_success(policy: AiRuntimePolicy) -> None:
+    policy.consecutive_failure_count = 0
+    policy.circuit_open_until = None
+
+
+def model_for_runtime_route(policy: AiRuntimePolicy, route: str) -> str:
     if route == "high_volume":
         return policy.high_volume_model
     if route == "escalation":

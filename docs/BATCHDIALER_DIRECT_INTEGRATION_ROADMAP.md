@@ -372,6 +372,7 @@ external automation, changing a campaign environment allowlist, or redeploying S
 | BD7 Health and visibility | Implemented and repository-verified | Persisted direct health, lag, failures, and quarantine evidence |
 | BD8 Production acceptance | Pending owner/provider action | Controlled direct results plus 24-hour reconciliation |
 | BD9 Direct-only cleanup | Implemented and repository-verified | No obsolete BatchDialer third-party transport surface; current documentation |
+| Manager VA analytics and coaching | Implemented and repository-verified | Confirm production call-fact backfill, map each provider agent, and review one evidence-cited coaching draft |
 
 ## 11. Cross-Phase Acceptance Matrix
 
@@ -437,6 +438,10 @@ Version one is done only when:
 - Appointment Set creates a visible urgent manual-entry task, never an automatic Appointment;
 - VAs create and manage appointments directly in Stonegate;
 - health, lag, failures, and quarantined results are visible;
+- managers can compare normalized call activity and downstream outcomes without treating provider
+  dispositions as verified leads or call-derived spans as paid hours;
+- observed provider agents can be explicitly mapped to Stonegate users, and the draft-only VA
+  Performance Coach cites only stored metrics and provider events;
 - provider outages recover from durable checkpoint state; and
 - controlled direct acceptance and 24-hour reconciliation pass.
 

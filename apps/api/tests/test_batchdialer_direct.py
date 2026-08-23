@@ -313,6 +313,17 @@ def test_poll_stops_on_empty_page_even_when_provider_returns_a_cursor(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    poll_started_at = datetime(2026, 8, 22, 15, 0, tzinfo=UTC)
+    poll_completed_at = poll_started_at + timedelta(seconds=45)
+    clock = iter((poll_started_at, poll_completed_at))
+
+    class ControlledDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            value = next(clock)
+            return value if tz is not None else value.replace(tzinfo=None)
+
+    monkeypatch.setattr("app.services.batchdialer_direct.datetime", ControlledDateTime)
 
     class EmptyCursorClient:
         def __init__(self) -> None:
@@ -348,6 +359,17 @@ def test_poll_stops_on_empty_page_even_when_provider_returns_a_cursor(
     assert checkpoint is not None
     assert checkpoint.organization_id == organization.id
     assert checkpoint.status == "healthy"
+    assert checkpoint.last_attempt_at is not None
+    assert checkpoint.last_success_at is not None
+    assert checkpoint.next_poll_at is not None
+    assert checkpoint.last_attempt_at.replace(tzinfo=UTC) == poll_started_at
+    assert checkpoint.last_success_at.replace(tzinfo=UTC) == poll_completed_at
+    assert checkpoint.next_poll_at.replace(tzinfo=UTC) == (
+        poll_completed_at + timedelta(seconds=120)
+    )
+    assert checkpoint.sync_metadata["last_run"]["completed_at"] == (
+        poll_completed_at.isoformat()
+    )
     assert checkpoint.fetched_cdr_count == 0
     assert checkpoint.archived_event_count == 0
     assert checkpoint.sync_metadata["last_run"]["anomalies"] == [

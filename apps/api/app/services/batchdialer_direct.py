@@ -42,6 +42,7 @@ from app.models.foundation import (
 )
 from app.schemas.public_intake import SellerIntakeAttribution, SellerIntakeCreate
 from app.services.ai_operations import default_ai_work_owner, enqueue_lead_created_ai_work
+from app.services.batchdialer_call_facts import upsert_batchdialer_call_fact
 from app.services.communication_compliance import format_e164
 from app.services.inbox import ensure_primary_conversation, update_conversation_activity
 from app.services.lead_manager import ensure_inbound_case
@@ -267,15 +268,18 @@ def poll_batchdialer_direct(db: Session, settings: Settings) -> UUID | None:
                     "BatchDialer CDR scan reached the configured page safety limit."
                 )
 
+        completed_at = datetime.now(UTC)
         checkpoint = _locked_checkpoint(db, checkpoint_id, lease_token)
         checkpoint.status = "healthy"
         checkpoint.lease_token = None
         checkpoint.lease_owner = None
         checkpoint.lease_expires_at = None
-        checkpoint.next_poll_at = now + timedelta(seconds=settings.batchdialer_poll_seconds)
+        checkpoint.next_poll_at = completed_at + timedelta(
+            seconds=settings.batchdialer_poll_seconds
+        )
         checkpoint.scan_date = None
         checkpoint.next_page_cursor = None
-        checkpoint.last_success_at = now
+        checkpoint.last_success_at = completed_at
         checkpoint.last_error = None
         checkpoint.consecutive_failure_count = 0
         checkpoint.success_count += 1
@@ -293,7 +297,7 @@ def poll_batchdialer_direct(db: Session, settings: Settings) -> UUID | None:
                 "qualified": qualified,
                 "quarantined": quarantined,
                 "anomalies": anomalies,
-                "completed_at": now.isoformat(),
+                "completed_at": completed_at.isoformat(),
             },
         }
         db.commit()
@@ -309,19 +313,22 @@ def poll_batchdialer_direct(db: Session, settings: Settings) -> UUID | None:
         return checkpoint_id
     except Exception as exc:
         db.rollback()
+        failed_at = datetime.now(UTC)
         checkpoint = db.get(BatchDialerSyncCheckpoint, checkpoint_id)
         if checkpoint is not None and checkpoint.lease_token == lease_token:
             checkpoint.status = "failed"
             checkpoint.lease_token = None
             checkpoint.lease_owner = None
             checkpoint.lease_expires_at = None
-            checkpoint.next_poll_at = now + timedelta(seconds=settings.batchdialer_poll_seconds)
+            checkpoint.next_poll_at = failed_at + timedelta(
+                seconds=settings.batchdialer_poll_seconds
+            )
             checkpoint.last_error = _safe_error(exc)
             checkpoint.consecutive_failure_count += 1
             checkpoint.failure_count += 1
             checkpoint.sync_metadata = {
                 **(checkpoint.sync_metadata or {}),
-                "last_failure_at": now.isoformat(),
+                "last_failure_at": failed_at.isoformat(),
             }
             db.commit()
         raise
@@ -381,13 +388,40 @@ def archive_batchdialer_cdr(
             with db.begin_nested():
                 db.flush()
         except IntegrityError:
+            concurrent = db.scalar(
+                select(ProspectingProviderEvent).where(
+                    ProspectingProviderEvent.organization_id == organization_id,
+                    ProspectingProviderEvent.provider == PROVIDER,
+                    ProspectingProviderEvent.external_event_id == external_event_id,
+                )
+            )
+            if concurrent is not None:
+                upsert_batchdialer_call_fact(
+                    db,
+                    event=concurrent,
+                    disposition_classification=classify_disposition(
+                        sanitized.get("disposition")
+                    ),
+                )
             return "unchanged"
+        upsert_batchdialer_call_fact(
+            db,
+            event=event,
+            disposition_classification=classify_disposition(sanitized.get("disposition")),
+        )
         return "archived"
     if existing.payload_sha256 == digest:
         if _transcript_recheck_due(existing, now=now):
             existing.processing_status = "pending"
             existing.error_message = None
             existing.processed_at = None
+            upsert_batchdialer_call_fact(
+                db,
+                event=existing,
+                disposition_classification=classify_disposition(
+                    sanitized.get("disposition")
+                ),
+            )
             return "updated"
         return "unchanged"
     prior_result = dict(existing.payload or {}).get("_stonegate")
@@ -404,6 +438,11 @@ def archive_batchdialer_cdr(
     existing.retry_count = 0
     existing.error_message = None
     existing.processed_at = None
+    upsert_batchdialer_call_fact(
+        db,
+        event=existing,
+        disposition_classification=classify_disposition(sanitized.get("disposition")),
+    )
     return "updated"
 
 
@@ -543,6 +582,7 @@ def process_next_batchdialer_direct_event(
     final_payload = {**dict(event.payload or {}), "_stonegate": result}
     final_payload.pop("_stonegate_claim", None)
     event.payload = final_payload
+    upsert_batchdialer_call_fact(db, event=event, final_result=result)
     db.commit()
     return event_id
 
@@ -2403,6 +2443,7 @@ def _mark_event_failure(
         payload = {**dict(event.payload or {}), "_stonegate": result}
         payload.pop("_stonegate_claim", None)
         event.payload = payload
+        upsert_batchdialer_call_fact(db, event=event, final_result=result)
         db.commit()
         return
     event.processing_status = "exhausted" if exhausted else "retry"
@@ -2411,6 +2452,7 @@ def _mark_event_failure(
     payload = dict(event.payload or {})
     payload.pop("_stonegate_claim", None)
     event.payload = payload
+    upsert_batchdialer_call_fact(db, event=event)
     db.commit()
 
 
@@ -2514,6 +2556,7 @@ def _mark_qualification_pending(
             reason_code=exc.reason_code,
         )
     event.retry_count = max(0, event.retry_count - 1)
+    upsert_batchdialer_call_fact(db, event=event)
     db.commit()
 
 
@@ -2543,6 +2586,7 @@ def _route_event_exception_to_review(
         payload = dict(event.payload or {})
         payload.pop("_stonegate_claim", None)
         event.payload = payload
+        upsert_batchdialer_call_fact(db, event=event)
         db.commit()
         return
     prior_result = (event.payload or {}).get("_stonegate")
@@ -2561,6 +2605,7 @@ def _route_event_exception_to_review(
     payload = {**dict(event.payload or {}), "_stonegate": result}
     payload.pop("_stonegate_claim", None)
     event.payload = payload
+    upsert_batchdialer_call_fact(db, event=event, final_result=result)
     db.commit()
 
 
@@ -2620,6 +2665,7 @@ def apply_batchdialer_qualification_decision(
         payload = {**dict(event.payload or {}), "_stonegate": updated_result}
         payload.pop("_stonegate_claim", None)
         event.payload = payload
+        upsert_batchdialer_call_fact(db, event=event, final_result=updated_result)
         return
 
     override_status = "approved" if status == "approved" else "rejected"
@@ -2649,6 +2695,7 @@ def apply_batchdialer_qualification_decision(
     payload = {**dict(event.payload or {}), "_stonegate": updated_result}
     payload.pop("_stonegate_claim", None)
     event.payload = payload
+    upsert_batchdialer_call_fact(db, event=event, final_result=updated_result)
 
 
 def _transcript_recheck_due(event: ProspectingProviderEvent, *, now: datetime) -> bool:

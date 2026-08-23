@@ -1455,6 +1455,179 @@ export type ProspectingDialerAnalyticsQuery = {
   dial_mode?: string;
 };
 
+export type BatchDialerVaPerformanceMetrics = {
+  calls: number | null;
+  unique_contacts: number | null;
+  identified_contact_calls: number | null;
+  identified_contact_coverage_basis_points: number | null;
+  human_contacts: number | null;
+  recorded_duration_calls: number | null;
+  recorded_duration_coverage_basis_points: number | null;
+  recorded_call_seconds: number | null;
+  average_recorded_call_seconds: number | null;
+  qualified_candidates: number | null;
+  evidence_accepted_candidates: number | null;
+  verified_handoffs: number | null;
+  qualification_false_positives: number | null;
+  appointments_set: number | null;
+  appointments_entered: number | null;
+  handoffs_with_appointment_entered: number | null;
+  appointments_held: number | null;
+  signed_contracts: number | null;
+  closed_transactions: number | null;
+  dnc: number | null;
+  not_interested: number | null;
+  voicemails: number | null;
+  no_answers: number | null;
+  first_call_at: string | null;
+  last_call_at: string | null;
+  inferred_calling_minutes: number | null;
+  human_contact_rate_basis_points: number | null;
+  evidence_acceptance_rate_basis_points: number | null;
+  false_positive_rate_basis_points: number | null;
+  appointments_entered_rate_basis_points: number | null;
+};
+
+export type BatchDialerVaPerformanceAgent = {
+  mapping_id: string | null;
+  provider_agent_id: string;
+  provider_agent_name: string;
+  user_id: string | null;
+  user_name: string | null;
+  metrics: BatchDialerVaPerformanceMetrics;
+};
+
+export type BatchDialerVaPerformanceCampaign = {
+  provider_campaign_id: string;
+  campaign_name: string;
+  metrics: BatchDialerVaPerformanceMetrics;
+};
+
+export type BatchDialerVaPerformanceDailyActivity = {
+  date: string;
+  provider_agent_id: string;
+  provider_agent_name: string;
+  metrics: BatchDialerVaPerformanceMetrics;
+};
+
+export type BatchDialerVaPerformanceHourlyActivity = {
+  hour_start_at: string;
+  provider_agent_id: string;
+  provider_agent_name: string;
+  calls: number | null;
+  human_contacts: number | null;
+  verified_handoffs: number | null;
+  recorded_call_seconds: number | null;
+};
+
+export type BatchDialerVaPerformance = {
+  timezone: string;
+  date_from: string;
+  date_to: string;
+  as_of: string;
+  earliest_archived_call_at: string | null;
+  archive_history_status:
+    | "no_archived_calls"
+    | "selected_range_may_be_incomplete"
+    | "archived_calls_available";
+  provider_scan_window_days: number;
+  provider_sync_status:
+    | "missing"
+    | "idle"
+    | "polling"
+    | "healthy"
+    | "failed"
+    | "unknown";
+  provider_sync_freshness: "current" | "stale" | "incomplete";
+  provider_sync_last_success_at: string | null;
+  provider_sync_error_present: boolean;
+  provider_sync_poll_interval_seconds: number;
+  summary: BatchDialerVaPerformanceMetrics;
+  agents: BatchDialerVaPerformanceAgent[];
+  campaigns: BatchDialerVaPerformanceCampaign[];
+  daily_activity: BatchDialerVaPerformanceDailyActivity[];
+  hourly_activity: BatchDialerVaPerformanceHourlyActivity[];
+  coverage_warnings: string[];
+};
+
+export type BatchDialerAgentMapping = {
+  id: string;
+  provider_agent_id: string;
+  provider_agent_name: string;
+  user_id: string | null;
+  user_name: string | null;
+  last_seen_at: string | null;
+};
+
+export type BatchDialerAgentMappingUser = {
+  id: string;
+  name: string;
+  email: string;
+  is_active: boolean;
+};
+
+export type BatchDialerAgentMappings = {
+  items: BatchDialerAgentMapping[];
+  users: BatchDialerAgentMappingUser[];
+};
+
+export type BatchDialerVaPerformanceQuery = {
+  date_from?: string;
+  date_to?: string;
+};
+
+export type BatchDialerVaCoachObservation = {
+  observation: string;
+  evidence_refs: string[];
+};
+
+export type BatchDialerVaCoachAction = {
+  action: string;
+  rationale: string;
+  evidence_refs: string[];
+};
+
+export type BatchDialerVaCoachCallReview = {
+  provider_event_id: string;
+  reason: string;
+  evidence_refs: string[];
+};
+
+export type BatchDialerVaCoachCaveat = {
+  caveat: string;
+  evidence_refs: string[];
+};
+
+export type BatchDialerVaCoachOutput = {
+  draft_only: true;
+  summary: { text: string; evidence_refs: string[] };
+  strengths: BatchDialerVaCoachObservation[];
+  concerns: BatchDialerVaCoachObservation[];
+  next_shift_actions: BatchDialerVaCoachAction[];
+  calls_to_review: BatchDialerVaCoachCallReview[];
+  comparison_caveats: BatchDialerVaCoachCaveat[];
+  confidence: {
+    level: "high" | "medium" | "low";
+    rationale: string;
+    evidence_refs: string[];
+  };
+};
+
+export type BatchDialerVaCoachReport = {
+  run_id: string;
+  provider_agent_id: string;
+  range_start: string;
+  range_end: string;
+  status: string;
+  output: BatchDialerVaCoachOutput | null;
+  generated_at: string;
+  reused: boolean;
+  is_stale: boolean;
+  refresh_required: boolean;
+  stale_reasons: Array<"evidence_changed" | "generation_contract_changed">;
+  current_evidence_as_of: string;
+};
+
 export type ProspectingVoiceSession = {
   can_initialize: boolean;
   dial_session_id: string;
@@ -5031,6 +5204,64 @@ export async function getProspectingDialerAnalytics(
   } catch (error) {
     console.error("Stonegate dialer analytics request failed.", error);
     return { dialerAnalytics: null, apiConnected: false };
+  }
+}
+
+export async function getBatchDialerVaPerformance(
+  query: BatchDialerVaPerformanceQuery = {},
+): Promise<{
+  vaPerformance: BatchDialerVaPerformance | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value) search.set(key, value);
+  }
+  const suffix = search.size ? `?${search.toString()}` : "";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/batchdialer/va-performance${suffix}`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      vaPerformance: (await response.json()) as BatchDialerVaPerformance,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate BatchDialer VA performance request failed.", error);
+    return { vaPerformance: null, apiConnected: false };
+  }
+}
+
+export async function getBatchDialerAgentMappings(): Promise<{
+  agentMappings: BatchDialerAgentMappings | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/batchdialer/agent-mappings`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      agentMappings: (await response.json()) as BatchDialerAgentMappings,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate BatchDialer agent mapping request failed.", error);
+    return { agentMappings: null, apiConnected: false };
   }
 }
 

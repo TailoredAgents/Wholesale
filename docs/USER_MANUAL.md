@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 19, 2026
+Last verified against the application: August 22, 2026
 
 ## Purpose
 
@@ -920,6 +920,35 @@ evidence, but cost, revenue, and profit values remain hidden.
 9. Treat native-readiness blockers as historical evidence or cleanup signals. Escalate an old live
    session, callback, recording, or worker issue through an authorized recovery path; do not reopen
    Dialer Control merely to clear the display.
+
+The same page includes **BatchDialer VA performance** for managers:
+
+- The selected dates define the outbound-call cohort. Appointments, signed contracts, and closed
+  transactions show the current outcomes of that cohort as of the report snapshot; they may occur
+  after the selected calling period. Recent and older cohorts are not maturity-normalized.
+
+1. Select **Today**, **Last 7 days**, or **Last 30 days**, then optionally select one observed
+   BatchDialer agent.
+2. Review completed calls, unique contacts, provider-recorded call duration, human-contact rate,
+   provider candidates, evidence-verified handoffs, false positives, appointments, contracts, and
+   closed transactions. **Candidate** means the VA selected a qualifying result; **Evidence
+   accepted** means Stonegate's gate accepted that candidate; **Verified handoff** means the
+   accepted call also created a new lead. Later accepted calls on that same lead remain accepted
+   but do not inflate the new-handoff total. Duration and unique-contact coverage identify provider
+   records that omitted those source values instead of presenting guessed totals.
+   For 7- or 30-day views, also read the archive evidence boundary. Dates before the earliest
+   archived call may be incomplete rather than true zero-activity dates because the provider sync
+   scans a rolling window.
+3. Use the hourly and daily views to see when calls occurred. The first/last call and observed span
+   are not proof of login time, paid hours, breaks, or continuous work.
+4. Under **Identity mapping**, connect each BatchDialer agent to the correct active Stonegate user
+   and select **Save mapping**. Never choose a user merely because a name looks similar.
+5. Select one agent and choose **Prepare coaching draft** to generate an evidence-cited manager
+   review for that exact date range. Review its strengths, concerns, suggested next-shift actions,
+   calls to inspect, caveats, and confidence before using any recommendation.
+6. Treat the coach as advisory only. It cannot change calls, leads, assignments, campaigns, pay,
+   discipline, or employment status. Compare VAs only after considering campaign/list difficulty,
+   shift coverage, and sample size.
 
 Any historical **Ready for controlled pilot** status is retained technical evidence only. It does
 not make the native dialer Active or Accepted and does not override dormant mode. BatchDialer is

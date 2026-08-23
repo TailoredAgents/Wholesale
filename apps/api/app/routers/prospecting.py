@@ -6,10 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.integrations.voice_call_provider import VoiceCallProviderError
 from app.schemas.prospecting import (
+    BatchDialerAgentMappingListRead,
+    BatchDialerAgentMappingRead,
+    BatchDialerAgentMappingUpdate,
+    BatchDialerVaCoachAnalyzeRequest,
+    BatchDialerVaCoachOutputRead,
+    BatchDialerVaCoachReportRead,
+    BatchDialerVaPerformanceRead,
     DialerContextRead,
     ProspectHandoffDecision,
     ProspectHandoffRead,
@@ -62,6 +70,12 @@ from app.schemas.prospecting_dialer_acceptance import (
     ProspectingDialerPilotShiftReviewCreate,
     ProspectingDialerPilotStart,
     ProspectingDialerPilotSubmit,
+)
+from app.services.batchdialer_va_performance import (
+    get_batchdialer_va_coaching_input,
+    get_batchdialer_va_performance,
+    list_batchdialer_agent_mappings,
+    update_batchdialer_agent_mapping,
 )
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.prospecting import (
@@ -134,6 +148,13 @@ from app.services.prospecting_voice import (
     prepare_browser_prospecting_voice_call,
     start_prospecting_voice_call,
 )
+from app.services.va_performance_coach import (
+    VaPerformanceCoachError,
+    VaPerformanceCoachReport,
+    assess_va_performance_coaching_report_freshness,
+    generate_va_performance_coaching_report,
+    get_latest_va_performance_coaching_report,
+)
 
 router = APIRouter(prefix="/api/v1/prospecting", tags=["prospecting"])
 work_dependency = require_any_permission(
@@ -172,6 +193,29 @@ def _parse_analytics_uuid(value: str | None, parameter: str) -> UUID | None:
         return UUID(value)
     except ValueError as exc:
         raise ValueError(f"{parameter} must be a valid UUID.") from exc
+
+
+def _va_coach_report_read(report: VaPerformanceCoachReport) -> BatchDialerVaCoachReportRead:
+    if report.current_evidence_as_of is None:
+        raise ValueError("The VA coaching report has no current evidence timestamp.")
+    return BatchDialerVaCoachReportRead(
+        run_id=report.run_id,
+        provider_agent_id=report.provider_agent_id,
+        range_start=report.range_start,
+        range_end=report.range_end,
+        status=report.status,
+        output=(
+            BatchDialerVaCoachOutputRead.model_validate(report.output)
+            if report.output is not None
+            else None
+        ),
+        generated_at=report.generated_at,
+        reused=report.reused,
+        is_stale=report.is_stale,
+        refresh_required=report.refresh_required,
+        stale_reasons=list(report.stale_reasons),
+        current_evidence_as_of=report.current_evidence_as_of,
+    )
 
 
 def _raise_prospecting_voice_error(exc: Exception) -> NoReturn:
@@ -318,6 +362,167 @@ def read_native_dialer_analytics(
             detail=str(exc),
             headers={"Cache-Control": "private, no-store"},
         ) from exc
+
+
+@router.get("/batchdialer/va-performance")
+def read_batchdialer_va_performance(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> BatchDialerVaPerformanceRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        return get_batchdialer_va_performance(
+            db,
+            principal,
+            date_from=_parse_analytics_date(date_from, "date_from"),
+            date_to=_parse_analytics_date(date_to, "date_to"),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+
+
+@router.get("/batchdialer/agent-mappings")
+def read_batchdialer_agent_mappings(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> BatchDialerAgentMappingListRead:
+    _mark_sensitive_response_no_store(response)
+    return list_batchdialer_agent_mappings(db, principal)
+
+
+@router.patch("/batchdialer/agent-mappings/{mapping_id}")
+def patch_batchdialer_agent_mapping(
+    mapping_id: UUID,
+    payload: BatchDialerAgentMappingUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> BatchDialerAgentMappingRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        result = update_batchdialer_agent_mapping(
+            db,
+            principal,
+            mapping_id=mapping_id,
+            user_id=payload.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="BatchDialer agent identity not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.get("/batchdialer/va-coach/latest")
+def read_latest_batchdialer_va_coaching(
+    provider_agent_id: str,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> BatchDialerVaCoachReportRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        parsed_date_from = _parse_analytics_date(date_from, "date_from")
+        parsed_date_to = _parse_analytics_date(date_to, "date_to")
+        report = get_latest_va_performance_coaching_report(
+            db,
+            principal,
+            provider_agent_id=provider_agent_id,
+            date_from=parsed_date_from,
+            date_to=parsed_date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No VA coaching draft exists for this BatchDialer agent.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    try:
+        _, _, current_range_end, current_snapshot = get_batchdialer_va_coaching_input(
+            db,
+            principal,
+            provider_agent_id=provider_agent_id,
+            date_from=parsed_date_from,
+            date_to=parsed_date_to,
+        )
+        report = assess_va_performance_coaching_report_freshness(
+            db,
+            principal,
+            report,
+            current_performance_snapshot=current_snapshot,
+            current_evidence_as_of=current_range_end,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    return _va_coach_report_read(report)
+
+
+@router.post("/batchdialer/va-coach")
+def generate_batchdialer_va_coaching(
+    payload: BatchDialerVaCoachAnalyzeRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> BatchDialerVaCoachReportRead:
+    _mark_sensitive_response_no_store(response)
+    try:
+        _, range_start, range_end, snapshot = get_batchdialer_va_coaching_input(
+            db,
+            principal,
+            provider_agent_id=payload.provider_agent_id,
+            date_from=payload.date_from,
+            date_to=payload.date_to,
+        )
+        report = generate_va_performance_coaching_report(
+            db,
+            principal,
+            get_settings(),
+            provider_agent_id=payload.provider_agent_id,
+            range_start=range_start,
+            range_end=range_end,
+            performance_snapshot=snapshot,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    except VaPerformanceCoachError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
+    return _va_coach_report_read(report)
 
 
 @router.get("/dialer/pilot")

@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: August 19, 2026
+Last verified against the repository: August 22, 2026
 
 ## Purpose
 
@@ -1290,10 +1290,22 @@ Run one controlled qualified call and one controlled appointment-set call, then 
 - no-answer, voicemail, wrong-number, not-interested, and ordinary callback activity does not enter
   Leads;
 - BatchDialer retains expected cold-call DNC/redial behavior; and
-- optional transcript or recording absence never blocks the handoff.
+- delayed transcript evidence retries before any Lead is created; exhausted or inconclusive
+  candidates remain visibly reviewable rather than silently passing the evidence gate.
 
 After activation, reconcile provider CDR identities and eligible results against Stonegate for at
 least 24 hours. Acceptance requires zero eligible misses, duplicate actions, or wrong-contact merges.
+
+The worker also normalizes archived direct CDR observations into bounded call-fact batches for
+**Prospecting > Analytics > BatchDialer VA performance**. This backfill requires no additional
+provider credential. It drains immediately while history remains, then uses a durable checkpoint
+to audit for missed or stale facts every ten minutes rather than rescanning every worker loop.
+Managers must explicitly map observed provider agents to active Stonegate
+users; no name or email match is inferred. The VA Performance Coach reuses the existing governed
+OpenAI configuration and creates draft-only reports, so it adds no new environment variable.
+An AI administrator must select **Install runtime** in **AI & Automation** after this release to
+register the coach capability for an existing workspace. Generating a coaching draft never creates,
+enables, or changes that capability and respects an administrator disabling it.
 
 ## Marketing Conversion Delivery
 

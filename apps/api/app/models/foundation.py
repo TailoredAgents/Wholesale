@@ -2012,6 +2012,200 @@ class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class BatchDialerAgentIdentity(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Observed BatchDialer agent identity with an optional explicit user mapping."""
+
+    __tablename__ = "batchdialer_agent_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider_agent_id",
+            name="uq_batchdialer_agent_identities_org_provider",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "mapped_user_id",
+            name="uq_batchdialer_agent_identities_org_mapped_user",
+        ),
+        Index(
+            "ix_batchdialer_agent_identities_org_last_seen",
+            "organization_id",
+            "last_seen_at",
+        ),
+        CheckConstraint(
+            "length(trim(provider_agent_id)) > 0",
+            name="ck_batchdialer_agent_identities_provider_id",
+        ),
+        CheckConstraint(
+            "mapped_user_id IS NULL OR mapped_at IS NOT NULL",
+            name="ck_batchdialer_agent_identities_explicit_mapping",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_agent_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mapped_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    mapped_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    mapped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    provider_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
+
+
+class BatchDialerCallFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Normalized, revision-safe analytics fact for one archived BatchDialer CDR."""
+
+    __tablename__ = "batchdialer_call_facts"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_event_id",
+            name="uq_batchdialer_call_facts_provider_event",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "provider_cdr_id",
+            name="uq_batchdialer_call_facts_org_cdr",
+        ),
+        Index(
+            "ix_batchdialer_call_facts_org_started",
+            "organization_id",
+            "started_at",
+        ),
+        Index(
+            "ix_batchdialer_call_facts_org_activity",
+            "organization_id",
+            text("COALESCE(started_at, occurred_at, received_at)"),
+        ),
+        Index(
+            "ix_batchdialer_call_facts_org_agent_started",
+            "organization_id",
+            "provider_agent_id",
+            "started_at",
+        ),
+        Index(
+            "ix_batchdialer_call_facts_org_campaign_started",
+            "organization_id",
+            "provider_campaign_id",
+            "started_at",
+        ),
+        Index(
+            "ix_batchdialer_call_facts_org_qualification",
+            "organization_id",
+            "final_qualification_status",
+        ),
+        CheckConstraint(
+            "length(trim(provider_cdr_id)) > 0",
+            name="ck_batchdialer_call_facts_provider_cdr",
+        ),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds >= 0",
+            name="ck_batchdialer_call_facts_duration",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_event_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_provider_events.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    agent_identity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("batchdialer_agent_identities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("leads.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("call_records.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    provider_cdr_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_contact_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_campaign_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_campaign_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_agent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_agent_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    direction: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="outbound", server_default="outbound"
+    )
+    provider_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    raw_disposition: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    disposition_classification: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unknown", server_default="unknown"
+    )
+    final_outcome: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    final_qualification_status: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+    mood: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_voicemail: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    recording_available: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    transcript_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    transcript_available: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    qualification_evidence_present: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    lead_created_by_event: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    source_payload_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    normalization_version: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="batchdialer_call_fact_v1",
+        server_default="batchdialer_call_fact_v1",
+    )
+    final_processing_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="pending", server_default="pending"
+    )
+
+
 class ProspectingProviderCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     """Provider-neutral campaign archive retained by migration 0075.
 

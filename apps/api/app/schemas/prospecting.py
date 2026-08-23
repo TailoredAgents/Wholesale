@@ -966,6 +966,200 @@ class ProspectingWorkbenchOverview(BaseModel):
     copilot: ProspectingCopilotOverview
 
 
+class BatchDialerVaMetricsRead(BaseModel):
+    """Provider-call facts and downstream outcomes for one scorecard slice.
+
+    ``inferred_calling_minutes`` is deliberately not represented as paid or logged
+    hours. It is only the span of observed calling activity after long idle gaps are
+    removed.
+    """
+
+    calls: int = 0
+    unique_contacts: int = 0
+    identified_contact_calls: int = 0
+    identified_contact_coverage_basis_points: int | None = None
+    human_contacts: int = 0
+    recorded_duration_calls: int = 0
+    recorded_duration_coverage_basis_points: int | None = None
+    recorded_call_seconds: int | None = None
+    average_recorded_call_seconds: int | None = None
+    qualified_candidates: int = 0
+    evidence_accepted_candidates: int = 0
+    verified_handoffs: int = 0
+    qualification_false_positives: int = 0
+    appointments_set: int = 0
+    appointments_entered: int = 0
+    handoffs_with_appointment_entered: int = 0
+    appointments_held: int = 0
+    signed_contracts: int = 0
+    closed_transactions: int = 0
+    dnc: int = 0
+    not_interested: int = 0
+    voicemails: int = 0
+    no_answers: int = 0
+    first_call_at: datetime | None = None
+    last_call_at: datetime | None = None
+    inferred_calling_minutes: int | None = None
+    human_contact_rate_basis_points: int | None = None
+    evidence_acceptance_rate_basis_points: int | None = None
+    false_positive_rate_basis_points: int | None = None
+    appointments_entered_rate_basis_points: int | None = None
+
+
+class BatchDialerVaScorecardRead(BaseModel):
+    mapping_id: UUID | None
+    provider_agent_id: str
+    provider_agent_name: str
+    user_id: UUID | None
+    user_name: str | None
+    metrics: BatchDialerVaMetricsRead
+
+
+class BatchDialerCampaignScorecardRead(BaseModel):
+    provider_campaign_id: str
+    campaign_name: str
+    metrics: BatchDialerVaMetricsRead
+
+
+class BatchDialerVaDailyActivityRead(BaseModel):
+    date: date
+    provider_agent_id: str
+    provider_agent_name: str
+    metrics: BatchDialerVaMetricsRead
+
+
+class BatchDialerVaHourlyActivityRead(BaseModel):
+    hour_start_at: datetime
+    provider_agent_id: str
+    provider_agent_name: str
+    calls: int
+    human_contacts: int
+    verified_handoffs: int
+    recorded_call_seconds: int | None
+
+
+class BatchDialerVaPerformanceRead(BaseModel):
+    timezone: str
+    date_from: date
+    date_to: date
+    as_of: datetime
+    earliest_archived_call_at: datetime | None
+    archive_history_status: Literal[
+        "no_archived_calls",
+        "selected_range_may_be_incomplete",
+        "archived_calls_available",
+    ]
+    provider_scan_window_days: int
+    provider_sync_status: Literal[
+        "missing",
+        "idle",
+        "polling",
+        "healthy",
+        "failed",
+        "unknown",
+    ]
+    provider_sync_freshness: Literal["current", "stale", "incomplete"]
+    provider_sync_last_success_at: datetime | None
+    provider_sync_error_present: bool
+    provider_sync_poll_interval_seconds: int
+    summary: BatchDialerVaMetricsRead
+    agents: list[BatchDialerVaScorecardRead]
+    campaigns: list[BatchDialerCampaignScorecardRead]
+    daily_activity: list[BatchDialerVaDailyActivityRead]
+    hourly_activity: list[BatchDialerVaHourlyActivityRead]
+    coverage_warnings: list[str]
+
+
+class BatchDialerAgentMappingRead(BaseModel):
+    id: UUID
+    provider_agent_id: str
+    provider_agent_name: str
+    user_id: UUID | None
+    user_name: str | None
+    last_seen_at: datetime
+
+
+class BatchDialerAgentMappingUserRead(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    is_active: bool
+
+
+class BatchDialerAgentMappingListRead(BaseModel):
+    items: list[BatchDialerAgentMappingRead]
+    users: list[BatchDialerAgentMappingUserRead]
+
+
+class BatchDialerAgentMappingUpdate(BaseModel):
+    user_id: UUID | None
+
+
+class BatchDialerVaCoachAnalyzeRequest(BaseModel):
+    provider_agent_id: str = Field(min_length=1, max_length=255)
+    date_from: date | None = None
+    date_to: date | None = None
+
+
+class BatchDialerVaCoachObservationRead(BaseModel):
+    observation: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachActionRead(BaseModel):
+    action: str
+    rationale: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachCallReviewRead(BaseModel):
+    provider_event_id: str
+    reason: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachCaveatRead(BaseModel):
+    caveat: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachSummaryRead(BaseModel):
+    text: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachConfidenceRead(BaseModel):
+    level: Literal["high", "medium", "low"]
+    rationale: str
+    evidence_refs: list[str]
+
+
+class BatchDialerVaCoachOutputRead(BaseModel):
+    draft_only: Literal[True]
+    summary: BatchDialerVaCoachSummaryRead
+    strengths: list[BatchDialerVaCoachObservationRead]
+    concerns: list[BatchDialerVaCoachObservationRead]
+    next_shift_actions: list[BatchDialerVaCoachActionRead]
+    calls_to_review: list[BatchDialerVaCoachCallReviewRead]
+    comparison_caveats: list[BatchDialerVaCoachCaveatRead]
+    confidence: BatchDialerVaCoachConfidenceRead
+
+
+class BatchDialerVaCoachReportRead(BaseModel):
+    run_id: UUID
+    provider_agent_id: str
+    range_start: datetime
+    range_end: datetime
+    status: str
+    output: BatchDialerVaCoachOutputRead | None
+    generated_at: datetime
+    reused: bool
+    is_stale: bool
+    refresh_required: bool
+    stale_reasons: list[Literal["evidence_changed", "generation_contract_changed"]]
+    current_evidence_as_of: datetime
+
+
 class ProspectingAnalyticsPeriodRead(BaseModel):
     date_from: date
     date_to: date

@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 21, 2026
+Last verified against the repository: August 22, 2026
 
 ## 1. Document Authority
 
@@ -499,6 +499,35 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - The prepared dormant release removes the native browser softphone and coordination loop from
   normal work. The live environment is not considered dormant until the production drain,
   deployment, and verification checklist is complete.
+
+**Prospecting > Analytics (`/os/prospecting?view=analytics`)**
+
+- The manager-only BatchDialer VA Performance section uses normalized completed-call evidence from
+  the official direct integration. It reports calls, unique contacts, provider-recorded duration,
+  detected human contacts, disposition outcomes, evidence-verified handoffs, appointments,
+  contracts, and closed transactions by agent, campaign, date, and hour.
+- Provider-selected qualified results remain **candidates** until Stonegate's transcript evidence
+  gate accepts them. The dashboard keeps candidates, evidence-accepted candidates, new verified
+  handoffs, unresolved candidates, and evidence failures separate so a weak disposition cannot
+  make a VA appear more productive. Evidence-acceptance rate measures the quality gate fairly; a
+  verified handoff is counted once, when an accepted call creates the Stonegate lead. Later
+  accepted calls attached to that lead do not create duplicate handoff credit.
+- Recorded-duration totals exclude calls with no provider duration, and unique-contact totals use
+  provider contact IDs only. Separate coverage rates and warnings expose either missing source.
+- Historical views show the earliest call currently archived by Stonegate and disclose the
+  provider's rolling scan window. Dates before that observation may be incomplete rather than
+  zero, and an earliest observed call is not presented as proof of continuous archive coverage.
+- Managers explicitly map each observed BatchDialer agent identity to one active Stonegate user.
+  Similar names or emails are never guessed, and mapping is not required for safe call ingestion.
+- First call, last call, and observed calling span are call-derived operating evidence only. They
+  are not login time, paid hours, break time, or a timeclock.
+- The VA Performance Coach creates a draft-only, evidence-cited coaching review for one agent and
+  reporting period. It may suggest calls to review and next-shift coaching, but it cannot change
+  records, campaigns, employment status, discipline, or compensation. A manager remains the final
+  reviewer.
+- Existing archived direct-call observations are normalized in bounded worker batches after the
+  analytics migration, while normal direct polling keeps current facts revision-safe. Once caught
+  up, a durable checkpoint cools the archive-wide repair audit down to a ten-minute cadence.
 
 **Prospecting > Pilot acceptance (`/os/prospecting?view=pilot`)**
 

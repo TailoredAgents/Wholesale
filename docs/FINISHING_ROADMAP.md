@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 21, 2026
+Last updated: August 22, 2026
 
 ## Purpose
 
@@ -54,7 +54,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
 | Native VA dialer | D0-D10 foundation is implemented but was not production-accepted; the owner selected BatchDialer as the production dialer | Execute BD0 dormancy without deleting native records, evidence, migrations, or shared communication behavior |
-| BatchDialer direct integration | Direct-only implementation and repository verification complete: fixed-host client, durable polling, transcript evidence gate, visible Tasks review, accepted-handoff processing, manual-appointment task, and health visibility | Deploy with the owner-managed key, run controlled qualified/appointment/review results, and reconcile provider CDRs for 24 hours |
+| BatchDialer direct integration | Direct-only implementation and repository verification complete: fixed-host client, durable polling, transcript evidence gate, visible Tasks review, accepted-handoff processing, manual-appointment task, health visibility, normalized VA performance, explicit agent mapping, and draft-only evidence-cited coaching | Confirm production fact backfill, map each provider agent, run controlled qualified/appointment/review results, review one coaching draft, and reconcile provider CDRs for 24 hours |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
