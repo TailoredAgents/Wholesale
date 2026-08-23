@@ -305,9 +305,9 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Saved lead views | Filters by predefined operating state and updates the URL | **Address Only** shows incomplete website records; other operational views exclude them |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
-| Stage filter | Shows one normalized pipeline stage | Filter only |
+| Stage filter | Shows one normalized pipeline stage in Table mode | Pipeline mode clears this filter so every valid drop destination remains visible |
 | Sort | Orders the visible leads by Newest, Oldest, or Highest priority | All Leads and Address Only default to Newest; saved operational queues default to Highest priority |
-| Table / Board | Changes display while preserving saved view, search, owner, stage, and selected seller | Display only |
+| Table / Board | Changes display while preserving saved view, search, owner, and selected seller | Board mode clears a single-stage filter so the complete pipeline can accept moves |
 | Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Lead Queue, Inbox, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
@@ -352,15 +352,22 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | --- | --- | --- |
 | Search seller pipeline | Filters by seller, property, or source | Filter only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
-| Stage filter | Shows all pipeline columns or one stage | Updates the URL; does not move leads |
-| Pipeline card | Selects seller context | Does not change stage |
+| Pipeline columns | Group active sellers by normalized operating stage | Every column remains visible while Board mode is active |
+| Pipeline card | Selects seller context | Selecting the card does not change stage |
+| Card drag grip | Moves the seller to the destination column and saves the corresponding pipeline stage | Requires `leads:edit`; mouse and press-and-hold touch dragging are supported; disabled while the same lead is saving or is Under Contract |
+| Move to stage | Provides a non-drag stage control in the selected seller preview | Uses the same permission, validation, audit, and rollback behavior as dragging; workflow-controlled destinations are disabled |
+| Saving / result notice | Shows the in-progress move and its success or failure | A rejected or stale move restores the prior column and refreshes current server state |
 | Card action | Opens the recommended workspace for current operating status | Navigation only |
 | Conversation | Opens Inbox for the lead | Requires conversation access |
 | Full record | Opens the complete lead record | Requires lead access |
 | Close pipeline context | Closes the mobile detail drawer | Mobile only |
 
-The pipeline board deliberately does not drag records between stages. Stage changes require the
-lead record's audited stage control.
+Dropping a card inside its existing grouped column is a no-op, which preserves more-specific stages
+such as Appointment Scheduled or Offer Presented. **Offer** is entered through **Valuation &
+Offer**, and **Under Contract** is entered through the signed-contract workflow; neither is a board
+drop destination. Under-contract cards cannot be dragged out of sync with their deal. Every
+successful board move uses the same audited stage-update service as the full lead record; dragging
+never bypasses stage, permission, or asset-class rules.
 
 ## Operations
 

@@ -316,6 +316,7 @@ SELLER_PIPELINE_STAGES = {
     "contacted",
     "qualification_in_progress",
     "qualified",
+    "appointment_scheduling",
     "appointment_scheduled",
     "underwriting",
     "offer_pending_approval",
@@ -335,6 +336,12 @@ LAND_UNAVAILABLE_EXECUTION_STAGES = {
     "negotiating",
     "under_contract",
 }
+
+
+class LeadStageConflictError(ValueError):
+    """Raised when a stage change was based on a stale pipeline card."""
+
+
 TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
     if payload.stage_key in TERMINAL_CLOSE_OUT_STAGES:
@@ -1278,12 +1285,17 @@ def update_lead_stage(
         principal,
         lead_id,
         include_archived=True,
+        for_update=True,
     )
     if lead is None:
         return None
     if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
         raise ValueError("Reopen this closed lead before changing its pipeline stage.")
     previous_stage = lead.stage_key
+    if payload.expected_stage_key and payload.expected_stage_key != previous_stage:
+        raise LeadStageConflictError(
+            "This lead moved after the pipeline loaded. Refresh the board and try again."
+        )
     if previous_stage == payload.stage_key:
         return get_lead_detail(db, principal, lead_id)
     if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:

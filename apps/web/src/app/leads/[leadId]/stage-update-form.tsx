@@ -12,6 +12,7 @@ const stages = [
   ["contacted", "Contacted"],
   ["qualification_in_progress", "Qualification in progress"],
   ["qualified", "Qualified"],
+  ["appointment_scheduling", "Appointment scheduling"],
   ["appointment_scheduled", "Appointment scheduled"],
   ["underwriting", "Underwriting"],
   ["offer_pending_approval", "Offer pending approval"],
@@ -77,6 +78,7 @@ export function StageUpdateForm({
         headers,
         body: JSON.stringify({
           stage_key: String(formData.get("stage_key") ?? currentStage),
+          expected_stage_key: currentStage,
           reason: String(formData.get("reason") ?? "").trim() || null,
         }),
       });

@@ -61,6 +61,7 @@ from app.services.acquisition_operations import update_appointment
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.leads import (
     AppointmentConflictError,
+    LeadStageConflictError,
     add_lead_communication,
     add_lead_note,
     archive_lead,
@@ -841,6 +842,11 @@ def update_seller_lead_stage(
 ) -> LeadDetail:
     try:
         lead = update_lead_stage(db, principal, lead_id, payload)
+    except LeadStageConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

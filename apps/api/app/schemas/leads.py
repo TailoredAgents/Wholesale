@@ -975,6 +975,7 @@ class LeadDetail(LeadRead):
 
 class LeadStageUpdate(BaseModel):
     stage_key: str = Field(min_length=1, max_length=120)
+    expected_stage_key: str | None = Field(default=None, min_length=1, max_length=120)
     reason: str | None = Field(default=None, max_length=500)
 
 

@@ -1,10 +1,26 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  pointerWithin,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import {
   ArrowRight,
   CalendarDays,
   Columns3,
   ExternalLink,
+  GripVertical,
   Inbox,
   Search,
   Table2,
@@ -12,23 +28,28 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import {
   defaultLeadSortKey,
+  apiErrorMessage,
   formatDateTime,
   getFilteredLeads,
   getLeadOperatingStatus,
   getPipelineStage,
   getSavedLeadViewCounts,
   isAddressOnlyLead,
+  leadCanEnterPipelineStage,
   leadSortOptions,
   labelize,
   pipelineStages,
+  pipelineStageMoveBlockReason,
   qualificationFieldCount,
   qualificationFieldTarget,
+  type PipelineStage,
   type LeadSortKey,
   type SavedLeadViewKey,
 } from "../os-utils";
@@ -86,7 +107,119 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
   return { href: `/os/leads/${lead.id}`, label: "Open seller record" };
 }
 
+function LeadBoardCard({
+  canEditLead,
+  isPending,
+  isSelected,
+  lead,
+  onSelect,
+  tasks,
+}: {
+  canEditLead: boolean;
+  isPending: boolean;
+  isSelected: boolean;
+  lead: LeadListItem;
+  onSelect: () => void;
+  tasks: SpeedToLeadTask[];
+}) {
+  const operatingStatus = getLeadOperatingStatus(lead, tasks);
+  const action = nextAction(lead, tasks);
+  const canMoveLead = canEditLead && getPipelineStage(lead.stage_key)?.key !== "under_contract";
+  const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
+    id: `lead:${lead.id}`,
+    data: { leadId: lead.id },
+    disabled: !canMoveLead || isPending,
+  });
+
+  return (
+    <article
+      aria-busy={isPending || undefined}
+      className={`${styles.boardCard} ${isSelected ? styles.selectedCard : ""} ${isDragging ? styles.draggingCard : ""}`}
+      ref={setNodeRef}
+    >
+      <button
+        aria-current={isSelected ? "true" : undefined}
+        className={styles.cardSelect}
+        onClick={onSelect}
+        type="button"
+      >
+        <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)} · {labelize(lead.lead_temperature)}</em></span>
+        <span className={styles.cardAddress}>{lead.property_address}</span>
+        <time className={styles.cardReceived} dateTime={lead.created_at}>Received {formatDateTime(lead.created_at)}</time>
+        <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
+        <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
+      </button>
+      {canMoveLead ? (
+        <button
+          {...attributes}
+          {...listeners}
+          aria-label={`Move ${lead.seller_name} to another pipeline stage`}
+          className={styles.dragHandle}
+          disabled={isPending}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect();
+          }}
+          title="Drag to another stage"
+          type="button"
+        >
+          <GripVertical aria-hidden="true" size={16} />
+        </button>
+      ) : null}
+      {isPending ? <span className={styles.savingBadge}>Saving</span> : null}
+    </article>
+  );
+}
+
+function LeadBoardColumn({
+  blockedReason,
+  children,
+  disabled,
+  leadCount,
+  stage,
+}: {
+  blockedReason?: string;
+  children: ReactNode;
+  disabled: boolean;
+  leadCount: number;
+  stage: PipelineStage;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `pipeline-stage:${stage.key}`,
+    data: { stageKey: stage.key },
+    disabled,
+  });
+
+  return (
+    <section
+      aria-label={`${stage.label} pipeline stage${blockedReason ? `, move unavailable: ${blockedReason}` : ""}`}
+      className={`${styles.boardColumn} ${isOver ? (blockedReason ? styles.blockedDropTarget : styles.dropTarget) : ""} ${disabled || blockedReason ? styles.disabledDropTarget : ""}`}
+      data-drop-disabled={disabled || Boolean(blockedReason) || undefined}
+      ref={setNodeRef}
+      title={blockedReason}
+    >
+      <header><h2>{stage.label}</h2><strong>{leadCount}</strong></header>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function LeadDragOverlay({ lead, tasks }: { lead: LeadListItem; tasks: SpeedToLeadTask[] }) {
+  const operatingStatus = getLeadOperatingStatus(lead, tasks);
+  return (
+    <div aria-hidden="true" className={`${styles.boardCard} ${styles.dragOverlay}`}>
+      <div className={styles.cardSelect}>
+        <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)}</em></span>
+        <span className={styles.cardAddress}>{lead.property_address}</span>
+        <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+      </div>
+    </div>
+  );
+}
+
 export function LeadsWorkspace({
+  canEditLead,
   initialAsset,
   initialDisplay,
   initialLeadId,
@@ -99,6 +232,7 @@ export function LeadsWorkspace({
   newPaidLeadCount,
   tasks,
 }: {
+  canEditLead: boolean;
   initialAsset: "all" | "house" | "land";
   initialDisplay: "table" | "board";
   initialLeadId: string;
@@ -111,26 +245,71 @@ export function LeadsWorkspace({
   newPaidLeadCount: number;
   tasks: SpeedToLeadTask[];
 }) {
+  const router = useRouter();
+  const { getToken } = useAuth();
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
+  const devUserEmail = useMemo(
+    () => process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com",
+    [],
+  );
   const [view, setView] = useState<SavedLeadViewKey>(initialView);
   const [asset, setAsset] = useState<"all" | "house" | "land">(initialAsset);
   const [display, setDisplay] = useState<"table" | "board">(initialDisplay);
   const [query, setQuery] = useState(initialQuery);
   const [owner, setOwner] = useState(initialOwner);
   const [sort, setSort] = useState<LeadSortKey>(initialSort);
-  const [stage, setStage] = useState(initialStage);
+  const [stage, setStage] = useState(initialDisplay === "board" ? "all" : initialStage);
   const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
-  const viewCounts = useMemo(() => getSavedLeadViewCounts(leads, tasks), [leads, tasks]);
+  const [workingLeads, setWorkingLeads] = useState(leads);
+  const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
+  const [pendingLeadIds, setPendingLeadIds] = useState<Set<string>>(() => new Set());
+  const [stageNotice, setStageNotice] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const pendingLeadIdsRef = useRef(new Set<string>());
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
+
+  useEffect(() => {
+    setWorkingLeads((current) =>
+      leads.map(
+        (lead) =>
+          (pendingLeadIdsRef.current.has(lead.id)
+            ? current.find((currentLead) => currentLead.id === lead.id)
+            : null) ?? lead,
+      ),
+    );
+  }, [leads]);
+
+  useEffect(() => {
+    if (initialDisplay !== "board" || initialStage === "all") return;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("stage");
+    window.history.replaceState(
+      null,
+      "",
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+  }, [initialDisplay, initialStage]);
+
+  const viewCounts = useMemo(
+    () => getSavedLeadViewCounts(workingLeads, tasks),
+    [tasks, workingLeads],
+  );
   const owners = useMemo(
     () =>
       Array.from(
-        new Set(leads.map((lead) => lead.assigned_user_email).filter((email): email is string => Boolean(email))),
+        new Set(workingLeads.map((lead) => lead.assigned_user_email).filter((email): email is string => Boolean(email))),
       ).sort(),
-    [leads],
+    [workingLeads],
   );
   const baseLeads = useMemo(
-    () => getFilteredLeads(leads, tasks, view, sort),
-    [leads, sort, tasks, view],
+    () => getFilteredLeads(workingLeads, tasks, view, sort),
+    [sort, tasks, view, workingLeads],
   );
   const visibleLeads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -153,11 +332,8 @@ export function LeadsWorkspace({
     visibleLeads.find((lead) => lead.id === selectedLeadId) ?? visibleLeads[0] ?? null;
   const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
   const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
-  const visibleStages =
-    stage === "all"
-      ? pipelineStages
-      : pipelineStages.filter((item) => item.key === stage);
-  const contactReadyLeads = leads.filter((lead) => !isAddressOnlyLead(lead));
+  const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
+  const contactReadyLeads = workingLeads.filter((lead) => !isAddressOnlyLead(lead));
   const newLeadCount = contactReadyLeads.filter((lead) => lead.stage_key === "new").length;
   const qualifiedCount = contactReadyLeads.filter((lead) =>
     [
@@ -220,6 +396,11 @@ export function LeadsWorkspace({
 
   function chooseDisplay(nextDisplay: "table" | "board") {
     setDisplay(nextDisplay);
+    if (nextDisplay === "board") {
+      setStage("all");
+      replaceLocation({ display: nextDisplay, stage: "all" });
+      return;
+    }
     replaceLocation({ display: nextDisplay });
   }
 
@@ -234,6 +415,139 @@ export function LeadsWorkspace({
     if (query) values.set("q", query);
     return `/os/leads/${leadId}?returnTo=${encodeURIComponent(`/os/leads?${values.toString()}`)}`;
   }
+
+  async function moveLeadToStage(leadId: string, targetStage: PipelineStage) {
+    const lead = workingLeads.find((item) => item.id === leadId);
+    if (!lead || !canEditLead || pendingLeadIdsRef.current.has(leadId)) return;
+
+    const currentPipelineStage = getPipelineStage(lead.stage_key);
+    if (currentPipelineStage?.key === targetStage.key) {
+      setStageNotice({
+        message: `${lead.seller_name} is already in ${targetStage.label}.`,
+        tone: "success",
+      });
+      return;
+    }
+    const moveBlockReason = pipelineStageMoveBlockReason(lead, targetStage);
+    if (moveBlockReason) {
+      setStageNotice({
+        message: moveBlockReason,
+        tone: "error",
+      });
+      return;
+    }
+
+    const previousStageKey = lead.stage_key;
+    pendingLeadIdsRef.current.add(leadId);
+    setPendingLeadIds(new Set(pendingLeadIdsRef.current));
+    setStageNotice(null);
+    setWorkingLeads((current) =>
+      current.map((item) =>
+        item.id === leadId ? { ...item, stage_key: targetStage.dropStageKey } : item,
+      ),
+    );
+
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+
+      const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}/stage`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          expected_stage_key: previousStageKey,
+          reason: `Moved on Leads board from ${currentPipelineStage?.label ?? labelize(previousStageKey)} to ${targetStage.label}.`,
+          stage_key: targetStage.dropStageKey,
+        }),
+      });
+      const responseBody = await response.json().catch(() => null) as {
+        detail?: unknown;
+        stage_key?: string;
+      } | null;
+      if (!response.ok) {
+        throw new Error(
+          apiErrorMessage(responseBody?.detail, "Unable to move this lead. Its original stage was restored."),
+        );
+      }
+
+      setWorkingLeads((current) =>
+        current.map((item) =>
+          item.id === leadId
+            ? { ...item, stage_key: responseBody?.stage_key ?? targetStage.dropStageKey }
+            : item,
+        ),
+      );
+      setStageNotice({
+        message: `${lead.seller_name} moved to ${targetStage.label}.`,
+        tone: "success",
+      });
+    } catch (error) {
+      setWorkingLeads((current) =>
+        current.map((item) =>
+          item.id === leadId ? { ...item, stage_key: previousStageKey } : item,
+        ),
+      );
+      setStageNotice({
+        message: error instanceof Error ? error.message : "Unable to move this lead. Its original stage was restored.",
+        tone: "error",
+      });
+    } finally {
+      pendingLeadIdsRef.current.delete(leadId);
+      setPendingLeadIds(new Set(pendingLeadIdsRef.current));
+      router.refresh();
+    }
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const leadId = event.active.data.current?.leadId;
+    setActiveLeadId(typeof leadId === "string" ? leadId : null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const leadId = event.active.data.current?.leadId;
+    const targetStageKey = event.over?.data.current?.stageKey;
+    setActiveLeadId(null);
+    if (typeof leadId !== "string" || typeof targetStageKey !== "string") return;
+    const targetStage = pipelineStages.find((item) => item.key === targetStageKey);
+    if (targetStage) void moveLeadToStage(leadId, targetStage);
+  }
+
+  const dragAnnouncements: Announcements = {
+    onDragStart({ active }) {
+      const leadId = active.data.current?.leadId;
+      const lead = workingLeads.find((item) => item.id === leadId);
+      return lead ? `Picked up ${lead.seller_name}.` : "Picked up lead.";
+    },
+    onDragOver({ active, over }) {
+      const leadId = active.data.current?.leadId;
+      const lead = workingLeads.find((item) => item.id === leadId);
+      const targetStageKey = over?.data.current?.stageKey;
+      const targetStage = pipelineStages.find((item) => item.key === targetStageKey);
+      const blockedReason = lead && targetStage
+        ? pipelineStageMoveBlockReason(lead, targetStage)
+        : null;
+      if (blockedReason) return `${targetStage?.label ?? "That stage"} is unavailable. ${blockedReason}`;
+      return targetStage ? `Over ${targetStage.label}.` : "Not over a pipeline stage.";
+    },
+    onDragEnd({ active, over }) {
+      const leadId = active.data.current?.leadId;
+      const lead = workingLeads.find((item) => item.id === leadId);
+      const targetStageKey = over?.data.current?.stageKey;
+      const targetStage = pipelineStages.find((item) => item.key === targetStageKey);
+      const blockedReason = lead && targetStage
+        ? pipelineStageMoveBlockReason(lead, targetStage)
+        : null;
+      if (blockedReason) return `Move blocked. ${blockedReason}`;
+      return lead && targetStage
+        ? `${lead.seller_name} dropped in ${targetStage.label}. Saving the change.`
+        : "Move cancelled.";
+    },
+    onDragCancel() {
+      return "Move cancelled.";
+    },
+  };
 
   return (
     <div className={styles.workspace}>
@@ -299,10 +613,16 @@ export function LeadsWorkspace({
           </label>
           <label>
             <span>Stage</span>
-            <select onChange={(event) => {
-              setStage(event.target.value);
-              replaceLocation({ stage: event.target.value });
-            }} value={stage}>
+            <select
+              aria-label={display === "board" ? "All stages shown in Board view" : "Filter leads by stage"}
+              disabled={display === "board"}
+              onChange={(event) => {
+                setStage(event.target.value);
+                replaceLocation({ stage: event.target.value });
+              }}
+              title={display === "board" ? "Board view shows every pipeline stage so leads can be moved between columns." : undefined}
+              value={stage}
+            >
               <option value="all">All stages</option>
               {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
@@ -325,6 +645,15 @@ export function LeadsWorkspace({
           </div>
           <strong>{visibleLeads.length} shown</strong>
         </div>
+        {stageNotice ? (
+          <p
+            aria-live={stageNotice.tone === "error" ? "assertive" : "polite"}
+            className={stageNotice.tone === "error" ? styles.stageError : styles.stageSuccess}
+            role={stageNotice.tone === "error" ? "alert" : "status"}
+          >
+            {stageNotice.message}
+          </p>
+        ) : null}
 
         <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
           {display === "table" ? <div className={styles.list}>
@@ -359,41 +688,55 @@ export function LeadsWorkspace({
               <div className={styles.empty}><strong>No leads match this view</strong><span>Change the view, owner, stage, or search.</span></div>
             ) : null}
           </div> : (
-            <div className={styles.board}>
-              {visibleStages.map((pipelineStage) => {
-                const stageLeads = visibleLeads.filter(
-                  (lead) => getPipelineStage(lead.stage_key)?.key === pipelineStage.key,
-                );
-                return (
-                  <section className={styles.boardColumn} key={pipelineStage.key}>
-                    <header><h2>{pipelineStage.label}</h2><strong>{stageLeads.length}</strong></header>
-                    <div>
-                      {stageLeads.map((lead) => {
-                        const operatingStatus = getLeadOperatingStatus(lead, tasks);
-                        const action = nextAction(lead, tasks);
-                        return (
-                          <button
-                            aria-current={selectedLead?.id === lead.id ? "true" : undefined}
-                            className={selectedLead?.id === lead.id ? styles.selectedCard : undefined}
-                            key={lead.id}
-                            onClick={() => selectLead(lead.id)}
-                            type="button"
-                          >
-                            <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)} · {labelize(lead.lead_temperature)}</em></span>
-                            <span className={styles.cardAddress}>{lead.property_address}</span>
-                            <time className={styles.cardReceived} dateTime={lead.created_at}>Received {formatDateTime(lead.created_at)}</time>
-                            <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
-                            <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
-                            <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
-                          </button>
-                        );
-                      })}
+            <DndContext
+              accessibility={{
+                announcements: dragAnnouncements,
+                screenReaderInstructions: {
+                  draggable: "Press Enter on the move handle to open the seller preview, then use the Move to stage selector. Mouse and touch users can drag the handle between columns.",
+                },
+              }}
+              collisionDetection={pointerWithin}
+              onDragCancel={() => setActiveLeadId(null)}
+              onDragEnd={handleDragEnd}
+              onDragStart={handleDragStart}
+              sensors={sensors}
+            >
+              <div className={styles.board}>
+                {pipelineStages.map((pipelineStage) => {
+                  const stageLeads = visibleLeads.filter(
+                    (lead) => getPipelineStage(lead.stage_key)?.key === pipelineStage.key,
+                  );
+                  const dropBlockedReason = activeLead
+                    ? pipelineStageMoveBlockReason(activeLead, pipelineStage) ?? undefined
+                    : undefined;
+                  return (
+                    <LeadBoardColumn
+                      blockedReason={dropBlockedReason}
+                      disabled={!canEditLead}
+                      key={pipelineStage.key}
+                      leadCount={stageLeads.length}
+                      stage={pipelineStage}
+                    >
+                      {stageLeads.map((lead) => (
+                        <LeadBoardCard
+                          canEditLead={canEditLead}
+                          isPending={pendingLeadIds.has(lead.id)}
+                          isSelected={selectedLead?.id === lead.id}
+                          key={lead.id}
+                          lead={lead}
+                          onSelect={() => selectLead(lead.id)}
+                          tasks={tasks}
+                        />
+                      ))}
                       {!stageLeads.length ? <p>No leads</p> : null}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+                    </LeadBoardColumn>
+                  );
+                })}
+              </div>
+              <DragOverlay>
+                {activeLead ? <LeadDragOverlay lead={activeLead} tasks={tasks} /> : null}
+              </DragOverlay>
+            </DndContext>
           )}
 
           <aside className={`${styles.preview} ${mobileDetailOpen ? styles.previewOpen : ""}`}>
@@ -407,6 +750,41 @@ export function LeadsWorkspace({
                   <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
                   <span>{labelize(selectedLead.asset_class)} · {labelize(selectedLead.stage_key)}</span>
                 </div>
+                {canEditLead ? (
+                  <label className={styles.moveControl}>
+                    <span>Move to stage</span>
+                    <select
+                      aria-label={`Move ${selectedLead.seller_name} to pipeline stage`}
+                      disabled={
+                        pendingLeadIds.has(selectedLead.id) ||
+                        getPipelineStage(selectedLead.stage_key)?.key === "under_contract"
+                      }
+                      onChange={(event) => {
+                        const targetStage = pipelineStages.find((item) => item.key === event.target.value);
+                        if (targetStage) void moveLeadToStage(selectedLead.id, targetStage);
+                      }}
+                      value={getPipelineStage(selectedLead.stage_key)?.key ?? ""}
+                    >
+                      {pipelineStages.map((pipelineStage) => (
+                        <option
+                          disabled={!leadCanEnterPipelineStage(selectedLead, pipelineStage)}
+                          key={pipelineStage.key}
+                          title={pipelineStageMoveBlockReason(selectedLead, pipelineStage) ?? undefined}
+                          value={pipelineStage.key}
+                        >
+                          {pipelineStage.label}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      {pendingLeadIds.has(selectedLead.id)
+                        ? "Saving stage…"
+                        : getPipelineStage(selectedLead.stage_key)?.key === "under_contract"
+                          ? "Under-contract stages move through Contract & Deal."
+                          : "Available on keyboard and mobile. Offer and contract stages use their controlled workflows."}
+                    </small>
+                  </label>
+                ) : null}
                 <dl>
                   <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                   <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>

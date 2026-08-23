@@ -1629,9 +1629,22 @@ test records.
 
 ### Pipeline
 
-Select **Pipeline** to switch the same filtered records to a stage board. Search, owner, stage,
-selected seller, and display mode stay in the URL. Use the recommended next action to open Inbox,
-Lead Queue, Calendar, Valuation & Offer, Contract & Deal, or the complete record.
+Select **Pipeline** to switch the same active records to a stage board. Search, owner, selected
+seller, and display mode stay in the URL. Pipeline mode clears a single-stage filter so every valid
+drop destination remains visible. Use the recommended next action to open Inbox, Lead Queue,
+Calendar, Valuation & Offer, Contract & Deal, or the complete record.
+
+If you have lead-edit access, drag the grip on a lead card into another column to change its saved
+pipeline stage. On a touch device, press and hold the grip briefly before moving it. The card moves
+immediately while Stonegate saves, then displays confirmation. If the save is rejected, the card
+returns to its original column and the board refreshes. Select the card and use **Move to stage** in
+the seller preview when dragging is inconvenient. Dropping inside the card's existing grouped
+column does not rewrite a more-specific stage such as Appointment Scheduled or Offer Presented.
+
+**Offer** and **Under Contract** are workflow-controlled destinations: prepare the offer in
+**Valuation & Offer** and complete the signed contract in **Contract & Deal** instead of dragging a
+card there. An under-contract card is locked on the board so an active deal cannot be moved out of
+sync. Staff without `leads:edit` can view and select pipeline cards but cannot move them.
 
 Move a stage only when the corresponding real-world event occurred. Stage movement does not
 replace qualification, approvals, or evidence.

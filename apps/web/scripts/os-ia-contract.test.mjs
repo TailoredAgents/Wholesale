@@ -385,7 +385,7 @@ test("address-only website leads stay visible without polluting operational queu
   assert.match(utilities, /\["all", "address_only"\]\.includes\(viewKey\) \? "newest" : "priority"/);
   assert.match(utilities, /if \(isAddressOnlyLead\(lead\)\) \{\s*return false;/);
   assert.match(workspace, /Review address-only lead/);
-  assert.match(workspace, /const contactReadyLeads = leads\.filter\(\(lead\) => !isAddressOnlyLead\(lead\)\)/);
+  assert.match(workspace, /const contactReadyLeads = (?:leads|workingLeads)\.filter\(\(lead\) => !isAddressOnlyLead\(lead\)\)/);
   assert.match(workspace, /const newLeadCount = contactReadyLeads\.filter/);
   assert.match(workspace, /const unassignedCount = contactReadyLeads\.filter/);
   assert.match(workspace, /Paid prospects/);

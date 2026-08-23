@@ -1,29 +1,92 @@
 import type { LeadListItem, SpeedToLeadTask } from "../lib/api";
 
 export const pipelineStages = [
-  { key: "new", label: "New", stageKeys: ["new", "contact_attempt_due", "reopened"] },
-  { key: "contacting", label: "Contacting", stageKeys: ["attempting_contact"] },
-  { key: "contacted", label: "Contacted", stageKeys: ["contacted"] },
-  { key: "qualifying", label: "Qualifying", stageKeys: ["qualification_in_progress"] },
+  {
+    key: "new",
+    label: "New",
+    dropStageKey: "new",
+    stageKeys: ["new", "contact_attempt_due", "reopened"],
+  },
+  {
+    key: "contacting",
+    label: "Contacting",
+    dropStageKey: "attempting_contact",
+    stageKeys: ["attempting_contact"],
+  },
+  {
+    key: "contacted",
+    label: "Contacted",
+    dropStageKey: "contacted",
+    stageKeys: ["contacted"],
+  },
+  {
+    key: "qualifying",
+    label: "Qualifying",
+    dropStageKey: "qualification_in_progress",
+    stageKeys: ["qualification_in_progress"],
+  },
   {
     key: "qualified",
     label: "Qualified",
+    dropStageKey: "qualified",
     stageKeys: ["qualified", "qualification_complete"],
   },
   {
     key: "appointment",
     label: "Appointment",
+    dropStageKey: "appointment_scheduling",
     stageKeys: ["appointment_scheduling", "appointment_set", "appointment_scheduled"],
   },
-  { key: "underwriting", label: "Underwriting", stageKeys: ["underwriting"] },
+  {
+    key: "underwriting",
+    label: "Underwriting",
+    dropStageKey: "underwriting",
+    stageKeys: ["underwriting"],
+  },
   {
     key: "offer",
     label: "Offer",
+    dropStageKey: "offer_pending_approval",
     stageKeys: ["offer_pending_approval", "offer_ready", "offer_presented", "negotiating"],
   },
-  { key: "nurture", label: "Nurture", stageKeys: ["long_term_follow_up"] },
-  { key: "under_contract", label: "Under contract", stageKeys: ["under_contract"] },
+  {
+    key: "nurture",
+    label: "Nurture",
+    dropStageKey: "long_term_follow_up",
+    stageKeys: ["long_term_follow_up"],
+  },
+  {
+    key: "under_contract",
+    label: "Under contract",
+    dropStageKey: "under_contract",
+    stageKeys: ["under_contract"],
+  },
 ] as const;
+
+export type PipelineStage = (typeof pipelineStages)[number];
+
+export function leadCanEnterPipelineStage(
+  lead: Pick<LeadListItem, "asset_class" | "stage_key">,
+  stage: PipelineStage,
+) {
+  return pipelineStageMoveBlockReason(lead, stage) === null;
+}
+
+export function pipelineStageMoveBlockReason(
+  lead: Pick<LeadListItem, "asset_class" | "stage_key">,
+  stage: PipelineStage,
+) {
+  if (getPipelineStage(lead.stage_key)?.key === "under_contract") {
+    return "Under-contract leads move through the Contract & Deal workflow.";
+  }
+  if (stage.key === "offer") {
+    return "Offer stages move through the Valuation & Offer workflow.";
+  }
+  if (stage.key === "under_contract") {
+    return "Under-contract status requires the signed-contract workflow.";
+  }
+  return null;
+}
 
 export const boardStages = pipelineStages.slice(0, 6);
 const terminalStages = new Set(["dead", "disqualified", "under_contract"]);

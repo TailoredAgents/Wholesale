@@ -1290,7 +1290,11 @@ def test_read_lead_detail_and_update_stage(
     update_response = client.patch(
         f"/api/v1/leads/{lead_id}/stage",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json={"stage_key": "contacted", "reason": "Reached seller by phone."},
+        json={
+            "stage_key": "contacted",
+            "expected_stage_key": "new",
+            "reason": "Reached seller by phone.",
+        },
     )
 
     assert update_response.status_code == 200
@@ -1300,6 +1304,81 @@ def test_read_lead_detail_and_update_stage(
     assert "lead.stage_changed" in [
         activity["event_type"] for activity in updated["recent_activity"]
     ]
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.stage_update")
+            )
+            or 0
+        )
+        == 1
+    )
+
+
+def test_update_lead_stage_accepts_pipeline_appointment_scheduling(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "appointment_scheduling",
+            "expected_stage_key": "new",
+            "reason": "Moved on Leads board from New to Appointment.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["stage_key"] == "appointment_scheduling"
+
+
+def test_update_lead_stage_rejects_stale_pipeline_card(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    first_response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"stage_key": "contacted", "expected_stage_key": "new"},
+    )
+    stale_response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"stage_key": "qualified", "expected_stage_key": "new"},
+    )
+
+    assert first_response.status_code == 200
+    assert stale_response.status_code == 409
+    assert stale_response.json()["detail"] == (
+        "This lead moved after the pipeline loaded. Refresh the board and try again."
+    )
+    detail_response = client.get(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["stage_key"] == "contacted"
     assert (
         int(
             db_session.scalar(

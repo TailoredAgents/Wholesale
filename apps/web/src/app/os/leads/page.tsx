@@ -132,6 +132,7 @@ export default async function LeadsPage({
 
       {activeView === "database" ? (
         <LeadsWorkspace
+          canEditLead={canCreateLead}
           initialDisplay={display}
           initialAsset={requestedAsset as "all" | "house" | "land"}
           initialLeadId={first(params.lead)}

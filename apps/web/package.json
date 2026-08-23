@@ -19,6 +19,7 @@
     "audit:prospecting-operations": "node --test scripts/prospecting-dialer-operations-contract.test.mjs",
     "audit:prospecting-analytics": "node --test scripts/prospecting-analytics-contract.test.mjs",
     "audit:batchdialer-performance": "node --test scripts/batchdialer-va-performance-contract.test.mjs",
+    "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:prospecting-pilot": "node --test scripts/prospecting-pilot-acceptance-contract.test.mjs",
     "audit:prospecting-dormancy": "node --test scripts/prospecting-dormancy-contract.test.mjs",
     "baseline:ia": "node scripts/os-ia-baseline.mjs",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.17",
+    "@dnd-kit/core": "^6.3.1",
     "@sentry/nextjs": "^10.68.0",
     "@twilio/voice-sdk": "^2.18.3",
     "lucide-react": "^0.468.0",
