@@ -25,6 +25,7 @@ import type {
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
+import { AcquisitionsPerformanceScorecard } from "./acquisitions-performance-scorecard";
 import styles from "./lead-manager.module.css";
 
 type View = "today" | "qualification" | "performance" | "standards";
@@ -143,6 +144,8 @@ export function LeadManagerWorkspace({
   const [editedSummary, setEditedSummary] = useState("");
   const [editedMessageBody, setEditedMessageBody] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
+  const activeView: View =
+    !data.can_manage && (view === "performance" || view === "standards") ? "today" : view;
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -540,16 +543,20 @@ export function LeadManagerWorkspace({
         {([
           ["today", "Daily queue"],
           ["qualification", "Qualification"],
-          ["performance", "Performance"],
-          ...(data.can_manage ? [["standards", "Standards"]] : []),
+          ...(data.can_manage
+            ? [
+                ["performance", "Performance"],
+                ["standards", "Standards"],
+              ]
+            : []),
         ] as Array<[View, string]>).map(([key, label]) => (
-          <button className={view === key ? styles.activeTab : ""} key={key} onClick={() => setView(key)} type="button">{label}</button>
+          <button className={activeView === key ? styles.activeTab : ""} key={key} onClick={() => setView(key)} type="button">{label}</button>
         ))}
       </nav>
 
       {message ? <p className={message === "Saved." ? styles.notice : styles.error}>{message}</p> : null}
 
-      {view === "today" ? (
+      {activeView === "today" ? (
         <div className={styles.queueGrid}>
           <section className={styles.queueSection}>
             <div className={styles.sectionHeader}><div><span>First priority</span><h3>Accept warm handoffs</h3></div><Clock3 size={19} /></div>
@@ -572,7 +579,7 @@ export function LeadManagerWorkspace({
         </div>
       ) : null}
 
-      {view === "qualification" ? (
+      {activeView === "qualification" ? (
         <div className={styles.qualificationLayout}>
           <aside className={styles.qualificationList}>
             <div className={styles.sectionHeader}><div><span>Assigned queue</span><h3>Needs qualification</h3></div></div>
@@ -647,14 +654,11 @@ export function LeadManagerWorkspace({
         </div>
       ) : null}
 
-      {view === "performance" ? (
-        <section className={styles.performance}>
-          <div className={styles.sectionHeader}><div><span>Trailing 30 days</span><h3>Acquisitions scorecard</h3></div></div>
-          <div className={styles.tableWrap}><table><thead><tr><th>Manager</th><th>Accepted</th><th>Within SLA</th><th>Avg response</th><th>Qualified</th><th>Set</th><th>Held</th><th>No-show</th><th>Contracts</th><th>Follow-up quality</th></tr></thead><tbody>{data.scorecards.map((item) => <tr key={item.user_id}><td>{item.user_name}</td><td>{item.handoffs_accepted}/{item.handoffs_received}</td><td>{item.accepted_within_sla}</td><td>{item.average_acceptance_minutes === null ? "-" : `${item.average_acceptance_minutes}m`}</td><td>{item.qualifications_completed}</td><td>{item.appointments_set}</td><td>{item.appointments_held}</td><td>{item.appointment_no_shows}</td><td>{item.contracts_created}</td><td>{percent(item.follow_up_quality_basis_points)}</td></tr>)}</tbody></table></div>
-        </section>
+      {activeView === "performance" && data.can_manage ? (
+        <AcquisitionsPerformanceScorecard />
       ) : null}
 
-      {view === "standards" && data.can_manage ? (
+      {activeView === "standards" && data.can_manage ? (
         <div className={styles.standardsGrid}>
           <section className={styles.standardForm}>
             <div className={styles.sectionHeader}><div><span>Controlled process</span><h3>Create qualification version</h3></div></div>

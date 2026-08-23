@@ -1,12 +1,13 @@
-from typing import Annotated
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.schemas.acquisition_performance import AcquisitionPerformanceOverview
 from app.schemas.lead_manager import (
     LeadManagerAcceptRequest,
     LeadManagerCaseRead,
@@ -20,6 +21,7 @@ from app.schemas.lead_manager import (
     QualificationScriptRead,
     QualificationSessionRead,
 )
+from app.services.acquisition_performance import get_acquisition_performance
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.lead_manager import (
     accept_case,
@@ -44,6 +46,26 @@ def read_lead_manager_overview(
     principal: Annotated[Principal, Depends(work_dependency)],
 ) -> LeadManagerOverview:
     return get_overview(db, principal)
+
+
+@router.get("/performance")
+def read_acquisition_performance(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+    period_days: int = 30,
+) -> AcquisitionPerformanceOverview:
+    if period_days not in (30, 90):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="period_days must be 30 or 90.",
+        )
+    response.headers["Cache-Control"] = "private, no-store"
+    return get_acquisition_performance(
+        db,
+        principal,
+        period_days=cast(Literal[30, 90], period_days),
+    )
 
 
 @router.post("/scripts", status_code=201)

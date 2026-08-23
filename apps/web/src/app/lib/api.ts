@@ -1935,6 +1935,52 @@ export type LeadManagerCopilotRecommendation = {
   reviewed_at: string | null;
 };
 
+export type AcquisitionsPerformanceDimensionKey =
+  | "speed_to_lead"
+  | "follow_up_discipline"
+  | "conversation_quality"
+  | "qualification_quality"
+  | "crm_hygiene"
+  | "appointment_execution"
+  | "mature_outcomes";
+
+export type AcquisitionsPerformanceDimension = {
+  key: AcquisitionsPerformanceDimensionKey;
+  label: string;
+  weight_basis_points: number;
+  score: number | null;
+  status: "unavailable" | "building" | "ready";
+  sample_size: number;
+  minimum_sample_size: number;
+  numerator: number | null;
+  denominator: number | null;
+  display_value: string;
+  detail: string;
+};
+
+export type AcquisitionsPerformanceScorecard = {
+  user_id: string;
+  user_name: string;
+  overall_score: number | null;
+  coverage_basis_points: number;
+  reliability_status: "building" | "provisional" | "reliable";
+  dimensions: AcquisitionsPerformanceDimension[];
+  strengths: string[];
+  focus_areas: string[];
+  warnings: string[];
+};
+
+export type AcquisitionsPerformanceOverview = {
+  period_days: 30 | 90;
+  period_start: string;
+  period_end: string;
+  policy_version: string;
+  shadow_mode: boolean;
+  weights: Record<AcquisitionsPerformanceDimensionKey, number>;
+  scorecards: AcquisitionsPerformanceScorecard[];
+  warnings: string[];
+};
+
 export type LeadManagerOverview = {
   current_user_id: string;
   current_user_name: string;

@@ -216,6 +216,32 @@ class LandStructuredCallNotes(StructuredCallNotes):
 CallNotes = LandStructuredCallNotes | StructuredCallNotes
 
 
+class AcquisitionSalesCallQuality(BaseModel):
+    """Evidence-cited coaching for a recorded warm-seller conversation.
+
+    The scores describe observable language and sales behaviors in the transcript. They do not
+    attempt to infer accent, personality, emotion, protected traits, or vocal/acoustic qualities.
+    Nullable category scores are required so an unevaluable call is explicit rather than being
+    silently converted into a zero.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    evaluable: bool
+    evaluation_reason: str = Field(max_length=1000)
+    speaker_attribution_confidence: int = Field(ge=0, le=100)
+    active_listening_score: int | None = Field(ge=0, le=100)
+    discovery_score: int | None = Field(ge=0, le=100)
+    objection_handling_score: int | None = Field(ge=0, le=100)
+    next_step_clarity_score: int | None = Field(ge=0, le=100)
+    professionalism_score: int | None = Field(ge=0, le=100)
+    compliance_score: int | None = Field(ge=0, le=100)
+    strengths: list[str] = Field(max_length=8)
+    coaching_points: list[str] = Field(max_length=8)
+    evidence: list[CallNoteEvidence] = Field(max_length=30)
+    confidence: int = Field(ge=0, le=100)
+
+
 class CallTranscriptRead(BaseModel):
     id: UUID
     status: str

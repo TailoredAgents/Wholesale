@@ -46,6 +46,8 @@ from app.models.foundation import (
     Task,
 )
 from app.schemas.voice import (
+    AcquisitionSalesCallQuality,
+    CallNoteEvidence,
     CallNotes,
     CallTranscriptRead,
     CallTranscriptReview,
@@ -90,6 +92,37 @@ promise buildability, legal access, zoning compliance, utility availability, sur
 or boundaries, title quality, septic suitability, or environmental clearance. Do not turn a
 seller's intended use into a verified permitted use. Every populated land-specific field must
 have a matching evidence entry using that field's exact schema name."""
+ACQUISITION_SALES_QUALITY_POLICY_VERSION = "stonegate-acquisitions-call-quality-v1"
+ACQUISITION_SALES_QUALITY_PROMPT = """You are a private sales coach evaluating a recorded
+Stonegate acquisition conversation from its diarized transcript. Score only observable words and
+conversation behaviors. Do not infer or score vocal pitch, accent, dialect, personality, emotion,
+enthusiasm, age, gender, disability, race, ethnicity, national origin, or any other protected or
+identity-related trait. Do not penalize grammar, speech patterns, or communication differences.
+
+First identify the Stonegate team member from the conversation context and call direction. If the
+speakers cannot be attributed with reasonable confidence, the call is voicemail/no-answer, or the
+transcript does not contain enough two-way seller conversation, return evaluable=false and null for
+all six category scores. Never turn missing evidence into a zero.
+
+For an evaluable call, score these observable behaviors from 0 to 100:
+- active_listening_score: acknowledges seller statements and asks relevant follow-up questions;
+- discovery_score: uncovers motivation, timeline, condition, occupancy, price, and decision context;
+- objection_handling_score: addresses stated concerns accurately and without pressure;
+- next_step_clarity_score: confirms a specific, realistic next action and ownership;
+- professionalism_score: uses respectful, calm, clear, non-manipulative language;
+- compliance_score: avoids unsupported promises, misrepresentation, pressure, and binding claims.
+
+Every non-null category must have transcript evidence using that score field's exact name. Evidence
+must cite the supplied segment index, start time, and a short supporting excerpt. This is coaching
+evidence only. It must never recommend compensation, employment, discipline, or lead assignment."""
+ACQUISITION_SALES_QUALITY_SCORE_FIELDS = (
+    "active_listening_score",
+    "discovery_score",
+    "objection_handling_score",
+    "next_step_clarity_score",
+    "professionalism_score",
+    "compliance_score",
+)
 LEAD_UPDATE_FIELDS = {
     "motivation": "motivation",
     "timeline": "desired_timeline",
@@ -826,6 +859,56 @@ def process_call_transcript(
                 "output_tokens": None,
                 "total_tokens": note_usage,
             }
+        acquisition_sales_quality: AcquisitionSalesCallQuality | None = None
+        acquisition_sales_quality_status = "not_applicable"
+        acquisition_sales_quality_error: str | None = None
+        acquisition_sales_quality_usage: dict[str, int | None] | None = None
+        acquisition_sales_quality_cost: AiCostEstimate | None = None
+        acquisition_sales_quality_model: str | None = None
+        if lead is not None and call.actor_user_id is not None:
+            acquisition_sales_quality_status = "unavailable"
+            acquisition_sales_quality_model = (
+                settings.openai_high_volume_model or settings.openai_default_model
+            )
+            try:
+                quality_payload, quality_usage = client.create_structured_response(
+                    model=acquisition_sales_quality_model,
+                    system_prompt=ACQUISITION_SALES_QUALITY_PROMPT,
+                    user_prompt=build_acquisition_sales_quality_prompt(
+                        call,
+                        transcript,
+                        asset_class=asset_class,
+                    ),
+                    schema_name="stonegate_acquisition_sales_quality",
+                    json_schema=AcquisitionSalesCallQuality.model_json_schema(),
+                    reasoning_effort="low",
+                    max_output_tokens=1600,
+                )
+                acquisition_sales_quality = normalize_acquisition_sales_quality(
+                    AcquisitionSalesCallQuality.model_validate(quality_payload),
+                    speaker_segments=transcript.speaker_segments or [],
+                )
+                acquisition_sales_quality_status = (
+                    "scored" if acquisition_sales_quality.evaluable else "not_evaluable"
+                )
+                if isinstance(quality_usage, int):
+                    acquisition_sales_quality_usage = {
+                        "input_tokens": None,
+                        "output_tokens": None,
+                        "total_tokens": quality_usage,
+                    }
+                else:
+                    acquisition_sales_quality_usage = quality_usage
+                acquisition_sales_quality_cost = estimate_openai_cost(
+                    settings,
+                    model=acquisition_sales_quality_model,
+                    input_tokens=acquisition_sales_quality_usage["input_tokens"],
+                    output_tokens=acquisition_sales_quality_usage["output_tokens"],
+                )
+            except (OpenAIClientError, ValidationError, ValueError) as exc:
+                # Call notes remain operational even when optional coaching is unavailable.
+                # Missing coaching evidence is shown as N/A in the scorecard, never as zero.
+                acquisition_sales_quality_error = str(exc)[:1000]
         notes_cost = estimate_openai_cost(
             settings,
             model=settings.openai_default_model,
@@ -834,6 +917,9 @@ def process_call_transcript(
         )
         pricing_components = [notes_cost.to_metadata()]
         component_costs = [notes_cost.cost_microusd]
+        if acquisition_sales_quality_cost is not None:
+            pricing_components.append(acquisition_sales_quality_cost.to_metadata())
+            component_costs.append(acquisition_sales_quality_cost.cost_microusd)
         if audio_cost is not None:
             pricing_components.insert(0, audio_cost.to_metadata())
             component_costs.insert(0, audio_cost.cost_microusd)
@@ -845,10 +931,20 @@ def process_call_transcript(
         input_tokens = sum_optional_counts(
             audio_input_tokens,
             note_usage["input_tokens"],
+            (
+                acquisition_sales_quality_usage["input_tokens"]
+                if acquisition_sales_quality_usage is not None
+                else None
+            ),
         )
         output_tokens = sum_optional_counts(
             audio_output_tokens,
             note_usage["output_tokens"],
+            (
+                acquisition_sales_quality_usage["output_tokens"]
+                if acquisition_sales_quality_usage is not None
+                else None
+            ),
         )
         if lead is not None:
             lead = lock_organization_lead(
@@ -913,6 +1009,21 @@ def process_call_transcript(
                 str(prospecting_attempt.id) if prospecting_attempt is not None else None
             ),
             "prospecting_suggestions": prospecting_suggestions,
+            "acquisition_sales_quality": (
+                acquisition_sales_quality.model_dump(mode="json")
+                if acquisition_sales_quality is not None
+                else None
+            ),
+            "acquisition_sales_quality_status": acquisition_sales_quality_status,
+            "acquisition_sales_quality_evidence_validated": bool(
+                acquisition_sales_quality is not None
+                and acquisition_sales_quality.evaluable
+            ),
+            "acquisition_sales_quality_error": acquisition_sales_quality_error,
+            "acquisition_sales_quality_policy_version": (
+                ACQUISITION_SALES_QUALITY_POLICY_VERSION
+            ),
+            "acquisition_sales_quality_model": acquisition_sales_quality_model,
             "ai_run_id": str(run.id),
         }
         if lead is not None and lead_is_active:
@@ -956,7 +1067,15 @@ def process_call_transcript(
         run.total_tokens = (
             sum(
                 value
-                for value in (audio_total_tokens, note_usage["total_tokens"])
+                for value in (
+                    audio_total_tokens,
+                    note_usage["total_tokens"],
+                    (
+                        acquisition_sales_quality_usage["total_tokens"]
+                        if acquisition_sales_quality_usage is not None
+                        else None
+                    ),
+                )
                 if value is not None
             )
             or None
@@ -968,6 +1087,11 @@ def process_call_transcript(
             "pricing_status": ("priced" if total_cost_microusd is not None else "incomplete"),
             "transcription_checkpointed": transcription_performed,
             "transcription_reused": not transcription_performed,
+            "acquisition_sales_quality_status": acquisition_sales_quality_status,
+            "acquisition_sales_quality_policy_version": (
+                ACQUISITION_SALES_QUALITY_POLICY_VERSION
+            ),
+            "acquisition_sales_quality_error": acquisition_sales_quality_error,
         }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
@@ -1710,6 +1834,112 @@ def build_call_notes_prompt(
         payload,
         indent=2,
     )
+
+
+def build_acquisition_sales_quality_prompt(
+    call: CallRecord,
+    transcript: CallTranscript,
+    *,
+    asset_class: str,
+) -> str:
+    payload = {
+        "call_context": {
+            "direction": call.direction,
+            "asset_class": asset_class,
+            "stonegate_speaker_rule": (
+                "Identify the staff-side speaker from the conversation itself. If that speaker "
+                "cannot be identified reliably, return evaluable=false."
+            ),
+        },
+        "diarized_segments": transcript.speaker_segments or [],
+    }
+    payload["evaluation_policy"] = {
+        "version": ACQUISITION_SALES_QUALITY_POLICY_VERSION,
+        "minimum_speaker_attribution_confidence": 60,
+        "minimum_output_confidence": 60,
+        "missing_evidence_policy": (
+            "Return evaluable=false and null scores; never score missing evidence as zero."
+        ),
+    }
+    return json.dumps(payload, indent=2)
+
+
+def normalize_acquisition_sales_quality(
+    quality: AcquisitionSalesCallQuality,
+    *,
+    speaker_segments: list[dict[str, object]] | None = None,
+) -> AcquisitionSalesCallQuality:
+    """Make insufficient transcript evidence explicitly unscored for fair coaching."""
+
+    reasons: list[str] = []
+    if not quality.evaluable:
+        reasons.append(quality.evaluation_reason)
+    if quality.speaker_attribution_confidence < 60:
+        reasons.append("Stonegate speaker attribution is below the 60% minimum.")
+    if quality.confidence < 60:
+        reasons.append("Evaluation confidence is below the 60% minimum.")
+    missing_scores = [
+        field_name
+        for field_name in ACQUISITION_SALES_QUALITY_SCORE_FIELDS
+        if getattr(quality, field_name) is None
+    ]
+    if missing_scores:
+        reasons.append("One or more required coaching categories lack transcript evidence.")
+    segments_by_index = {
+        int(segment.get("index", index)): segment
+        for index, segment in enumerate(speaker_segments or [])
+        if isinstance(segment, dict)
+    }
+    speakers = {
+        str(segment.get("speaker") or "").strip().casefold()
+        for segment in segments_by_index.values()
+        if str(segment.get("speaker") or "").strip()
+    }
+    if quality.evaluable and len(speakers) < 2:
+        reasons.append("The transcript does not contain two reliably diarized speakers.")
+    cited_fields = {
+        item.field
+        for item in quality.evidence
+        if _valid_acquisition_quality_evidence(item, segments_by_index)
+    }
+    missing_evidence = [
+        field_name
+        for field_name in ACQUISITION_SALES_QUALITY_SCORE_FIELDS
+        if getattr(quality, field_name) is not None and field_name not in cited_fields
+    ]
+    if missing_evidence:
+        reasons.append("One or more coaching categories lack an evidence citation.")
+    if not reasons:
+        return quality
+    reason = " ".join(dict.fromkeys(item.strip() for item in reasons if item.strip()))
+    return quality.model_copy(
+        update={
+            "evaluable": False,
+            "evaluation_reason": reason[:1000] or "The call lacks reliable coaching evidence.",
+            **dict.fromkeys(ACQUISITION_SALES_QUALITY_SCORE_FIELDS),
+        }
+    )
+
+
+def _valid_acquisition_quality_evidence(
+    evidence: CallNoteEvidence,
+    segments_by_index: dict[int, dict[str, object]],
+) -> bool:
+    segment = segments_by_index.get(evidence.segment_index)
+    if segment is None:
+        return False
+    segment_start = numeric_value(segment.get("start"))
+    if abs(segment_start - evidence.start_seconds) > 2:
+        return False
+    segment_text = _normalized_evidence_text(segment.get("text"))
+    supporting_text = _normalized_evidence_text(evidence.supporting_text)
+    return bool(supporting_text and supporting_text in segment_text)
+
+
+def _normalized_evidence_text(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
 
 
 def normalize_segments(segments: list[dict[str, object]]) -> list[dict[str, object]]:

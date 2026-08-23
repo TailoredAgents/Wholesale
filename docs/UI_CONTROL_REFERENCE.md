@@ -775,7 +775,11 @@ Lead Queue views are **Copilot**, **Today**, **Qualification**, **Performance**,
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Acquisitions scorecard | Shows handoff SLA, qualifications, appointments, contracts, and follow-up quality | Read-only |
+| Acquisitions scorecard | Compares weighted speed-to-lead, follow-up, conversation, qualification, CRM, appointment, and mature-outcome evidence without ranking specialists | Manager only; read-only shadow coaching view |
+| 30 days / 90 days | Selects the evidence window and requests a fresh report | Manager only; the selected request includes a 12-second session-token and report timeout |
+| **Refresh** | Requests a new uncached snapshot and announces completion; the report shows its generation time | Disabled while loading; a timeout says whether a confirmed same-period snapshot remains visible |
+| Raw scoring evidence | Shows dimension-specific operands, sample counts, minimums, and evidence status | Manager only; Building dimensions expose raw inputs but withhold the numeric score and bar |
+| Methodology and weights | Explains the versioned policy, coverage, and coaching-only guardrails | Read-only |
 | Version name / Opening guidance | Defines a new qualification standard version | Manager only |
 | **Create draft** | Saves a standard containing the nine standardized questions | Does not activate it |
 | Qualification standards | Shows version history and current status | Read-only |

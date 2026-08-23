@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -25,11 +26,12 @@ from app.models.foundation import (
     Property,
 )
 from app.schemas.leads import LeadCloseOutRequest
-from app.schemas.voice import StructuredCallNotes
+from app.schemas.voice import AcquisitionSalesCallQuality, CallTranscriptRead, StructuredCallNotes
 from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
     call_notes_system_prompt,
     enqueue_call_transcript,
+    normalize_acquisition_sales_quality,
     process_call_transcript,
     process_next_call_transcript,
     process_next_pending_call_note_approval,
@@ -45,6 +47,73 @@ def test_call_note_schema_is_valid_for_openai_strict_mode() -> None:
 
     validate_strict_json_schema(schema)
     assert set(schema["properties"]) == set(schema["required"])
+
+
+def test_acquisition_sales_quality_schema_is_valid_for_openai_strict_mode() -> None:
+    schema = AcquisitionSalesCallQuality.model_json_schema()
+
+    validate_strict_json_schema(schema)
+    assert set(schema["properties"]) == set(schema["required"])
+    assert "acquisition_sales_quality" not in CallTranscriptRead.model_fields
+
+
+def test_acquisition_sales_quality_requires_reliable_cited_evidence() -> None:
+    quality = AcquisitionSalesCallQuality.model_validate(
+        {
+            "evaluable": True,
+            "evaluation_reason": "A two-way seller conversation was present.",
+            "speaker_attribution_confidence": 92,
+            "active_listening_score": 84,
+            "discovery_score": 80,
+            "objection_handling_score": 76,
+            "next_step_clarity_score": 88,
+            "professionalism_score": 90,
+            "compliance_score": 95,
+            "strengths": ["Confirmed the seller's timing."],
+            "coaching_points": ["Ask one more condition follow-up."],
+            "evidence": [
+                {
+                    "field": field_name,
+                    "segment_index": 999,
+                    "start_seconds": 999_999,
+                    "supporting_text": "This excerpt is not in the transcript.",
+                }
+                for field_name in (
+                    "active_listening_score",
+                    "discovery_score",
+                    "objection_handling_score",
+                    "next_step_clarity_score",
+                    "professionalism_score",
+                    "compliance_score",
+                )
+            ],
+            "confidence": 86,
+        }
+    )
+
+    normalized = normalize_acquisition_sales_quality(
+        quality,
+        speaker_segments=[
+            {
+                "index": 0,
+                "speaker": "Agent",
+                "start": 1.0,
+                "end": 3.0,
+                "text": "What timing works best for you?",
+            },
+            {
+                "index": 1,
+                "speaker": "Seller",
+                "start": 3.0,
+                "end": 5.0,
+                "text": "I would like to sell within thirty days.",
+            },
+        ],
+    )
+
+    assert normalized.evaluable is False
+    assert normalized.active_listening_score is None
+    assert "evidence citation" in normalized.evaluation_reason
 
 
 def test_call_note_runtime_prompt_requires_complete_plain_english_fields() -> None:
@@ -375,6 +444,12 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
             language="en",
             segments=[
                 {
+                    "speaker": "Agent",
+                    "start": 5.0,
+                    "end": 11.0,
+                    "text": "Thanks for explaining that. What timing would work best for you?",
+                },
+                {
                     "speaker": "Seller",
                     "start": 12.0,
                     "end": 18.0,
@@ -415,15 +490,66 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
             }
         ],
     }
-    structured_response_calls = 0
+    quality_payload = {
+        "evaluable": True,
+        "evaluation_reason": "The transcript contains a two-way seller conversation.",
+        "speaker_attribution_confidence": 93,
+        "active_listening_score": 82,
+        "discovery_score": 86,
+        "objection_handling_score": 78,
+        "next_step_clarity_score": 88,
+        "professionalism_score": 91,
+        "compliance_score": 95,
+        "strengths": ["Confirmed the seller's stated timeline."],
+        "coaching_points": ["Ask a more specific follow-up about roof condition."],
+        "evidence": [
+            {
+                "field": field_name,
+                "segment_index": 1,
+                "start_seconds": 12.0,
+                "supporting_text": "I want to move in 30 days and I am asking 180 thousand.",
+            }
+            for field_name in (
+                "active_listening_score",
+                "discovery_score",
+                "objection_handling_score",
+                "next_step_clarity_score",
+                "professionalism_score",
+                "compliance_score",
+            )
+        ],
+        "confidence": 89,
+    }
+    structured_note_response_calls = 0
+    quality_response_calls = 0
 
     def create_structured_notes(
         *_args: object,
         **_kwargs: object,
     ) -> tuple[dict[str, object], dict[str, int]]:
-        nonlocal structured_response_calls
-        structured_response_calls += 1
-        if structured_response_calls == 1:
+        nonlocal quality_response_calls, structured_note_response_calls
+        if _kwargs.get("schema_name") == "stonegate_acquisition_sales_quality":
+            quality_response_calls += 1
+            quality_prompt = json.loads(str(_kwargs["user_prompt"]))
+            assert set(quality_prompt) == {
+                "call_context",
+                "diarized_segments",
+                "evaluation_policy",
+            }
+            serialized_quality_prompt = json.dumps(quality_prompt)
+            assert "Taylor Seller" not in serialized_quality_prompt
+            assert "100 Main Street" not in serialized_quality_prompt
+            assert "user_id" not in serialized_quality_prompt
+            return (
+                quality_payload,
+                {
+                    "input_tokens": 1000,
+                    "output_tokens": 200,
+                    "total_tokens": 1200,
+                },
+            )
+        structured_note_response_calls += 1
+        if structured_note_response_calls == 1:
             malformed_payload = {
                 **notes_payload,
                 "timeline": "Seller may travel after Monday but will not make the長",
@@ -478,7 +604,8 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     assert processed.transcript_text
     assert processed.confidence_score == 88
     assert audio_transcription_calls == 1
-    assert structured_response_calls == 2
+    assert structured_note_response_calls == 2
+    assert quality_response_calls == 1
     db_session.refresh(lead)
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"
@@ -505,16 +632,17 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
         )
     )
     assert ai_run is not None
-    assert ai_run.input_tokens == 2000
-    assert ai_run.output_tokens == 500
-    assert ai_run.total_tokens == 2500
-    assert ai_run.cost_microusd == 25_000
-    assert ai_run.cost_cents == 3
+    assert ai_run.input_tokens == 3000
+    assert ai_run.output_tokens == 700
+    assert ai_run.total_tokens == 3700
+    assert ai_run.cost_microusd == 36_000
+    assert ai_run.cost_cents == 4
     assert ai_run.run_metadata is not None
     assert ai_run.run_metadata["pricing_status"] == "priced"
     assert ai_run.run_metadata["transcription_reused"] is True
+    assert ai_run.run_metadata["acquisition_sales_quality_status"] == "scored"
     total_call_cost = db_session.scalar(select(func.sum(AiRunLog.cost_microusd)))
-    assert total_call_cost == 28_500
+    assert total_call_cost == 39_500
     operation_event = db_session.scalar(
         select(AiOrchestratorEvent).where(
             AiOrchestratorEvent.event_key == f"call.notes:{transcript.id}"
@@ -556,6 +684,9 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     assert not lead_payload["open_tasks"]
     db_session.refresh(transcript)
     metadata = transcript.transcript_metadata or {}
+    assert metadata["acquisition_sales_quality_status"] == "scored"
+    assert metadata["acquisition_sales_quality_evidence_validated"] is True
+    assert metadata["acquisition_sales_quality"]["discovery_score"] == 86
     assert metadata["quick_read_summary"] == (
         "Why: Relocating\n"
         "Numbers: asking $180,000; payoff $92,000 payoff\n"

@@ -100,7 +100,7 @@ The Lead Queue contains these tabs:
 - **Copilot**
 - **Daily queue**
 - **Qualification**
-- **Performance**
+- **Performance**, for authorized managers only
 - **Standards**, for authorized managers only
 
 ## Accepting A New Warm Lead
@@ -475,23 +475,28 @@ whether the lead is archived. Ask a manager to correct access or assignment if n
 Confirm you are signed in with your own Stonegate account. Sign out and sign back in once. If the
 problem remains, ask an Owner or Administrator to verify your active role and permissions.
 
-## Your Performance Scorecard
+## Manager Performance Scorecard
 
-The **Performance** tab shows the trailing 30 days:
+The **Performance** tab is available only to managers with **Manage acquisition operations**
+permission. It compares eligible acquisition specialists without ranking them. Managers can select
+the trailing 30- or 90-day evidence window and review:
 
-- Warm handoffs received and accepted.
-- Handoffs accepted within the required time.
-- Average acceptance time.
-- Qualifications completed.
-- Appointments set.
-- Appointments held.
-- No-shows.
-- Contracts created from your leads.
-- Follow-up quality.
+- speed to lead;
+- follow-up discipline;
+- conversation quality from recorded, reviewable call evidence;
+- qualification quality;
+- CRM hygiene;
+- appointment execution; and
+- mature, role-credit-aware outcomes.
 
-The goal is not to create the largest number of appointments. The goal is to respond quickly,
-qualify accurately, protect follow-up, and schedule appointments that have a reasonable chance of
-moving forward.
+Each dimension shows its policy weight, evidence status, sample size, required minimum, and raw
+inputs. A dimension below its minimum is labeled **Building**; its numeric score and bar are withheld
+and its weight does not enter the overall score. The overall score is also withheld until at least
+60% of policy weight has ready evidence.
+
+Version 1 is a shadow coaching report. It does not change lead assignment, compensation,
+employment decisions, or automation. Check the visible snapshot-generation time after refreshing,
+and use the coverage, warnings, and raw evidence before drawing a conclusion.
 
 ## End-Of-Day Checklist
 
