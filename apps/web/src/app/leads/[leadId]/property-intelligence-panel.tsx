@@ -397,7 +397,7 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
 
       <div className={styles.propertyIntelligenceSections}>
         <div className={styles.propertyFactSection}>
-          <h3>Verified property facts</h3>
+          <h3>{isLand ? "Saved screening facts" : "Verified property facts"}</h3>
           <dl>
             {facts.map(([label, value]) => (
               <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
@@ -434,7 +434,7 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
       <div className={styles.propertySignalSection}>
         <div>
           <h3>Property and market signals</h3>
-          <p>{isLand ? "Recorded zoning, utilities, access, flood, and environmental facts are screening evidence—not legal opinions or guarantees that a parcel is buildable." : "Provider estimates are research signals, not seller-confirmed balances or offer math."}</p>
+          <p>{isLand ? "Recorded zoning, utilities, access, flood, and environmental facts are screening evidence - not legal opinions or guarantees that a parcel is buildable." : "Provider estimates are research signals, not seller-confirmed balances or offer math."}</p>
         </div>
         <dl>
           {propertySignals.map(([label, value]) => (

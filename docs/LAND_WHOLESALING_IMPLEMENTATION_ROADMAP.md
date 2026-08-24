@@ -1,6 +1,6 @@
 # Stonegate House And Land Wholesaling Implementation Roadmap
 
-Last updated: August 8, 2026
+Last updated: August 23, 2026
 
 ## Decision
 
@@ -93,6 +93,12 @@ to `house` so this upgrade does not silently change current operations.
 - Attribution and duplicate history remain intact.
 
 ## Stage 3 - Qualification, Calls, Follow-Up, And AI Context
+
+**Repository implementation status (August 23, 2026):** Phase 2 now provides a canonical Land
+acquisition profile, seller/provider provenance separation, Land-specific qualification editing,
+asset-aware missing questions, and derived valuation-review readiness. The operating procedure is
+published in `LAND_ACQUISITION_OPERATIONS_PLAYBOOK.md`. Production staff acceptance and real-parcel
+pilot evidence remain open; this status does not authorize Land offers or execution.
 
 ### Work
 
@@ -256,6 +262,17 @@ These items do not block early implementation, but they block live Land activati
 The implemented Land value and cost-control rules are documented in
 [`LAND_VALUATION_METHOD.md`](./LAND_VALUATION_METHOD.md).
 
+The current Land-first readiness findings, 80/20 operating assumption, launch gates, and phased
+remediation plan are documented in
+[`LAND_FIRST_READINESS_AUDIT_2026-08-23.md`](./LAND_FIRST_READINESS_AUDIT_2026-08-23.md).
+
+Ingress classification checkpoint completed August 23, 2026: Stonegate campaign creation now
+requires an explicit House or Land selection. Direct BatchDialer campaigns have an audited,
+organization-scoped House/Land mapping; qualified events from unmapped campaigns are held before
+CRM mutation and selectively requeued when classified. Direct parcel-only Land handoffs preserve
+APN, county, and state without a fabricated House address and enter the parcel research path.
+Historical mapping disagreements are visible to managers and are never silently rewritten.
+
 Safety checkpoint completed August 8, 2026: Land records now receive a clear `409` guard if any
 residential ARV, comp, repair, offer-approval, negotiation, field-walkthrough, acquisitions-copilot,
 valuation-report, residential transaction/package/e-signature, house-buyer disposition, or
@@ -268,7 +285,8 @@ implemented and verified.
 - [x] Stage 0 - Safety, baseline, and rollback
 - [x] Stage 1 - Shared asset and property identity foundation
 - [~] Stage 2 - Intake, prospecting, and handoff propagation (primary manual, public,
-  Facebook/Zapier, Inbox, campaign, import, VA, filter, and alert paths complete)
+  Facebook/Zapier, Inbox, campaign, import, VA, direct BatchDialer mapping, filter, and alert paths
+  complete; richer Land lead-sheet fields such as acreage remain)
 - [x] Stage 3 - Qualification, calls, follow-up, and AI context
 - [~] Stage 4 - Land Property Intelligence (profile-safe address/APN RealEstateAPI facts path,
   county-scoped parcel identity, conflict checks, and paid-call cache are complete; official

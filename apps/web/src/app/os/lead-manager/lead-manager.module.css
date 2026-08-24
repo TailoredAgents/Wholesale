@@ -861,6 +861,54 @@
   font-size: 0.8rem;
 }
 
+.standardQuestionPreview {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 7px;
+}
+
+.standardQuestionPreview > strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.standardQuestionPreview ol {
+  max-height: 330px;
+  margin: 2px 0 0;
+  padding-left: 22px;
+  overflow-y: auto;
+}
+
+.standardQuestionPreview ol:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.standardQuestionPreview li {
+  padding: 6px 3px;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+}
+
+.standardQuestionPreview li span,
+.standardQuestionPreview li small {
+  display: block;
+}
+
+.standardQuestionPreview li span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.standardQuestionPreview li small {
+  margin-top: 2px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .standardForm button {
   justify-self: start;
   min-height: 40px;

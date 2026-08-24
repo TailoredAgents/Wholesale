@@ -62,6 +62,11 @@ from app.services.ai_operations import (
 )
 from app.services.call_evidence_scope import get_authorized_recording
 from app.services.call_recording_evidence import select_preferred_call_recording
+from app.services.land_acquisition_profile import (
+    canonical_land_key,
+    land_context_value,
+    record_land_reported_answers,
+)
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
     lock_organization_lead,
@@ -1196,6 +1201,11 @@ PROSPECTING_QUESTION_NOTE_ALIASES = {
     "timeline": "timeline",
     "motivation": "motivation",
     **{field: field for field in LAND_QUALIFICATION_FIELDS},
+    "access_frontage": "access_or_frontage",
+    "zoning_use": "zoning_or_use",
+    "septic_perc": "septic_or_perc",
+    "taxes_hoa": "taxes_or_hoa",
+    "terrain_environmental": "terrain_or_environmental_concerns",
 }
 
 
@@ -2191,12 +2201,14 @@ def auto_populate_call_note_fields(
 ) -> dict[str, object]:
     populated_values: dict[str, object] = {}
     note_values = notes.model_dump()
+    reported_answers: dict[str, object] = {}
     for note_field, lead_field in LEAD_UPDATE_FIELDS.items():
         value = note_values.get(note_field)
         if not value or not crm_field_is_empty(getattr(lead, lead_field)):
             continue
         setattr(lead, lead_field, value)
         populated_values[lead_field] = value
+        reported_answers[note_field] = value
     if (
         not isinstance(notes, LandStructuredCallNotes)
         or normalize_asset_class(lead.asset_class) != LAND_ASSET_CLASS
@@ -2207,9 +2219,14 @@ def auto_populate_call_note_fields(
     context_changed = False
     for field in LAND_QUALIFICATION_FIELDS:
         value = note_values.get(field)
+        canonical_field = canonical_land_key(field)
+        if canonical_field is None:
+            continue
         if (
             crm_field_is_empty(value)
-            or not crm_field_is_empty(qualification_context.get(field))
+            or not crm_field_is_empty(
+                land_context_value(qualification_context, canonical_field)
+            )
             or not evidence_supports_land_field(notes, field)
             or (
                 field == "parcel_id"
@@ -2218,8 +2235,20 @@ def auto_populate_call_note_fields(
             )
         ):
             continue
-        qualification_context[field] = value
-        populated_values[f"qualification_context.{field}"] = value
+        if canonical_field == "parcel_id":
+            # APN remains canonical on Property; the reviewed call notes retain its evidence.
+            continue
+        qualification_context[canonical_field] = value
+        reported_answers[canonical_field] = value
+        populated_values[f"qualification_context.{canonical_field}"] = value
+        context_changed = True
+    if reported_answers:
+        qualification_context = record_land_reported_answers(
+            qualification_context,
+            reported_answers,
+            source_name="call_intelligence_transcript",
+            observed_at=datetime.now(UTC),
+        )
         context_changed = True
     if context_changed:
         lead.qualification_context = qualification_context

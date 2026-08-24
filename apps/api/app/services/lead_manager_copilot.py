@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import LAND_ASSET_CLASS, normalize_asset_class
 from app.models.foundation import (
     AiAgentDefinition,
     AiRunLog,
@@ -21,6 +22,7 @@ from app.models.foundation import (
     LeadManagerCopilotReview,
     LeadQualificationScriptVersion,
     LeadQualificationSession,
+    Property,
 )
 from app.schemas.ai import AiRuntimeExecuteCreate
 from app.schemas.lead_manager import (
@@ -35,6 +37,10 @@ from app.schemas.lead_manager import (
     LeadManagerCopilotWorkItemRead,
 )
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
+from app.services.land_acquisition_profile import (
+    canonical_land_key,
+    land_context_value,
+)
 from app.services.lead_manager import (
     as_utc,
     case_read,
@@ -456,6 +462,10 @@ def _qualification_gaps(
         .order_by(LeadQualificationSession.completed_at.desc())
     )
     answers = session.answers if session else {}
+    is_land = normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+    property_record = db.get(Property, lead.property_id) if is_land else None
+    if property_record is not None and property_record.organization_id != case.organization_id:
+        property_record = None
     gaps: list[str] = []
     questions: list[str] = []
     for question in script.questions:
@@ -463,7 +473,25 @@ def _qualification_gaps(
         answer = answers.get(key)
         mapped_field = LEAD_FIELD_BY_QUESTION.get(key)
         lead_value = getattr(lead, mapped_field, None) if mapped_field else None
-        if _has_value(answer) or _has_value(lead_value):
+        context_value = land_context_value(lead.qualification_context, key) if is_land else None
+        canonical_key = canonical_land_key(key) if is_land else None
+        property_value = (
+            {
+                "parcel_id": property_record.parcel_id,
+                "county": property_record.county,
+                "state": property_record.state,
+            }.get(canonical_key)
+            if property_record is not None
+            else None
+        )
+        if is_land:
+            has_answer = any(
+                _has_value(value)
+                for value in (answer, lead_value, context_value, property_value)
+            )
+        else:
+            has_answer = _has_value(answer) or _has_value(lead_value)
+        if has_answer:
             continue
         gaps.append(str(question.get("label") or key))
         questions.append(str(question.get("prompt") or question.get("label") or key))

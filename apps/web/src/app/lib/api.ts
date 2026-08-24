@@ -268,6 +268,7 @@ export type AcquisitionOperations = {
     name: string;
     code: string;
     channel: string;
+    asset_class: "house" | "land";
     status: string;
     starts_on: string | null;
     ends_on: string | null;
@@ -285,6 +286,7 @@ export type AcquisitionOperations = {
     assigned_user_name: string | null;
     converted_lead_id: string | null;
     source_record_key: string | null;
+    asset_class: "house" | "land";
     status: string;
     legal_name: string;
     phone: string | null;
@@ -1571,6 +1573,30 @@ export type BatchDialerAgentMappings = {
   users: BatchDialerAgentMappingUser[];
 };
 
+export type BatchDialerCampaignMapping = {
+  id: string;
+  provider_campaign_id: string;
+  provider_campaign_name: string;
+  provider_status: string;
+  is_active: boolean;
+  asset_class: "house" | "land" | null;
+  asset_class_mapped_at: string | null;
+  asset_class_mapped_by_user_id: string | null;
+  last_seen_at: string;
+  historical_lead_count: number;
+  historical_asset_mismatch_count: number;
+  historical_asset_mismatch_sample_lead_ids: string[];
+};
+
+export type BatchDialerCampaignMappings = {
+  items: BatchDialerCampaignMapping[];
+};
+
+export type BatchDialerCampaignMappingUpdateResponse = {
+  item: BatchDialerCampaignMapping;
+  requeued_event_count: number;
+};
+
 export type BatchDialerVaPerformanceQuery = {
   date_from?: string;
   date_to?: string;
@@ -2384,7 +2410,47 @@ export type FieldAppointmentWorkspace = {
   can_review_underwriting: boolean;
 };
 
+export type LandAcquisitionEvidence = {
+  value: unknown;
+  source_type: "seller_reported" | "provider_sourced" | "crm_record";
+  source_name: string;
+  observed_at: string | null;
+};
+
+export type LandAcquisitionFact = {
+  status: "known" | "unknown" | "conflict";
+  value: unknown | null;
+  source_type: "seller_reported" | "provider_sourced" | "crm_record" | "unknown";
+  source_name: string | null;
+  observed_at: string | null;
+  requires_verification: boolean;
+  evidence: LandAcquisitionEvidence[];
+};
+
+export type LandAcquisitionProfile = {
+  version: "land_acquisition_v1";
+  facts: Record<string, LandAcquisitionFact>;
+  readiness: {
+    status:
+      | "ready_for_valuation_review"
+      | "needs_seller_information"
+      | "needs_due_diligence_review";
+    completion_score: number;
+    required_fields: string[];
+    completed_fields: string[];
+    unanswered_fields: string[];
+    unknown_fields: string[];
+    conflict_fields: string[];
+    seller_reported_fields: string[];
+    provider_sourced_fields: string[];
+    open_questions: string[];
+    remote_review_ready: boolean;
+    in_person_review_recommended: boolean;
+  };
+};
+
 export type LeadDetail = LeadListItem & {
+  land_acquisition_profile: LandAcquisitionProfile | null;
   property_intelligence: {
     research_status: string;
     research_profile: string;
@@ -5308,6 +5374,31 @@ export async function getBatchDialerAgentMappings(): Promise<{
   } catch (error) {
     console.error("Stonegate BatchDialer agent mapping request failed.", error);
     return { agentMappings: null, apiConnected: false };
+  }
+}
+
+export async function getBatchDialerCampaignMappings(): Promise<{
+  campaignMappings: BatchDialerCampaignMappings | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/prospecting/batchdialer/campaign-mappings`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      campaignMappings: (await response.json()) as BatchDialerCampaignMappings,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate BatchDialer campaign mapping request failed.", error);
+    return { campaignMappings: null, apiConnected: false };
   }
 }
 

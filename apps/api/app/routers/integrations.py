@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.domain.assets import ASSET_CLASSES
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import BatchDialerCampaign, BatchDialerSyncCheckpoint
 from app.schemas.integrations import IntegrationStatusListResponse, IntegrationStatusRead
@@ -70,13 +71,17 @@ def read_integration_status(
             BatchDialerSyncCheckpoint.stream == "cdrs",
         )
     )
-    batchdialer_campaign_count = len(
+    batchdialer_campaigns = list(
         db.scalars(
-            select(BatchDialerCampaign.id).where(
+            select(BatchDialerCampaign).where(
                 BatchDialerCampaign.organization_id == principal.organization_id,
                 BatchDialerCampaign.is_active.is_(True),
             )
         ).all()
+    )
+    batchdialer_campaign_count = len(batchdialer_campaigns)
+    batchdialer_unmapped_campaign_count = sum(
+        campaign.asset_class not in ASSET_CLASSES for campaign in batchdialer_campaigns
     )
     batchdialer_runtime_status = (
         batchdialer_checkpoint.status
@@ -84,6 +89,14 @@ def read_integration_status(
         else ("not_started" if not batchdialer_blockers else "not_configured")
     )
     batchdialer_details = [f"{batchdialer_campaign_count} active campaign(s) discovered"]
+    batchdialer_details.append(
+        f"{batchdialer_campaign_count - batchdialer_unmapped_campaign_count} active "
+        "campaign(s) have an explicit House or Land mapping"
+    )
+    batchdialer_details.append(
+        f"{batchdialer_unmapped_campaign_count} active campaign(s) lack an explicit "
+        "House or Land mapping and will quarantine qualified handoffs"
+    )
     if batchdialer_checkpoint is not None:
         batchdialer_details.append(
             f"{batchdialer_checkpoint.archived_event_count} new CDR event(s) archived"

@@ -1095,6 +1095,34 @@ class BatchDialerAgentMappingUpdate(BaseModel):
     user_id: UUID | None
 
 
+class BatchDialerCampaignMappingRead(BaseModel):
+    id: UUID
+    provider_campaign_id: str
+    provider_campaign_name: str
+    provider_status: str
+    is_active: bool
+    asset_class: AssetClass | None
+    asset_class_mapped_at: datetime | None
+    asset_class_mapped_by_user_id: UUID | None
+    last_seen_at: datetime
+    historical_lead_count: int
+    historical_asset_mismatch_count: int
+    historical_asset_mismatch_sample_lead_ids: list[UUID]
+
+
+class BatchDialerCampaignMappingListRead(BaseModel):
+    items: list[BatchDialerCampaignMappingRead]
+
+
+class BatchDialerCampaignMappingUpdate(BaseModel):
+    asset_class: AssetClass | None
+
+
+class BatchDialerCampaignMappingUpdateRead(BaseModel):
+    item: BatchDialerCampaignMappingRead
+    requeued_event_count: int
+
+
 class BatchDialerVaCoachAnalyzeRequest(BaseModel):
     provider_agent_id: str = Field(min_length=1, max_length=255)
     date_from: date | None = None

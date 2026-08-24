@@ -231,6 +231,7 @@ export function CampaignManagementWorkspace({
       name: value(formData, "name"),
       code: value(formData, "code").toLowerCase(),
       channel: value(formData, "channel"),
+      asset_class: value(formData, "asset_class"),
       starts_on: value(formData, "starts_on") || null,
       ends_on: value(formData, "ends_on") || null,
       budget_cents: budget ? dollarsToCents(budget) : null,
@@ -491,7 +492,7 @@ export function CampaignManagementWorkspace({
                   >
                     {data.campaigns.map((campaign) => (
                       <option key={campaign.id} value={campaign.id}>
-                        {campaign.name}
+                        {campaign.name} - {labelize(campaign.asset_class)}
                       </option>
                     ))}
                   </select>
@@ -521,6 +522,7 @@ export function CampaignManagementWorkspace({
         {selectedCampaign ? (
           <div className={styles.campaignSummary}>
             <div><span>Status</span><strong>{labelize(selectedCampaign.status)}</strong></div>
+            <div><span>Workflow</span><strong>{labelize(selectedCampaign.asset_class)}</strong></div>
             <div><span>Owner</span><strong>{selectedCampaign.owner_name ?? "Unassigned"}</strong></div>
             <div><span>Budget</span><strong>{formatMoney(selectedCampaign.budget_cents)}</strong></div>
             <div><span>Start</span><strong>{selectedCampaign.starts_on ? dateLabel(selectedCampaign.starts_on) : "Not set"}</strong></div>
@@ -539,6 +541,7 @@ export function CampaignManagementWorkspace({
             </div>
             <label><span>Name</span><input name="name" placeholder="Cherokee absentee owners" required /></label>
             <label><span>Short code</span><input name="code" pattern="[a-z0-9][a-z0-9_-]+" placeholder="cherokee_absentee" required /></label>
+            <label><span>Property workflow</span><select defaultValue="" name="asset_class" required><option disabled value="">Select House or Land</option><option value="house">House</option><option value="land">Land</option></select></label>
             <label>
               <span>Market</span>
               <select

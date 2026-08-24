@@ -45,6 +45,7 @@ import type {
   ProspectingTechnicalFailurePayload,
   ProspectingWorkbenchOverview,
 } from "../../lib/api";
+import { landStandardQuestions } from "../land-qualification-questions";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import type {
@@ -118,7 +119,7 @@ type PendingWrapUpSubmission = {
   payload: ProspectingAttemptCompletionPayload;
 };
 
-const standardQuestions = [
+const houseStandardQuestions = [
   ["motivation", "Reason for selling", "What has you considering selling the property?", true],
   ["timeline", "Timeline", "When would you ideally like to sell?", true],
   ["property_condition", "Property condition", "What repairs or updates does the property need?", true],
@@ -220,6 +221,7 @@ export function ProspectingWorkspace({
   const [view, setView] = useState<View>("workbench");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
+  const [scriptAssetClass, setScriptAssetClass] = useState<"house" | "land">("house");
   const [outcome, setOutcome] = useState<ProspectingSellerOutcome>("no_answer");
   const [entrySelection, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
   const [optimisticEntry, setOptimisticEntry] = useState<ProspectingEntry | null>(null);
@@ -795,11 +797,13 @@ export function ProspectingWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const assetClass = (value(formData, "asset_class") || "house") as "house" | "land";
+    const scriptQuestions = assetClass === "land" ? landStandardQuestions : houseStandardQuestions;
     const result = await request("/api/v1/prospecting/scripts", "POST", {
-      asset_class: value(formData, "asset_class") || "house",
+      asset_class: assetClass,
       title: value(formData, "title"),
       opening_script: value(formData, "opening_script"),
-      qualification_questions: standardQuestions.map(([key, label, fallbackPrompt, required]) => ({
+      qualification_questions: scriptQuestions.map(([key, label, fallbackPrompt, required]) => ({
         key,
         label,
         prompt: value(formData, `${key}_prompt`) || fallbackPrompt,
@@ -812,6 +816,7 @@ export function ProspectingWorkspace({
     });
     if (result) {
       form.reset();
+      setScriptAssetClass("house");
       router.refresh();
     }
   }
@@ -1227,11 +1232,19 @@ export function ProspectingWorkspace({
           </div>
           <form className={styles.scriptForm} onSubmit={createScript}>
             <div className={styles.sectionHeader}><div><span>New immutable version</span><h3>Draft caller script</h3></div></div>
-            <label><span>Property workflow</span><select defaultValue="house" name="asset_class"><option value="house">House</option><option value="land">Land</option></select></label>
+            <label><span>Property workflow</span><select name="asset_class" onChange={(event) => setScriptAssetClass(event.target.value as "house" | "land")} value={scriptAssetClass}><option value="house">House</option><option value="land">Land</option></select></label>
             <label><span>Version title</span><input name="title" placeholder="Stonegate seller conversation" required /></label>
             <label><span>Opening</span><textarea name="opening_script" placeholder="Introduce Stonegate, identify the property, and ask permission to continue." required /></label>
-            {standardQuestions.map(([key, label, prompt]) => (
-              <label key={key}><span>{label} prompt</span><input defaultValue={prompt} name={`${key}_prompt`} required /></label>
+            <div aria-live="polite" className={styles.scriptQuestionPreview}>
+              <strong>{scriptAssetClass === "land" ? "Land seller checklist" : "House seller checklist"}</strong>
+              <span>
+                {scriptAssetClass === "land"
+                  ? "Parcel questions replace House repair and occupancy prompts. The saved version remains a draft until a manager approves it."
+                  : "House qualification keeps repair and occupancy prompts. The saved version remains a draft until a manager approves it."}
+              </span>
+            </div>
+            {(scriptAssetClass === "land" ? landStandardQuestions : houseStandardQuestions).map(([key, label, prompt]) => (
+              <label key={`${scriptAssetClass}-${key}`}><span>{label} prompt</span><input defaultValue={prompt} name={`${key}_prompt`} required /></label>
             ))}
             <button className={styles.primaryButton} type="submit">Create draft version</button>
           </form>

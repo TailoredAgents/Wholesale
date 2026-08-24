@@ -19,6 +19,8 @@
     "audit:prospecting-operations": "node --test scripts/prospecting-dialer-operations-contract.test.mjs",
     "audit:prospecting-analytics": "node --test scripts/prospecting-analytics-contract.test.mjs",
     "audit:batchdialer-performance": "node --test scripts/batchdialer-va-performance-contract.test.mjs",
+    "audit:campaign-classification": "node --test scripts/campaign-classification-contract.test.mjs",
+    "audit:land-acquisition": "node --test scripts/land-acquisition-experience-contract.test.mjs",
     "audit:acquisitions-performance": "node --test scripts/acquisitions-performance-contract.test.mjs",
     "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:prospecting-pilot": "node --test scripts/prospecting-pilot-acceptance-contract.test.mjs",

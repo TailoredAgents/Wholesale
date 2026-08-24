@@ -2075,6 +2075,27 @@
   min-height: 34px;
 }
 
+.scriptQuestionPreview {
+  padding: 11px 12px;
+  border: 1px solid #d6ddd7;
+  border-left: 3px solid #27724b;
+  border-radius: 4px;
+  background: #f1f7f3;
+  display: grid;
+  gap: 4px;
+}
+
+.scriptQuestionPreview strong {
+  color: #204f37;
+  font-size: 0.82rem;
+}
+
+.scriptQuestionPreview span {
+  color: #59645d;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 1120px) {
   .metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));

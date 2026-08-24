@@ -1952,6 +1952,10 @@ class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "AND imported_lead_count >= 0",
             name="ck_batchdialer_campaigns_counters",
         ),
+        CheckConstraint(
+            "asset_class IS NULL OR asset_class IN ('house', 'land')",
+            name="ck_batchdialer_campaigns_asset_class",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -1993,6 +1997,15 @@ class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     imported_lead_count: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0, server_default="0"
+    )
+    asset_class: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    asset_class_mapped_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    asset_class_mapped_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     provider_created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

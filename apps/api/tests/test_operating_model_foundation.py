@@ -80,6 +80,7 @@ def test_market_campaign_and_prospect_foundation_is_scoped_and_audited(
             "name": "North Atlanta Absentee Owners",
             "code": "atl-absentee-2026-07",
             "channel": "cold_call",
+            "asset_class": "house",
             "starts_on": "2026-07-22",
             "budget_cents": 250000,
         },

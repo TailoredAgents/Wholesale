@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 22, 2026
+Last verified against the repository: August 23, 2026
 
 ## 1. Document Authority
 
@@ -19,9 +19,11 @@ Stonegate is one company platform with two intentionally separate product surfac
 2. A private, authenticated operating system for the Stonegate team.
 
 The platform is designed for a real-estate wholesaling company starting in Georgia and later
-expanding by market and territory. It supports the business from prospect acquisition through
-seller qualification, field appointments, underwriting, contracting, disposition, closing,
-accounting, performance measurement, and AI-assisted work.
+expanding by market and territory. It supports one explicitly asset-aware CRM for House and Land
+opportunities from prospect acquisition through seller qualification, underwriting, contracting,
+disposition, closing, accounting, performance measurement, and AI-assisted work. House and Land
+share people, communications, ownership, tasks, and audit history; they do not share qualification
+questions, research snapshots, valuation math, contracts, or disposition assumptions.
 
 The public website is not a staff portal. The private OS does not need a public-site navigation
 tab. Staff enter through `/sign-in` or a direct `/os` route and are sent to a role-appropriate
@@ -71,8 +73,9 @@ must use Stonegate Home Buyers.
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
 | BatchDialer outbound calling | Selected production calling system for VAs; official direct API is the sole Stonegate integration, with implementation complete and controlled production acceptance pending |
 | Native Stonegate VA dialer | Dormant-mode repository and Blueprint change prepared; production company/campaign drain, deployment, and no-call verification remain pending. Historical evidence, analytics, late callbacks, and safe cleanup are retained |
+| Land acquisition pilot | Intake classification, Land qualification profile, call-note normalization, parcel research, and deterministic valuation review are implemented behind controlled activation; official diligence, legal execution, and disposition remain incomplete |
 
-“Implemented” does not mean an external provider is active. Provider status is visible separately
+"Implemented" does not mean an external provider is active. Provider status is visible separately
 so staff are not misled by a control that exists but lacks production credentials.
 
 ## 4. Technical Architecture
@@ -110,7 +113,8 @@ so staff are not misled by a control that exists but lacks production credential
 
 ### 4.3 Database Evolution
 
-The database has 94 numbered Alembic migrations through `0094_esign_send_intents`. Migrations are
+The database has 112 numbered Alembic migrations through
+`0112_batchdialer_campaign_asset_mapping`. Migrations are
 run automatically when the Render API starts and manually with `npm run db:migrate` locally.
 
 Schema changes must be additive or explicitly migrated. Production data must never depend on
@@ -794,13 +798,21 @@ redirect to their new owners.
 ### 8.4 Lead Management
 
 1. The Lead Manager accepts the work within the configured SLA.
-2. The current approved qualification script captures motivation, condition, timeline, occupancy,
-   price context, title or mortgage issues, and next action.
+2. The record's explicit asset class selects the approved qualification script. House captures
+   condition, occupancy, repairs, price context, title or mortgage issues, and access. Land captures
+   ownership/decision-makers, motivation, timeline, price, APN/acreage, access/frontage, utilities,
+   survey/boundaries, septic/perc, taxes/HOA, restrictions, flood/wetlands,
+   terrain/environmental concerns, prior work, and title/probate/heirs.
 3. Missing or conflicting information remains visible instead of being guessed.
-4. The Lead Manager schedules a call, follow-up, or closer appointment.
-5. Overdue handoffs and neglected leads produce tasks or notifications.
-6. The Lead Manager Copilot drafts summaries, questions, replies, and next steps for human review.
-7. A dead or disqualified lead is closed with a structured disposition and reason. Stonegate
+4. Land seller statements are stored separately from provider screening and canonical CRM parcel
+   identity. The Land profile derives **Needs seller information**, **Needs diligence review**, or
+   **Ready for valuation review**; the latter is not offer approval.
+5. The Lead Manager schedules a call or follow-up. House can proceed through its appointment-led
+   path; Land defaults to remote phone/video review and uses a site visit only for a specific risk.
+6. Overdue handoffs and neglected leads produce tasks or notifications.
+7. The Lead Manager Copilot drafts asset-specific summaries, questions, replies, and next steps for
+   human review.
+8. A dead or disqualified lead is closed with a structured disposition and reason. Stonegate
    atomically ends routine work, cancels all lead-related pending approvals, retires unused offer
    authority, and preserves the complete record as read-only history. Active deal, contract, or
    disposition work blocks close-out, and funded deals remain successful closed business rather
@@ -832,6 +844,13 @@ redirect to their new owners.
    overwrite an approved analysis.
 
 ### 8.7 Underwriting And Offer
+
+The numbered process below is the House valuation path. A Land lead cannot enter it. Land uses its
+dedicated parcel identity, saved `land_v1` property research, closed Land-sale search, deterministic
+price-per-acre analysis, access evidence, and owner-controlled policy gates. A supported Land
+research range can be reviewed without releasing opening guidance or an offer ceiling. Official
+diligence, manual comparable completion, contract execution, and disposition remain later launch
+gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 
 1. Stonegate validates the subject address and canonical property facts.
 2. RentCast supplies the subject record and recorded-sale candidates when available.
@@ -992,6 +1011,11 @@ The lead record is the complete seller workspace. It combines:
 - communications and consent
 - recent activity and audit evidence
 
+For Land leads, the Property and Qualification panels show a dedicated Land acquisition profile.
+It keeps seller-reported evidence, provider screening, canonical parcel identity, unknowns, and
+conflicts visibly separate and supplies Land-specific open questions and valuation-review
+readiness. House leads retain the existing seller/property and qualification panels.
+
 The canonical internal detail route is `/os/leads/{lead_id}`. The legacy `/leads/{leadId}` route
 exists in the web tree but should not be presented as the primary OS workflow.
 
@@ -1134,8 +1158,10 @@ When recording is deliberately enabled:
 1. Twilio reports the completed recording.
 2. The worker retrieves eligible audio.
 3. OpenAI transcription produces speaker-aware transcript evidence.
-4. structured notes identify motivation, condition, timeline, occupancy, price, objections,
-   commitments, and next action.
+4. Structured notes use the lead's asset schema. House notes identify motivation, condition,
+   timeline, occupancy, price, objections, commitments, and next action. Land notes identify
+   motivation, timeline, price, parcel identity, acreage, access/frontage, utilities, zoning/use,
+   septic/perc, taxes/HOA, terrain/environmental concerns, objections, commitments, and next action.
 5. transcript-grounded values immediately fill only empty CRM qualification fields and create an
    audit/activity record; existing staff-entered values are not overwritten.
 6. the transcript-grounded narrative posts automatically as an internal conversation note and

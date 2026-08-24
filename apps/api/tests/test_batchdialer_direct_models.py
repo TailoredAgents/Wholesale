@@ -62,6 +62,7 @@ def test_batchdialer_models_are_organization_scoped_and_polling_ready() -> None:
         "uq_batchdialer_campaigns_org_provider",
         "ck_batchdialer_campaigns_identity",
         "ck_batchdialer_campaigns_counters",
+        "ck_batchdialer_campaigns_asset_class",
     } <= campaign_constraints
 
     for table in (checkpoint, campaign):
@@ -100,6 +101,9 @@ def test_batchdialer_models_are_organization_scoped_and_polling_ready() -> None:
         "cdr_seen_count",
         "qualified_cdr_count",
         "imported_lead_count",
+        "asset_class",
+        "asset_class_mapped_by_user_id",
+        "asset_class_mapped_at",
         "first_seen_at",
         "last_seen_at",
         "last_cdr_at",
@@ -129,6 +133,11 @@ def test_batchdialer_models_are_organization_scoped_and_polling_ready() -> None:
         "is_active",
         "status",
     )
+    mapped_by_foreign_key = next(
+        iter(campaign.c.asset_class_mapped_by_user_id.foreign_keys)
+    )
+    assert mapped_by_foreign_key.target_fullname == "users.id"
+    assert mapped_by_foreign_key.ondelete == "SET NULL"
 
 
 def test_checkpoint_enforces_one_stream_and_complete_lease_per_organization() -> None:
@@ -243,5 +252,17 @@ def test_campaign_identity_is_unique_per_organization_and_counters_are_nonnegati
                 "provider_campaign_id": "negative-count",
                 "name": "Invalid Campaign",
                 "qualified_cdr_count": -1,
+            },
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            sa.insert(BatchDialerCampaign),
+            {
+                "id": uuid4(),
+                "organization_id": first_organization_id,
+                "provider_campaign_id": "invalid-asset",
+                "name": "Invalid Asset Campaign",
+                "asset_class": "commercial",
             },
         )

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,14 +14,18 @@ from app.models.foundation import (
     Appointment,
     ApprovalRequest,
     AttributionTouch,
+    BatchDialerCallFact,
+    BatchDialerCampaign,
     BatchDialerSyncCheckpoint,
     CallRecord,
     CallRecording,
     CallTranscript,
     CommunicationRecord,
     ConsentRecord,
+    Contact,
     Lead,
     Property,
+    PropertyResearchRun,
     ProspectingProviderEvent,
     Task,
 )
@@ -462,6 +467,7 @@ def test_qualified_voicemail_id_routes_to_review_without_crm_side_effects(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient([qualifying_transcript()])
     install_qualification_fakes(monkeypatch, provider)
     cdr = sample_cdr("Qualified Seller – Follow Up")
@@ -511,6 +517,7 @@ def test_qualified_voicemail_transcript_cannot_create_lead(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [
             (
@@ -553,6 +560,7 @@ def test_transcript_not_ready_retries_without_lead_then_imports_once_available(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [BatchDialerTransientError("not ready"), qualifying_transcript()]
     )
@@ -595,6 +603,7 @@ def test_transcript_exhaustion_creates_visible_review_without_lead(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [
             BatchDialerTransientError("not ready"),
@@ -660,6 +669,7 @@ def test_invalid_ai_evidence_citation_routes_to_review(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     monkeypatch.setattr(
         "app.services.batchdialer_direct.BatchDialerClient",
         FakeBatchDialerClient,
@@ -696,6 +706,7 @@ def test_ai_must_cite_two_distinct_conversation_turns(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     monkeypatch.setattr(
         "app.services.batchdialer_direct.BatchDialerClient",
         FakeBatchDialerClient,
@@ -732,6 +743,7 @@ def test_two_cited_turns_from_one_speaker_do_not_prove_a_live_conversation(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [
             (
@@ -778,6 +790,7 @@ def test_approved_unknown_disposition_still_has_to_pass_transcript_gate(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     install_qualification_fakes(monkeypatch)
     archive_batchdialer_cdr(
         db_session,
@@ -826,6 +839,7 @@ def test_provider_data_exception_cannot_be_approved_into_a_lead(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [],
         contact={
@@ -880,6 +894,7 @@ def test_appointment_set_without_explicit_agreement_routes_to_review(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     monkeypatch.setattr(
         "app.services.batchdialer_direct.BatchDialerClient",
         FakeBatchDialerClient,
@@ -918,6 +933,7 @@ def test_out_of_market_zero_duration_call_can_qualify(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [qualifying_transcript()],
         contact={
@@ -967,6 +983,7 @@ def test_human_approval_is_evidence_bound_and_creates_one_lead(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     provider = ScriptedBatchDialerClient(
         [
             qualifying_transcript(),
@@ -1043,6 +1060,7 @@ def test_qualified_follow_up_creates_lead_call_and_transcript_without_appointmen
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     install_qualification_fakes(monkeypatch)
     archive_batchdialer_cdr(
         db_session,
@@ -1075,6 +1093,373 @@ def test_qualified_follow_up_creates_lead_call_and_transcript_without_appointmen
     assert db_session.scalar(select(func.count()).select_from(ConsentRecord)) == 0
 
 
+def test_unmapped_campaign_quarantines_then_mapping_requeues_and_reports_history(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    campaign = map_sample_campaign(db_session, organization.id, asset_class=None)
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller – Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    def unexpected_client(_settings: Settings) -> object:
+        raise AssertionError("Unmapped campaigns must fail before provider enrichment.")
+
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.BatchDialerClient",
+        unexpected_client,
+    )
+    event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    event = db_session.get(ProspectingProviderEvent, event_id)
+    approval = db_session.scalar(select(ApprovalRequest))
+
+    assert event is not None and event.processing_status == "quarantined"
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
+        "campaign_asset_unmapped"
+    )
+    assert approval is not None
+    assert approval.approval_metadata["can_approve"] is False
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": "owner@example.com"}
+    list_response = client.get(
+        "/api/v1/prospecting/batchdialer/campaign-mappings",
+        headers=headers,
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert list_response.headers["cache-control"] == "private, no-store"
+    assert list_response.json()["items"][0]["asset_class"] is None
+
+    patch_response = client.patch(
+        f"/api/v1/prospecting/batchdialer/campaign-mappings/{campaign.id}",
+        headers=headers,
+        json={"asset_class": "house"},
+    )
+    assert patch_response.status_code == 200, patch_response.text
+    assert patch_response.json()["requeued_event_count"] == 1
+    assert patch_response.json()["item"]["asset_class"] == "house"
+    db_session.refresh(event)
+    db_session.refresh(approval)
+    assert event.processing_status == "pending"
+    assert approval.status == "cancelled"
+
+    install_qualification_fakes(monkeypatch)
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+    db_session.refresh(event)
+    lead = db_session.scalar(select(Lead))
+    assert event.processing_status == "processed"
+    assert lead is not None and lead.asset_class == "house"
+
+    mismatch_response = client.patch(
+        f"/api/v1/prospecting/batchdialer/campaign-mappings/{campaign.id}",
+        headers=headers,
+        json={"asset_class": "land"},
+    )
+    assert mismatch_response.status_code == 200, mismatch_response.text
+    mismatch = mismatch_response.json()
+    assert mismatch["requeued_event_count"] == 0
+    assert mismatch["item"]["historical_lead_count"] == 1
+    assert mismatch["item"]["historical_asset_mismatch_count"] == 1
+    assert mismatch["item"]["historical_asset_mismatch_sample_lead_ids"] == [
+        str(lead.id)
+    ]
+    db_session.refresh(lead)
+    assert lead.asset_class == "house"
+
+
+def test_direct_handoffs_are_tenant_scoped_and_reject_foreign_prior_leads(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    tenant_a = bootstrap_foundation(
+        db_session,
+        admin_email="owner-a@example.com",
+        admin_name="Owner A",
+        organization_name="Tenant A Home Buyers",
+    ).organization
+    tenant_b = bootstrap_foundation(
+        db_session,
+        admin_email="owner-b@example.com",
+        admin_name="Owner B",
+        organization_name="Tenant B Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, tenant_a.id)
+    map_sample_campaign(db_session, tenant_b.id)
+    install_qualification_fakes(monkeypatch)
+
+    tenant_a_cdr = sample_cdr("Qualified Seller – Follow Up")
+    tenant_a_cdr["id"] = 41001
+    tenant_a_cdr["callid"] = "tenant-a-call"
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=tenant_a.id,
+        cdr=tenant_a_cdr,
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+
+    tenant_b_cdr = sample_cdr("Qualified Seller – Follow Up")
+    tenant_b_cdr["id"] = 42001
+    tenant_b_cdr["callid"] = "tenant-b-call"
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=tenant_b.id,
+        cdr=tenant_b_cdr,
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+
+    lead_a = db_session.scalar(select(Lead).where(Lead.organization_id == tenant_a.id))
+    lead_b = db_session.scalar(select(Lead).where(Lead.organization_id == tenant_b.id))
+    assert lead_a is not None
+    assert lead_b is not None
+    assert lead_a.id != lead_b.id
+    tracked_models = (
+        Lead,
+        Contact,
+        Property,
+        CallRecord,
+        CommunicationRecord,
+        AttributionTouch,
+        Task,
+        PropertyResearchRun,
+    )
+    before_conflict = {
+        model: (
+            int(
+                db_session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(model.organization_id == tenant_a.id)
+                )
+                or 0
+            ),
+            int(
+                db_session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(model.organization_id == tenant_b.id)
+                )
+                or 0
+            ),
+        )
+        for model in tracked_models
+    }
+    assert all(counts[0] > 0 and counts[1] > 0 for counts in before_conflict.values())
+
+    conflict_cdr = sample_cdr("Qualified Seller – Follow Up")
+    conflict_cdr["id"] = 42002
+    conflict_cdr["callid"] = "tenant-b-foreign-prior-lead"
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=tenant_b.id,
+        cdr=conflict_cdr,
+        now=datetime.now(UTC),
+    )
+    conflict_event = db_session.scalar(
+        select(ProspectingProviderEvent).where(
+            ProspectingProviderEvent.organization_id == tenant_b.id,
+            ProspectingProviderEvent.external_event_id == "cdr:42002",
+        )
+    )
+    assert conflict_event is not None
+    conflict_event.payload = {
+        **dict(conflict_event.payload or {}),
+        "_stonegate": {"lead_id": str(lead_a.id)},
+    }
+    db_session.commit()
+
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+    db_session.refresh(conflict_event)
+    assert conflict_event.processing_status == "quarantined"
+    assert conflict_event.payload["_stonegate"]["qualification"]["reason_code"] == (
+        "prior_lead_workspace_conflict"
+    )
+    assert "lead_id" not in conflict_event.payload["_stonegate"]
+    conflict_fact = db_session.scalar(
+        select(BatchDialerCallFact).where(
+            BatchDialerCallFact.provider_event_id == conflict_event.id
+        )
+    )
+    assert conflict_fact is not None and conflict_fact.lead_id is None
+    after_conflict = {
+        model: (
+            int(
+                db_session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(model.organization_id == tenant_a.id)
+                )
+                or 0
+            ),
+            int(
+                db_session.scalar(
+                    select(func.count())
+                    .select_from(model)
+                    .where(model.organization_id == tenant_b.id)
+                )
+                or 0
+            ),
+        )
+        for model in tracked_models
+    }
+    assert after_conflict == before_conflict
+
+
+def test_mapped_land_complete_address_creates_land_lead(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id, asset_class="land")
+    install_qualification_fakes(monkeypatch)
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller – Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+    lead = db_session.scalar(select(Lead))
+    property_record = db_session.scalar(select(Property))
+
+    assert lead is not None and lead.asset_class == "land"
+    assert property_record is not None
+    assert property_record.property_type == "vacant_land"
+    assert property_record.street_address == "123 Test Lane"
+    assert lead.qualification_context["batchdialer"]["asset_class"] == "land"
+
+
+def test_mapped_land_parcel_identity_never_persists_house_placeholder(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id, asset_class="land")
+    provider = ScriptedBatchDialerClient(
+        [qualifying_transcript()],
+        contact={
+            "id": 44,
+            "firstname": "Parcel",
+            "lastname": "Seller",
+            "state": "GA",
+            "phonenumber1": "+16785550199",
+            "customfields": {
+                "APN": "01A-002-003",
+                "Property County": "Gilmer County",
+            },
+        },
+    )
+    install_qualification_fakes(monkeypatch, provider)
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller – Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    process_next_batchdialer_direct_event(
+        db_session,
+        direct_settings(LAND_WORKFLOW_ENABLED=True),
+    )
+    lead = db_session.scalar(select(Lead))
+    property_record = db_session.scalar(select(Property))
+    research_run = db_session.scalar(select(PropertyResearchRun))
+
+    assert lead is not None and lead.asset_class == "land"
+    assert property_record is not None
+    assert property_record.property_type == "vacant_land"
+    assert property_record.parcel_id == "01A-002-003"
+    assert property_record.county == "Gilmer County"
+    assert property_record.state == "GA"
+    assert property_record.street_address == ""
+    assert property_record.city == ""
+    assert property_record.postal_code == ""
+    assert "Address pending" not in property_record.street_address
+    assert lead.qualification_context["batchdialer"]["property_data_status"] == (
+        "parcel_provided"
+    )
+    assert research_run is not None
+    assert research_run.source_lead_id == lead.id
+    assert research_run.property_id == property_record.id
+    assert research_run.research_profile == "land_v1"
+    assert research_run.trigger_source == "batchdialer"
+    assert research_run.status == "queued"
+    assert property_record.research_status == "queued"
+
+
+def test_mapped_land_without_real_property_identity_is_non_overridable(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id, asset_class="land")
+    provider = ScriptedBatchDialerClient(
+        [qualifying_transcript()],
+        contact={
+            "id": 44,
+            "firstname": "Identity",
+            "lastname": "Missing",
+            "state": "GA",
+            "phonenumber1": "+16785550199",
+        },
+    )
+    install_qualification_fakes(monkeypatch, provider)
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller – Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    event = db_session.get(ProspectingProviderEvent, event_id)
+    approval = db_session.scalar(select(ApprovalRequest))
+
+    assert event is not None and event.processing_status == "quarantined"
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
+        "land_property_identity_incomplete"
+    )
+    assert approval is not None
+    assert approval.approval_metadata["can_approve"] is False
+    assert provider.transcript_calls == 0
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Property)) == 0
+
+
 def test_appointment_handoff_creates_one_lead_call_transcript_and_manual_task(
     db_session: Session,
     monkeypatch: Any,
@@ -1085,6 +1470,7 @@ def test_appointment_handoff_creates_one_lead_call_transcript_and_manual_task(
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     install_qualification_fakes(monkeypatch)
     now = datetime.now(UTC)
     archive_batchdialer_cdr(
@@ -1155,6 +1541,7 @@ def test_active_manual_appointment_clears_batchdialer_task_but_cancelled_one_doe
         admin_name="Owner",
         organization_name="Stonegate Home Buyers",
     ).organization
+    map_sample_campaign(db_session, organization.id)
     install_qualification_fakes(monkeypatch)
     archive_batchdialer_cdr(
         db_session,
@@ -1240,3 +1627,23 @@ def direct_settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings.model_validate(values)
+
+
+def map_sample_campaign(
+    db: Session,
+    organization_id: UUID,
+    *,
+    asset_class: str | None = "house",
+) -> BatchDialerCampaign:
+    campaign = BatchDialerCampaign(
+        organization_id=organization_id,
+        provider_campaign_id="88",
+        name="Georgia Distressed Homeowners",
+        status="active",
+        is_active=True,
+        asset_class=asset_class,
+        asset_class_mapped_at=datetime.now(UTC) if asset_class is not None else None,
+        provider_snapshot={"id": 88, "name": "Georgia Distressed Homeowners"},
+    )
+    db.add(campaign)
+    return campaign

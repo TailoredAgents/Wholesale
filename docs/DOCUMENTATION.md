@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 22, 2026
+Last verified against the repository: August 23, 2026
 
 ## Purpose
 
@@ -23,15 +23,17 @@ When sources disagree, use this order:
 3. **`FINISHING_ROADMAP.md`** describes unfinished work and external acceptance steps.
 4. **`CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`** describes the approved private-OS
    reorganization target and migration sequence.
-5. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
-6. **`BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`** describes the approved outbound-calling
+5. **`LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`** describes the staged unified House/Land
+   implementation and the production boundaries that remain in force.
+6. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
+7. **`BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`** describes the approved outbound-calling
    architecture, sole direct provider integration, manual Stonegate appointment workflow, and
    native-dialer dormancy plan.
-7. **`BATCHDIALER_API_CONTRACT.md`** records the official provider evidence, unresolved behavior,
+8. **`BATCHDIALER_API_CONTRACT.md`** records the official provider evidence, unresolved behavior,
    and conservative constraints governing the owner-approved direct implementation.
-8. **Domain references** define approved operating policy and specialist methods.
-9. **User manuals** explain how staff should perform current workflows.
-10. **Git history** preserves completed phase plans and prior decisions for forensic review only.
+9. **Domain references** define approved operating policy and specialist methods.
+10. **User manuals** explain how staff should perform current workflows.
+11. **Git history** preserves completed phase plans and prior decisions for forensic review only.
 
 Never use an old commit, completed phase document, or provider application draft to override the
 current code or canonical documentation.
@@ -43,6 +45,8 @@ current code or canonical documentation.
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
 | `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Implemented IA1-IA10 navigation and workspace consolidation, route compatibility, and role-acceptance evidence | Owner, managers, and developers |
+| `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md` | Unified House/Land implementation stages, current Land safety boundary, and remaining production work | Owner, acquisitions, and developers |
+| `LAND_ACQUISITION_OPERATIONS_PLAYBOOK.md` | Current Land intake, qualification, provenance, readiness, remote-first follow-up, and manager-review procedure | VAs, acquisitions, managers, and owner |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` | Current production-dialer decision, sole direct BatchDialer API integration, urgent manual Stonegate appointment task, production acceptance, and native-dialer dormancy | Owner, prospecting managers, and developers |
 | `BATCHDIALER_API_CONTRACT.md` | Official BatchDialer API surface, controlled evidence, unresolved assumptions, and constrained direct-version rules | Owner and developers |
@@ -51,6 +55,7 @@ current code or canonical documentation.
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |
 | `UNDERWRITING_COMP_METHOD.md` | Current Stonegate Valuation V3 method and `v3.1-adjusted-distribution` contract, with V2.2 retained only for history and engineering rollback | Acquisitions, underwriting, owner, and developers |
+| `LAND_VALUATION_METHOD.md` | Current deterministic Land comparable-sale method, evidence rules, and unresolved launch requirements | Acquisitions, underwriting, owner, and developers |
 | `SETUP_REFERENCE.md` | Local setup, production services, environment variables, and provider activation | Owner and developers |
 | `SETUP_MANUAL.md` | Nontechnical provider, account, staff, launch, and maintenance procedures | Owner and trusted administrators |
 | `USER_MANUAL.md` | Full current operating instructions | All staff |
@@ -70,6 +75,11 @@ verification, remediations, and the production acceptance runbooks that remain o
 evidence artifact, not a higher-priority source of current product truth than `SYSTEM_MAP.md` or
 `FINISHING_ROADMAP.md`.
 
+`LAND_FIRST_READINESS_AUDIT_2026-08-23.md` records the August 23, 2026 asset-class trace audit,
+the near-term 80% Land operating assumption, severity-ranked gaps, migration safeguards, and the
+recommended staged implementation. It is point-in-time evidence and a planning aid; application
+code and the canonical current-state documents remain authoritative.
+
 `../apps/web/AGENTS.md` and `../apps/web/CLAUDE.md` are repository tool instructions. They are not
 employee help content and must not be ingested into the staff help assistant.
 
@@ -87,7 +97,8 @@ employee help content and must not be ingested into the staff help assistant.
 
 ### Operating Policy
 
-`OPERATING_MODEL.md`, `SECURITY_COMPLIANCE.md`, and `UNDERWRITING_COMP_METHOD.md` answer:
+`OPERATING_MODEL.md`, `SECURITY_COMPLIANCE.md`, `UNDERWRITING_COMP_METHOD.md`, and
+`LAND_VALUATION_METHOD.md` answer:
 
 - Who owns the work?
 - What is the approved business process?
@@ -118,8 +129,9 @@ nontechnical owner procedure while `SETUP_REFERENCE.md` remains the exact mainta
 ### Future Work
 
 `FINISHING_ROADMAP.md`, `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`,
-`PUBLIC_SITE_CONVERSION_ROADMAP.md`, `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`, the historical
-`VA_DIALER_ROADMAP.md`, and `AI_AUTOMATION_ROADMAP.md` answer:
+`LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`, `PUBLIC_SITE_CONVERSION_ROADMAP.md`,
+`BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md`, the historical `VA_DIALER_ROADMAP.md`, and
+`AI_AUTOMATION_ROADMAP.md` answer:
 
 - What is incomplete?
 - What requires credentials, provider approval, production evidence, or human acceptance?

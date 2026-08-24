@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.domain.assets import ASSET_CLASSES, LAND_ASSET_CLASS
 from app.integrations.batchdialer_client import (
     BatchDialerAPIError,
     BatchDialerClient,
@@ -37,6 +38,7 @@ from app.models.foundation import (
     CallTranscript,
     CommunicationRecord,
     Lead,
+    Organization,
     ProspectingProviderEvent,
     Task,
 )
@@ -101,6 +103,24 @@ MAX_TRANSCRIPT_LENGTH = 100_000
 MAX_TRANSCRIPT_SEGMENTS = 250
 MAX_TRANSCRIPT_SEGMENT_LENGTH = 4_000
 MAX_QUALIFICATION_PROMPT_CHARS = 40_000
+LAND_PARCEL_FIELD_KEYS = frozenset(
+    {
+        "apn",
+        "parcel",
+        "parcelid",
+        "parcelnumber",
+        "taxparcelid",
+        "taxparcelnumber",
+        "assessorparcelnumber",
+        "assessorsparcelnumber",
+    }
+)
+LAND_COUNTY_FIELD_KEYS = frozenset(
+    {"county", "propertycounty", "parcelcounty", "taxcounty"}
+)
+PROVIDER_IDENTITY_PLACEHOLDERS = frozenset(
+    {"-", "n/a", "na", "none", "not available", "null", "pending", "tbd", "unknown"}
+)
 
 QUALIFICATION_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -655,12 +675,88 @@ def _process_batchdialer_event(
             "raw_disposition": _string(raw_cdr.get("disposition")),
         }
 
+    asset_class, asset_review = _resolve_campaign_asset_mapping(
+        db,
+        organization_id=event.organization_id,
+        raw_cdr=raw_cdr,
+    )
+    if asset_review is not None:
+        reason_code, reason = asset_review
+        return _route_claimed_qualification_review(
+            db,
+            event_id=event.id,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+            normalized=_basic_review_context(raw_cdr),
+            reason_code=reason_code,
+            reason=reason,
+            prior_result=prior_result,
+        )
+    prior_lead_id = prior_result.get("lead_id")
+    if prior_lead_id:
+        try:
+            prior_lead = db.get(Lead, UUID(str(prior_lead_id)))
+        except ValueError:
+            prior_lead = None
+        if prior_lead is not None and prior_lead.organization_id != event.organization_id:
+            tenant_safe_prior_result = dict(prior_result)
+            for key in ("lead_id", "contact_id", "property_id", "call_record_id"):
+                tenant_safe_prior_result.pop(key, None)
+            return _route_claimed_qualification_review(
+                db,
+                event_id=event.id,
+                claim_token=claim_token,
+                claimed_payload_sha256=claimed_payload_sha256,
+                normalized=_basic_review_context(raw_cdr),
+                reason_code="prior_lead_workspace_conflict",
+                reason=(
+                    "Stored BatchDialer state referenced a Lead in another workspace. "
+                    "The foreign reference was discarded and no CRM records were created."
+                ),
+                prior_result=tenant_safe_prior_result,
+            )
+        if (
+            prior_lead is not None
+            and prior_lead.asset_class != asset_class
+        ):
+            return _route_claimed_qualification_review(
+                db,
+                event_id=event.id,
+                claim_token=claim_token,
+                claimed_payload_sha256=claimed_payload_sha256,
+                normalized=_basic_review_context(raw_cdr),
+                reason_code="existing_lead_asset_conflict",
+                reason=(
+                    "This provider event previously created a Lead in a different asset lane. "
+                    "The historical Lead was preserved for explicit staff repair."
+                ),
+                prior_result=prior_result,
+            )
+
     client = BatchDialerClient(settings)
     provider_contact_id = _contact_id(raw_cdr)
     contact_payload: dict[str, Any] = {}
     if provider_contact_id:
         contact_payload = sanitize_contact(client.get_contact(provider_contact_id))
     normalized = normalize_qualified_handoff(raw_cdr, contact_payload, outcome=outcome)
+    normalized["asset_class"] = asset_class
+    if asset_class == LAND_ASSET_CLASS and not (
+        normalized["has_complete_address"]
+        or normalized["has_parcel_identity"]
+    ):
+        return _route_claimed_qualification_review(
+            db,
+            event_id=event.id,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+            normalized=normalized,
+            reason_code="land_property_identity_incomplete",
+            reason=(
+                "Mapped Land handoffs require a complete provider address or provider APN "
+                "with county and state. Placeholder House identity was not accepted."
+            ),
+            prior_result=prior_result,
+        )
 
     if disposition_override:
         # The reviewer mapped only the unknown provider disposition. The call must still
@@ -813,6 +909,7 @@ def _process_batchdialer_event(
         event=event,
         normalized=normalized,
         prior_result=prior_result,
+        settings=settings,
     )
     call = _ensure_call_evidence(
         db,
@@ -840,6 +937,7 @@ def _process_batchdialer_event(
     db.flush()
     return {
         "outcome": outcome,
+        "asset_class": normalized["asset_class"],
         "lead_id": str(lead.id),
         "contact_id": str(lead.contact_id),
         "property_id": str(lead.property_id),
@@ -1629,13 +1727,25 @@ def normalize_qualified_handoff(
     postal_code = _string(contact.get("postalcode")) or _nested_string(
         cdr, "contact", "zip"
     )
-    has_complete_address = bool(address and city and len(state) == 2 and postal_code)
+    has_provider_state = bool(len(state) == 2 and state.isalpha())
+    has_complete_address = bool(
+        _is_real_provider_identity(address)
+        and _is_real_provider_identity(city)
+        and has_provider_state
+        and re.fullmatch(r"\d{5}(?:-\d{4})?", postal_code)
+    )
     if not has_complete_address:
         suffix = provider_contact_id or _required_numeric_id(cdr.get("id"), "CDR")
         address = f"Address pending (BatchDialer {suffix})"
         city = "Unknown"
-        state = "GA"
+        state = state.upper() if has_provider_state else "GA"
         postal_code = "Unknown"
+    parcel_id, property_county = _contact_land_identity(contact)
+    raw_contact = cdr.get("contact")
+    if isinstance(raw_contact, dict) and (parcel_id is None or property_county is None):
+        raw_parcel_id, raw_property_county = _contact_land_identity(raw_contact)
+        parcel_id = parcel_id or raw_parcel_id
+        property_county = property_county or raw_property_county
     notes = _collect_provider_notes(cdr, contact)
     raw_agent = cdr.get("agent")
     agent: dict[str, Any] = raw_agent if isinstance(raw_agent, dict) else {}
@@ -1653,7 +1763,13 @@ def normalize_qualified_handoff(
         "property_city": city[:120],
         "property_state": state.upper()[:2],
         "property_zip_code": postal_code[:20],
+        "property_county": property_county,
+        "parcel_id": parcel_id,
         "has_complete_address": has_complete_address,
+        "has_parcel_identity": bool(
+            parcel_id and property_county and has_provider_state
+        ),
+        "has_provider_state": has_provider_state,
         "notes": notes,
         "raw_disposition": _string(cdr.get("disposition")),
         "campaign_id": _string(campaign.get("id")),
@@ -1674,24 +1790,69 @@ def normalize_qualified_handoff(
     }
 
 
+def _resolve_campaign_asset_mapping(
+    db: Session,
+    *,
+    organization_id: UUID,
+    raw_cdr: dict[str, Any],
+) -> tuple[str | None, tuple[str, str] | None]:
+    raw_campaign = raw_cdr.get("campaign")
+    raw_campaign = raw_campaign if isinstance(raw_campaign, dict) else {}
+    provider_campaign_id = _string(raw_campaign.get("id"))
+    if not provider_campaign_id:
+        return None, (
+            "campaign_asset_unmapped",
+            "BatchDialer campaign identity is missing, so no explicit asset mapping can "
+            "be applied.",
+        )
+    campaign = db.scalar(
+        select(BatchDialerCampaign)
+        .where(
+            BatchDialerCampaign.organization_id == organization_id,
+            BatchDialerCampaign.provider_campaign_id == provider_campaign_id,
+        )
+        .with_for_update(of=BatchDialerCampaign)
+    )
+    if campaign is None or campaign.asset_class is None:
+        return None, (
+            "campaign_asset_unmapped",
+            f"BatchDialer campaign {provider_campaign_id} has no explicit House or Land mapping.",
+        )
+    if campaign.asset_class not in ASSET_CLASSES:
+        return None, (
+            "campaign_asset_invalid",
+            f"BatchDialer campaign {provider_campaign_id} has an invalid asset mapping.",
+        )
+    return campaign.asset_class, None
+
+
 def _ensure_batchdialer_lead(
     db: Session,
     *,
     event: ProspectingProviderEvent,
     normalized: dict[str, Any],
     prior_result: dict[str, Any],
+    settings: Settings,
 ) -> tuple[Lead, bool]:
+    organization = db.get(Organization, event.organization_id)
+    if organization is None:
+        raise BatchDialerNeedsReview(
+            "The BatchDialer event workspace is unavailable; no CRM records were created."
+        )
     prior_lead_id = prior_result.get("lead_id")
     if prior_lead_id:
         try:
             lead = db.get(Lead, UUID(str(prior_lead_id)))
         except ValueError:
             lead = None
+        if lead is not None and lead.organization_id != event.organization_id:
+            raise BatchDialerNeedsReview(
+                "The prior BatchDialer Lead belongs to another workspace and cannot be reused."
+            )
         if lead is not None:
             _apply_batchdialer_context(lead, event, normalized)
             return lead, False
 
-    organization = get_default_organization(db)
     intake = _handoff_intake(normalized, event.external_event_id)
     duplicate = find_duplicate_match(db, organization, intake)
     contact = duplicate.contact or create_contact(db, organization, intake)
@@ -1704,12 +1865,16 @@ def _ensure_batchdialer_lead(
     _apply_batchdialer_context(lead, event, normalized)
     if created:
         enqueue_lead_created_ai_work(db, lead, source=PROVIDER)
-        if normalized["has_complete_address"]:
+        if normalized["has_complete_address"] or (
+            normalized["asset_class"] == LAND_ASSET_CLASS
+            and normalized["has_parcel_identity"]
+        ):
             enqueue_property_research(
                 db,
                 property_record,
                 source_lead_id=lead.id,
                 trigger_source=PROVIDER,
+                settings=settings,
             )
     ensure_inbound_case(
         db,
@@ -1752,12 +1917,20 @@ def _ensure_batchdialer_lead(
 
 
 def _handoff_intake(normalized: dict[str, Any], event_id: str) -> SellerIntakeCreate:
+    is_land = normalized.get("asset_class") == LAND_ASSET_CLASS
+    parcel_only_land = is_land and not normalized["has_complete_address"]
     try:
         return SellerIntakeCreate(
-            property_address=normalized["property_address"],
-            property_city=normalized["property_city"],
+            property_address="" if parcel_only_land else normalized["property_address"],
+            property_city="" if parcel_only_land else normalized["property_city"],
             property_state=normalized["property_state"],
-            property_postal_code=normalized["property_zip_code"],
+            property_postal_code=(
+                "" if parcel_only_land else normalized["property_zip_code"]
+            ),
+            property_county=normalized.get("property_county"),
+            property_type="vacant_land" if is_land else None,
+            asset_class=normalized["asset_class"],
+            parcel_id=normalized.get("parcel_id"),
             name=normalized["full_name"],
             phone=normalized["phone"],
             email=normalized["email"],
@@ -1794,19 +1967,30 @@ def _apply_batchdialer_context(
         "provider_call_id": normalized["provider_call_id"],
         "campaign_id": normalized["campaign_id"],
         "campaign_name": normalized["campaign_name"],
+        "asset_class": normalized["asset_class"],
+        "asset_mapping": "provider_campaign",
         "agent_id": normalized["agent_id"],
         "agent_name": normalized["agent_name"],
         "disposition": normalized["raw_disposition"],
         "follow_up_permission": "unknown",
         "occurred_at": (event.occurred_at or event.received_at).isoformat(),
-        "property_data_status": (
-            "provided" if normalized["has_complete_address"] else "address_needed"
-        ),
+        "property_data_status": _batchdialer_property_data_status(normalized),
     }
     if normalized["outcome"] == "appointment_set":
         context["batchdialer_appointment_pending_entry"] = True
         lead.appointment_status = "needs_scheduling"
     lead.qualification_context = context
+
+
+def _batchdialer_property_data_status(normalized: dict[str, Any]) -> str:
+    if normalized["has_complete_address"]:
+        return "provided"
+    if (
+        normalized["asset_class"] == LAND_ASSET_CLASS
+        and normalized["has_parcel_identity"]
+    ):
+        return "parcel_provided"
+    return "address_needed"
 
 
 def _ensure_attribution(
@@ -2124,6 +2308,17 @@ def sanitize_cdr(cdr: dict[str, Any]) -> dict[str, Any]:
                 "city",
                 "state",
                 "zip",
+                "postalcode",
+                "county",
+                "propertycounty",
+                "property_county",
+                "apn",
+                "parcelid",
+                "parcel_id",
+                "parcelnumber",
+                "parcel_number",
+                "taxparcelid",
+                "tax_parcel_id",
                 "status",
                 "email",
             ),
@@ -2133,7 +2328,13 @@ def sanitize_cdr(cdr: dict[str, Any]) -> dict[str, Any]:
     ):
         value = cdr.get(key)
         if isinstance(value, dict):
-            result[key] = {field: value.get(field) for field in fields if field in value}
+            sanitized_nested = {
+                field: value.get(field) for field in fields if field in value
+            }
+            custom_fields = value.get("customfields")
+            if key == "contact" and isinstance(custom_fields, dict):
+                sanitized_nested["customfields"] = _sanitize_custom_fields(custom_fields)
+            result[key] = sanitized_nested
     comments = cdr.get("comments")
     if isinstance(comments, list):
         result["comments"] = [
@@ -2158,6 +2359,16 @@ def sanitize_contact(contact: dict[str, Any]) -> dict[str, Any]:
         "city",
         "state",
         "postalcode",
+        "county",
+        "propertycounty",
+        "property_county",
+        "apn",
+        "parcelid",
+        "parcel_id",
+        "parcelnumber",
+        "parcel_number",
+        "taxparcelid",
+        "tax_parcel_id",
         "country",
         "email",
         "comments",
@@ -2734,6 +2945,36 @@ def _contact_phone(contact: dict[str, Any]) -> str | None:
         if normalized:
             return normalized
     return None
+
+
+def _contact_land_identity(contact: dict[str, Any]) -> tuple[str | None, str | None]:
+    parcel_id: str | None = None
+    county: str | None = None
+    values: list[tuple[object, object]] = list(contact.items())
+    custom_fields = contact.get("customfields")
+    if isinstance(custom_fields, dict):
+        values.extend(custom_fields.items())
+    for raw_key, raw_value in values:
+        key = re.sub(r"[^a-z0-9]+", "", _string(raw_key).casefold())
+        value = _clean_text(raw_value)
+        if not _is_real_provider_identity(value):
+            continue
+        if parcel_id is None and key in LAND_PARCEL_FIELD_KEYS:
+            parcel_id = value[:255]
+        elif county is None and key in LAND_COUNTY_FIELD_KEYS:
+            county = value[:120]
+        if parcel_id is not None and county is not None:
+            break
+    return parcel_id, county
+
+
+def _is_real_provider_identity(value: object) -> bool:
+    clean = _clean_text(value)
+    return bool(
+        clean
+        and clean.casefold() not in PROVIDER_IDENTITY_PLACEHOLDERS
+        and any(character.isalnum() for character in clean)
+    )
 
 
 def _collect_provider_notes(cdr: dict[str, Any], contact: dict[str, Any]) -> str:

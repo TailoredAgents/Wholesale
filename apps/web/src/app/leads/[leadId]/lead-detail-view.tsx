@@ -22,6 +22,11 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadCallButton } from "./lead-call-button";
 import { LeadEditForm } from "./lead-edit-form";
+import {
+  LandAcquisitionProfile,
+  LandAcquisitionSummary,
+  LandQualificationPanel,
+} from "./land-acquisition-profile";
 import { LandValuationWorkspace } from "./land-valuation-workspace";
 import { MarketValuePreview } from "./market-value-preview";
 import { NegotiationGovernance } from "./negotiation-governance";
@@ -192,7 +197,12 @@ function ContactPanel({
   );
 }
 
-function PropertyPanel({ lead }: { lead: LeadDetail }) {
+function PropertyPanel({ compact = false, lead }: { compact?: boolean; lead: LeadDetail }) {
+  if (lead.asset_class === "land") {
+    return compact
+      ? <LandAcquisitionSummary lead={lead} />
+      : <LandAcquisitionProfile lead={lead} />;
+  }
   return (
     <section className={styles.sectionPanel}>
       <SectionHeader title="Property and seller situation" />
@@ -246,6 +256,7 @@ function TasksPanel({ lead }: { lead: LeadDetail }) {
 }
 
 function QualificationPanel({ lead }: { lead: LeadDetail }) {
+  if (lead.asset_class === "land") return <LandQualificationPanel lead={lead} />;
   const missing = lead.intelligence.missing_fields.slice(0, 6);
   return (
     <section className={styles.sectionPanel}>
@@ -794,7 +805,7 @@ function PropertyTab({
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
         <PropertyIntelligencePanel lead={lead} />
-        <PropertyPanel lead={lead} />
+        <PropertyPanel compact lead={lead} />
         <details
           className={`${styles.sectionPanel} ${styles.editAnchor} ${styles.editLeadDisclosure}`}
           id="edit-lead"

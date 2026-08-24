@@ -11,6 +11,10 @@ const component = readFileSync(
   resolve(webRoot, "src/app/os/prospecting/batchdialer-va-performance.tsx"),
   "utf8",
 );
+const campaignMappingsComponent = readFileSync(
+  resolve(webRoot, "src/app/os/prospecting/batchdialer-campaign-mappings.tsx"),
+  "utf8",
+);
 const styles = readFileSync(
   resolve(webRoot, "src/app/os/prospecting/batchdialer-va-performance.module.css"),
   "utf8",
@@ -99,6 +103,39 @@ test("mapping controls make attribution explicit and persist only on Save", () =
   assert.match(component, /body: JSON\.stringify\(\{ user_id: selectedUserId \|\| null \}\)/);
   assert.match(component, /agent\.mapping_id === mapping\.id/);
   assert.match(component, /Mapping saved/);
+});
+
+test("manager campaign mappings make House and Land routing explicit", () => {
+  assert.match(page, /getBatchDialerCampaignMappings\(\)/);
+  assert.match(page, /initialCampaignMappings=\{batchDialerCampaignMappings\}/);
+  assert.match(api, /BatchDialerCampaignMapping/);
+  assert.match(api, /historical_asset_mismatch_count/);
+  assert.match(api, /requeued_event_count/);
+  assert.match(api, /\/api\/v1\/prospecting\/batchdialer\/campaign-mappings/);
+  assert.match(component, /BatchDialerCampaignMappingsPanel/);
+  assert.match(
+    campaignMappingsComponent,
+    /Map every BatchDialer campaign to House or Land/,
+  );
+  assert.match(campaignMappingsComponent, /Needs classification/);
+  assert.match(campaignMappingsComponent, /<option value="house">House<\/option>/);
+  assert.match(campaignMappingsComponent, /<option value="land">Land<\/option>/);
+  assert.match(campaignMappingsComponent, /method: "PATCH"/);
+  assert.match(
+    campaignMappingsComponent,
+    /body: JSON\.stringify\(\{ asset_class: selectedAssetClass \|\| null \}\)/,
+  );
+});
+
+test("unclassified BatchDialer campaigns disclose the qualified-lead hold", () => {
+  assert.match(campaignMappingsComponent, /Qualified leads are held until mapped/);
+  assert.match(campaignMappingsComponent, /events held for a missing campaign mapping/);
+  assert.match(campaignMappingsComponent, /requeued_event_count/);
+  assert.match(campaignMappingsComponent, /historical asset mismatch/);
+  assert.match(campaignMappingsComponent, /historical_asset_mismatch_sample_lead_ids/);
+  assert.match(campaignMappingsComponent, /aria-live="polite"/);
+  assert.match(styles, /\.classificationHoldNotice/);
+  assert.match(styles, /\.campaignMappingName/);
 });
 
 test("AI coaching remains evidence-backed, draft-only manager guidance", () => {

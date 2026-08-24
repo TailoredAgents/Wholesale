@@ -78,6 +78,7 @@ from app.services.acquisition_operations import (
 from app.services.call_recording_evidence import select_preferred_call_recording
 from app.services.communication_compliance import format_e164
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.land_acquisition_profile import record_land_reported_answers
 from app.services.lead_lifecycle import require_lead_open_for_work
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
 from app.services.leads import (
@@ -1329,8 +1330,14 @@ def convert_prospect_to_lead(
         if existing is None:
             raise ValueError("The prospect points to a missing CRM lead.")
         require_lead_open_for_work(existing)
+        existing_property = db.get(Property, existing.property_id)
+        if (
+            existing_property is None
+            or existing_property.organization_id != principal.organization_id
+        ):
+            raise ValueError("The existing CRM lead points to a missing property.")
         existing.assigned_user_id = assigned_user_id
-        update_lead_qualification(existing, answers)
+        update_lead_qualification(existing, answers, property_record=existing_property)
         sync_contact_phone_methods(
             db,
             organization_id=principal.organization_id,
@@ -1442,7 +1449,7 @@ def convert_prospect_to_lead(
         appointment_status=None,
         next_follow_up_at=None,
     )
-    update_lead_qualification(lead, answers)
+    update_lead_qualification(lead, answers, property_record=property_record)
     db.add(lead)
     db.flush()
     from app.services.ai_operations import enqueue_lead_created_ai_work
@@ -1578,13 +1585,29 @@ def create_handoff_appointment(
     )
 
 
-def update_lead_qualification(lead: Lead, answers: dict[str, str]) -> None:
+def update_lead_qualification(
+    lead: Lead,
+    answers: dict[str, str],
+    *,
+    property_record: Property | None = None,
+) -> None:
     lead.motivation = answers.get("motivation") or lead.motivation
     lead.desired_timeline = answers.get("timeline") or lead.desired_timeline
     lead.property_condition = answers.get("property_condition") or lead.property_condition
     lead.occupancy_status = answers.get("occupancy") or lead.occupancy_status
     lead.asking_price = answers.get("asking_price") or lead.asking_price
     lead.mortgage_balance = answers.get("mortgage_balance") or lead.mortgage_balance
+    if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS:
+        parcel_answer = (answers.get("parcel_id") or answers.get("apn") or "").strip()
+        if property_record is not None and parcel_answer and not property_record.parcel_id:
+            property_record.parcel_id = parcel_answer
+            refresh_property_identity_keys(property_record)
+        lead.qualification_context = record_land_reported_answers(
+            lead.qualification_context,
+            answers,
+            source_name="prospecting_qualification",
+            observed_at=datetime.now(UTC),
+        )
 
 
 def completion_payload_fingerprint(payload: ProspectingAttemptComplete) -> str:

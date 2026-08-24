@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   getAcquisitionOperations,
   getBatchDialerAgentMappings,
+  getBatchDialerCampaignMappings,
   getBatchDialerVaPerformance,
   getCampaignManagementOverview,
   getProspectingDialerAnalytics,
@@ -67,6 +68,7 @@ export default async function ProspectingPage({
     analyticsResult,
     batchDialerPerformanceResult,
     batchDialerMappingsResult,
+    batchDialerCampaignMappingsResult,
     pilotResult,
   ] =
     await Promise.all([
@@ -94,6 +96,9 @@ export default async function ProspectingPage({
       canManage && view === "analytics"
         ? getBatchDialerAgentMappings()
         : Promise.resolve({ agentMappings: null, apiConnected: true }),
+      canManage && view === "analytics"
+        ? getBatchDialerCampaignMappings()
+        : Promise.resolve({ campaignMappings: null, apiConnected: true }),
       canManage && view === "pilot"
         ? getProspectingDialerPilot()
         : Promise.resolve({ dialerPilot: null, apiConnected: true }),
@@ -105,6 +110,7 @@ export default async function ProspectingPage({
   const dialerAnalytics = analyticsResult.dialerAnalytics;
   const batchDialerPerformance = batchDialerPerformanceResult.vaPerformance;
   const batchDialerMappings = batchDialerMappingsResult.agentMappings;
+  const batchDialerCampaignMappings = batchDialerCampaignMappingsResult.campaignMappings;
   const dialerPilot = pilotResult.dialerPilot;
   const connected =
     apiConnected &&
@@ -237,6 +243,8 @@ export default async function ProspectingPage({
             }
             initialData={batchDialerPerformance}
             initialMappings={batchDialerMappings}
+            initialCampaignMappings={batchDialerCampaignMappings}
+            initialCampaignMappingsAvailable={batchDialerCampaignMappingsResult.apiConnected}
           />
         </>
       ) : view === "pilot" && canManage ? (

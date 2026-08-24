@@ -129,8 +129,11 @@ def test_land_call_notes_fill_only_empty_evidence_backed_crm_fields() -> None:
     assert lead.asking_price == "$75,000"
     assert lead.qualification_context["acreage"] == "5.2 acres"
     assert lead.qualification_context["utilities"] == ("County utility map verified water at road")
-    assert lead.qualification_context["parcel_id"] == "12-345-678-901"
+    assert "parcel_id" not in lead.qualification_context
     assert property_record.parcel_id == "12-345-678-901"
+    stored_profile = lead.qualification_context["land_acquisition_v1"]
+    assert stored_profile["facts"]["acreage"]["source_type"] == "seller_reported"
+    assert "parcel_id" not in stored_profile["facts"]
     assert "qualification_context.acreage" in populated
     assert "qualification_context.utilities" not in populated
     assert populated["property.parcel_id"] == "12-345-678-901"

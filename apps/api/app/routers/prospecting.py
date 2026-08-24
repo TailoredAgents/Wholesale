@@ -14,6 +14,9 @@ from app.schemas.prospecting import (
     BatchDialerAgentMappingListRead,
     BatchDialerAgentMappingRead,
     BatchDialerAgentMappingUpdate,
+    BatchDialerCampaignMappingListRead,
+    BatchDialerCampaignMappingUpdate,
+    BatchDialerCampaignMappingUpdateRead,
     BatchDialerVaCoachAnalyzeRequest,
     BatchDialerVaCoachOutputRead,
     BatchDialerVaCoachReportRead,
@@ -70,6 +73,10 @@ from app.schemas.prospecting_dialer_acceptance import (
     ProspectingDialerPilotShiftReviewCreate,
     ProspectingDialerPilotStart,
     ProspectingDialerPilotSubmit,
+)
+from app.services.batchdialer_campaign_mapping import (
+    list_batchdialer_campaign_mappings,
+    update_batchdialer_campaign_mapping,
 )
 from app.services.batchdialer_va_performance import (
     get_batchdialer_va_coaching_input,
@@ -424,6 +431,40 @@ def patch_batchdialer_agent_mapping(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="BatchDialer agent identity not found.",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return result
+
+
+@router.get("/batchdialer/campaign-mappings")
+def read_batchdialer_campaign_mappings(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> BatchDialerCampaignMappingListRead:
+    _mark_sensitive_response_no_store(response)
+    return list_batchdialer_campaign_mappings(db, principal)
+
+
+@router.patch("/batchdialer/campaign-mappings/{mapping_id}")
+def patch_batchdialer_campaign_mapping(
+    mapping_id: UUID,
+    payload: BatchDialerCampaignMappingUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> BatchDialerCampaignMappingUpdateRead:
+    _mark_sensitive_response_no_store(response)
+    result = update_batchdialer_campaign_mapping(
+        db,
+        principal,
+        mapping_id=mapping_id,
+        asset_class=payload.asset_class,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="BatchDialer campaign not found.",
             headers={"Cache-Control": "private, no-store"},
         )
     return result

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.domain.assets import HOUSE_ASSET_CLASS, AssetClass
+from app.domain.assets import AssetClass
 
 
 def normalize_operating_code(value: Any) -> Any:
@@ -307,7 +307,7 @@ class CampaignCreate(BaseModel):
         "referral",
         "other",
     ]
-    asset_class: AssetClass = HOUSE_ASSET_CLASS
+    asset_class: AssetClass
     starts_on: date | None = None
     ends_on: date | None = None
     budget_cents: int | None = Field(default=None, ge=0)

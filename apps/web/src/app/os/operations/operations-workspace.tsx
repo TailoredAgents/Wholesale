@@ -203,6 +203,7 @@ export function OperationsWorkspace({
       name: formValue(data, "name"),
       code: formValue(data, "code"),
       channel: formValue(data, "channel"),
+      asset_class: formValue(data, "asset_class"),
       starts_on: formValue(data, "starts_on") || null,
       ends_on: null,
       budget_cents: budget ? Math.round(Number(budget) * 100) : null,
@@ -489,7 +490,7 @@ export function OperationsWorkspace({
                   <div className={styles.planRow} key={campaign.id}>
                     <div>
                       <strong>{campaign.name}</strong>
-                      <span>{labelize(campaign.channel)} · {campaign.territory_name ?? campaign.market_name}</span>
+                      <span>{labelize(campaign.asset_class)} - {labelize(campaign.channel)} - {campaign.territory_name ?? campaign.market_name}</span>
                       <small>{campaign.prospect_count} prospects · {campaign.converted_prospect_count} converted · {campaign.owner_name ?? "No owner"}</small>
                     </div>
                     <span className={styles.badge}>{labelize(campaign.status)}</span>
@@ -501,6 +502,7 @@ export function OperationsWorkspace({
                   <h4>Create campaign</h4>
                   <label><span>Name</span><input name="name" required placeholder="Atlanta absentee owners" /></label>
                   <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="atl-absentee-2026-07" /></label>
+                  <label><span>Property workflow</span><select defaultValue="" name="asset_class" required><option disabled value="">Select House or Land</option><option value="house">House</option><option value="land">Land</option></select></label>
                   <label><span>Market</span><select name="market_id" required>{operations.markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
                   <label><span>Territory</span><select name="territory_id"><option value="">Entire market</option>{operations.territories.map((territory) => <option key={territory.id} value={territory.id}>{territory.name}</option>)}</select></label>
                   <label><span>Channel</span><select name="channel" defaultValue="cold_call"><option value="cold_call">Cold call</option><option value="cold_email">Cold email</option><option value="direct_mail">Direct mail</option><option value="paid_search">Paid search</option><option value="paid_social">Paid social</option><option value="organic">Organic</option><option value="referral">Referral</option><option value="other">Other</option></select></label>

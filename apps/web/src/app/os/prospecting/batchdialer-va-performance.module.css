@@ -564,6 +564,142 @@
   color: #9a3328;
 }
 
+.classificationPanel {
+  border-color: #d6c798;
+  background: linear-gradient(180deg, #fffdf6, #fff);
+}
+
+.classificationHoldNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border: 1px solid #dfc982;
+  border-radius: 7px;
+  background: #fff8e4;
+  color: #68521e;
+}
+
+.classificationHoldNotice svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.classificationHoldNotice p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.classificationSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.classificationSummary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dce2de;
+  border-radius: 7px;
+  background: #fafbfa;
+}
+
+.classificationSummary > div[data-state="needs"] {
+  border-color: #dfc377;
+  background: #fff7df;
+}
+
+.classificationSummary > div[data-state="house"] {
+  border-color: #cbd8cf;
+  background: #f3f8f5;
+}
+
+.classificationSummary > div[data-state="land"] {
+  border-color: #cfceb8;
+  background: #f8f7ef;
+}
+
+.classificationSummary span {
+  color: #69736d;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.classificationSummary strong {
+  color: #25392e;
+  font-size: 1rem;
+}
+
+.campaignMappingName {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.campaignMappingName > span {
+  display: inline-flex;
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid #c8d6cd;
+  border-radius: 999px;
+  background: #edf5f0;
+  color: #245f40;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.campaignMappingName > span[data-state="needs"] {
+  border-color: #dabe73;
+  background: #fff4d2;
+  color: #745614;
+}
+
+.campaignMappingName > span[data-state="land"] {
+  border-color: #c8c6a5;
+  background: #f4f2df;
+  color: #5d5a2c;
+}
+
+.campaignMappingFeedback {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 5px;
+  min-height: 1em;
+}
+
+.campaignMappingFeedback > p {
+  grid-column: auto;
+  min-height: 0;
+}
+
+.mappingMismatch {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #8a4d20;
+  line-height: 1.45;
+}
+
+.mappingMismatch svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.mappingMismatch a {
+  color: #784217;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .coachPanel {
   border-color: #c9d7ce;
   background: linear-gradient(180deg, #fff, #f8faf8);
@@ -837,6 +973,10 @@
   }
 
   .coachColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .classificationSummary {
     grid-template-columns: 1fr;
   }
 }

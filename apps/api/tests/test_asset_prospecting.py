@@ -45,6 +45,31 @@ def create_script(
     asset_class: str,
     title: str,
 ) -> dict[str, Any]:
+    qualification_questions: list[dict[str, object]] = [
+        {
+            "key": "motivation",
+            "label": "Reason for selling",
+            "prompt": "What has you considering selling the property?",
+            "required_for_handoff": True,
+        }
+    ]
+    if asset_class == "land":
+        qualification_questions.extend(
+            [
+                {
+                    "key": "parcel_id",
+                    "label": "Parcel / APN",
+                    "prompt": "What is the parcel number?",
+                    "required_for_handoff": False,
+                },
+                {
+                    "key": "access_frontage",
+                    "label": "Access and frontage",
+                    "prompt": "What access or road frontage does the seller report?",
+                    "required_for_handoff": False,
+                },
+            ]
+        )
     response = client.post(
         "/api/v1/prospecting/scripts",
         headers=headers,
@@ -55,14 +80,7 @@ def create_script(
                 "Hi, this is Stonegate. I am calling about your property and wanted "
                 "to ask whether you would consider an offer."
             ),
-            "qualification_questions": [
-                {
-                    "key": "motivation",
-                    "label": "Reason for selling",
-                    "prompt": "What has you considering selling the property?",
-                    "required_for_handoff": True,
-                }
-            ],
+            "qualification_questions": qualification_questions,
         },
     )
     assert response.status_code == 201, response.text
@@ -118,6 +136,17 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
     )
     assert market_response.status_code == 201, market_response.text
     market_id = market_response.json()["id"]
+    missing_asset_campaign_response = client.post(
+        "/api/v1/operations/campaigns",
+        headers=owner_headers,
+        json={
+            "market_id": market_id,
+            "name": "House Owners",
+            "code": "house-owners",
+            "channel": "cold_call",
+        },
+    )
+    assert missing_asset_campaign_response.status_code == 422
     house_campaign_response = client.post(
         "/api/v1/operations/campaigns",
         headers=owner_headers,
@@ -126,6 +155,7 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
             "name": "House Owners",
             "code": "house-owners",
             "channel": "cold_call",
+            "asset_class": "house",
         },
     )
     assert house_campaign_response.status_code == 201, house_campaign_response.text
@@ -332,7 +362,11 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
         json={
             "outcome": "interested",
             "handoff_user_id": acquisitions["id"],
-            "qualification_answers": {"motivation": "No longer needs the parcel"},
+            "qualification_answers": {
+                "motivation": "No longer needs the parcel",
+                "parcel_id": "APN-45-100",
+                "access_frontage": "Seller reports county-road frontage",
+            },
         },
     )
     assert complete_response.status_code == 200, complete_response.text
@@ -346,6 +380,14 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
     assert property_record.normalized_address_key is None
     assert property_record.normalized_parcel_key == "GA|pickens|APN45100"
     assert property_record.property_type == "land"
+    assert "parcel_id" not in lead.qualification_context
+    prospecting_profile = lead.qualification_context["land_acquisition_v1"]
+    assert prospecting_profile["facts"]["access_frontage"] == {
+        "value": "Seller reports county-road frontage",
+        "source_type": "seller_reported",
+        "source_name": "prospecting_qualification",
+        "observed_at": prospecting_profile["facts"]["access_frontage"]["observed_at"],
+    }
     lead_detail = client.get(f"/api/v1/leads/{lead.id}", headers=owner_headers)
     assert lead_detail.status_code == 200, lead_detail.text
     assert lead_detail.json()["property_address"] == (
@@ -463,4 +505,10 @@ def test_land_campaign_import_script_isolation_and_warm_handoff(
     assert (
         lead.qualification_context["access_frontage"]
         == "County road frontage; legal access not yet verified"
+    )
+    assert "parcel_id" not in lead.qualification_context
+    manager_profile = lead.qualification_context["land_acquisition_v1"]
+    assert manager_profile["facts"]["acreage"]["source_type"] == "seller_reported"
+    assert manager_profile["facts"]["acreage"]["source_name"] == (
+        "lead_manager_qualification"
     )

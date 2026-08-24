@@ -56,6 +56,7 @@ def create_campaign(client: TestClient, headers: dict[str, str]) -> dict[str, An
             "name": "Atlanta Owner List",
             "code": "atlanta-owner-list",
             "channel": "cold_call",
+            "asset_class": "house",
             "budget_cents": 500000,
         },
     )

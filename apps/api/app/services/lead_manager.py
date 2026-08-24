@@ -50,6 +50,10 @@ from app.services.acquisition_operations import (
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.land_acquisition_profile import (
+    canonical_land_key,
+    record_land_reported_answers,
+)
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
     lock_organization_lead,
@@ -537,8 +541,24 @@ def complete_qualification(
             setattr(lead, lead_field, str(value))
     qualification_context = dict(lead.qualification_context or {})
     for answer_key, value in answers.items():
-        if answer_key not in LEAD_FIELD_MAP and has_answer(value):
+        is_property_identity = asset_class == "land" and canonical_land_key(answer_key) in {
+            "parcel_id",
+            "county",
+            "state",
+        }
+        if (
+            answer_key not in LEAD_FIELD_MAP
+            and not is_property_identity
+            and has_answer(value)
+        ):
             qualification_context[answer_key] = value
+    if asset_class == "land":
+        qualification_context = record_land_reported_answers(
+            qualification_context,
+            answers,
+            source_name="lead_manager_qualification",
+            observed_at=now,
+        )
     lead.qualification_context = qualification_context
     parcel_answer = answers.get("parcel_id")
     if has_answer(parcel_answer):

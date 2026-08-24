@@ -6,6 +6,12 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { LeadDetail } from "../../lib/api";
+import {
+  buildLandQualificationContext,
+  LAND_SELLER_PROFILE_FIELDS,
+  landSellerFieldState,
+  landSellerFieldValue,
+} from "./land-acquisition-state";
 import styles from "./page.module.css";
 
 type Status = "idle" | "saving" | "saved" | "error";
@@ -118,6 +124,61 @@ function dateTimeLocalValue(value: string | null) {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
+function LandSellerQualificationEditor({ lead }: { lead: LeadDetail }) {
+  return (
+    <fieldset className={`${styles.landQualificationEditor} ${styles.editWide}`}>
+      <legend>Land seller qualification</legend>
+      <p>
+        Record only what the seller reports. These answers remain unverified and are kept separate
+        from provider research shown in the Land acquisition profile.
+      </p>
+      <div className={styles.landQualificationEditorGrid}>
+        {LAND_SELLER_PROFILE_FIELDS.map((field) => {
+          const initialValue = landSellerFieldValue(lead.qualification_context, field);
+          const initialState = landSellerFieldState(initialValue);
+          const helpId = `land-${field.key}-help`;
+          return (
+            <div className={styles.landQualificationField} data-state={initialState} key={field.key}>
+              <div>
+                <strong>{field.label}</strong>
+                <label>
+                  <span>Seller answer status</span>
+                  <input
+                    name={`land_${field.key}_initial_state`}
+                    type="hidden"
+                    value={initialState}
+                  />
+                  <select
+                    aria-describedby={helpId}
+                    defaultValue={initialState}
+                    name={`land_${field.key}_state`}
+                  >
+                    <option value="unknown">Unknown / not yet asked</option>
+                    <option value="seller_reported">Seller reported</option>
+                    <option value="not_applicable">Not applicable</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                <span>Seller-reported details</span>
+                <textarea
+                  aria-describedby={helpId}
+                  defaultValue={initialState === "seller_reported" ? initialValue : ""}
+                  maxLength={1500}
+                  name={`land_${field.key}_value`}
+                  placeholder="Enter the seller's words or a concise factual summary."
+                  rows={3}
+                />
+              </label>
+              <small id={helpId}>{field.prompt}</small>
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 export function LeadEditForm({ lead }: { lead: LeadDetail }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -188,8 +249,17 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
           lead_temperature: optionalFormString(formData, "lead_temperature"),
           motivation: optionalFormString(formData, "motivation"),
           desired_timeline: optionalFormString(formData, "desired_timeline"),
-          property_condition: optionalFormString(formData, "property_condition"),
-          occupancy_status: optionalFormString(formData, "occupancy_status"),
+          ...(lead.asset_class === "land"
+            ? {
+                qualification_context: buildLandQualificationContext(
+                  formData,
+                  lead.qualification_context,
+                ),
+              }
+            : {
+                property_condition: optionalFormString(formData, "property_condition"),
+                occupancy_status: optionalFormString(formData, "occupancy_status"),
+              }),
           asking_price: optionalFormString(formData, "asking_price"),
           mortgage_balance: optionalFormString(formData, "mortgage_balance"),
           appointment_status: optionalFormString(formData, "appointment_status"),
@@ -440,26 +510,32 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
             placeholder="ASAP, 30 days, just exploring"
           />
         </label>
-        <label>
-          <span>Condition</span>
-          <select name="property_condition" defaultValue={lead.property_condition ?? ""}>
-            {conditionOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Occupancy</span>
-          <select name="occupancy_status" defaultValue={lead.occupancy_status ?? ""}>
-            {occupancyOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {lead.asset_class === "land" ? (
+          <LandSellerQualificationEditor lead={lead} />
+        ) : (
+          <>
+            <label>
+              <span>Condition</span>
+              <select name="property_condition" defaultValue={lead.property_condition ?? ""}>
+                {conditionOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Occupancy</span>
+              <select name="occupancy_status" defaultValue={lead.occupancy_status ?? ""}>
+                {occupancyOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
         <label>
           <span>Appointment</span>
           <select name="appointment_status" defaultValue={lead.appointment_status ?? ""}>
@@ -475,7 +551,7 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
           <input name="asking_price" defaultValue={lead.asking_price ?? ""} maxLength={120} />
         </label>
         <label>
-          <span>Mortgage balance</span>
+          <span>{lead.asset_class === "land" ? "Liens or balances" : "Mortgage balance"}</span>
           <input
             name="mortgage_balance"
             defaultValue={lead.mortgage_balance ?? ""}

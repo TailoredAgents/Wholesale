@@ -1069,12 +1069,25 @@ Open **Leads > Lead Queue**. Its views are:
 
 1. Open **Qualification**.
 2. Select the seller.
-3. Ask the approved questions for ownership, decision-makers, motivation, timeline, condition,
-   occupancy, price expectation, mortgage or liens, and access.
-4. Save confirmed answers.
-5. Leave unknown facts unknown rather than guessing.
-6. Set the next action and due date.
-7. Schedule an appointment when the lead is ready.
+3. Confirm the lead's **House** or **Land** label before asking qualification questions.
+4. For a **House**, ask the approved questions for ownership, decision-makers, motivation,
+   timeline, condition, occupancy, price expectation, mortgage or liens, and access.
+5. For **Land**, use the Land acquisition profile and ask the displayed open questions for
+   ownership and decision-makers, motivation, timeline, price, APN and acreage, access/frontage,
+   utilities, survey/boundaries, septic/perc, taxes/HOA, restrictions, flood/wetlands,
+   terrain/environmental concerns, prior work, and title/probate/heirs. Do not require House
+   condition, room, repair, occupancy, mortgage, or walkthrough fields.
+6. Save only seller-supported answers. Seller-reported answers remain separate from provider
+   screening evidence, and a source conflict remains open for review.
+7. Treat **Ready for valuation review** as qualification readiness only. It is not offer approval.
+8. For Land, use phone or video review by default. Schedule an in-person visit only when access,
+   terrain, drainage, dumping, boundaries, improvements, seller interaction, or offer risk
+   justifies one.
+9. Leave unknown facts unknown rather than guessing.
+10. Set the next action and due date.
+11. Schedule an appointment when the applicable House or Land workflow calls for one.
+
+See `LAND_ACQUISITION_OPERATIONS_PLAYBOOK.md` for the complete Land procedure and evidence rules.
 
 ### Use The Lead Manager Copilot
 

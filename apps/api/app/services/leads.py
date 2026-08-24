@@ -101,6 +101,7 @@ from app.schemas.leads import (
     ContactMethodRead,
     ContactPermissionUpdate,
     DashboardSummary,
+    LandAcquisitionProfileRead,
     LeadAiReadySummary,
     LeadAppointmentCreate,
     LeadAssignableUserRead,
@@ -159,6 +160,11 @@ from app.services.inbox import (
     ensure_primary_conversation,
     sync_conversation_to_lead_stage,
     update_conversation_activity,
+)
+from app.services.land_acquisition_profile import (
+    build_land_acquisition_profile,
+    land_context_value,
+    merge_land_staff_context,
 )
 from app.services.lead_lifecycle import (
     TERMINAL_CLOSE_OUT_STAGES,
@@ -309,6 +315,104 @@ QUALIFICATION_FIELDS = [
         "high",
     ),
 ]
+LAND_PROFILE_QUALIFICATION_FIELDS = [
+    (
+        "motivation",
+        "Motivation",
+        "Why is the seller considering a sale now?",
+        "high",
+    ),
+    (
+        "timeline",
+        "Timeline",
+        "When does the seller want to close or decide?",
+        "high",
+    ),
+    (
+        "asking_price",
+        "Asking price",
+        "What price or net number is the seller hoping for?",
+        "medium",
+    ),
+    (
+        "ownership_decision_makers",
+        "Ownership and decision makers",
+        "Who is on title, and who must approve a sale of this parcel?",
+        "high",
+    ),
+    (
+        "parcel_id",
+        "Parcel / APN",
+        "What is the parcel or assessor parcel number (APN)?",
+        "high",
+    ),
+    (
+        "acreage",
+        "Acreage",
+        "How many acres are included, and what is the source of that acreage?",
+        "high",
+    ),
+    (
+        "zoning_use",
+        "Zoning and use",
+        "What zoning, current use, and intended use are known?",
+        "medium",
+    ),
+    (
+        "access_frontage",
+        "Access and frontage",
+        "What legal and practical access, road frontage, or easements are known?",
+        "high",
+    ),
+    (
+        "utilities",
+        "Utilities",
+        "Which utilities are at the parcel or nearby?",
+        "medium",
+    ),
+    (
+        "survey_boundaries",
+        "Survey and boundaries",
+        "Is there a survey, and are the boundaries or corners known?",
+        "medium",
+    ),
+    (
+        "septic_perc",
+        "Septic, sewer, well, and perc",
+        "What is known about sewer, septic, well, or perc testing?",
+        "medium",
+    ),
+    (
+        "taxes_hoa",
+        "Taxes, delinquency, HOA, and POA",
+        "What taxes, delinquency, HOA, or POA obligations are known?",
+        "medium",
+    ),
+    (
+        "restrictions",
+        "Restrictions",
+        "What deed, county, subdivision, or use restrictions are known?",
+        "medium",
+    ),
+    (
+        "flood_wetlands",
+        "Flood and wetlands",
+        "What flood-zone or wetland signals are known?",
+        "medium",
+    ),
+    (
+        "terrain_environmental",
+        "Terrain and environmental concerns",
+        "What terrain, slope, drainage, dumping, or environmental concerns are known?",
+        "medium",
+    ),
+    (
+        "title_probate_heirship",
+        "Title, probate, and heirship",
+        "Are there title, lien, probate, heirship, or co-owner issues to resolve?",
+        "high",
+    ),
+]
 SELLER_PIPELINE_STAGES = {
     "new",
     "contact_attempt_due",
@@ -442,6 +546,13 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     require_valid_property_identity(property_record, asset_class=asset_class)
     if asset_class == "land" and not property_record.property_type:
         property_record.property_type = "land"
+    qualification_context = dict(payload.qualification_context)
+    if asset_class == LAND_ASSET_CLASS:
+        qualification_context = merge_land_staff_context(
+            {},
+            qualification_context,
+            observed_at=datetime.now(UTC),
+        )
 
     lead = Lead(
         organization_id=principal.organization_id,
@@ -450,7 +561,7 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         assigned_user_id=assigned_user.id,
         source=payload.source,
         asset_class=asset_class,
-        qualification_context=dict(payload.qualification_context),
+        qualification_context=qualification_context,
         stage_key=payload.stage_key,
         lead_temperature=payload.lead_temperature,
         motivation=payload.motivation,
@@ -618,8 +729,9 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         return None
     base = lead_to_read(db, lead)
     contact = db.get(Contact, lead.contact_id)
-    if contact is None:
-        raise RuntimeError("lead is missing its seller contact")
+    property_record = db.get(Property, lead.property_id)
+    if contact is None or property_record is None:
+        raise RuntimeError("lead is missing its seller contact or property")
     sms_eligibility = evaluate_sms_eligibility(db, contact)
     voice_eligibility = evaluate_voice_eligibility(db, contact)
     contact_methods = db.scalars(
@@ -789,6 +901,16 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         }
         if buyer_ids
         else {}
+    )
+    property_intelligence = build_property_intelligence_read(db, principal, lead)
+    land_acquisition_profile = (
+        build_land_acquisition_profile(
+            lead=lead,
+            property_record=property_record,
+            property_intelligence=property_intelligence,
+        )
+        if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+        else None
     )
 
     return LeadDetail(
@@ -1018,8 +1140,10 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             lead=lead,
             contact_methods=list(contact_methods),
             open_tasks=list(open_tasks),
+            land_acquisition_profile=land_acquisition_profile,
         ),
-        property_intelligence=build_property_intelligence_read(db, principal, lead),
+        property_intelligence=property_intelligence,
+        land_acquisition_profile=land_acquisition_profile,
     )
 
 
@@ -1028,6 +1152,7 @@ def build_lead_intelligence(
     lead: Lead,
     contact_methods: list[ContactMethod],
     open_tasks: list[Task],
+    land_acquisition_profile: LandAcquisitionProfileRead | None = None,
 ) -> LeadIntelligence:
     if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
         next_best_action = LeadNextBestAction(
@@ -1047,10 +1172,23 @@ def build_lead_intelligence(
                 [],
                 next_best_action,
                 0,
+                land_acquisition_profile,
             ),
         )
-    missing_fields = get_missing_fields(lead, contact_methods)
-    quality_score = get_quality_score(missing_fields)
+    missing_fields = get_missing_fields(
+        lead,
+        contact_methods,
+        land_acquisition_profile=land_acquisition_profile,
+    )
+    qualification_field_count = (
+        len(LAND_PROFILE_QUALIFICATION_FIELDS)
+        if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+        else len(QUALIFICATION_FIELDS)
+    )
+    quality_score = get_quality_score(
+        missing_fields,
+        total_fields=qualification_field_count + 1,
+    )
     urgency_score = get_urgency_score(lead, open_tasks)
     next_best_action = get_next_best_action(lead, missing_fields, open_tasks, quality_score)
     return LeadIntelligence(
@@ -1064,11 +1202,17 @@ def build_lead_intelligence(
             missing_fields,
             next_best_action,
             urgency_score,
+            land_acquisition_profile,
         ),
     )
 
 
-def get_missing_fields(lead: Lead, contact_methods: list[ContactMethod]) -> list[LeadMissingField]:
+def get_missing_fields(
+    lead: Lead,
+    contact_methods: list[ContactMethod],
+    *,
+    land_acquisition_profile: LandAcquisitionProfileRead | None = None,
+) -> list[LeadMissingField]:
     missing_fields: list[LeadMissingField] = []
     if not contact_methods:
         missing_fields.append(
@@ -1079,9 +1223,38 @@ def get_missing_fields(lead: Lead, contact_methods: list[ContactMethod]) -> list
                 severity="high",
             )
         )
-    for field_key, label, question, severity in QUALIFICATION_FIELDS:
-        value = getattr(lead, field_key)
-        if value is None or (isinstance(value, str) and not value.strip()):
+    is_land = normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+    qualification_fields = (
+        LAND_PROFILE_QUALIFICATION_FIELDS if is_land else QUALIFICATION_FIELDS
+    )
+    for field_key, label, question, severity in qualification_fields:
+        if is_land:
+            profile_fact = (
+                land_acquisition_profile.facts.get(field_key)
+                if land_acquisition_profile is not None
+                else None
+            )
+            has_value = (
+                profile_fact is not None
+                and land_acquisition_profile is not None
+                and field_key
+                not in land_acquisition_profile.readiness.unanswered_fields
+            )
+            if profile_fact is None:
+                fallback_value = {
+                    "motivation": lead.motivation,
+                    "timeline": lead.desired_timeline,
+                    "asking_price": lead.asking_price,
+                }.get(field_key, land_context_value(lead.qualification_context, field_key))
+                has_value = fallback_value is not None and (
+                    not isinstance(fallback_value, str) or bool(fallback_value.strip())
+                )
+        else:
+            value = getattr(lead, field_key)
+            has_value = value is not None and (
+                not isinstance(value, str) or bool(value.strip())
+            )
+        if not has_value:
             missing_fields.append(
                 LeadMissingField(
                     field_key=field_key,
@@ -1093,8 +1266,12 @@ def get_missing_fields(lead: Lead, contact_methods: list[ContactMethod]) -> list
     return missing_fields
 
 
-def get_quality_score(missing_fields: list[LeadMissingField]) -> int:
-    total_fields = len(QUALIFICATION_FIELDS) + 1
+def get_quality_score(
+    missing_fields: list[LeadMissingField],
+    *,
+    total_fields: int | None = None,
+) -> int:
+    total_fields = total_fields or len(QUALIFICATION_FIELDS) + 1
     high_penalty = sum(15 for field in missing_fields if field.severity == "high")
     medium_penalty = sum(10 for field in missing_fields if field.severity == "medium")
     raw_score = 100 - high_penalty - medium_penalty
@@ -1180,6 +1357,35 @@ def get_next_best_action(
             priority="high",
         )
 
+    if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS:
+        remaining_gap = next(iter(missing_fields), None)
+        if remaining_gap is not None:
+            return LeadNextBestAction(
+                action_type="ask_missing_question",
+                label=f"Ask about {remaining_gap.label.lower()}",
+                description=remaining_gap.question,
+                priority="normal",
+            )
+        if lead.stage_key in {"qualified", "appointment_scheduled", "underwriting"}:
+            return LeadNextBestAction(
+                action_type="prepare_land_valuation",
+                label="Review Land valuation",
+                description=(
+                    "Confirm parcel evidence, review closed Land sales, and resolve any "
+                    "withheld-guidance blockers."
+                ),
+                priority="normal",
+            )
+        return LeadNextBestAction(
+            action_type="review_land_diligence",
+            label="Continue remote Land review",
+            description=(
+                "Review seller-reported and provider-sourced parcel evidence remotely; "
+                "request an in-person visit only when a specific risk warrants it."
+            ),
+            priority="normal",
+        )
+
     if lead.appointment_status in {None, "", "not_scheduled", "appointment_requested"}:
         return LeadNextBestAction(
             action_type="schedule_appointment",
@@ -1191,16 +1397,6 @@ def get_next_best_action(
         )
 
     if lead.stage_key in {"qualified", "appointment_scheduled", "underwriting"}:
-        if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS:
-            return LeadNextBestAction(
-                action_type="prepare_land_valuation",
-                label="Review Land valuation",
-                description=(
-                    "Confirm parcel evidence, review closed Land sales, and resolve any "
-                    "withheld-guidance blockers."
-                ),
-                priority="normal",
-            )
         return LeadNextBestAction(
             action_type="prepare_underwriting",
             label="Prepare underwriting review",
@@ -1232,24 +1428,61 @@ def get_ai_ready_summary(
     missing_fields: list[LeadMissingField],
     next_best_action: LeadNextBestAction,
     urgency_score: int,
+    land_acquisition_profile: LandAcquisitionProfileRead | None = None,
 ) -> LeadAiReadySummary:
     known_facts = [
         f"Stage: {lead.stage_key}.",
         f"Source: {lead.source}.",
     ]
-    optional_facts = [
-        ("Temperature", lead.lead_temperature),
-        ("Motivation", lead.motivation),
-        ("Timeline", lead.desired_timeline),
-        ("Condition", lead.property_condition),
-        ("Occupancy", lead.occupancy_status),
-        ("Asking price", lead.asking_price),
-        ("Mortgage balance", lead.mortgage_balance),
-        ("Appointment", lead.appointment_status),
-    ]
-    known_facts.extend(
-        f"{label}: {value}." for label, value in optional_facts if value is not None and value != ""
-    )
+    if (
+        normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+        and land_acquisition_profile is not None
+    ):
+        land_labels = {
+            "motivation": "Motivation",
+            "timeline": "Timeline",
+            "asking_price": "Asking price",
+            "ownership_decision_makers": "Ownership / decision makers",
+            "parcel_id": "Parcel / APN",
+            "acreage": "Acreage",
+            "zoning_use": "Zoning / use",
+            "access_frontage": "Access / frontage",
+            "utilities": "Utilities",
+            "survey_boundaries": "Survey / boundaries",
+            "septic_perc": "Septic / perc",
+            "taxes_hoa": "Taxes / HOA",
+            "restrictions": "Restrictions",
+            "flood_wetlands": "Flood / wetlands",
+            "terrain_environmental": "Terrain / environmental",
+            "title_probate_heirship": "Title / probate / heirship",
+        }
+        for key, label in land_labels.items():
+            fact = land_acquisition_profile.facts[key]
+            if fact.status == "unknown":
+                continue
+            source_label = {
+                "seller_reported": "seller reported; unverified",
+                "provider_sourced": "provider screen; unverified",
+                "crm_record": "CRM record",
+                "unknown": "unknown",
+            }[fact.source_type]
+            known_facts.append(f"{label}: {fact.value} ({source_label}).")
+    else:
+        optional_facts = [
+            ("Temperature", lead.lead_temperature),
+            ("Motivation", lead.motivation),
+            ("Timeline", lead.desired_timeline),
+            ("Condition", lead.property_condition),
+            ("Occupancy", lead.occupancy_status),
+            ("Asking price", lead.asking_price),
+            ("Mortgage balance", lead.mortgage_balance),
+            ("Appointment", lead.appointment_status),
+        ]
+        known_facts.extend(
+            f"{label}: {value}."
+            for label, value in optional_facts
+            if value is not None and value != ""
+        )
     if urgency_score >= 60:
         urgency = "High urgency lead."
     elif urgency_score >= 35:
@@ -3433,12 +3666,22 @@ def update_lead_staff_details(
         "asset_class",
         requested_asset_class,
     )
+    qualification_context_value = dict(payload.qualification_context or {})
+    if (
+        "qualification_context" in provided_fields
+        and normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
+    ):
+        qualification_context_value = merge_land_staff_context(
+            lead.qualification_context,
+            qualification_context_value,
+            observed_at=datetime.now(UTC),
+        )
     update_nullable_raw_value(
         previous_values,
         new_values,
         lead,
         "qualification_context",
-        dict(payload.qualification_context or {}),
+        qualification_context_value,
         provided_fields,
     )
 

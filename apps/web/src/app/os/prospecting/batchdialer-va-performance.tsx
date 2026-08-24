@@ -27,12 +27,14 @@ import {
 import type {
   BatchDialerAgentMapping,
   BatchDialerAgentMappings,
+  BatchDialerCampaignMappings,
   BatchDialerVaCoachReport,
   BatchDialerVaPerformance,
   BatchDialerVaPerformanceAgent,
   BatchDialerVaPerformanceMetrics,
 } from "../../lib/api";
 import styles from "./batchdialer-va-performance.module.css";
+import { BatchDialerCampaignMappingsPanel } from "./batchdialer-campaign-mappings";
 
 type RangeKey = "today" | "7" | "30";
 type NullableMetricKey = Exclude<
@@ -218,10 +220,14 @@ function coachStaleReason(reason: BatchDialerVaCoachReport["stale_reasons"][numb
 
 export function BatchDialerVaPerformanceSection({
   initialApiConnected,
+  initialCampaignMappings,
+  initialCampaignMappingsAvailable,
   initialData,
   initialMappings,
 }: {
   initialApiConnected: boolean;
+  initialCampaignMappings: BatchDialerCampaignMappings | null;
+  initialCampaignMappingsAvailable: boolean;
   initialData: BatchDialerVaPerformance | null;
   initialMappings: BatchDialerAgentMappings | null;
 }) {
@@ -738,6 +744,12 @@ export function BatchDialerVaPerformanceSection({
           </div>
         </div>
       ) : null}
+
+      <BatchDialerCampaignMappingsPanel
+        initialAvailable={initialCampaignMappingsAvailable}
+        initialData={initialCampaignMappings}
+        timeZone={data?.timezone ?? "America/New_York"}
+      />
 
       {displayedMetrics ? (
         <>

@@ -23,6 +23,7 @@ import type {
   LeadManagerCopilotRecommendation,
   LeadManagerOverview,
 } from "../../lib/api";
+import { landStandardQuestions } from "../land-qualification-questions";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import { AcquisitionsPerformanceScorecard } from "./acquisitions-performance-scorecard";
@@ -41,23 +42,6 @@ const houseStandardQuestions = [
   ["asking_price", "Price expectation", "Do you have a price in mind?", false],
   ["mortgage_balance", "Mortgage or liens", "Is there a mortgage, lien, or other balance?", false],
   ["access", "Property access", "How and when can the property be viewed?", true],
-] as const;
-
-const landStandardQuestions = [
-  ["ownership", "Ownership", "Please confirm who owns the parcel and how title is held.", true],
-  ["decision_makers", "Decision makers", "Who must agree before the parcel can be sold?", true],
-  ["motivation", "Reason for selling", "What has you considering selling the land now?", true],
-  ["timeline", "Timeline", "When would you ideally like to complete a sale?", true],
-  ["parcel_id", "Parcel / APN", "What is the parcel number or APN, if available?", false],
-  ["acreage", "Acreage", "Approximately how many acres are included?", true],
-  ["access_frontage", "Access and frontage", "How is the parcel accessed, and what road frontage is known?", true],
-  ["utilities", "Utilities", "What utilities are at the road or already connected?", false],
-  ["zoning_use", "Zoning or known use", "What zoning or permitted-use information have you been given?", false],
-  ["septic_perc", "Septic / perc", "Has any soil, perc, septic, or sewer work been completed?", false],
-  ["taxes_hoa", "Taxes / HOA", "What annual taxes, HOA dues, or road fees apply?", false],
-  ["terrain_environmental", "Terrain and environmental", "Are you aware of slope, drainage, flood, wetland, or dumping concerns?", false],
-  ["asking_price", "Price expectation", "Do you have a price in mind?", false],
-  ["mortgage_balance", "Liens or balances", "Is there a mortgage, lien, tax balance, or other payoff?", false],
 ] as const;
 
 function formatDateTime(value: string | null) {
@@ -132,6 +116,7 @@ export function LeadManagerWorkspace({
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [standardAssetClass, setStandardAssetClass] = useState<"house" | "land">("house");
   const [qualificationNextAction, setQualificationNextAction] =
     useState<QualificationNextAction>("call");
   const [disqualificationReason, setDisqualificationReason] = useState("");
@@ -322,7 +307,10 @@ export function LeadManagerWorkspace({
         required,
       })),
     });
-    if (saved) form.reset();
+    if (saved) {
+      form.reset();
+      setStandardAssetClass("house");
+    }
   }
 
   return (
@@ -663,10 +651,20 @@ export function LeadManagerWorkspace({
           <section className={styles.standardForm}>
             <div className={styles.sectionHeader}><div><span>Controlled process</span><h3>Create qualification version</h3></div></div>
             <form onSubmit={createScript}>
-              <label><span>Lead type</span><select defaultValue="house" name="asset_class"><option value="house">House</option><option value="land">Land</option></select></label>
+              <label><span>Lead type</span><select name="asset_class" onChange={(event) => setStandardAssetClass(event.target.value as "house" | "land")} value={standardAssetClass}><option value="house">House</option><option value="land">Land</option></select></label>
               <label><span>Version name</span><input defaultValue="Stonegate Lead Qualification" name="title" required /></label>
               <label><span>Opening guidance</span><textarea defaultValue="Confirm the seller's situation carefully. Explain that these questions help Stonegate determine whether a direct sale is a reasonable fit." name="introduction" required rows={4} /></label>
-              <p>House drafts include {houseStandardQuestions.length} questions; Land drafts include {landStandardQuestions.length} land-specific questions.</p>
+              <div aria-live="polite" className={styles.standardQuestionPreview}>
+                <strong>{standardAssetClass === "land" ? "Land seller checklist" : "House seller checklist"}</strong>
+                <p>
+                  This creates a draft with {standardAssetClass === "land" ? landStandardQuestions.length : houseStandardQuestions.length} questions. A manager must approve it before the team can use it.
+                </p>
+                <ol aria-label="Draft qualification questions" tabIndex={0}>
+                  {(standardAssetClass === "land" ? landStandardQuestions : houseStandardQuestions).map(([, label, prompt]) => (
+                    <li key={label}><span>{label}</span><small>{prompt}</small></li>
+                  ))}
+                </ol>
+              </div>
               <button disabled={saving} type="submit">Create draft</button>
             </form>
           </section>

@@ -35,6 +35,7 @@ def test_operating_codes_are_normalized_before_validation() -> None:
         name="North Metro Absentee Owners",
         code="North Metro / August",
         channel="cold_call",
+        asset_class="house",
     )
 
     assert market.code == "georgia-state"

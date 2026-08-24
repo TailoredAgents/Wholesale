@@ -229,6 +229,7 @@ def create_prospecting_batch(
             "name": "Owner Outreach",
             "code": "owner-outreach",
             "channel": "cold_call",
+            "asset_class": "house",
         },
     )
     assert campaign_response.status_code == 201, campaign_response.text

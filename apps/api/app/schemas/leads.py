@@ -931,6 +931,53 @@ class PropertyIntelligenceRead(BaseModel):
     last_error: str | None = None
 
 
+class LandAcquisitionEvidenceRead(BaseModel):
+    value: Any
+    source_type: Literal["seller_reported", "provider_sourced", "crm_record"]
+    source_name: str
+    observed_at: datetime | None = None
+
+
+class LandAcquisitionFactRead(BaseModel):
+    status: Literal["known", "unknown", "conflict"]
+    value: Any | None = None
+    source_type: Literal[
+        "seller_reported",
+        "provider_sourced",
+        "crm_record",
+        "unknown",
+    ]
+    source_name: str | None = None
+    observed_at: datetime | None = None
+    requires_verification: bool = True
+    evidence: list[LandAcquisitionEvidenceRead] = Field(default_factory=list)
+
+
+class LandAcquisitionReadinessRead(BaseModel):
+    status: Literal[
+        "ready_for_valuation_review",
+        "needs_seller_information",
+        "needs_due_diligence_review",
+    ]
+    completion_score: int = Field(ge=0, le=100)
+    required_fields: list[str]
+    completed_fields: list[str]
+    unanswered_fields: list[str]
+    unknown_fields: list[str]
+    conflict_fields: list[str]
+    seller_reported_fields: list[str]
+    provider_sourced_fields: list[str]
+    open_questions: list[str]
+    remote_review_ready: bool
+    in_person_review_recommended: bool
+
+
+class LandAcquisitionProfileRead(BaseModel):
+    version: Literal["land_acquisition_v1"] = "land_acquisition_v1"
+    facts: dict[str, LandAcquisitionFactRead]
+    readiness: LandAcquisitionReadinessRead
+
+
 class LeadNextBestAction(BaseModel):
     action_type: str
     label: str
@@ -971,6 +1018,7 @@ class LeadDetail(LeadRead):
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
     property_intelligence: PropertyIntelligenceRead
+    land_acquisition_profile: LandAcquisitionProfileRead | None = None
 
 
 class LeadStageUpdate(BaseModel):
