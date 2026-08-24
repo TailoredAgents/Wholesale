@@ -581,9 +581,12 @@
   background: var(--sg-color-surface);
   color: var(--sg-color-text);
   box-shadow: var(--sg-shadow-raised);
+  overflow: hidden;
+}
+
+.overlay[open] {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
 }
 
 .overlay::backdrop {

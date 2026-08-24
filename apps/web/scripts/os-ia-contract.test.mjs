@@ -850,10 +850,12 @@ test("Tall dialogs keep actions visible while their body scrolls", () => {
     resolve(osSourceRoot, "_components/design-system.module.css"),
     "utf8",
   );
+  const closedDialogRule = designSystemStyles.match(/\.overlay\s*\{([^}]*)\}/s)?.[1] ?? "";
 
+  assert.doesNotMatch(closedDialogRule, /display\s*:/);
   assert.match(
     designSystemStyles,
-    /\.overlay\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s,
+    /\.overlay\[open\]\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s,
   );
   assert.match(
     designSystemStyles,
