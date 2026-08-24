@@ -845,6 +845,22 @@ test("Leads exposes received timestamps and URL-backed sort controls", () => {
   assert.ok(leadsRoute?.queryParameters.some((parameter) => parameter.name === "sort"));
 });
 
+test("Tall dialogs keep actions visible while their body scrolls", () => {
+  const designSystemStyles = readFileSync(
+    resolve(osSourceRoot, "_components/design-system.module.css"),
+    "utf8",
+  );
+
+  assert.match(
+    designSystemStyles,
+    /\.overlay\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s,
+  );
+  assert.match(
+    designSystemStyles,
+    /\.overlayBody\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s,
+  );
+});
+
 test("Voice line settings make 24/7 staff ringing the visible default", () => {
   const voiceSettings = readFileSync(
     resolve(osSourceRoot, "settings/communications/voice-line-settings.tsx"),
