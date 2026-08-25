@@ -225,6 +225,7 @@ export function LeadLifecycleActions({
   archived,
   canArchiveRecords,
   canEditLead,
+  onCloseOutComplete,
   stageKey,
   compact = false,
 }: {
@@ -232,6 +233,7 @@ export function LeadLifecycleActions({
   archived: boolean;
   canArchiveRecords: boolean;
   canEditLead: boolean;
+  onCloseOutComplete?: (result: LeadCloseOutResponse) => void;
   stageKey?: string;
   compact?: boolean;
 }) {
@@ -275,9 +277,13 @@ export function LeadLifecycleActions({
       if (!response.ok) {
         throw new Error(await responseError(response, "The lead could not be closed out."));
       }
-      await response.json() as LeadCloseOutResponse;
+      const result = await response.json() as LeadCloseOutResponse;
       setCloseOutOpen(false);
-      router.push("/os/leads/closed");
+      if (onCloseOutComplete) {
+        onCloseOutComplete(result);
+      } else {
+        router.push("/os/leads/closed");
+      }
       router.refresh();
     } catch (caught) {
       setStatus("error");

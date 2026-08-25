@@ -282,6 +282,10 @@ test("IA9 canonical records preserve context and load only active specialist dat
 
 test("seller lead close-out is atomic, auditable, and separate from administrative archive", () => {
   const leadsPage = readFileSync(resolve(osSourceRoot, "leads/page.tsx"), "utf8");
+  const leadsWorkspace = readFileSync(
+    resolve(osSourceRoot, "leads/leads-workspace.tsx"),
+    "utf8",
+  );
   const lifecycle = readFileSync(
     resolve(osSourceRoot, "leads/lead-lifecycle-actions.tsx"),
     "utf8",
@@ -303,6 +307,13 @@ test("seller lead close-out is atomic, auditable, and separate from administrati
   );
 
   assert.match(leadsPage, /href="\/os\/leads\/closed"/);
+  assert.match(leadsWorkspace, /<LeadLifecycleActions/);
+  assert.match(leadsWorkspace, /canArchiveRecords=\{false\}/);
+  assert.match(leadsWorkspace, /onCloseOutComplete=\{handleLeadClosed\}/);
+  assert.match(
+    leadsWorkspace,
+    /current\.filter\(\(lead\) => lead\.id !== closedLeadId\)/,
+  );
   assert.match(lifecycle, /\/api\/v1\/leads\/\$\{leadId\}\/close-out/);
   assert.match(lifecycle, /\/api\/v1\/leads\/\$\{leadId\}\/reopen/);
   assert.match(lifecycle, /minLength=\{10\}/);

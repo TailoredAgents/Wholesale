@@ -90,6 +90,9 @@
 .previewActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .previewActions a { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-soft); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 800; text-align: center; }
 .previewActions .primaryAction { grid-column: 1 / -1; border-color: var(--brand-strong); background: var(--brand); color: white; }
+.previewLifecycle { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.previewLifecycle > div { width: 100%; }
+.previewLifecycle button { width: 100%; }
 .empty { min-height: 220px; padding: 24px; color: var(--muted); display: grid; place-items: center; align-content: center; gap: 5px; text-align: center; }
 .empty strong { color: var(--text); }
 .backdrop { display: none; }

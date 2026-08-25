@@ -31,7 +31,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
+import type { LeadCloseOutResponse, LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import {
   defaultLeadSortKey,
@@ -54,6 +54,7 @@ import {
   type SavedLeadViewKey,
 } from "../os-utils";
 import styles from "./leads-workspace.module.css";
+import { LeadLifecycleActions } from "./lead-lifecycle-actions";
 
 function ownerLabel(email: string | null) {
   if (!email) return "Unassigned";
@@ -500,6 +501,27 @@ export function LeadsWorkspace({
     }
   }
 
+  function handleLeadClosed(result: LeadCloseOutResponse) {
+    const closedLeadId = result.lead.id;
+    const closedLeadIndex = visibleLeads.findIndex((lead) => lead.id === closedLeadId);
+    const nextLead =
+      visibleLeads[closedLeadIndex + 1] ??
+      visibleLeads[closedLeadIndex - 1] ??
+      visibleLeads.find((lead) => lead.id !== closedLeadId) ??
+      null;
+
+    pendingLeadIdsRef.current.delete(closedLeadId);
+    setPendingLeadIds(new Set(pendingLeadIdsRef.current));
+    setWorkingLeads((current) => current.filter((lead) => lead.id !== closedLeadId));
+    setSelectedLeadId(nextLead?.id ?? "");
+    setMobileDetailOpen(false);
+    replaceLocation({ leadId: nextLead?.id ?? "" });
+    setStageNotice({
+      message: `${result.lead.seller_name} was closed and removed from the active Leads board.`,
+      tone: "success",
+    });
+  }
+
   function handleDragStart(event: DragStartEvent) {
     const leadId = event.active.data.current?.leadId;
     setActiveLeadId(typeof leadId === "string" ? leadId : null);
@@ -809,6 +831,18 @@ export function LeadsWorkspace({
                   <Link href={fullRecordHref(selectedLead.id)}><ExternalLink size={15} />Full record</Link>
                   {selectedLead.appointment_status ? <Link href={`/os/calendar`}><CalendarDays size={15} />Calendar</Link> : null}
                 </div>
+                {canEditLead ? (
+                  <div className={styles.previewLifecycle}>
+                    <LeadLifecycleActions
+                      archived={false}
+                      canArchiveRecords={false}
+                      canEditLead={canEditLead}
+                      leadId={selectedLead.id}
+                      onCloseOutComplete={handleLeadClosed}
+                      stageKey={selectedLead.stage_key}
+                    />
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className={styles.empty}><strong>No seller selected</strong><span>Select a lead to inspect its current context.</span></div>
