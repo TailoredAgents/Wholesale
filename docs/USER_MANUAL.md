@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 22, 2026
+Last verified against the application: August 26, 2026
 
 ## Purpose
 
@@ -2093,6 +2093,11 @@ the assistant.
 
 Open **Buyers**.
 
+The Buyer Network list is searched and filtered on the server. Search by the buyer identity or
+contact information; use the **Status**, **Relationship owner**, and **Source** filters to narrow the
+list. Use the pagination controls to continue through the full database. Clearing a filter restores
+the broader result set; it does not delete or change buyers.
+
 Select a buyer, then use **Summary**, **Criteria & Markets**, **Active Deals**, or **Proof &
 Capacity**. The selected buyer and section stay in the page URL. On a phone, selecting a buyer
 opens the record as a full-height drawer; use the close button to return to the buyer list.
@@ -2100,14 +2105,77 @@ opens the record as a full-height drawer; use the close button to return to the 
 For each buyer, maintain:
 
 - Contact and company information.
-- Active status.
+- Lifecycle status and why the buyer is or is not currently usable.
+- Relationship owner, source, and last verified date.
 - Markets, counties, property types, price range, and strategy.
 - Cash or financing capacity.
 - Proof-of-funds status and expiration.
 - Reliability and prior activity.
 - Notes and relationship history.
+- The latest call and SMS permission decision and its factual source.
 
 Expired or missing proof of funds should reduce selection confidence.
+
+#### Add A Buyer
+
+1. Search the Buyer Network first. Do not assume a spelling difference or a different company name
+   means the person is new.
+2. Select **Add buyer**.
+3. Enter the buyer's name and at least one usable phone number or email address. A name alone is not
+   enough to create the record.
+4. Enter the company, relationship owner, source, source reference when available, and facts that
+   have already been verified.
+5. Save the criteria that the buyer actually stated. Do not infer markets, price capacity, or
+   strategy from one inquiry.
+6. Review the duplicate check. If a matching phone or email belongs to an existing buyer, select
+   **Use existing** and update that profile.
+7. Select **Create separate** only when the contacts truly represent different buyer records, then
+   enter a specific reason. Stonegate records the override. It never silently merges the records.
+8. Review the new **Needs Review** profile before changing its lifecycle status.
+
+Stonegate does not currently provide a buyer-merge action. If two records represent the same
+buyer, use the existing record and pause or archive the unnecessary duplicate according to the
+record's history. Never create a separate record merely to avoid correcting the existing one.
+
+#### Buyer Lifecycle
+
+| Status | Use it when | Matching behavior |
+| --- | --- | --- |
+| **Needs Review** | The record is new, incomplete, imported, or awaiting contact/criteria verification | Excluded |
+| **Active** | Identity, contact path, relationship state, and usable buying criteria have been reviewed | Eligible for future matching |
+| **Paused** | The buyer relationship is retained but should not receive current opportunities | Excluded |
+| **Do Not Contact** | The buyer opted out or Stonegate has another documented contact restriction | Excluded |
+| **Archived** | The record should leave normal working views while its history is retained | Excluded |
+
+Only **Active** buyers are eligible for future matching. Status is not a quality score: do not mark
+a buyer Active solely to make a disposition match appear.
+
+#### Edit And Verify A Buyer
+
+1. Open the buyer and select **Edit buyer**.
+2. Correct identity and contact details, company, relationship owner, source, and last verified
+   date from factual evidence.
+3. Update criteria when the buyer gives new guidance. Each criteria save creates another version;
+   it does not erase the prior criteria record.
+4. Record call or SMS permission only from evidence. Include the source and any available note;
+   later permission changes remain in history.
+5. Save the profile. Stonegate synchronizes the canonical buyer contact and linked Inbox
+   conversation so staff do not have to create another thread.
+6. Confirm the status still represents the relationship. Move the buyer to **Active** only after
+   the review is complete.
+
+Changing a phone number or email does not transfer permission from a different contact method.
+Document the permission that applies to the contact path being used.
+
+#### Archive Or Restore A Buyer
+
+Use **Archive buyer** to remove a buyer from normal working views without deleting relationship,
+criteria, permission, Inbox, offer, or deal history. Use **Restore buyer** when the record should
+return to review, then verify the displayed lifecycle status before making the buyer Active.
+
+Imported and provider-created buyers display their available provenance. Treat that data as a lead
+for review, not as verified buyer criteria or permission. InvestorLift synchronization and live
+buyer outreach are not active; maintaining a buyer or changing status does not send anything.
 
 ### Disposition Case
 
@@ -2721,6 +2789,19 @@ off until market authorization, access, retention, and deletion settings are app
 - Continue using the internal Buyer CRM and manually maintained criteria.
 - When configured, confirm the provider panel says live search is enabled before previewing cost.
 - Provider candidates are not buyers in Stonegate until a person selects and imports them.
+
+### A Buyer Cannot Be Saved Or Does Not Appear In Matching
+
+- A new buyer requires a name plus at least one usable phone number or email address.
+- Resolve the duplicate review. Choose the existing buyer, or use **Create separate** and enter a
+  factual reason when the identities are truly different.
+- Confirm the buyer is **Active**. Needs Review, Paused, Do Not Contact, and Archived buyers are
+  intentionally excluded from future automated matching.
+- Review the current criteria version, market, property type, price capacity, funding, proof, and
+  other case requirements. Do not loosen verified criteria merely to create a match.
+- Clear Buyer Network filters or move to another result page before assuming the record is absent.
+- InvestorLift and live Buyer Network outreach are disabled; a saved or matched buyer is not proof
+  that an external campaign ran.
 
 ### RealEstateAPI Property Intelligence Is Unavailable
 

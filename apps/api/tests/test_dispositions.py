@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    Buyer,
     CompensationPlanRole,
     CompensationPlanVersion,
     DealDeduction,
     DispositionCampaign,
     DispositionCopilotRecommendation,
     DispositionCopilotReview,
+    DispositionMatch,
     DispositionOperatingMode,
     Lead,
     RevenueRecord,
@@ -138,6 +140,7 @@ def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, st
         headers=HEADERS,
         json={
             "name": "Reliable Atlanta Buyer",
+            "email": "reliable-atlanta@example.com",
             "buyer_type": "cash_buyer",
             "status": "active",
             "max_purchase_price_cents": 30000000,
@@ -148,7 +151,16 @@ def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, st
             },
         },
     )
-    return lead_id, transaction_id, buyer_response.json()["id"]
+    assert buyer_response.status_code == 201, buyer_response.text
+    buyer_id = buyer_response.json()["id"]
+    assert buyer_response.json()["status"] == "needs_review"
+    activation = client.patch(
+        f"/api/v1/buyers/{buyer_id}",
+        headers=HEADERS,
+        json={"status": "active"},
+    )
+    assert activation.status_code == 200, activation.text
+    return lead_id, transaction_id, buyer_id
 
 
 def test_disposition_buyer_selection_and_reconciliation(
@@ -324,6 +336,100 @@ def test_buyer_selection_requires_current_proof_of_funds(
     assert "proof-of-funds" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("buyer_status", "archived"),
+    [
+        ("paused", False),
+        ("do_not_contact", False),
+        ("archived", True),
+    ],
+)
+def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
+    db_session: Session,
+    api_db_override: None,
+    buyer_status: str,
+    archived: bool,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    assert (
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/package/approve",
+            headers=HEADERS,
+        ).status_code
+        == 200
+    )
+    proof = client.post(
+        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "file_name": "proof.pdf",
+            "content_type": "application/pdf",
+            "institution_name": "Example Bank",
+            "verified_amount_cents": 40000000,
+            "expires_at": (datetime.now(UTC) + timedelta(days=90)).isoformat(),
+        },
+        content=b"%PDF verified proof of funds",
+    )
+    assert proof.status_code == 201, proof.text
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    assert matched.json()["matches"][0]["qualification_status"] == "qualified"
+
+    buyer = db_session.get(Buyer, UUID(buyer_id))
+    assert buyer is not None
+    buyer.status = buyer_status
+    buyer.archived_at = datetime.now(UTC) if archived else None
+    db_session.commit()
+
+    copilot = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=HEADERS,
+    )
+    assert copilot.status_code == 200, copilot.text
+    assert copilot.json()["qualified_buyer_count"] == 0
+    assert copilot.json()["verified_buyer_count"] == 0
+    assert "Generate the deterministic buyer ranking." in copilot.json()["readiness_gaps"]
+
+    release = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert release.status_code == 422, release.text
+    assert "currently active qualified buyers" in release.json()["detail"]
+
+    db_session.expire_all()
+    match = db_session.scalar(
+        select(DispositionMatch).where(
+            DispositionMatch.disposition_case_id == UUID(case_id),
+            DispositionMatch.buyer_id == UUID(buyer_id),
+        )
+    )
+    assert match is not None
+    assert match.qualification_status == "ineligible"
+    assert match.recipient_status == "excluded"
+    campaign_count = db_session.scalar(
+        select(func.count(DispositionCampaign.id)).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert campaign_count == 0
+
+
 def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
     db_session: Session,
     api_db_override: None,
@@ -366,6 +472,16 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         headers=HEADERS,
     )
     assert matched.status_code == 200
+    buyer = db_session.get(Buyer, UUID(buyer_id))
+    assert buyer is not None
+    buyer.proof_of_funds_status = "verified"
+    db_session.commit()
+    copilot_overview = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=HEADERS,
+    )
+    assert copilot_overview.status_code == 200, copilot_overview.text
+    assert copilot_overview.json()["verified_buyer_count"] == 1
     offer = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offers",
         headers=HEADERS,

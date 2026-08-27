@@ -73,6 +73,7 @@ from app.services.call_intelligence import transcript_to_read
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
+    format_e164,
 )
 from app.services.document_storage import read_content
 from app.services.email_identity import general_email_display_name
@@ -211,7 +212,12 @@ def ensure_buyer_conversation(
         )
     )
     if existing is not None:
-        return existing
+        return sync_buyer_conversation(
+            db,
+            buyer,
+            existing,
+            actor_user_id=actor_user_id,
+        )
 
     line = db.scalar(
         select(VoiceLine)
@@ -223,24 +229,27 @@ def ensure_buyer_conversation(
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
+    assigned_user_id = buyer.relationship_owner_user_id or (
+        line.assigned_user_id if line is not None else None
+    )
     contact = Contact(
         organization_id=buyer.organization_id,
         legal_name=buyer.name,
         preferred_name=buyer.name.split()[0] if buyer.name.strip() else None,
         contact_type="buyer",
-        assigned_user_id=line.assigned_user_id if line is not None else None,
+        assigned_user_id=assigned_user_id,
     )
     db.add(contact)
     db.flush()
     if buyer.phone:
-        digits = "".join(character for character in buyer.phone if character.isdigit())
+        normalized_phone = buyer.normalized_phone or format_e164(buyer.phone) or buyer.phone
         db.add(
             ContactMethod(
                 organization_id=buyer.organization_id,
                 contact_id=contact.id,
                 method_type="phone",
                 value=buyer.phone,
-                normalized_value=digits,
+                normalized_value=normalized_phone,
                 is_primary=True,
             )
         )
@@ -251,8 +260,8 @@ def ensure_buyer_conversation(
                 contact_id=contact.id,
                 method_type="email",
                 value=buyer.email,
-                normalized_value=buyer.email.strip().lower(),
-                is_primary=not bool(buyer.phone),
+                normalized_value=buyer.normalized_email or buyer.email.strip().lower(),
+                is_primary=True,
             )
         )
 
@@ -261,7 +270,7 @@ def ensure_buyer_conversation(
         conversation_type="buyer",
         lead_id=None,
         contact_id=contact.id,
-        assigned_user_id=line.assigned_user_id if line is not None else None,
+        assigned_user_id=assigned_user_id,
         assigned_team_id=line.assigned_team_id if line is not None else None,
         source_alias_id=None,
         visibility_scope="standard",
@@ -310,6 +319,151 @@ def ensure_buyer_conversation(
     )
     db.flush()
     return conversation
+
+
+def sync_buyer_conversation(
+    db: Session,
+    buyer: Buyer,
+    conversation: Conversation | None = None,
+    *,
+    actor_user_id: UUID | None = None,
+    reassign: bool = False,
+) -> Conversation:
+    """Keep the buyer CRM identity and its canonical Inbox contact aligned."""
+
+    conversation = conversation or ensure_buyer_conversation(db, buyer)
+    contact = db.scalar(
+        select(Contact).where(
+            Contact.organization_id == buyer.organization_id,
+            Contact.id == conversation.contact_id,
+        )
+    )
+    if contact is None:
+        raise RuntimeError("Buyer conversation is missing its contact record.")
+
+    line = None
+    if reassign and buyer.relationship_owner_user_id is None:
+        line = db.scalar(
+            select(VoiceLine)
+            .where(
+                VoiceLine.organization_id == buyer.organization_id,
+                VoiceLine.department_key == "dispositions",
+                VoiceLine.purpose_key == "buyer_relations",
+                VoiceLine.status == "active",
+            )
+            .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+        )
+    assigned_user_id = (
+        buyer.relationship_owner_user_id
+        if buyer.relationship_owner_user_id is not None
+        else (
+            (line.assigned_user_id if line is not None else None)
+            if reassign
+            else conversation.assigned_user_id
+        )
+    )
+    previous_assigned_user_id = conversation.assigned_user_id
+    contact.legal_name = buyer.name
+    contact.preferred_name = buyer.name.split()[0] if buyer.name.strip() else None
+    contact.assigned_user_id = assigned_user_id
+    conversation.assigned_user_id = assigned_user_id
+    if reassign and line is not None:
+        conversation.assigned_team_id = line.assigned_team_id
+    if previous_assigned_user_id != assigned_user_id:
+        db.add(
+            ConversationAssignmentEvent(
+                organization_id=buyer.organization_id,
+                conversation_id=conversation.id,
+                lead_id=None,
+                actor_user_id=actor_user_id,
+                previous_assigned_user_id=previous_assigned_user_id,
+                assigned_user_id=assigned_user_id,
+                previous_queue_key=conversation.queue_key,
+                queue_key=conversation.queue_key,
+                reason="Buyer relationship owner updated.",
+            )
+        )
+
+    _sync_buyer_contact_method(
+        db,
+        buyer=buyer,
+        contact=contact,
+        method_type="phone",
+        value=buyer.phone,
+        normalized_value=buyer.normalized_phone or format_e164(buyer.phone),
+    )
+    _sync_buyer_contact_method(
+        db,
+        buyer=buyer,
+        contact=contact,
+        method_type="email",
+        value=buyer.email,
+        normalized_value=buyer.normalized_email,
+    )
+    metadata = dict(conversation.conversation_metadata or {})
+    if buyer.archived_at is not None:
+        if conversation.status != "closed":
+            metadata["buyer_archive_closed"] = True
+            metadata["buyer_archive_previous_queue"] = conversation.queue_key
+            conversation.status = "closed"
+            conversation.queue_key = "closed"
+            conversation.closed_at = buyer.archived_at
+        else:
+            metadata.setdefault("buyer_archive_closed", False)
+    elif metadata.pop("buyer_archive_closed", False):
+        conversation.status = "open"
+        conversation.queue_key = str(
+            metadata.pop("buyer_archive_previous_queue", None) or "dispositions"
+        )
+        conversation.closed_at = None
+    conversation.conversation_metadata = metadata
+    db.flush()
+    return conversation
+
+
+def _sync_buyer_contact_method(
+    db: Session,
+    *,
+    buyer: Buyer,
+    contact: Contact,
+    method_type: str,
+    value: str | None,
+    normalized_value: str | None,
+) -> None:
+    rows = db.scalars(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == buyer.organization_id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == method_type,
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    ).all()
+    if not value or not normalized_value:
+        for row in rows:
+            db.delete(row)
+        return
+    primary = next(
+        (row for row in rows if row.normalized_value == normalized_value),
+        None,
+    )
+    if primary is None:
+        primary = ContactMethod(
+            organization_id=buyer.organization_id,
+            contact_id=contact.id,
+            method_type=method_type,
+            value=value,
+            normalized_value=normalized_value,
+            is_primary=True,
+        )
+        db.add(primary)
+    else:
+        primary.value = value
+        primary.normalized_value = normalized_value
+        primary.is_primary = True
+    for alternate in rows:
+        if alternate.id != primary.id:
+            alternate.is_primary = False
 
 
 def create_general_conversation(

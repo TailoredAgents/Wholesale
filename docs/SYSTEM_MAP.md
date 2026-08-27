@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 23, 2026
+Last verified against the repository: August 26, 2026
 
 ## 1. Document Authority
 
@@ -964,10 +964,12 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 
 1. The disposition case is opened from the contracted transaction.
 2. Staff approve the property package before marketing.
-3. Buyers are matched against markets, property criteria, price, capacity, activity, and proof.
+3. Only **Active** buyers are eligible for future automated matching against markets, property
+   criteria, price, capacity, activity, and proof.
 4. The optional DealMachine adapter can provide external buyer candidates only if it is deliberately reactivated and
    accepted.
-5. Candidates are reviewed before import; external data does not overwrite trusted buyer records.
+5. Candidates keep provider/import provenance and enter **Needs Review** before activation;
+   external data does not overwrite trusted buyer records.
 6. Staff record outreach, engagement, offers, deposits, and proof.
 7. Buyer selection is a human approval.
 8. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
@@ -1288,16 +1290,38 @@ document. This does not create a separate contract or signature system.
 
 ### 13.1 Buyer CRM
 
-Buyer records can retain:
+The Buyer Network is the organization-scoped source of truth for investor relationships. Its list
+uses server-side search, lifecycle, relationship-owner, and source filtering with pagination, so
+staff can work the full buyer database rather than only a browser-loaded subset.
 
-- identity and contact information
-- active or inactive status
+Buyer records retain:
+
+- identity, company, normalized phone and email, internal notes, and contact history
+- lifecycle status: **Needs Review**, **Active**, **Paused**, **Do Not Contact**, or **Archived**
+- the staff member who created the record, the relationship owner, and the last verified date
+- manual, provider, or import source and the available external provenance identifier
 - preferred markets and property types
-- minimum and maximum price
-- rehab tolerance and strategy
+- minimum and maximum price, rehab tolerance, funding type, and strategy
+- versioned criteria history, so later edits do not erase what the team previously recorded
 - proof-of-funds evidence and expiration
-- capacity and recent activity
-- engagement and offer history
+- capacity, reliability, recent activity, engagement, and offer history
+- the latest call and SMS permission state plus the evidence history behind each decision
+
+New records start in **Needs Review** and require a name plus at least one usable phone number or
+email address. Before creation, the server checks normalized phone and email identities for likely
+duplicates. Staff must either use the existing buyer or deliberately create a separate record and
+record why. The foundation does not silently merge records, and an actual buyer-merge workflow is
+not implemented.
+
+Only **Active** buyers are eligible for future automated matching. **Needs Review**, **Paused**,
+**Do Not Contact**, and **Archived** buyers remain visible to authorized staff but are excluded from
+matching. Archive and restore preserve criteria versions, provenance, permission evidence, Inbox
+history, and prior deal activity.
+
+Buyer profile edits synchronize canonical contact methods and the linked Buyer Inbox conversation
+instead of creating a second communication identity. Permission changes append evidence records;
+they do not rewrite prior permission history. Provider and file imports keep their source metadata
+so staff can distinguish Stonegate-entered facts from outside data.
 
 ### 13.2 Buyer Discovery
 
@@ -1316,7 +1340,9 @@ when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the work
 7. Links imported records to the existing buyer CRM without sending outreach.
 
 The adapter is not required for Stonegate's current launch and should not be treated as an active
-buyer source unless the Owner deliberately reactivates and accepts it later.
+buyer source unless the Owner deliberately reactivates and accepts it later. InvestorLift outreach
+and synchronization are not active in this foundation. No Buyer Network action sends an
+InvestorLift campaign or other live buyer outreach.
 
 ### 13.3 Disposition Authority
 
@@ -1586,6 +1612,7 @@ telemarketing, recording, or real-estate advice.
 | Twilio | SMS, Voice, recordings, and Call Intelligence | Implemented with transcript backoff, exhaustion visibility, and audited manual retry | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
+| InvestorLift | Future buyer-list enrichment or disposition outreach | Not implemented | Disabled; Buyer Network changes do not send or synchronize data |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |

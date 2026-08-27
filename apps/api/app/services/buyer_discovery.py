@@ -32,6 +32,14 @@ from app.schemas.buyers import (
     BuyerDiscoveryImport,
     BuyerDiscoveryRunRead,
 )
+from app.services.buyers import (
+    normalize_company,
+    normalize_email,
+    normalize_phone,
+    normalize_source_key,
+    normalize_text,
+)
+from app.services.inbox import ensure_buyer_conversation
 
 ENTITY_TERMS = {
     "llc",
@@ -345,32 +353,86 @@ def import_candidates(
     existing_buyers = list(
         db.scalars(select(Buyer).where(Buyer.organization_id == principal.organization_id)).all()
     )
-    by_name = {_normalized_name(item.company_name or item.name): item for item in existing_buyers}
+    existing_buyers_by_id = {item.id: item for item in existing_buyers}
+    by_name: dict[str, list[Buyer]] = {}
+    by_email: dict[str, list[Buyer]] = {}
+    by_phone: dict[str, list[Buyer]] = {}
+    by_source_external: dict[tuple[str, str], list[Buyer]] = {}
+    for item in existing_buyers:
+        for display_name in {item.name, item.company_name}:
+            if not display_name:
+                continue
+            normalized_name = _normalized_name(display_name)
+            if normalized_name:
+                by_name.setdefault(normalized_name, []).append(item)
+        if item.normalized_email:
+            by_email.setdefault(item.normalized_email, []).append(item)
+        if item.normalized_phone:
+            by_phone.setdefault(item.normalized_phone, []).append(item)
+        if item.source_external_key:
+            by_source_external.setdefault((item.source_key, item.source_external_key), []).append(
+                item
+            )
     imported = 0
     duplicates = 0
+    duplicate_reviews = 0
+    quarantined = 0
     now = datetime.now(UTC)
     for candidate in candidates:
         if candidate.buyer_id is not None:
             candidate.status = "duplicate"
             duplicates += 1
             continue
-        previous = db.scalar(
-            select(BuyerDiscoveryCandidate)
-            .where(
-                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
-                BuyerDiscoveryCandidate.provider == candidate.provider,
-                BuyerDiscoveryCandidate.external_key == candidate.external_key,
-                BuyerDiscoveryCandidate.buyer_id.is_not(None),
-                BuyerDiscoveryCandidate.id != candidate.id,
-            )
-            .order_by(BuyerDiscoveryCandidate.imported_at.desc())
-            .limit(1)
-        )
-        buyer = (
-            db.get(Buyer, previous.buyer_id)
-            if previous and previous.buyer_id is not None
-            else by_name.get(_normalized_name(candidate.company_name or candidate.name))
-        )
+        source_key = normalize_source_key(candidate.provider)
+        display_email = normalize_text(candidate.email)
+        display_phone = normalize_text(candidate.phone)
+        normalized_email = normalize_email(display_email)
+        normalized_phone = normalize_phone(display_phone)
+        canonical_email = display_email if normalized_email is not None else None
+        canonical_phone = display_phone if normalized_phone is not None else None
+        previous_buyer_ids = {
+            buyer_id
+            for buyer_id in db.scalars(
+                select(BuyerDiscoveryCandidate.buyer_id)
+                .where(
+                    BuyerDiscoveryCandidate.organization_id == principal.organization_id,
+                    BuyerDiscoveryCandidate.provider == candidate.provider,
+                    BuyerDiscoveryCandidate.external_key == candidate.external_key,
+                    BuyerDiscoveryCandidate.buyer_id.is_not(None),
+                    BuyerDiscoveryCandidate.id != candidate.id,
+                )
+                .order_by(BuyerDiscoveryCandidate.imported_at.desc())
+            ).all()
+            if buyer_id is not None
+        }
+        strong_matches: dict[UUID, Buyer] = {
+            buyer_id: existing_buyers_by_id[buyer_id]
+            for buyer_id in previous_buyer_ids
+            if buyer_id in existing_buyers_by_id
+        }
+        for possible in by_source_external.get((source_key, candidate.external_key), []):
+            strong_matches[possible.id] = possible
+        if normalized_email:
+            for possible in by_email.get(normalized_email, []):
+                strong_matches[possible.id] = possible
+        if normalized_phone:
+            for possible in by_phone.get(normalized_phone, []):
+                strong_matches[possible.id] = possible
+
+        if len(strong_matches) > 1:
+            candidate.status = "needs_duplicate_review"
+            candidate.evidence_snapshot = {
+                **(candidate.evidence_snapshot or {}),
+                "duplicate_review": {
+                    "reason": "ambiguous_strong_identity",
+                    "possible_buyer_ids": [
+                        str(buyer_id) for buyer_id in sorted(strong_matches, key=str)
+                    ],
+                },
+            }
+            duplicate_reviews += 1
+            continue
+        buyer = next(iter(strong_matches.values()), None)
         if buyer is not None:
             candidate.buyer_id = buyer.id
             candidate.status = "duplicate"
@@ -378,15 +440,52 @@ def import_candidates(
             duplicates += 1
             continue
 
+        candidate_name_keys = {
+            _normalized_name(display_name)
+            for display_name in {candidate.name, candidate.company_name}
+            if display_name
+        }
+        name_only_matches = {
+            possible.id: possible
+            for name_key in candidate_name_keys
+            for possible in by_name.get(name_key, [])
+        }
+        if name_only_matches:
+            candidate.status = "needs_duplicate_review"
+            candidate.evidence_snapshot = {
+                **(candidate.evidence_snapshot or {}),
+                "duplicate_review": {
+                    "reason": "name_or_company_match_only",
+                    "possible_buyer_ids": [
+                        str(buyer_id) for buyer_id in sorted(name_only_matches, key=str)
+                    ],
+                },
+            }
+            duplicate_reviews += 1
+            continue
+
+        if normalized_email is None and normalized_phone is None:
+            candidate.status = "needs_contact_review"
+            quarantined += 1
+            continue
+
         observed_max = candidate.max_purchase_price_cents
         buyer = Buyer(
             organization_id=principal.organization_id,
             name=candidate.name,
             company_name=candidate.company_name,
-            email=candidate.email,
-            phone=candidate.phone,
+            email=canonical_email,
+            phone=canonical_phone,
+            normalized_email=normalized_email,
+            normalized_phone=normalized_phone,
+            normalized_company_name=normalize_company(candidate.company_name),
             buyer_type="cash_buyer",
-            status="active",
+            status="needs_review",
+            source_key=source_key,
+            source_detail="Buyer discovery candidate",
+            source_external_key=candidate.external_key,
+            created_by_user_id=principal.user_id,
+            relationship_owner_user_id=principal.user_id,
             proof_of_funds_status="unknown",
             max_purchase_price_cents=(
                 round(observed_max * 1.25) if observed_max is not None else None
@@ -407,6 +506,8 @@ def import_candidates(
             BuyerCriteria(
                 organization_id=principal.organization_id,
                 buyer_id=buyer.id,
+                version_number=1,
+                is_current=True,
                 markets=candidate.market,
                 property_types=(
                     property_record.property_type or ", ".join(candidate.property_types) or None
@@ -420,10 +521,21 @@ def import_candidates(
                 ),
             )
         )
+        ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
         candidate.buyer_id = buyer.id
         candidate.status = "imported"
         candidate.imported_at = now
-        by_name[_normalized_name(candidate.company_name or candidate.name)] = buyer
+        for name_key in candidate_name_keys:
+            by_name.setdefault(name_key, []).append(buyer)
+        existing_buyers_by_id[buyer.id] = buyer
+        if buyer.normalized_email:
+            by_email.setdefault(buyer.normalized_email, []).append(buyer)
+        if buyer.normalized_phone:
+            by_phone.setdefault(buyer.normalized_phone, []).append(buyer)
+        if buyer.source_external_key:
+            by_source_external.setdefault((buyer.source_key, buyer.source_external_key), []).append(
+                buyer
+            )
         imported += 1
         db.add(
             ActivityEvent(
@@ -468,6 +580,8 @@ def import_candidates(
                 "selected_count": len(candidates),
                 "imported_count": imported,
                 "duplicate_count": duplicates,
+                "duplicate_review_count": duplicate_reviews,
+                "quarantined_count": quarantined,
                 "external_messages_sent": 0,
             },
             reason="Human-selected DealMachine candidate import",

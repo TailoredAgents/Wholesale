@@ -1679,8 +1679,9 @@ def _disposition_context(
             .where(
                 BuyerCriteria.organization_id == principal.organization_id,
                 BuyerCriteria.buyer_id.in_(buyer_ids),
+                BuyerCriteria.is_current.is_(True),
             )
-            .order_by(BuyerCriteria.created_at.desc())
+            .order_by(BuyerCriteria.version_number.desc(), BuyerCriteria.created_at.desc())
         ).all():
             criteria_by_buyer.setdefault(
                 criteria_record.buyer_id,
@@ -1772,7 +1773,11 @@ def _disposition_context(
                 else None,
             }
             for match in matches
-            if match.buyer_id in buyers
+            if (
+                match.buyer_id in buyers
+                and buyers[match.buyer_id].status == "active"
+                and buyers[match.buyer_id].archived_at is None
+            )
         ],
         "offers": [
             {

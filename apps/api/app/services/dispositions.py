@@ -304,9 +304,7 @@ def create_case(
 
 
 def approve_package(db: Session, principal: Principal, case_id: UUID) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"package_prep"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"package_prep"})
     if case is None:
         return None
     case.package_status = "approved"
@@ -329,9 +327,7 @@ def approve_package(db: Session, principal: Principal, case_id: UUID) -> Disposi
 def generate_matches(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"buyer_matching"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
     if case is None:
         return None
     if case.package_status != "approved":
@@ -342,14 +338,20 @@ def generate_matches(
     now = datetime.now(UTC)
     buyers = db.scalars(
         select(Buyer).where(
-            Buyer.organization_id == principal.organization_id, Buyer.status == "active"
+            Buyer.organization_id == principal.organization_id,
+            Buyer.status == "active",
+            Buyer.archived_at.is_(None),
         )
     ).all()
     for buyer in buyers:
         criteria = db.scalar(
             select(BuyerCriteria)
-            .where(BuyerCriteria.buyer_id == buyer.id)
-            .order_by(BuyerCriteria.created_at.desc())
+            .where(
+                BuyerCriteria.organization_id == principal.organization_id,
+                BuyerCriteria.buyer_id == buyer.id,
+                BuyerCriteria.is_current.is_(True),
+            )
+            .order_by(BuyerCriteria.version_number.desc(), BuyerCriteria.created_at.desc())
         )
         buyer_maximums = [
             value
@@ -426,22 +428,53 @@ def generate_matches(
 def release_campaign(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"buyer_matching"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
     if case is None:
         return None
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before releasing a campaign.")
-    matches = db.scalars(
-        select(DispositionMatch).where(
-            DispositionMatch.disposition_case_id == case.id,
-            DispositionMatch.qualification_status == "qualified",
-        )
-    ).all()
-    if not matches:
-        raise ValueError("No qualified buyers are available for an approved campaign.")
+    matches = list(
+        db.scalars(
+            select(DispositionMatch)
+            .where(
+                DispositionMatch.organization_id == principal.organization_id,
+                DispositionMatch.disposition_case_id == case.id,
+                DispositionMatch.qualification_status == "qualified",
+            )
+            .with_for_update()
+        ).all()
+    )
+    buyer_ids = {match.buyer_id for match in matches}
+    buyers = (
+        {
+            buyer.id: buyer
+            for buyer in db.scalars(
+                select(Buyer)
+                .where(
+                    Buyer.organization_id == principal.organization_id,
+                    Buyer.id.in_(buyer_ids),
+                )
+                .with_for_update()
+            ).all()
+        }
+        if buyer_ids
+        else {}
+    )
+    eligible_matches: list[DispositionMatch] = []
     for match in matches:
+        buyer = buyers.get(match.buyer_id)
+        if buyer is None or buyer.status != "active" or buyer.archived_at is not None:
+            match.qualification_status = "ineligible"
+            match.recipient_status = "excluded"
+            continue
+        eligible_matches.append(match)
+    if not eligible_matches:
+        # Persist lifecycle invalidation so the stale match cannot be reused on a retry.
+        db.commit()
+        raise ValueError(
+            "No currently active qualified buyers are available for an approved campaign."
+        )
+    for match in eligible_matches:
         match.recipient_status = "approved"
     campaign = DispositionCampaign(
         organization_id=principal.organization_id,
@@ -450,7 +483,7 @@ def release_campaign(
         status="simulated_released",
         name=f"{case.package_snapshot.get('property_address', 'Deal')} buyer release",
         channel="simulation",
-        recipient_count=len(matches),
+        recipient_count=len(eligible_matches),
         released_at=datetime.now(UTC),
     )
     db.add(campaign)
@@ -623,9 +656,7 @@ def add_engagement(
 def select_buyer(
     db: Session, principal: Principal, case_id: UUID, payload: BuyerSelection
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"offers_received"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"offers_received"})
     if case is None:
         return None
     primary = db.scalar(
@@ -693,9 +724,7 @@ def select_buyer(
 def build_reconciliation(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"buyer_selected"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
     transaction = db.get(Transaction, case.transaction_id)
@@ -845,9 +874,7 @@ def build_reconciliation(
 def decide_reconciliation(
     db: Session, principal: Principal, case_id: UUID, payload: ReconciliationDecision
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"buyer_selected"}
-    )
+    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
     reconciliation = db.scalar(

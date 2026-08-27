@@ -2681,8 +2681,22 @@ export type BuyerListItem = {
   company_name: string | null;
   email: string | null;
   phone: string | null;
+  normalized_email: string | null;
+  normalized_phone: string | null;
   buyer_type: string;
   status: string;
+  source_key: string;
+  source_detail: string | null;
+  source_external_key: string | null;
+  created_by_user_id: string | null;
+  created_by_name: string | null;
+  created_by_email: string | null;
+  relationship_owner_user_id: string | null;
+  relationship_owner_name: string | null;
+  last_verified_at: string | null;
+  archived_at: string | null;
+  archived_by_user_id: string | null;
+  archive_reason: string | null;
   proof_of_funds_status: string;
   max_purchase_price_cents: number | null;
   reliability_score_basis_points: number;
@@ -2690,7 +2704,11 @@ export type BuyerListItem = {
   failed_deals: number;
   proof_of_funds_expires_at: string | null;
   notes: string | null;
+  phone_permission: BuyerPermissionEvidence;
+  sms_permission: BuyerPermissionEvidence;
+  permission_history: BuyerPermissionHistoryEntry[];
   criteria: {
+    version_number: number;
     markets: string | null;
     property_types: string | null;
     min_price_cents: number | null;
@@ -2699,6 +2717,65 @@ export type BuyerListItem = {
     notes: string | null;
   } | null;
   created_at: string;
+  updated_at: string;
+};
+
+export type BuyerPermissionEvidence = {
+  status: string;
+  source: string | null;
+  recorded_at: string | null;
+  normalized_address: string | null;
+  wording_version: string | null;
+};
+
+export type BuyerPermissionHistoryEntry = BuyerPermissionEvidence & {
+  channel: string;
+};
+
+export type BuyerRelationshipOwner = {
+  user_id: string;
+  display_name: string;
+  email: string;
+};
+
+export type BuyerDuplicateMatch = {
+  buyer_id: string;
+  name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  matched_fields: string[];
+  reasons: string[];
+};
+
+export type BuyerDuplicatePreflight = {
+  has_matches: boolean;
+  normalized_email: string | null;
+  normalized_phone: string | null;
+  normalized_company_name: string | null;
+  matches: BuyerDuplicateMatch[];
+};
+
+export type BuyerQuery = {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  ownerUserId?: string;
+  sourceKey?: string;
+};
+
+export type BuyerPage = {
+  buyers: BuyerListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  relationshipOwners: BuyerRelationshipOwner[];
+  sourceOptions: string[];
+  apiConnected: boolean;
+  errorMessage: string | null;
 };
 
 export type BuyerDataProvider = {
@@ -4484,6 +4561,12 @@ type TaskQueueResponse = {
 
 type BuyerListResponse = {
   items: BuyerListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  owner_options: BuyerRelationshipOwner[];
+  source_options: string[];
 };
 
 export type DashboardData = {
@@ -5504,26 +5587,73 @@ export async function getFieldAppointmentWorkspace(
   }
 }
 
-export async function getBuyers(): Promise<{
-  buyers: BuyerListItem[];
-  apiConnected: boolean;
-}> {
+export async function getBuyers(query: BuyerQuery = {}): Promise<BuyerPage> {
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const page = Number.isFinite(query.page) ? Math.max(1, Math.floor(query.page ?? 1)) : 1;
+  const pageSize = Number.isFinite(query.pageSize)
+    ? Math.min(100, Math.max(10, Math.floor(query.pageSize ?? 25)))
+    : 25;
+  const params = new URLSearchParams({
+    limit: String(pageSize),
+    offset: String((page - 1) * pageSize),
+  });
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.status?.trim()) params.set("status", query.status.trim());
+  if (query.ownerUserId?.trim()) {
+    params.set("owner_id", query.ownerUserId.trim());
+  }
+  if (query.sourceKey?.trim()) params.set("source_key", query.sourceKey.trim());
 
   try {
     const headers = await getServerApiHeaders();
-    const response = await fetch(`${apiBaseUrl}/api/v1/buyers`, {
+    const response = await fetch(`${apiBaseUrl}/api/v1/buyers?${params.toString()}`, {
       headers,
       cache: "no-store",
     });
 
     if (!response.ok) {
-      throw new Error("API returned a non-OK response");
+      throw await apiError(response);
     }
 
-    return { buyers: ((await response.json()) as BuyerListResponse).items, apiConnected: true };
-  } catch {
-    return { buyers: [], apiConnected: false };
+    const payload = (await response.json()) as BuyerListResponse;
+    return {
+      buyers: payload.items,
+      total: payload.total,
+      page: Math.floor(payload.offset / Math.max(1, payload.limit)) + 1,
+      pageSize: payload.limit,
+      hasMore: payload.has_more,
+      relationshipOwners: payload.owner_options,
+      sourceOptions: payload.source_options,
+      apiConnected: true,
+      errorMessage: null,
+    };
+  } catch (error) {
+    return {
+      buyers: [],
+      total: 0,
+      page,
+      pageSize,
+      hasMore: false,
+      relationshipOwners: [],
+      sourceOptions: [],
+      apiConnected: false,
+      errorMessage: error instanceof Error ? error.message : "Buyer CRM is unavailable.",
+    };
+  }
+}
+
+export async function getBuyer(buyerId: string): Promise<BuyerListItem | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/buyers/${encodeURIComponent(buyerId)}`,
+      { headers: await getServerApiHeaders(), cache: "no-store" },
+    );
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as BuyerListItem;
+  } catch (error) {
+    console.error("Stonegate buyer detail request failed.", error);
+    return null;
   }
 }
 

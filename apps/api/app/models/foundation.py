@@ -5439,6 +5439,18 @@ class TransactionCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyers"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "source_key",
+            "source_external_key",
+            name="uq_buyers_org_source_external_key",
+        ),
+        Index("ix_buyers_org_normalized_phone", "organization_id", "normalized_phone"),
+        Index("ix_buyers_org_normalized_email", "organization_id", "normalized_email"),
+        Index("ix_buyers_org_normalized_company", "organization_id", "normalized_company_name"),
+        Index("ix_buyers_org_status_created", "organization_id", "status", "created_at"),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -5447,8 +5459,30 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    normalized_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    normalized_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    normalized_company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     buyer_type: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_key: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="legacy", server_default="legacy", index=True
+    )
+    source_detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_external_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    relationship_owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    archived_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    archive_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     proof_of_funds_status: Mapped[str] = mapped_column(String(80), nullable=False)
     max_purchase_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reliability_score_basis_points: Mapped[int] = mapped_column(
@@ -5555,11 +5589,32 @@ class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class BuyerCriteria(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_criteria"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "buyer_id",
+            "version_number",
+            name="uq_buyer_criteria_buyer_version",
+        ),
+        Index("ix_buyer_criteria_current", "organization_id", "buyer_id", "is_current"),
+        Index(
+            "uq_buyer_criteria_one_current",
+            "organization_id",
+            "buyer_id",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+            sqlite_where=text("is_current = 1"),
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     markets: Mapped[str | None] = mapped_column(String(500), nullable=True)
     property_types: Mapped[str | None] = mapped_column(String(500), nullable=True)
     min_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

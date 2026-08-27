@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -206,6 +207,18 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert imported.json()["imported_count"] == 1
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
     imported_buyer_id = imported.json()["candidates"][0]["buyer_id"]
+    imported_buyer = client.get(f"/api/v1/buyers/{imported_buyer_id}", headers=HEADERS)
+    assert imported_buyer.status_code == 200
+    assert imported_buyer.json()["status"] == "needs_review"
+    assert imported_buyer.json()["source_key"] == "dealmachine"
+    assert imported_buyer.json()["phone"] == "4045550101"
+    assert imported_buyer.json()["normalized_phone"] == "+14045550101"
+    activated = client.patch(
+        f"/api/v1/buyers/{imported_buyer_id}",
+        headers=HEADERS,
+        json={"status": "active"},
+    )
+    assert activated.status_code == 200
     assert (
         client.post(
             f"/api/v1/dispositions/cases/{case_id}/package/approve",
@@ -230,16 +243,203 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
             "confirmed_estimated_credits": 4,
         },
     ).json()
+    contact_duplicate_candidate = db_session.get(
+        BuyerDiscoveryCandidate,
+        UUID(second_run["candidates"][0]["id"]),
+    )
+    assert contact_duplicate_candidate is not None
+    contact_duplicate_candidate.provider = "alternate_provider"
+    contact_duplicate_candidate.external_key = "alternate-contact-key"
+    contact_duplicate_candidate.name = "Different Buyer Name"
+    contact_duplicate_candidate.company_name = "Different Capital Group"
+    db_session.commit()
     duplicate = client.post(
         f"/api/v1/buyers/discovery-runs/{second_run['id']}/import",
         headers=HEADERS,
-        json={"candidate_ids": [second_run["candidates"][0]["id"]]},
+        json={"candidate_ids": [str(contact_duplicate_candidate.id)]},
     )
     assert duplicate.status_code == 200
-    assert duplicate.json()["candidates"][0]["status"] == "duplicate"
-    assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 2
-    assert (
-        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 4
+    contact_duplicate_result = next(
+        candidate
+        for candidate in duplicate.json()["candidates"]
+        if candidate["id"] == str(contact_duplicate_candidate.id)
     )
+    assert contact_duplicate_result["status"] == "duplicate"
+    assert contact_duplicate_result["buyer_id"] == imported_buyer_id
+
+    source_duplicate_candidate = next(
+        candidate
+        for candidate in second_run["candidates"]
+        if candidate["name"] == "Taylor Investor"
+    )
+    source_duplicate_row = db_session.get(
+        BuyerDiscoveryCandidate,
+        UUID(source_duplicate_candidate["id"]),
+    )
+    canonical_buyer = db_session.get(Buyer, UUID(imported_buyer_id))
+    assert source_duplicate_row is not None and canonical_buyer is not None
+    source_duplicate_row.external_key = str(canonical_buyer.source_external_key)
+    db_session.commit()
+    source_duplicate = client.post(
+        f"/api/v1/buyers/discovery-runs/{second_run['id']}/import",
+        headers=HEADERS,
+        json={"candidate_ids": [source_duplicate_candidate["id"]]},
+    )
+    assert source_duplicate.status_code == 200
+    source_duplicate_result = next(
+        candidate
+        for candidate in source_duplicate.json()["candidates"]
+        if candidate["id"] == source_duplicate_candidate["id"]
+    )
+    assert source_duplicate_result["status"] == "duplicate"
+    assert source_duplicate_result["buyer_id"] == imported_buyer_id
+
+    third_run = client.post(
+        "/api/v1/buyers/discovery-runs",
+        headers=HEADERS,
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 4,
+        },
+    ).json()
+    no_contact_candidate = next(
+        candidate for candidate in third_run["candidates"] if candidate["name"] == "Taylor Investor"
+    )
+    quarantined = client.post(
+        f"/api/v1/buyers/discovery-runs/{third_run['id']}/import",
+        headers=HEADERS,
+        json={"candidate_ids": [no_contact_candidate["id"]]},
+    )
+    assert quarantined.status_code == 200
+    quarantined_candidate = next(
+        candidate
+        for candidate in quarantined.json()["candidates"]
+        if candidate["id"] == no_contact_candidate["id"]
+    )
+    assert quarantined_candidate["status"] == "needs_contact_review"
+    assert quarantined_candidate["buyer_id"] is None
+    assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 3
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 6
+    )
+
+    fourth_run = client.post(
+        "/api/v1/buyers/discovery-runs",
+        headers=HEADERS,
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 4,
+        },
+    ).json()
+    name_only_candidate = db_session.get(
+        BuyerDiscoveryCandidate,
+        UUID(fourth_run["candidates"][0]["id"]),
+    )
+    assert name_only_candidate is not None
+    assert name_only_candidate.name == "Peachtree Capital LLC"
+    name_only_candidate.provider = "different_provider"
+    name_only_candidate.external_key = "different-provider-contact"
+    name_only_candidate.email = "distinct-buyer@example.com"
+    name_only_candidate.phone = "6785550137"
+    db_session.commit()
+    name_review = client.post(
+        f"/api/v1/buyers/discovery-runs/{fourth_run['id']}/import",
+        headers=HEADERS,
+        json={"candidate_ids": [str(name_only_candidate.id)]},
+    )
+    assert name_review.status_code == 200
+    reviewed_candidate = next(
+        candidate
+        for candidate in name_review.json()["candidates"]
+        if candidate["id"] == str(name_only_candidate.id)
+    )
+    assert reviewed_candidate["status"] == "needs_duplicate_review"
+    assert reviewed_candidate["buyer_id"] is None
+    assert reviewed_candidate["evidence_snapshot"]["duplicate_review"]["reason"] == (
+        "name_or_company_match_only"
+    )
+    assert (
+        imported_buyer_id
+        in reviewed_candidate["evidence_snapshot"]["duplicate_review"]["possible_buyer_ids"]
+    )
+    assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 4
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 8
+    )
+
+    shared_email = "shared-legacy-identity@example.com"
+    first_legacy = client.post(
+        "/api/v1/buyers",
+        headers=HEADERS,
+        json={
+            "name": "Legacy Identity One",
+            "email": shared_email,
+            "phone": "4045550141",
+        },
+    )
+    assert first_legacy.status_code == 201, first_legacy.text
+    second_legacy = client.post(
+        "/api/v1/buyers",
+        headers=HEADERS,
+        json={
+            "name": "Legacy Identity Two",
+            "email": shared_email,
+            "phone": "4045550142",
+            "allow_separate_record": True,
+            "separate_record_reason": (
+                "Legacy records intentionally share a company mailbox pending review."
+            ),
+        },
+    )
+    assert second_legacy.status_code == 201, second_legacy.text
+
+    fifth_run = client.post(
+        "/api/v1/buyers/discovery-runs",
+        headers=HEADERS,
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 4,
+        },
+    ).json()
+    ambiguous_candidate = db_session.get(
+        BuyerDiscoveryCandidate,
+        UUID(fifth_run["candidates"][0]["id"]),
+    )
+    assert ambiguous_candidate is not None
+    ambiguous_candidate.provider = "ambiguous_provider"
+    ambiguous_candidate.external_key = "ambiguous-strong-identity"
+    ambiguous_candidate.name = "Distinct Discovery Candidate"
+    ambiguous_candidate.company_name = "Distinct Discovery Company"
+    ambiguous_candidate.email = shared_email
+    ambiguous_candidate.phone = "6785550197"
+    db_session.commit()
+
+    ambiguous_review = client.post(
+        f"/api/v1/buyers/discovery-runs/{fifth_run['id']}/import",
+        headers=HEADERS,
+        json={"candidate_ids": [str(ambiguous_candidate.id)]},
+    )
+    assert ambiguous_review.status_code == 200, ambiguous_review.text
+    ambiguous_result = next(
+        candidate
+        for candidate in ambiguous_review.json()["candidates"]
+        if candidate["id"] == str(ambiguous_candidate.id)
+    )
+    assert ambiguous_result["status"] == "needs_duplicate_review"
+    assert ambiguous_result["buyer_id"] is None
+    assert ambiguous_result["evidence_snapshot"]["duplicate_review"]["reason"] == (
+        "ambiguous_strong_identity"
+    )
+    assert set(ambiguous_result["evidence_snapshot"]["duplicate_review"]["possible_buyer_ids"]) == {
+        first_legacy.json()["id"],
+        second_legacy.json()["id"],
+    }
+    db_session.refresh(ambiguous_candidate)
+    assert ambiguous_candidate.imported_at is None
+    assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 4
     get_settings.cache_clear()

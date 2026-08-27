@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last verified: August 21, 2026
+Last verified: August 26, 2026
 
 ## How To Use This Guide
 
@@ -160,10 +160,18 @@ Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for D
 the selected Deal's Disposition section for package, buyer, and offer work.
 
 - Prepare approved deal packages and match only appropriate buyers.
+- Search the Buyer Network before adding an investor, resolve duplicate warnings, and assign a
+  relationship owner.
+- Review identity, contact path, criteria, permission evidence, source, and last-verified date
+  before changing a buyer from **Needs Review** to **Active**.
 - Track inquiries, showings, offers, proof of funds, deposits, primary buyer, and backup buyer.
 - Keep restricted economics inside authorized roles and approved audiences.
-- Record opt-outs and buyer qualification changes.
+- Record opt-outs and buyer qualification changes without erasing the prior criteria or permission
+  history.
+- Use **Paused**, **Do Not Contact**, or **Archived** when appropriate; only **Active** buyers can
+  participate in future automated matching.
 - Do not select a buyer or release a package by bypassing approval gates.
+- Do not treat a provider/imported buyer as verified or assume that adding a buyer sends outreach.
 
 ## Finance And Accounting
 
@@ -510,12 +518,30 @@ current human disposition work according to the active compensation policy.
 ### Buyer Work
 
 1. Search Stonegate buyers first.
-2. When activated, use DealMachine to find additional candidates.
-3. Review candidates before importing.
-4. Rank by market, property type, price, strategy, funding, and reliability.
-5. Contact buyers through approved company channels.
-6. Record interest, pass reasons, showing activity, and follow-up.
-7. Obtain and review proof of funds where required.
+2. If the investor is not present, select **Add buyer** and enter the name plus a usable phone or
+   email. New buyers begin in **Needs Review**.
+3. Review any normalized phone or email match. Use the existing profile when it is the same
+   investor. Create a separate profile only for a genuinely different buyer and record the reason.
+   Stonegate does not silently merge buyer records, and no buyer-merge action is available.
+4. Assign the relationship owner and record the actual source, outside reference when available,
+   and last verified date.
+5. Verify contact information, markets, property types, price range, strategy, funding, and
+   permission evidence. Save criteria changes as new versions rather than replacing history.
+6. Change the status to **Active** only after review. Use **Paused** for a retained relationship
+   that should not receive current opportunities, **Do Not Contact** for a documented restriction,
+   and **Archived** to remove the record from normal work while keeping history.
+7. Rank only Active buyers by market, property type, price, strategy, funding, proof, and
+   reliability.
+8. Contact buyers through approved company channels. Buyer contact edits synchronize with the
+   canonical Inbox thread; do not create a second contact or thread to work around incorrect data.
+9. Record interest, pass reasons, showing activity, follow-up, and proof of funds where required.
+10. Archive or restore through the Buyer Network lifecycle controls; never delete relationship,
+    permission, offer, or deal history to clean up a list.
+
+Provider or file imports must retain their provenance and remain **Needs Review** until a person
+checks the record. The legacy DealMachine adapter is disabled. InvestorLift synchronization and
+live Buyer Network outreach are also disabled, so staff must not assume that saving, activating,
+or matching a buyer sends a message.
 
 ### Offers
 

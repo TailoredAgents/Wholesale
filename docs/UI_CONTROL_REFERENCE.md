@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 22, 2026
+Last verified against the application: August 26, 2026
 
 ## Purpose
 
@@ -1442,23 +1442,48 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Search | Finds buyers by name, company, market, contact, or criteria | Searches visible buyer records |
+| Search | Finds buyers through the server-backed Buyer Network search | Searches the complete organization-scoped result set, not only the currently loaded page |
+| Status filter | Limits the list to Needs Review, Active, Paused, Do Not Contact, or Archived | Filter only; it does not change buyer status |
+| Relationship owner filter | Limits the list to the employee responsible for the investor relationship | Available owners are organization scoped |
+| Source filter | Limits the list by manual, import, or provider provenance | A missing provider reference does not make outside data staff-verified |
+| Result total / pagination | Shows the matching count and loads the previous or next server result page | Changing search or filters returns to the beginning of that result set |
 | Buyer row | Opens the buyer profile | Requires buyer access |
 | Summary / Criteria & Markets / Active Deals / Proof & Capacity | Changes the selected buyer section and updates the URL | Navigation only |
 | Close buyer details | Returns to the buyer list | Phone layout only |
 | **Add buyer** | Opens the new-buyer drawer | Requires buyer edit permission |
-| Name / Company | Identifies the investor or organization | Name required |
-| Phone / Email | Stores contact methods | At least one useful method recommended |
+| Name / Company | Identifies the investor or organization | Name is required; company is optional |
+| Phone / Email | Stores canonical contact methods | At least one usable phone number or email address is required |
+| Relationship owner | Identifies the staff member responsible for verification and follow-up | Must be an eligible user in the same organization |
+| Source / source reference | Records whether the buyer was entered manually, imported, or supplied by a provider | Preserve the external reference when available; provenance is not verification |
+| Last verified | Records when staff most recently confirmed the buyer profile | Enter a factual verification date, not the import date unless verification occurred then |
+| Duplicate review | Shows likely normalized phone or email matches before creation | Resolve every shown match before saving |
+| **Use existing** | Opens the matching buyer instead of creating another record | Preferred when the identity belongs to the same investor |
+| **Create separate** / reason | Allows a genuinely distinct buyer record despite a likely match | Requires an explicit factual reason and is audited; no silent merge occurs |
+| **Edit buyer** | Opens the selected profile for authorized changes | Requires buyer edit permission |
 | Markets | Records geographic buying areas | Used for matching |
 | Property types | Records asset preferences | Used for matching |
 | Price minimum/maximum | Records acquisition budget | Used for matching |
 | Strategy | Records flip, rental, wholesale, development, or other focus | Used for matching |
 | Funding type | Records cash, hard money, private, conventional, or other source | Used for readiness |
 | Proof of funds status | Shows missing, submitted, verified, rejected, or expired | Verification requires evidence |
-| Reliability/status | Records activity and relationship state | Staff-managed |
+| Criteria version | Preserves each saved criteria revision | New criteria replace the current working version without deleting prior versions |
+| Status: **Needs Review** | Holds new, incomplete, or unverified buyer records | Excluded from future automated matching |
+| Status: **Active** | Marks a reviewed buyer as available for current opportunities | The only lifecycle status eligible for future automated matching |
+| Status: **Paused** | Retains a relationship that should not receive current opportunities | Excluded from matching |
+| Status: **Do Not Contact** | Records an opt-out or other documented contact restriction | Excluded from matching; do not use as a temporary pause |
+| Status: **Archived** | Retains an out-of-workflow buyer outside normal active results | Excluded from matching |
+| Call/SMS permission state and evidence | Shows the latest decision and its supporting history for the applicable contact path | Append evidence; never infer permission from the presence of a phone or email |
+| Inbox conversation | Opens or creates the canonical buyer communication thread | Profile contact edits synchronize the linked contact and conversation identity |
+| Reliability/status | Records performance and relationship state | Staff-managed; lifecycle status is separate from reliability |
 | Notes | Captures buyer-specific context | Internal |
-| **Save buyer** | Creates or updates the buyer profile | Disabled while saving |
-| Archive/deactivate | Removes buyer from active matching | Preserves history |
+| **Save buyer** | Creates or updates the buyer profile and current criteria version | Disabled while saving or when validation/duplicate review is unresolved |
+| **Archive buyer** | Removes the buyer from normal working views and future matching | Preserves profile, criteria versions, provenance, permission, Inbox, offer, and deal history |
+| **Restore buyer** | Returns an archived buyer to a reviewable lifecycle | Review identity, criteria, permission, and status before making the buyer Active |
+
+The Buyer Network does not include a merge control. Use the existing record when a duplicate match
+represents the same investor; use **Create separate** only for a truly distinct record and document
+why. InvestorLift synchronization and live buyer outreach remain disabled, so no control in this
+section sends an InvestorLift campaign.
 
 ## Dispositions
 

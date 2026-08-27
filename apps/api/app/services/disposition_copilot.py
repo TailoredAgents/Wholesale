@@ -338,7 +338,7 @@ def _disposition_facts(
     principal: Principal,
     case: DispositionCase,
 ) -> DispositionFacts:
-    matches = list(
+    historical_matches = list(
         db.scalars(
             select(DispositionMatch)
             .where(
@@ -348,7 +348,7 @@ def _disposition_facts(
             .order_by(DispositionMatch.rank)
         ).all()
     )
-    buyer_ids = {item.buyer_id for item in matches}
+    buyer_ids = {item.buyer_id for item in historical_matches}
     buyers = (
         {
             item.id: item
@@ -362,6 +362,15 @@ def _disposition_facts(
         if buyer_ids
         else {}
     )
+    matches = [
+        match
+        for match in historical_matches
+        if (
+            match.buyer_id in buyers
+            and buyers[match.buyer_id].status == "active"
+            and buyers[match.buyer_id].archived_at is None
+        )
+    ]
     offers = list(
         db.scalars(
             select(BuyerOffer)
@@ -633,6 +642,6 @@ def _aware(value: datetime) -> datetime:
 
 def _has_current_proof_of_funds(buyer: Buyer) -> bool:
     expires_at = buyer.proof_of_funds_expires_at
-    return buyer.proof_of_funds_status == "received" and (
+    return buyer.proof_of_funds_status in {"received", "verified"} and (
         expires_at is None or _aware(expires_at) >= datetime.now(UTC)
     )

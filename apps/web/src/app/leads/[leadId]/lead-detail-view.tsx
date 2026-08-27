@@ -1257,7 +1257,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const [{ lead, apiConnected }, buyerResult, profile] = await Promise.all([
     getLeadDetail(leadId),
     activeTab === "contract"
-      ? getBuyers()
+      ? getBuyers({ status: "active", pageSize: 100 })
       : Promise.resolve({ buyers: [], apiConnected: true }),
     getWorkspaceProfile(),
   ]);
