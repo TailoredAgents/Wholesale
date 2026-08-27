@@ -127,7 +127,7 @@ class ReviewOpenAIResponsesClient(FakeOpenAIResponsesClient):
                         "segment_index": 0,
                         "supporting_text": "Would you like to discuss selling",
                     },
-                    {"segment_index": 1, "supporting_text": "I want to sell"}
+                    {"segment_index": 1, "supporting_text": "I want to sell"},
                 ],
                 "seller_interest_evidence": [
                     {"segment_index": 1, "supporting_text": "I want to sell"}
@@ -168,6 +168,31 @@ class LowConfidenceOpenAIResponsesClient(FakeOpenAIResponsesClient):
         result["decision"] = "review"
         result["confidence"] = 72
         result["reason"] = "The cited seller-interest evidence needs human review."
+        return result, usage
+
+
+class SellerInterestUnsupportedOpenAIResponsesClient(FakeOpenAIResponsesClient):
+    def create_structured_response(
+        self, **_kwargs: object
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        result, usage = super().create_structured_response(**_kwargs)
+        result["decision"] = "review"
+        result["explicit_seller_interest"] = False
+        result["appointment_agreed"] = False
+        result["seller_interest_evidence"] = []
+        result["appointment_evidence"] = []
+        result["confidence"] = 91
+        result["reason"] = "Both people spoke, but the seller's interest was not explicit enough."
+        return result, usage
+
+
+class AmbiguousReviewOpenAIResponsesClient(FakeOpenAIResponsesClient):
+    def create_structured_response(
+        self, **_kwargs: object
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        result, usage = super().create_structured_response(**_kwargs)
+        result["decision"] = "review"
+        result["reason"] = "The cited conversation is valid but still needs staff review."
         return result, usage
 
 
@@ -245,17 +270,20 @@ def test_archive_is_idempotent_and_revisions_requeue(db_session: Session) -> Non
     now = datetime.now(UTC)
     cdr = sample_cdr("Qualified Seller – Follow Up")
 
-    assert archive_batchdialer_cdr(
-        db_session, organization_id=organization.id, cdr=cdr, now=now
-    ) == "archived"
+    assert (
+        archive_batchdialer_cdr(db_session, organization_id=organization.id, cdr=cdr, now=now)
+        == "archived"
+    )
     db_session.commit()
-    assert archive_batchdialer_cdr(
-        db_session, organization_id=organization.id, cdr=cdr, now=now
-    ) == "unchanged"
+    assert (
+        archive_batchdialer_cdr(db_session, organization_id=organization.id, cdr=cdr, now=now)
+        == "unchanged"
+    )
     cdr["comments"] = ["A revised provider note"]
-    assert archive_batchdialer_cdr(
-        db_session, organization_id=organization.id, cdr=cdr, now=now
-    ) == "updated"
+    assert (
+        archive_batchdialer_cdr(db_session, organization_id=organization.id, cdr=cdr, now=now)
+        == "updated"
+    )
     assert db_session.scalar(select(func.count()).select_from(ProspectingProviderEvent)) == 1
 
 
@@ -286,12 +314,15 @@ def test_new_cdr_revision_invalidates_an_inflight_worker_claim(
 
     revised = sample_cdr("Qualified Seller â€“ Follow Up")
     revised["comments"] = ["Provider supplied a newer call observation."]
-    assert archive_batchdialer_cdr(
-        db_session,
-        organization_id=organization.id,
-        cdr=revised,
-        now=datetime.now(UTC),
-    ) == "updated"
+    assert (
+        archive_batchdialer_cdr(
+            db_session,
+            organization_id=organization.id,
+            cdr=revised,
+            now=datetime.now(UTC),
+        )
+        == "updated"
+    )
     db_session.commit()
 
     with pytest.raises(BatchDialerClaimLost):
@@ -372,9 +403,7 @@ def test_poll_stops_on_empty_page_even_when_provider_returns_a_cursor(
     assert checkpoint.next_poll_at.replace(tzinfo=UTC) == (
         poll_completed_at + timedelta(seconds=120)
     )
-    assert checkpoint.sync_metadata["last_run"]["completed_at"] == (
-        poll_completed_at.isoformat()
-    )
+    assert checkpoint.sync_metadata["last_run"]["completed_at"] == (poll_completed_at.isoformat())
     assert checkpoint.fetched_cdr_count == 0
     assert checkpoint.archived_event_count == 0
     assert checkpoint.sync_metadata["last_run"]["anomalies"] == [
@@ -485,9 +514,7 @@ def test_qualified_voicemail_id_routes_to_review_without_crm_side_effects(
     approval = db_session.scalar(select(ApprovalRequest))
 
     assert event is not None and event.processing_status == "quarantined"
-    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
-        "provider_voicemail_id"
-    )
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == ("provider_voicemail_id")
     assert approval is not None and approval.status == "pending"
     assert approval.approval_metadata["reason_code"] == "provider_voicemail_id"
     assert approval.approval_metadata["can_approve"] is False
@@ -542,9 +569,7 @@ def test_qualified_voicemail_transcript_cannot_create_lead(
     event = db_session.get(ProspectingProviderEvent, event_id)
 
     assert event is not None and event.processing_status == "quarantined"
-    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
-        "transcript_voicemail"
-    )
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == ("transcript_voicemail")
     assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 0
@@ -633,9 +658,7 @@ def test_transcript_exhaustion_creates_visible_review_without_lead(
 
     approval = db_session.scalar(select(ApprovalRequest))
     assert event.processing_status == "quarantined"
-    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
-        "transcript_unavailable"
-    )
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == ("transcript_unavailable")
     assert approval is not None and approval.status == "pending"
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
 
@@ -645,8 +668,7 @@ def test_transcript_exhaustion_creates_visible_review_without_lead(
     )
     assert response.status_code == 200, response.text
     assert any(
-        item["task_type"] == "batchdialer_lead_qualification"
-        for item in response.json()["items"]
+        item["task_type"] == "batchdialer_lead_qualification" for item in response.json()["items"]
     )
     review_item = next(
         item
@@ -884,7 +906,7 @@ def test_provider_data_exception_cannot_be_approved_into_a_lead(
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
 
 
-def test_appointment_set_without_explicit_agreement_routes_to_review(
+def test_appointment_set_without_explicit_agreement_imports_for_review_without_appointment_task(
     db_session: Session,
     monkeypatch: Any,
 ) -> None:
@@ -914,13 +936,29 @@ def test_appointment_set_without_explicit_agreement_routes_to_review(
     event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
     event = db_session.get(ProspectingProviderEvent, event_id)
 
-    assert event is not None and event.processing_status == "quarantined"
-    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
+    assert event is not None and event.processing_status == "processed"
+    assert event.payload["_stonegate"]["qualification_status"] == ("accepted_needs_review")
+    assert event.payload["_stonegate"]["qualification"]["review_reason_code"] == (
         "appointment_not_supported"
     )
-    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
-    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
-    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    assert lead.qualification_context["batchdialer"]["qualification_review_required"] is True
+    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
+    review_task = db_session.scalar(
+        select(Task).where(Task.task_type == "batchdialer_qualified_seller_review")
+    )
+    assert review_task is not None and review_task.status == "open"
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.task_type == "batchdialer_manual_appointment")
+        )
+        == 0
+    )
+    assert db_session.scalar(select(func.count()).select_from(Appointment)) == 0
+    assert "batchdialer_appointment_pending_entry" not in lead.qualification_context
 
 
 def test_out_of_market_zero_duration_call_can_qualify(
@@ -972,7 +1010,170 @@ def test_out_of_market_zero_duration_call_can_qualify(
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
 
 
-def test_human_approval_is_evidence_bound_and_creates_one_lead(
+def test_low_confidence_live_two_way_call_imports_one_lead_for_review(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id)
+    provider = ScriptedBatchDialerClient([qualifying_transcript(), qualifying_transcript()])
+    install_qualification_fakes(monkeypatch, provider)
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.OpenAIResponsesClient",
+        LowConfidenceOpenAIResponsesClient,
+    )
+    cdr = sample_cdr("Qualified Seller â€“ Follow Up")
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=cdr,
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    event = db_session.get(ProspectingProviderEvent, event_id)
+    assert event is not None and event.processing_status == "processed"
+    assert event.payload["_stonegate"]["qualification_status"] == ("accepted_needs_review")
+    assert event.payload["_stonegate"]["qualification"]["review_reason_code"] == (
+        "qualification_low_confidence"
+    )
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(CallTranscript)) == 1
+    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
+    task = db_session.scalar(
+        select(Task).where(Task.task_type == "batchdialer_qualified_seller_review")
+    )
+    assert task is not None and task.status == "open"
+
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.OpenAIResponsesClient",
+        FakeOpenAIResponsesClient,
+    )
+    revised = sample_cdr("Qualified Seller - Follow Up")
+    revised["comments"] = ["Seller interest is now confirmed by the reviewed call evidence."]
+    assert (
+        archive_batchdialer_cdr(
+            db_session,
+            organization_id=organization.id,
+            cdr=revised,
+            now=datetime.now(UTC),
+        )
+        == "updated"
+    )
+    db_session.commit()
+
+    process_next_batchdialer_direct_event(db_session, direct_settings())
+    db_session.refresh(event)
+    db_session.refresh(task)
+
+    assert event.payload["_stonegate"]["qualification_status"] == "accepted"
+    assert task.status == "completed"
+    assert task.outcome == "evidence_confirmed"
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+
+
+@pytest.mark.parametrize(
+    ("response_client", "review_reason_code"),
+    (
+        (
+            SellerInterestUnsupportedOpenAIResponsesClient,
+            "seller_interest_not_supported",
+        ),
+        (AmbiguousReviewOpenAIResponsesClient, "qualification_ai_ambiguous"),
+    ),
+    ids=("seller-interest-unclear", "ai-ambiguous"),
+)
+def test_live_two_way_uncertainty_imports_one_lead_for_review(
+    db_session: Session,
+    monkeypatch: Any,
+    response_client: type[FakeOpenAIResponsesClient],
+    review_reason_code: str,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id)
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.BatchDialerClient",
+        FakeBatchDialerClient,
+    )
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.OpenAIResponsesClient",
+        response_client,
+    )
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller - Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    event = db_session.get(ProspectingProviderEvent, event_id)
+
+    assert event is not None and event.processing_status == "processed"
+    assert event.payload["_stonegate"]["qualification_status"] == ("accepted_needs_review")
+    assert event.payload["_stonegate"]["qualification"]["review_reason_code"] == (
+        review_reason_code
+    )
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
+    task = db_session.scalar(
+        select(Task).where(Task.task_type == "batchdialer_qualified_seller_review")
+    )
+    assert task is not None and task.status == "open"
+
+
+def test_ai_not_configured_keeps_candidate_outside_leads(
+    db_session: Session,
+    monkeypatch: Any,
+) -> None:
+    organization = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    ).organization
+    map_sample_campaign(db_session, organization.id)
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.BatchDialerClient",
+        FakeBatchDialerClient,
+    )
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=sample_cdr("Qualified Seller - Follow Up"),
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+
+    event_id = process_next_batchdialer_direct_event(
+        db_session,
+        direct_settings(AI_ENABLED=False, OPENAI_API_KEY=None),
+    )
+    event = db_session.get(ProspectingProviderEvent, event_id)
+
+    assert event is not None and event.processing_status == "quarantined"
+    assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
+        "qualification_ai_not_configured"
+    )
+    assert event.payload["_stonegate"]["qualification"]["classifier"] == "unavailable"
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+
+
+def test_human_approval_remains_evidence_bound_when_review_path_is_used(
     db_session: Session,
     api_db_override: None,
     monkeypatch: Any,
@@ -996,11 +1197,16 @@ def test_human_approval_is_evidence_bound_and_creates_one_lead(
         "app.services.batchdialer_direct.OpenAIResponsesClient",
         LowConfidenceOpenAIResponsesClient,
     )
-    cdr = sample_cdr("Qualified Seller â€“ Follow Up")
+    # Exercise the revision-bound approval path independently from the production
+    # provisional-import policy.
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.QUALIFICATION_PROVISIONAL_IMPORT_REASONS",
+        frozenset(),
+    )
     archive_batchdialer_cdr(
         db_session,
         organization_id=organization.id,
-        cdr=cdr,
+        cdr=sample_cdr("Qualified Seller - Follow Up"),
         now=datetime.now(UTC),
     )
     db_session.commit()
@@ -1019,9 +1225,6 @@ def test_human_approval_is_evidence_bound_and_creates_one_lead(
         json={"status": "approved", "decision_notes": "Confirmed by staff."},
     )
     assert response.status_code == 200, response.text
-    db_session.refresh(event)
-    assert event.processing_status == "pending"
-
     process_next_batchdialer_direct_event(db_session, direct_settings())
     db_session.refresh(event)
 
@@ -1031,9 +1234,7 @@ def test_human_approval_is_evidence_bound_and_creates_one_lead(
         select(ApprovalRequest).where(ApprovalRequest.status == "pending")
     )
     assert replacement is not None and replacement.id != approval.id
-    assert replacement.approval_metadata["reason_code"] == (
-        "evidence_changed_after_review"
-    )
+    assert replacement.approval_metadata["reason_code"] == ("evidence_changed_after_review")
 
     replacement_response = TestClient(app).patch(
         f"/api/v1/approvals/{replacement.id}/decision",
@@ -1172,9 +1373,7 @@ def test_unmapped_campaign_quarantines_then_mapping_requeues_and_reports_history
     assert mismatch["requeued_event_count"] == 0
     assert mismatch["item"]["historical_lead_count"] == 1
     assert mismatch["item"]["historical_asset_mismatch_count"] == 1
-    assert mismatch["item"]["historical_asset_mismatch_sample_lead_ids"] == [
-        str(lead.id)
-    ]
+    assert mismatch["item"]["historical_asset_mismatch_sample_lead_ids"] == [str(lead.id)]
     db_session.refresh(lead)
     assert lead.asset_class == "house"
 
@@ -1403,9 +1602,7 @@ def test_mapped_land_parcel_identity_never_persists_house_placeholder(
     assert property_record.city == ""
     assert property_record.postal_code == ""
     assert "Address pending" not in property_record.street_address
-    assert lead.qualification_context["batchdialer"]["property_data_status"] == (
-        "parcel_provided"
-    )
+    assert lead.qualification_context["batchdialer"]["property_data_status"] == ("parcel_provided")
     assert research_run is not None
     assert research_run.source_lead_id == lead.id
     assert research_run.property_id == property_record.id
@@ -1494,20 +1691,21 @@ def test_appointment_handoff_creates_one_lead_call_transcript_and_manual_task(
     assert db_session.scalar(select(func.count()).select_from(CallRecording)) == 1
     assert db_session.scalar(select(func.count()).select_from(CallTranscript)) == 1
     assert db_session.scalar(select(func.count()).select_from(Appointment)) == 0
-    task = db_session.scalar(
-        select(Task).where(Task.task_type == "batchdialer_manual_appointment")
-    )
+    task = db_session.scalar(select(Task).where(Task.task_type == "batchdialer_manual_appointment"))
     assert task is not None and task.priority == "urgent" and task.status == "open"
     assert db_session.scalar(select(func.count()).select_from(ConsentRecord)) == 0
 
     revised = sample_cdr("Appointment Set")
     revised["comments"] = ["The agreed appointment still needs manual calendar entry."]
-    assert archive_batchdialer_cdr(
-        db_session,
-        organization_id=organization.id,
-        cdr=revised,
-        now=datetime.now(UTC),
-    ) == "updated"
+    assert (
+        archive_batchdialer_cdr(
+            db_session,
+            organization_id=organization.id,
+            cdr=revised,
+            now=datetime.now(UTC),
+        )
+        == "updated"
+    )
     db_session.commit()
     process_next_batchdialer_direct_event(db_session, direct_settings())
     db_session.refresh(event)
@@ -1552,9 +1750,7 @@ def test_active_manual_appointment_clears_batchdialer_task_but_cancelled_one_doe
     db_session.commit()
     process_next_batchdialer_direct_event(db_session, direct_settings())
     lead = db_session.scalar(select(Lead))
-    task = db_session.scalar(
-        select(Task).where(Task.task_type == "batchdialer_manual_appointment")
-    )
+    task = db_session.scalar(select(Task).where(Task.task_type == "batchdialer_manual_appointment"))
     assert lead is not None and task is not None
     assert lead.qualification_context["batchdialer_appointment_pending_entry"] is True
 

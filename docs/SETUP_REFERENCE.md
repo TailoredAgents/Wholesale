@@ -1209,19 +1209,29 @@ The API key is sent as the raw `X-ApiKey` value to the fixed official host. Do n
 
 Stonegate recognizes only the exact reviewed **Qualified Seller - Follow Up** and **Appointment
 Set** labels as candidate warm handoffs. A label alone cannot create a Lead. Transcript evidence
-must prove a live two-way conversation and explicit seller interest; **Appointment Set** must also
-prove explicit appointment agreement. A changed, unknown, conflicting, unavailable, or
-inconclusive result is held for visible review. Do not broaden the automatic mapping from a
-similar-looking label. BatchDialer's optional **Mark As Lead** rule may organize records inside
-BatchDialer, but Stonegate does not use it as an integration transport or eligibility substitute.
+must prove a live two-way conversation with two distinct speakers and no clear disqualifier. Strong
+evidence of seller interest is accepted automatically. When the live conversation is valid but
+seller interest, classifier confidence, or the AI decision remains ambiguous, Stonegate imports the
+Lead with a visible **Qualified seller needs review** task instead of losing the handoff.
+**Appointment Set** without supported appointment agreement follows that review path but does not
+create appointment-entry work. A changed or unknown label, unavailable classifier, invalid
+citation, one-sided call, voicemail, no answer, wrong party, do-not-call request, or not-interested
+result remains outside Leads. Do not broaden the mapping from a similar-looking label.
+BatchDialer's optional **Mark As Lead** rule may organize records inside BatchDialer, but Stonegate
+does not use it as an integration transport or eligibility substitute.
 
 Current operating boundary:
 
 - VAs place calls, work cadence, manage cold-call DNC, and choose results in BatchDialer.
 - The direct worker retrieves candidate completed-call records, retries delayed transcripts, and
-  creates or updates the Stonegate warm handoff only after the evidence gate accepts it.
-- Unavailable, contradictory, or inconclusive evidence routes to visible approval review in Tasks;
-  it does not trigger a Lead, staff alert, property research, or seller call timeline first.
+  creates or updates the Stonegate warm handoff after either strict evidence acceptance or the
+  bounded live-two-way **needs review** path.
+- A valid two-speaker conversation with only allowed uncertainty creates one Lead, provider call
+  timeline, and high-priority review task. The task identifies that staff must confirm the handoff;
+  it is not proof that the seller or an appointment was fully qualified.
+- Unavailable AI, invalid citations, missing two-way proof, contradictory hard-conflict evidence,
+  and unknown labels route to visible approval review in Tasks without creating a Lead, staff
+  alert, property research, or seller call timeline first.
 - Tasks shows **Approve** only for explicitly overridable uncertainty. Approval requires a written
   reason and applies only to the exact evidence fingerprint. Voicemail, wrong-party, DNC,
   not-interested, missing/invalid evidence, and unrecognized reasons are reject-or-correct only.
@@ -1229,9 +1239,10 @@ Current operating boundary:
   unless a separate valid source proves it.
 - Stonegate My Calls/lead records retain manual qualification, notes, outcome review, follow-up,
   and acquisitions handoff without a native dialer lease.
-- When **Appointment Set** is selected, the VA creates the actual appointment manually in
-  Stonegate from the urgent **Enter/verify Stonegate appointment** task. BatchDialer calendar data
-  is not imported.
+- When **Appointment Set** and the appointment agreement are supported, the VA creates the actual
+  appointment manually in Stonegate from the urgent **Enter/verify Stonegate appointment** task.
+  If only the live conversation is supported, the Lead receives qualification review but no
+  appointment task. BatchDialer calendar data is not imported.
 - BatchDialer remains authoritative for its cold-calling suppression. Stonegate still enforces
   opt-outs for communications sent from Stonegate.
 
@@ -1279,19 +1290,24 @@ Run one controlled qualified call and one controlled appointment-set call, then 
 - active provider campaigns appear in the discovered campaign evidence;
 - **Qualified Seller - Follow Up** creates or updates one Lead with BatchDialer source, VA/campaign
   attribution, provider call evidence, normal Lead Manager work, and one staff alert;
+- a transcript-backed two-way call with unclear interest or low classifier confidence creates one
+  Lead plus one open **Qualified seller needs review** task, while invalid/one-sided evidence creates
+  no Lead;
 - a qualified seller with unknown permission is preserved without creating an SMS consent record;
 - a qualified seller with an incomplete property receives visible data-quality work and does not
   trigger research against a placeholder;
-- **Appointment Set** creates one Lead plus one urgent **Enter/verify Stonegate appointment** task
-  and no Appointment;
+- evidence-supported **Appointment Set** creates one Lead plus one urgent **Enter/verify Stonegate
+  appointment** task and no Appointment; a two-way call without supported appointment agreement
+  creates the Lead for qualification review but no appointment task;
 - the VA creates the real appointment in Stonegate and the task/warning clears;
 - rescanning the same provider call creates no duplicate business action;
 - an altered result label is held for review;
 - no-answer, voicemail, wrong-number, not-interested, and ordinary callback activity does not enter
   Leads;
 - BatchDialer retains expected cold-call DNC/redial behavior; and
-- delayed transcript evidence retries before any Lead is created; exhausted or inconclusive
-  candidates remain visibly reviewable rather than silently passing the evidence gate.
+- delayed transcript evidence retries before any Lead is created; exhausted, unavailable, or
+  structurally invalid evidence remains visibly reviewable outside Leads rather than silently
+  passing the evidence gate.
 
 After activation, reconcile provider CDR identities and eligible results against Stonegate for at
 least 24 hours. Acceptance requires zero eligible misses, duplicate actions, or wrong-contact merges.

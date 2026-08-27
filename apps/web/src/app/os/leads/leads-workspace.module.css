@@ -35,7 +35,8 @@
 .identity small, .next small { color: var(--muted); font-size: 11px; }
 .identity em { color: var(--text-soft); font-size: 10px; font-style: normal; }
 .received, .cardReceived { color: var(--muted); font-size: 10px; font-style: normal; white-space: nowrap; }
-.status { min-width: 0; }
+.status { min-width: 0; display: grid; justify-items: start; gap: 5px; }
+.qualifiedReviewBadge { width: fit-content; max-width: 100%; padding: 3px 6px; border: 1px solid #d8b35e; border-radius: 999px; background: #fff8df; color: #75540c; font-size: 9px; font-weight: 850; line-height: 1.25; text-transform: uppercase; white-space: normal; }
 .owner { min-width: 0; color: var(--text-soft); display: flex; align-items: center; gap: 5px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .next strong { color: var(--brand-strong); font-size: 11px; }
 .board { min-width: 0; padding: 12px; border-right: 1px solid var(--line); background: var(--surface-muted); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr); align-items: stretch; gap: 9px; overflow-x: auto; }
@@ -75,6 +76,8 @@
 .preview header button { display: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); place-items: center; }
 .previewStatus { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .previewStatus > span:last-child { color: var(--muted); font-size: 11px; }
+.qualifiedReviewPreview { margin-bottom: 12px; padding: 10px; border: 1px solid #dfc477; border-radius: 6px; background: #fff9e8; display: grid; gap: 5px; }
+.qualifiedReviewPreview p { margin: 0; color: #68551e; font-size: 10px; line-height: 1.4; }
 .moveControl { margin-bottom: 12px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--surface); display: grid; gap: 6px; }
 .moveControl > span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
 .moveControl select { width: 100%; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }

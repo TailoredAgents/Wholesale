@@ -1,6 +1,6 @@
 # BatchDialer Direct Integration And Native Dialer Dormancy Roadmap
 
-Last updated: August 22, 2026
+Last updated: August 27, 2026
 
 Status: direct-only architecture approved; native dialer dormancy prepared; direct runtime
 implementation and production acceptance in progress
@@ -11,14 +11,18 @@ This is the canonical implementation plan for Stonegate's outbound-calling archi
 
 BatchDialer is the production dialer. Stonegate receives supported BatchDialer data through the
 official API and becomes the business system of record only after a seller handoff passes the
-evidence gate. An eligible disposition by itself is not a qualified seller. Stonegate's native
-D0-D10 dialer remains dormant and preserved for historical evidence; it is not an alternate calling
-path.
+evidence gate. An eligible disposition by itself is not enough: Stonegate requires valid evidence
+of a live two-way conversation with two distinct speakers and no clear disqualifier. Strong seller
+evidence is accepted automatically; a bounded set of live-conversation uncertainties imports the
+Lead with visible review work. Stonegate's native D0-D10 dialer remains dormant and preserved for
+historical evidence; it is not an alternate calling path.
 
 The final architecture has one BatchDialer transport: the direct API integration. It has no
 third-party automation bridge, parallel observation transport, or alternate intake path.
-Appointments are never imported from BatchDialer. An evidence-accepted **Appointment Set** result
-creates an urgent Stonegate task, and the VA enters the actual appointment manually in Stonegate.
+Appointments are never imported from BatchDialer. An **Appointment Set** result creates an urgent
+Stonegate appointment-entry task only when the transcript supports explicit appointment agreement.
+Without that proof, a valid two-way call may still import as a seller Lead needing review, but the
+VA must not receive appointment-entry work from the unsupported disposition alone.
 
 Application code, migrations, and production configuration remain the truth about what is live. A
 roadmap phase is not production evidence by itself.
@@ -31,11 +35,12 @@ roadmap phase is not production evidence by itself.
    follow-up, appointments, acquisitions work, contracts, and downstream deal history belong in
    Stonegate.
 3. **The official BatchDialer API is the sole integration.** A Stonegate worker retrieves bounded
-   provider data, stores durable evidence, verifies qualifying conversations, and processes accepted
-   handoffs exactly once.
-4. **Appointments are manual in Stonegate.** An evidence-accepted **Appointment Set** creates one urgent
-   **Enter/verify Stonegate appointment** task and visible warning. It never creates an Appointment
-   from provider calendar data.
+   provider data, stores durable evidence, verifies qualifying conversations, and processes strict
+   or visibly reviewable handoffs exactly once.
+4. **Appointments are manual in Stonegate.** An appointment-evidence-supported **Appointment Set**
+   creates one urgent **Enter/verify Stonegate appointment** task and visible warning. It never
+   creates an Appointment from provider calendar data. An unsupported appointment claim receives
+   seller-qualification review only.
 5. **BatchDialer owns cold-calling cadence and DNC.** Stonegate does not write provider DNC or
    campaign state. Stonegate's own suppression controls continue to govern communication sent from
    Stonegate after handoff.
@@ -51,7 +56,7 @@ roadmap phase is not production evidence by itself.
 | Campaign and agent identity | BatchDialer | Discover and preserve provider attribution |
 | Raw completed-call evidence | BatchDialer | Retrieve through the official API and archive safely |
 | No-answer, voicemail, wrong number, not interested, and ordinary callback | BatchDialer | Preserve evidence; do not manufacture a warm Lead |
-| Qualified seller and appointment-set handoff | Stonegate after evidence acceptance | Require a live two-way conversation and explicit seller interest; an appointment result also requires explicit appointment agreement before creating or updating one warm Lead |
+| Qualified seller and appointment-set handoff | Stonegate after evidence validation | Require valid evidence of a live two-way conversation with distinct speakers and no clear disqualifier; accept strong seller evidence, or import allowed uncertainty with visible review. Require explicit appointment agreement before creating appointment-entry work |
 | Seller, property, qualification, source, and notes | Stonegate after handoff | Normalize, conflict-check, enrich, and preserve provenance |
 | Staff alert, speed-to-lead, AI preparation, and research | Stonegate | Trigger once per genuine warm handoff; research only a usable property |
 | Calendar appointment | Stonegate | VA enters and manages it manually |
@@ -68,8 +73,10 @@ Stonegate uses only the provider operations listed in
 - `GET /contact/{contactID}` to enrich a candidate handoff;
 - optional `POST /cdrs/by-lead-id` only when a nonblank provider vendor-contact ID exists; and
 - `GET /cdrs/{cdrID}/transcription` before lead creation for candidate qualified and appointment-set
-  results. Transcript readiness may be delayed, so the worker retries within a bounded window and
-  then creates a visible Tasks approval review instead of guessing.
+  results. Transcript readiness may be delayed, so the worker retries within a bounded window.
+  Unavailable or structurally invalid evidence routes to Tasks approval review without a Lead;
+  validated two-way evidence with only an allowed qualification uncertainty may create a Lead with
+  an open qualification-review task.
 
 Version one does not:
 
@@ -90,15 +97,18 @@ Version one does not:
 
 Only exact manager-reviewed provider labels are candidates for automatic lead creation. Version one
 uses the exact punctuation observed in the controlled account. The label is never sufficient by
-itself. Transcript evidence must demonstrate a live two-way conversation and explicit seller
-interest; **Appointment Set** must also demonstrate explicit agreement to the appointment. A renamed,
-unknown, conflicting, unavailable, or inconclusive result routes to visible approval review and
-never silently creates a Lead.
+itself. Transcript evidence must demonstrate a live two-way conversation with at least two valid
+cited turns from distinct speakers and no clear disqualifier. Explicit seller interest with adequate
+confidence is accepted automatically. If that valid conversation has only seller-interest,
+confidence, appointment-agreement, or AI-decision uncertainty, Stonegate imports the Lead with a
+high-priority qualification-review task. Invalid citations, one-sided calls, unavailable AI, and
+hard conflicts never use that relaxed path. A renamed or unknown result routes to visible approval
+review and never silently creates a Lead.
 
 | BatchDialer result | Stonegate effect |
 | --- | --- |
-| Qualified Seller - Follow Up | Candidate only. Create or update one warm Lead after transcript evidence proves a live two-way conversation and explicit seller interest; then preserve provider facts and notes, start normal lead work, and send one staff alert |
-| Appointment Set | Candidate only. Require the same seller-interest evidence plus explicit appointment agreement; after acceptance perform the qualified handoff, mark appointment entry pending, and create one urgent manual-entry task; do not create an Appointment |
+| Qualified Seller - Follow Up | Candidate only. After valid live two-way evidence, create or update one Lead. Strong seller-interest evidence is accepted; allowed uncertainty is visibly marked **needs review** with one high-priority task |
+| Appointment Set | Candidate only. A valid two-way conversation may create the seller Lead for review, but only supported explicit appointment agreement marks appointment entry pending and creates the urgent manual-entry task; never create an Appointment automatically |
 | Callback | Preserve provider evidence and callback context; do not manufacture a warm Lead solely from a cold callback |
 | No Answer or Voicemail | Preserve provider evidence only; keep outside Leads |
 | Not Interested | Preserve provider evidence only; do not create or reopen a Lead |
@@ -114,13 +124,13 @@ Out-of-market properties remain eligible. Geography may affect assignment, resea
 strategy after acceptance, but it is not a lead-qualification rejection rule.
 
 When transcript evidence is not ready, Stonegate retries it before creating any Lead or downstream
-side effect. If the bounded retry window expires, or evidence remains contradictory or inconclusive,
-Stonegate creates a visible approval item in the Tasks workspace. A human can accept or reject that
-specific evidence revision only when the reason is an explicitly overridable uncertainty and the
-reviewer records why. Hard conflicts such as voicemail, wrong party, do-not-call, not interested,
-missing proof, invalid provider evidence, and any unknown future reason are reject-or-correct only.
-An accepted revision is fingerprint-bound and requeues the same provider event; rejecting closes it
-without creating a Lead.
+side effect. If the bounded retry window expires, the classifier is unavailable, citations are
+invalid, two-way proof is missing, or evidence contains a hard conflict, Stonegate creates a visible
+approval item in the Tasks workspace without a Lead. A valid two-speaker conversation whose only
+uncertainty is seller interest, low confidence, unsupported appointment agreement, or an ambiguous
+AI decision instead creates one Lead and a high-priority qualification-review task. Hard conflicts
+such as voicemail, no answer, wrong party, do-not-call, and not interested remain reject-or-correct
+only. Any approval remains fingerprint-bound to the evidence revision.
 
 An unknown provider agent or a VA email that differs from a Stonegate login must not block the
 handoff. Stonegate preserves provider identity, assigns the configured acquisitions owner, and
@@ -191,17 +201,21 @@ timeline, and manual-appointment task across overlapping polls, retries, revisio
 | `BatchDialerSyncCheckpoint` | Lease, next poll, last attempt/success, scan health, counters, and failure detail |
 | `BatchDialerCampaign` | Latest provider campaign snapshot and direct-sync counters |
 | `ApprovalRequest` with type `batchdialer_lead_qualification` | Visible Tasks review for unavailable, contradictory, or inconclusive candidate evidence and its revision-bound human decision |
-| Lead qualification context | Provider campaign/contact/call/result identity, permission state, source facts, and appointment-entry warning |
+| `Task` with type `batchdialer_qualified_seller_review` | High-priority review of a Lead imported from valid two-way evidence with bounded qualification uncertainty |
+| Lead qualification context | Provider campaign/contact/call/result identity, permission state, source facts, qualification-review state, and appointment-entry warning |
 | `CommunicationRecord` and `CallRecord` | Inbox and seller-timeline representation of the provider call |
 | `Task` with type `batchdialer_manual_appointment` | Idempotent urgent manual Stonegate appointment work |
 
 ## 7. Manual Appointment Workflow
 
 1. The direct worker sees exact **Appointment Set** on a completed provider call.
-2. Stonegate verifies transcript evidence of a live two-way conversation, explicit seller interest,
-   and explicit appointment agreement, or routes the candidate to Tasks approval review.
-3. After evidence acceptance, Stonegate creates or updates the warm Lead exactly once.
-4. Stonegate sets the Lead's appointment state to **Needs scheduling**, records the provider source,
+2. Stonegate verifies transcript evidence of a live two-way conversation. A structurally valid call
+   may create the seller Lead with qualification review, but explicit appointment agreement must be
+   cited before appointment-entry work is authorized.
+3. Stonegate creates or updates the Lead exactly once after strict acceptance or the bounded
+   live-two-way review decision.
+4. Only after appointment agreement is supported, Stonegate sets the Lead's appointment state to
+   **Needs scheduling**, records the provider source,
    creates one urgent **Enter/verify Stonegate appointment** task, and shows a pending warning.
 5. The task links to `/os/leads/{lead_id}?tab=appointments`.
 6. The VA opens the Lead, enters the real date, time, type, owner, and location, and saves the
@@ -296,17 +310,19 @@ temporary failure without another transport.
 ### BD5. Implement Warm Handoffs And Call Evidence
 
 - classify only exact approved qualified results;
-- require transcript evidence of a live two-way conversation and explicit seller interest, plus
-  explicit appointment agreement for **Appointment Set**;
-- retry delayed transcripts within a bounded window, then route unresolved evidence to visible
-  Tasks approval review without creating a Lead;
-- create or update one Lead only after evidence acceptance, even when permission or address facts
-  are incomplete or the property is outside the current market;
+- require valid cited transcript evidence of a live two-way conversation with distinct speakers and
+  no hard conflict;
+- accept strong seller-interest evidence automatically and import only the bounded uncertainty set
+  as **needs review** with one high-priority task;
+- retry delayed transcripts within a bounded window, then route unavailable, invalid, one-sided, or
+  hard-conflict evidence to visible Tasks approval review without creating a Lead;
+- create or update one Lead after strict acceptance or bounded two-way review, even when permission
+  or address facts are incomplete or the property is outside the current market;
 - preserve source, VA, campaign, CDR, notes, and qualification context;
 - use a visible placeholder/data-quality path rather than discarding an incomplete seller;
 - skip property research until a usable property identity exists;
 - create one staff alert, attribution trail, activity, research workflow, and call timeline only
-  after acceptance; and
+  after strict acceptance or the bounded two-way review decision; and
 - keep callback and non-lead results as evidence only.
 
 Exit gate: controlled provider records create the correct CRM result exactly once and never invent
@@ -315,7 +331,8 @@ consent.
 ### BD6. Enforce Manual Stonegate Appointment Entry
 
 - never poll or accept provider calendar events;
-- create one urgent manual-entry task for **Appointment Set**;
+- create one urgent manual-entry task for **Appointment Set** only when explicit appointment
+  agreement is supported;
 - deep-link the VA to the Lead's appointment tab;
 - resolve the task only when an active Stonegate Appointment exists; and
 - escalate while the appointment remains missing.
@@ -385,8 +402,11 @@ Tests must cover:
   boundaries;
 - one raw observation per revision and one business action across rescans;
 - exact Qualified Seller and Appointment Set candidate results;
-- transcript-backed live-conversation, seller-interest, and appointment-agreement evidence gates;
-- delayed transcript retries and exhausted/inconclusive evidence routed to visible Tasks approval;
+- transcript-backed live-conversation, distinct-speaker, seller-interest, and
+  appointment-agreement evidence gates;
+- bounded seller-interest, confidence, appointment, and AI ambiguity imported with one Lead review
+  task, while invalid citations, one-sided calls, unavailable AI, and hard conflicts create no Lead;
+- delayed transcript retries and exhausted/unavailable evidence routed to visible Tasks approval;
 - unknown and renamed result quarantine;
 - callback and non-lead evidence without Lead pollution;
 - incomplete or out-of-market property and unknown permission without silent loss or fabricated
@@ -394,9 +414,10 @@ Tests must cover:
 - provider agent mismatch without blocking a handoff;
 - one Lead, alert, attribution trail, and call timeline per warm handoff;
 - property research only after a usable property identity exists;
-- one urgent manual-appointment task and no automatic Appointment;
+- one urgent manual-appointment task only after supported agreement and no automatic Appointment;
 - task resolution after a Stonegate Appointment is entered;
-- no Lead, staff alert, research, task, or call timeline before qualification evidence acceptance;
+- no Lead, staff alert, research, or call timeline before strict acceptance or the bounded valid
+  two-way review decision;
 - no native call execution in dormant mode; and
 - historical evidence and manual Prospecting readability.
 
@@ -410,12 +431,15 @@ Before the direct integration is considered accepted, verify:
 4. Active provider campaigns are discovered and visible.
 5. Exact qualifying and appointment result labels are recognized as candidates; an unknown label
    quarantines.
-6. Only transcript-backed qualified and appointment-set candidates create or update exactly one
-   Lead; voicemail, contradiction, and inconclusive evidence do not.
+6. Only candidates with valid transcript-backed live two-way evidence create or update exactly one
+   Lead. Bounded uncertainty receives visible Lead review; voicemail, no answer, wrong party,
+   do-not-call, not-interested, invalid citation, one-sided evidence, and unavailable AI do not.
 7. Delayed transcript evidence retries, then appears in Tasks approval review if unresolved.
 8. Staff receive one correctly labeled BatchDialer alert only after acceptance.
 9. Source, owner, property state, notes, attribution, and call evidence are correct.
-10. Appointment Set creates one urgent task and no automatic Appointment.
+10. Appointment Set creates one urgent appointment task only when agreement evidence is supported,
+    and never creates an automatic Appointment. Unsupported agreement creates only qualification
+    review on the seller Lead.
 11. A VA can enter the real Appointment in Stonegate and clear the task.
 12. Overlapping scans and provider replay create no duplicate side effects.
 13. A temporary provider outage catches up from durable state.
@@ -429,13 +453,15 @@ Version one is done only when:
 - the official direct API is the only BatchDialer-to-Stonegate integration;
 - the native Stonegate dialer is dormant and cannot place a call;
 - Stonegate retrieves supported provider data through bounded, durable polling;
-- qualified and appointment-set dispositions create or update one Lead exactly once only after the
-  required transcript evidence or a documented, revision-bound human approval of an explicitly
-  overridable uncertainty;
-- delayed or inconclusive transcript evidence retries and then remains visibly reviewable in Tasks;
+- qualified and appointment-set dispositions create or update one Lead exactly once only after
+  strict transcript acceptance, the bounded valid-two-way **needs review** decision, or a documented
+  revision-bound human approval of an explicitly overridable pre-Lead uncertainty;
+- bounded qualification uncertainty remains visibly reviewable on the Lead; delayed, unavailable,
+  invalid, one-sided, or hard-conflict evidence remains outside Leads in Tasks review;
 - notes, attribution, available call evidence, and data-quality gaps are preserved;
 - non-lead results do not pollute Leads or mutate Stonegate suppression;
-- Appointment Set creates a visible urgent manual-entry task, never an automatic Appointment;
+- Appointment Set creates a visible urgent manual-entry task only after supported appointment
+  agreement, never an automatic Appointment;
 - VAs create and manage appointments directly in Stonegate;
 - health, lag, failures, and quarantined results are visible;
 - managers can compare normalized call activity and downstream outcomes without treating provider

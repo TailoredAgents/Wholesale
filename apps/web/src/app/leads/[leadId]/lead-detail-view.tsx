@@ -1299,6 +1299,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
       ["scheduled", "rescheduled"].includes(appointment.status)
       && !appointment.outcome,
   );
+  const qualifiedSellerReviewTask = lead.open_tasks.find(
+    (task) => task.task_type === "batchdialer_qualified_seller_review",
+  );
   const appointmentWorkspaceHref = activeAppointment
     ? `/os/calendar?view=appointment&appointment=${encodeURIComponent(activeAppointment.id)}`
     : `/os/calendar?view=appointment&schedule=1&lead=${encodeURIComponent(lead.id)}`;
@@ -1377,6 +1380,18 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
                 timeline were saved as a cold lead. Research and skip trace the owner, then check
                 DNC status manually before outreach. Automated follow-up has not started.
               </p>
+            </section>
+          ) : null}
+          {qualifiedSellerReviewTask ? (
+            <section className={styles.qualificationReviewNotice} role="status">
+              <div>
+                <strong>Qualified seller · Needs review</strong>
+                <p>
+                  BatchDialer imported this VA-qualified lead, but the call evidence needs a
+                  quick staff review before it is treated as confirmed.
+                </p>
+              </div>
+              <Link href={`/os/tasks?item=task:${qualifiedSellerReviewTask.id}`}>Review call evidence</Link>
             </section>
           ) : null}
           <section className={styles.commandStrip}>

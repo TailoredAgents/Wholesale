@@ -61,6 +61,20 @@ function ownerLabel(email: string | null) {
   return email.split("@")[0]?.replace(/[._-]+/g, " ") || email;
 }
 
+const BATCHDIALER_QUALIFIED_SELLER_REVIEW_TASK = "batchdialer_qualified_seller_review";
+
+function needsQualifiedSellerReview(leadId: string, tasks: SpeedToLeadTask[]) {
+  return tasks.some(
+    (task) =>
+      task.lead_id === leadId &&
+      task.task_type === BATCHDIALER_QUALIFIED_SELLER_REVIEW_TASK,
+  );
+}
+
+function QualifiedSellerReviewBadge() {
+  return <span className={styles.qualifiedReviewBadge}>Qualified seller · Needs review</span>;
+}
+
 function operatingTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
   if (status === "Overdue follow-up") return "danger";
   if (["Needs qualification", "Needs follow-up"].includes(status)) return "warning";
@@ -124,6 +138,7 @@ function LeadBoardCard({
   tasks: SpeedToLeadTask[];
 }) {
   const operatingStatus = getLeadOperatingStatus(lead, tasks);
+  const needsReview = needsQualifiedSellerReview(lead.id, tasks);
   const action = nextAction(lead, tasks);
   const canMoveLead = canEditLead && getPipelineStage(lead.stage_key)?.key !== "under_contract";
   const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
@@ -148,6 +163,7 @@ function LeadBoardCard({
         <span className={styles.cardAddress}>{lead.property_address}</span>
         <time className={styles.cardReceived} dateTime={lead.created_at}>Received {formatDateTime(lead.created_at)}</time>
         <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+        {needsReview ? <QualifiedSellerReviewBadge /> : null}
         <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
         <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
       </button>
@@ -685,6 +701,7 @@ export function LeadsWorkspace({
             {visibleLeads.map((lead) => {
               const status = getLeadOperatingStatus(lead, tasks);
               const action = nextAction(lead, tasks);
+              const needsReview = needsQualifiedSellerReview(lead.id, tasks);
               return (
                 <button
                   aria-current={selectedLead?.id === lead.id ? "true" : undefined}
@@ -698,7 +715,10 @@ export function LeadsWorkspace({
                     <em>{labelize(lead.asset_class)} · {labelize(lead.source)} · {labelize(lead.stage_key)}</em>
                   </span>
                   <time className={styles.received} dateTime={lead.created_at}>{formatDateTime(lead.created_at)}</time>
-                  <span className={styles.status}><StatusBadge tone={operatingTone(status)}>{status}</StatusBadge></span>
+                  <span className={styles.status}>
+                    <StatusBadge tone={operatingTone(status)}>{status}</StatusBadge>
+                    {needsReview ? <QualifiedSellerReviewBadge /> : null}
+                  </span>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
                   <span className={styles.next}>
                     <strong>{action.label}</strong><small>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</small>
@@ -772,6 +792,12 @@ export function LeadsWorkspace({
                   <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
                   <span>{labelize(selectedLead.asset_class)} · {labelize(selectedLead.stage_key)}</span>
                 </div>
+                {needsQualifiedSellerReview(selectedLead.id, tasks) ? (
+                  <div className={styles.qualifiedReviewPreview}>
+                    <QualifiedSellerReviewBadge />
+                    <p>VA-qualified lead imported; confirm the call evidence.</p>
+                  </div>
+                ) : null}
                 {canEditLead ? (
                   <label className={styles.moveControl}>
                     <span>Move to stage</span>
