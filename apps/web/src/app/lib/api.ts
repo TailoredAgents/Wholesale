@@ -2994,6 +2994,78 @@ export type BuyerDiscoveryRun = {
   created_at: string;
 };
 
+export type DispositionBuyerPoolSource = "all" | "mine" | "network" | "external";
+
+export type DispositionBuyerPoolStage =
+  | "all"
+  | "discovered"
+  | "needs_review"
+  | "eligible"
+  | "shortlisted"
+  | "contacted"
+  | "interested"
+  | "showing"
+  | "offer"
+  | "pass"
+  | "selected"
+  | "backup"
+  | "fallout";
+
+export type DispositionBuyerPoolRun = {
+  id: string;
+  version_number: number;
+  matcher_version: string;
+  score_policy_version: string;
+  generated_at: string;
+};
+
+export type DispositionBuyerPoolEntry = {
+  id: string;
+  candidate_id: string;
+  buyer_id: string | null;
+  discovery_candidate_id: string | null;
+  source_type: Exclude<DispositionBuyerPoolSource, "all">;
+  origin_type: string;
+  provider: string | null;
+  external_key: string | null;
+  name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  decision_status: string;
+  lifecycle_stage: string;
+  decision_reason: string | null;
+  lock_version: number;
+  overlap_status: string;
+  possible_buyer_id: string | null;
+  possible_buyer_name: string | null;
+  possible_buyer_company_name: string | null;
+  overlap_evidence: Record<string, unknown>;
+  score_basis_points: number;
+  rank: number | null;
+  eligibility_status: string;
+  score_components: Record<string, number>;
+  score_explanation: string[];
+  supporting_evidence: Record<string, unknown>[];
+  conflicting_evidence: Record<string, unknown>[];
+  disqualifying_reasons: string[];
+  buy_box_version_id: string | null;
+  proof_status: string;
+  proof_expires_at: string | null;
+  relationship_status: string | null;
+  tier: string | null;
+  temperature: string | null;
+};
+
+export type DispositionBuyerPoolPage = {
+  case_id: string;
+  run: DispositionBuyerPoolRun | null;
+  total: number;
+  page: number;
+  page_size: number;
+  entries: DispositionBuyerPoolEntry[];
+};
+
 export type DispositionMatch = {
   id: string;
   buyer_id: string;

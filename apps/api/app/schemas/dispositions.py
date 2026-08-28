@@ -173,6 +173,111 @@ class DispositionCaseRead(BaseModel):
     created_at: datetime
 
 
+BuyerPoolSourceFilter = Literal["all", "mine", "network", "external"]
+BuyerPoolDecision = Literal["undecided", "shortlisted", "passed"]
+BuyerPoolLifecycleStage = Literal[
+    "discovered",
+    "needs_review",
+    "shortlisted",
+    "contacted",
+    "interested",
+    "showing",
+    "offer",
+    "pass",
+    "selected",
+    "backup",
+    "fallout",
+]
+
+
+class BuyerPoolRunRead(BaseModel):
+    id: UUID
+    version_number: int
+    asset_class: str
+    matcher_version: str
+    score_policy_version: str
+    status: str
+    source_counts: dict[str, int]
+    generated_at: datetime
+
+
+class BuyerPoolEntryRead(BaseModel):
+    id: UUID
+    candidate_id: UUID
+    buyer_id: UUID | None
+    discovery_candidate_id: UUID | None
+    source_type: Literal["mine", "network", "external"]
+    origin_type: Literal["internal", "external"]
+    provider: str | None
+    external_key: str | None
+    name: str
+    company_name: str | None
+    email: str | None
+    phone: str | None
+    decision_status: BuyerPoolDecision
+    lifecycle_stage: BuyerPoolLifecycleStage
+    decision_reason: str | None
+    lock_version: int
+    overlap_status: str
+    possible_buyer_id: UUID | None
+    possible_buyer_name: str | None
+    possible_buyer_company_name: str | None
+    overlap_evidence: dict[str, object]
+    score_basis_points: int
+    rank: int
+    eligibility_status: str
+    score_components: dict[str, int]
+    score_explanation: list[str]
+    supporting_evidence: list[dict[str, object]]
+    conflicting_evidence: list[dict[str, object]]
+    disqualifying_reasons: list[str]
+    buy_box_version_id: UUID | None
+    proof_status: str
+    proof_expires_at: datetime | None
+    relationship_status: str | None
+    tier: str | None
+    temperature: str | None
+
+
+class BuyerPoolRead(BaseModel):
+    case_id: UUID
+    run: BuyerPoolRunRead | None
+    total: int
+    page: int
+    page_size: int
+    entries: list[BuyerPoolEntryRead]
+
+
+class BuyerPoolDecisionUpdate(BaseModel):
+    expected_version: int = Field(ge=1)
+    decision_status: BuyerPoolDecision
+    lifecycle_stage: BuyerPoolLifecycleStage | None = None
+    reason: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_optional_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
+
+
+class BuyerPoolConversionRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    decision: Literal["create_new", "link_existing", "reject"]
+    existing_buyer_id: UUID | None = None
+    reason: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_conversion_reason(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 3:
+            raise ValueError("A conversion decision requires a meaningful reason.")
+        return normalized
+
+
 class EligibleTransactionRead(BaseModel):
     id: UUID
     seller_name: str

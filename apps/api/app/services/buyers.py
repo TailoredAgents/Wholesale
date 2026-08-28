@@ -625,7 +625,13 @@ def verify_buyer_profile(
     return get_buyer(db, principal, buyer.id)
 
 
-def create_buyer(db: Session, principal: Principal, payload: BuyerCreate) -> BuyerRead:
+def create_buyer(
+    db: Session,
+    principal: Principal,
+    payload: BuyerCreate,
+    *,
+    commit: bool = True,
+) -> BuyerRead:
     if payload.proof_of_funds_status != "unknown":
         raise ValueError(
             "Proof-of-funds status is derived from reviewed evidence and cannot be set manually."
@@ -739,13 +745,14 @@ def create_buyer(db: Session, principal: Principal, payload: BuyerCreate) -> Buy
     )
     if matches:
         _audit_duplicate_override(db, principal, buyer, matches, payload.separate_record_reason)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise BuyerSourceConflictError(
-            "A buyer with this source and external key already exists."
-        ) from exc
+    if commit:
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise BuyerSourceConflictError(
+                "A buyer with this source and external key already exists."
+            ) from exc
     result = get_buyer(db, principal, buyer.id)
     if result is None:
         raise RuntimeError("Buyer was not available after creation.")

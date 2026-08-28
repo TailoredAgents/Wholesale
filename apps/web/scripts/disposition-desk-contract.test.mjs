@@ -14,6 +14,7 @@ const deskStyles = readFileSync(resolve(appRoot, "os/deals/disposition-desk.modu
 const buyersPage = readFileSync(resolve(appRoot, "os/buyers/page.tsx"), "utf8");
 const buyersWorkspace = readFileSync(resolve(appRoot, "os/buyers/buyers-workspace.tsx"), "utf8");
 const dispositionWorkspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
+const buyerPool = readFileSync(resolve(appRoot, "os/dispositions/disposition-buyer-pool.tsx"), "utf8");
 const navigation = readFileSync(resolve(appRoot, "os/os-navigation.tsx"), "utf8");
 const iaContract = readFileSync(resolve(process.cwd(), "scripts/os-ia-contract.mjs"), "utf8");
 
@@ -115,8 +116,34 @@ test("buyer follow-ups can be scheduled from the existing disposition record", (
   assert.match(dispositionWorkspace, /engagementType === "follow_up"/);
   assert.match(dispositionWorkspace, /scheduled_at: scheduledAt/);
   assert.match(dispositionWorkspace, /status: scheduledAt \? "scheduled" : "logged"/);
-  assert.match(dispositionWorkspace, /item\.scheduled_at \? `Scheduled/);
+  assert.match(dispositionWorkspace, /item\.scheduled_at \? "Scheduled " \+/);
   assert.match(dispositionWorkspace, /Log inquiry, showing, or follow-up/);
+});
+
+test("the existing deal buyer tab hosts one governed, explainable buyer pool", () => {
+  assert.match(dispositionWorkspace, /item === "buyers" \? "Buyer pool"/);
+  assert.match(dispositionWorkspace, /<DispositionBuyerPool/);
+  assert.match(buyerPool, /useState<DispositionBuyerPoolSource>/);
+  assert.match(buyerPool, /useState<DispositionBuyerPoolStage>/);
+  assert.match(buyerPool, /\/buyer-pool\?\$\{query\.toString\(\)\}/);
+  assert.match(buyerPool, /"\/api\/v1\/buyers\/discovery-runs"/);
+  assert.match(buyerPool, /\/buyer-pool\/runs/);
+  assert.match(buyerPool, /\/buyer-pool\/candidates\/\$\{entry\.candidate_id\}/);
+  assert.match(buyerPool, /\/buyer-pool\/candidates\/\$\{entry\.candidate_id\}\/conversion/);
+  assert.match(buyerPool, /expected_version: entry\.lock_version/);
+  assert.match(buyerPool, /Shortlisting never sends outreach/);
+  assert.match(buyerPool, /Passing applies only to this deal/);
+  assert.match(buyerPool, /Approve into network/);
+  assert.match(buyerPool, /"Review reason"/);
+  assert.match(
+    buyerPool,
+    /activeEditor\.action === "pass" \|\| activeEditor\.action === "shortlist" \|\| activeEditor\.action === "clear" \? !reason\.trim\(\) : reason\.trim\(\)\.length < 3/,
+  );
+  assert.match(buyerPool, /canEditDeals/);
+  assert.match(buyerPool, /canEditBuyers/);
+  assert.match(api, /export type DispositionBuyerPoolPage/);
+  assert.match(api, /supporting_evidence: Record<string, unknown>\[\]/);
+  assert.match(api, /conflicting_evidence: Record<string, unknown>\[\]/);
 });
 
 test("the disposition role default and responsive controls use the canonical desk", () => {

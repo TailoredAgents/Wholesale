@@ -2,13 +2,16 @@
 
 Last updated: August 27, 2026
 
-> **Current status: DS0-DS3 complete; DS4-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS4 complete; DS5-DS12 planned.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
+> DS4 adds the unified, explainable House deal buyer pool, staged external evidence, explicit
+> external-to-network review, versioned score history, and shortlist-aware House release controls.
 > Existing deal-specific disposition cases, package generation, engagement and offer records,
 > primary and backup buyer selection, reconciliation, and review-only Disposition Copilot remain in
-> place. Later phases remain plans and are not proof that those capabilities are live.
+> place. Land release, live outreach, and later phases remain plans and are not proof that those
+> capabilities are live.
 
 ## 1. Purpose And Authority
 
@@ -88,14 +91,14 @@ negotiations, recipient approval, offer recommendations, and placement results.
 | Existing capability | Current location | Decision |
 | --- | --- | --- |
 | Manual buyer creation and list | `apps/api/app/routers/buyers.py`, `apps/web/src/app/os/buyers` | Extend |
-| Buyer criteria and reliability history | `Buyer`, `BuyerBuyBox`, `BuyerBuyBoxVersion`, legacy `BuyerCriteria`, and buyer read models | Reuse and extend in DS4 |
+| Buyer criteria and reliability history | `Buyer`, `BuyerBuyBox`, `BuyerBuyBoxVersion`, legacy `BuyerCriteria`, and buyer read models | Reused in the DS4 evidence score |
 | Buyer Inbox conversation | `apps/api/app/services/inbox.py` | Reuse with explicit relationship ownership |
 | Disposition access roles | `apps/api/app/domain/rbac.py` | Reuse and refine only if required |
 | Unified Deal workspace | `apps/web/src/app/os/deals` | Reuse as the deal source of truth |
 | Disposition case setup | `apps/web/src/app/os/dispositions/disposition-setup-workspace.tsx` | Reuse |
 | Assignment, double-close, and novation strategy selection | Disposition case setup | Reuse |
 | Investor package approval and PDF | Disposition workspace and disposition services | Extend |
-| Internal buyer ranking | Disposition services | Replace exact-token limitations with structured matching |
+| Internal buyer ranking | Disposition services | Extended in DS4 with versioned, explainable House pool scoring |
 | Proof-of-funds evidence and review | Buyer profile and disposition proof workflows | Reuse with explicit verification |
 | Inquiry, showing, follow-up, and deposit logs | Disposition workspace | Reuse and improve |
 | Offer records and primary/backup selection | Disposition workspace | Reuse and improve |
@@ -119,14 +122,17 @@ sections below supersede the starting gaps that those phases resolved.
 - Buyer source, relationship owner, creator, import batch, external IDs, and last verification are
   not structured.
 - One phone and one email do not adequately represent organizations with several contacts.
-- Land matching and immutable historical match-run records are not yet implemented.
+- Immutable House buyer-pool runs and score evidence are implemented. Automated Land matching and
+  Land campaign release are not yet implemented.
 
 ### 6.2 Deal Disposition Gaps
 
-- Internal matches and external candidates do not appear in one deduplicated deal buyer pool.
-- Buyer matching relies on limited exact market and property-type intersections.
-- There is no explicit candidate progression from discovered to reviewed, shortlisted, contacted,
-  interested, showing, offer, pass, selected, backup, or fallout.
+- Internal buyers and staged external candidates now appear in one deduplicated House deal buyer
+  pool. A corresponding Land execution and release lane is not yet active.
+- House pool scoring now evaluates structured market, asset, price, strategy, funding, capacity,
+  proof, activity, reliability, and relationship evidence. Land scoring remains future work.
+- Deal-candidate lifecycle and reviewed shortlist/pass decisions are implemented. Live contacted,
+  reply, delivery, and campaign progression remain bounded by the future DS6 outreach loop.
 - There is no operator-focused Today view combining deals, buyer replies, follow-ups, offers, POF,
   deposits, and closing deadlines.
 - The approved campaign release is simulated and sends no email or SMS.
@@ -456,12 +462,12 @@ new versions. A verified box must contain enough structured information to be op
 The profile labels reliability as insufficient when Stonegate has no performance history rather
 than treating an untested buyer as reliable.
 
-DS3 does not implement automated Land matching or immutable historical match runs. The current
-House matcher stores the exact version and criteria snapshot on its current match records, but a
-future regeneration can still replace those rows. Land matching, a unified asset-aware score, and
-preserved match-run history remain DS4 work. A generic preferred-margin field was also not added
-because its economic basis is not yet consistently defined across House and Land strategies; DS4
-must introduce any such field with explicit, asset-specific calculation semantics.
+DS3 did not implement automated Land matching or immutable historical match runs. DS4 subsequently
+added immutable, versioned House buyer-pool runs and evidence while retaining the legacy match rows
+as the current compatibility projection. Automated Land eligibility, matching, and release remain
+future work. A generic preferred-margin field was not added because its economic basis is not yet
+consistently defined across House and Land strategies; any future field must use explicit,
+asset-specific calculation semantics.
 
 ### Exit Criteria
 
@@ -472,25 +478,50 @@ must introduce any such field with explicit, asset-specific calculation semantic
 
 ## DS4 - Unified Explainable Deal Buyer Pool
 
-**Status: Planned.**
+**Status: Complete as of August 27, 2026, for the current House disposition workflow.**
 
 ### Goal
 
 Combine owned relationships and staged provider candidates into one deal-specific work queue without
 losing provenance or polluting the permanent Buyer Network.
 
-### Work
+### Completed
 
-- Define the deal-candidate lifecycle: Discovered, Needs Review, Shortlisted, Contacted, Interested,
+- Defined the deal-candidate lifecycle: Discovered, Needs Review, Shortlisted, Contacted, Interested,
   Showing, Offer, Pass, Selected, Backup, and Fallout.
-- Add My Buyers, Stonegate Network, and External Candidate source filters.
-- Expand matching to structured market, asset, price, strategy, funding, capacity, proof, activity,
+- Added My Buyers, Stonegate Network, and External Candidate source filters in one deal buyer pool.
+- Expanded House matching to structured market, asset, price, strategy, funding, capacity, proof, activity,
   reliability, and relationship evidence.
-- Record an explainable score breakdown and disqualifying reasons.
-- Detect likely identity overlap between internal and external candidates.
-- Let humans shortlist without converting every external result into a Buyer.
-- Require approval before converting an external candidate to the canonical network.
-- Preserve score and evidence versions for later evaluation.
+- Recorded an explainable score breakdown, supporting evidence, conflicting evidence, eligibility,
+  and disqualifying reasons for every saved run entry.
+- Added stable deal candidates, immutable versioned pool runs and entries, optimistic decision
+  locking, and auditable shortlist/pass history across reruns.
+- Detected exact and likely identity overlap between internal and external candidates. Exact
+  provider evidence is attached to the canonical candidate; ambiguous overlap remains staged for
+  human review rather than being silently merged.
+- Let humans shortlist or pass on a deal candidate without converting every external result into a
+  permanent Buyer.
+- Required an explicit reviewed create, link, or reject decision before an external candidate can
+  affect the canonical Buyer Network. Approved new buyers enter **Needs Review**, and provider
+  identity and evidence remain attached through a source link.
+- Captured the buy-box version, proof status and expiration snapshot, score policy, matcher version,
+  provenance, and evidence used by each House pool run.
+- Integrated House campaign release with the reviewed pool: once pool decisions exist, only
+  shortlisted canonical buyers that still satisfy current release eligibility may be recipients.
+  The immutable scored entry is not rewritten when current proof or buyer state changes.
+
+### Delivered Scope Decision
+
+DS4 is complete only for Stonegate's current **House** disposition case and release path. The data
+model records asset class and remains compatible with independently versioned Land buy boxes, but
+Stonegate does not yet claim automated Land buyer eligibility, Land pool scoring, Land campaign
+release, or a production-ready Land disposition workflow. Residential evidence and release rules
+must not be reused as a substitute for those missing Land controls.
+
+DS4 also does not activate live email or SMS outreach. Campaign release remains governed by the
+existing House disposition boundary, and live delivery, reply reconciliation, suppression, retry,
+and idempotency controls remain DS6 work. DealMachine results are staged provider evidence; the
+future InvestorLift adapter and its verified provider contract remain DS8 work.
 
 ### Exit Criteria
 
@@ -822,7 +853,7 @@ Quality and safety measures:
 | DS1 | Buyer Network Foundation | Complete |
 | DS2 | Disposition Desk | Complete |
 | DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Complete |
-| DS4 | Unified Explainable Deal Buyer Pool | Planned |
+| DS4 | Unified Explainable Deal Buyer Pool | Complete for current House disposition workflow |
 | DS5 | Deal Launch And Investor Package Readiness | Planned |
 | DS6 | Governed Live Outreach And Reply Loop | Planned |
 | DS7 | Offer Room And Closing Protection | Planned |
@@ -850,10 +881,12 @@ With DS1 complete, the specialist may transfer high-quality, authorized buyer re
 the Buyer Network using duplicate review, editing, ownership, lifecycle controls, and pagination.
 Ambiguous records should remain in Needs Review rather than being forced into an existing buyer.
 
-DS2 provides the specialist's daily command center, and DS3 provides the canonical buyer profile,
-separate versioned House and Land buy boxes, proof review, and current House match evidence. DS4-DS7
-continue turning that provider-independent foundation into the unified matching, package, outreach,
-offer, and closing system. DS8 follows only after InvestorLift supplies a
+DS2 provides the specialist's daily command center, DS3 provides the canonical buyer profile,
+separate versioned House and Land buy boxes and proof review, and DS4 provides the unified,
+versioned, explainable House deal buyer pool. DS5-DS7 continue turning that provider-independent
+foundation into the package, live outreach, offer, and closing system. Land matching and release
+must receive their own asset-safe implementation before being described as live. DS8 follows only
+after InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may

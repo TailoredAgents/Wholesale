@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -12,10 +12,15 @@ from app.main import app
 from app.models.foundation import (
     AuditEvent,
     Buyer,
+    BuyerDiscoveryCandidate,
+    BuyerDiscoveryRun,
     BuyerProofDocument,
     CompensationPlanRole,
     CompensationPlanVersion,
     DealDeduction,
+    DispositionBuyerPoolCandidate,
+    DispositionBuyerPoolEntry,
+    DispositionBuyerPoolRun,
     DispositionCampaign,
     DispositionCopilotRecommendation,
     DispositionCopilotReview,
@@ -268,6 +273,28 @@ def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, st
     )
     assert activation.status_code == 200, activation.text
     return lead_id, transaction_id, buyer_id
+
+
+def create_approved_disposition_case(client: TestClient, transaction_id: str) -> str:
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/approve",
+        headers=HEADERS,
+    )
+    assert approved.status_code == 200, approved.text
+    return case_id
 
 
 def test_disposition_buyer_selection_and_reconciliation(
@@ -1151,3 +1178,216 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
     )
     assert db_session.scalar(select(func.count(DispositionCopilotRecommendation.id))) == 1
     assert db_session.scalar(select(func.count(DispositionCopilotReview.id))) == 1
+
+
+def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidates(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    house_box = put_verified_buy_box(client, buyer_id)
+    proof = upload_received_proof(client, buyer_id)
+    verify_proof(client, proof["id"])
+
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    discovery_run = BuyerDiscoveryRun(
+        organization_id=owner.organization_id,
+        disposition_case_id=UUID(case_id),
+        requested_by_user_id=owner.id,
+        provider="dealmachine",
+        status="completed",
+        search_snapshot={"state": "GA", "asset_class": "house"},
+        provider_request={"test": True},
+        result_count=1,
+        imported_count=0,
+        credit_summary={"properties": 1, "people": 0},
+        completed_at=datetime.now(UTC),
+    )
+    db_session.add(discovery_run)
+    db_session.flush()
+    external = BuyerDiscoveryCandidate(
+        organization_id=owner.organization_id,
+        discovery_run_id=discovery_run.id,
+        buyer_id=None,
+        provider="dealmachine",
+        external_key="external-builder-1",
+        name="External Builder",
+        company_name="External Builder LLC",
+        email="external-builder@example.com",
+        phone="404-555-0199",
+        market="Atlanta, GA",
+        state="GA",
+        property_types=["single_family"],
+        observed_purchase_count=8,
+        no_mortgage_count=6,
+        last_purchase_date=date.today() - timedelta(days=30),
+        min_purchase_price_cents=10000000,
+        max_purchase_price_cents=30000000,
+        score_basis_points=7200,
+        score_components={"observed_activity": 7200},
+        evidence_snapshot={"source": "recorded_purchase_activity"},
+        provider_snapshot={"provider_id": "external-builder-1"},
+        status="review",
+    )
+    db_session.add(external)
+    db_session.commit()
+
+    refreshed = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    pool = refreshed.json()
+    assert pool["run"]["version_number"] == 1
+    assert pool["run"]["matcher_version"] == "stonegate_buyer_pool_v1"
+    assert pool["total"] == 2
+    assert {item["source_type"] for item in pool["entries"]} == {"network", "external"}
+
+    internal_entry = next(item for item in pool["entries"] if item["buyer_id"] == buyer_id)
+    assert internal_entry["eligibility_status"] == "eligible"
+    assert internal_entry["buy_box_version_id"] == house_box["id"]
+    assert internal_entry["proof_status"] == "verified"
+    assert set(internal_entry["score_components"]) == {
+        "market",
+        "asset",
+        "price",
+        "strategy",
+        "funding",
+        "capacity",
+        "proof",
+        "activity",
+        "reliability",
+        "relationship",
+    }
+    assert internal_entry["score_explanation"]
+
+    external_entry = next(item for item in pool["entries"] if item["source_type"] == "external")
+    assert external_entry["eligibility_status"] == "review_required"
+    assert "explicitly approved" in external_entry["disqualifying_reasons"][0]
+    buyer_count_before = int(db_session.scalar(select(func.count(Buyer.id))) or 0)
+    shortlisted_external = client.patch(
+        (
+            f"/api/v1/dispositions/cases/{case_id}/buyer-pool/candidates/"
+            f"{external_entry['candidate_id']}"
+        ),
+        headers=HEADERS,
+        json={
+            "expected_version": external_entry["lock_version"],
+            "decision_status": "shortlisted",
+        },
+    )
+    assert shortlisted_external.status_code == 200, shortlisted_external.text
+    assert int(db_session.scalar(select(func.count(Buyer.id))) or 0) == buyer_count_before
+    stale_external_update = client.patch(
+        (
+            f"/api/v1/dispositions/cases/{case_id}/buyer-pool/candidates/"
+            f"{external_entry['candidate_id']}"
+        ),
+        headers=HEADERS,
+        json={
+            "expected_version": external_entry["lock_version"],
+            "decision_status": "passed",
+            "reason": "This stale browser state must not overwrite the shortlist.",
+        },
+    )
+    assert stale_external_update.status_code == 422
+    assert "another session" in stale_external_update.json()["detail"]
+
+    shortlisted_internal = client.patch(
+        (
+            f"/api/v1/dispositions/cases/{case_id}/buyer-pool/candidates/"
+            f"{internal_entry['candidate_id']}"
+        ),
+        headers=HEADERS,
+        json={
+            "expected_version": internal_entry["lock_version"],
+            "decision_status": "shortlisted",
+        },
+    )
+    assert shortlisted_internal.status_code == 200, shortlisted_internal.text
+
+    rerun = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert rerun.status_code == 200, rerun.text
+    assert rerun.json()["run"]["version_number"] == 2
+    rerun_entries = rerun.json()["entries"]
+    persisted_internal = next(item for item in rerun_entries if item["buyer_id"] == buyer_id)
+    persisted_external = next(item for item in rerun_entries if item["source_type"] == "external")
+    assert persisted_internal["decision_status"] == "shortlisted"
+    assert persisted_external["decision_status"] == "shortlisted"
+    assert persisted_internal["candidate_id"] == internal_entry["candidate_id"]
+    assert persisted_external["candidate_id"] == external_entry["candidate_id"]
+    assert int(db_session.scalar(select(func.count(DispositionBuyerPoolRun.id))) or 0) == 2
+    assert int(db_session.scalar(select(func.count(DispositionBuyerPoolEntry.id))) or 0) == 4
+    assert int(db_session.scalar(select(func.count(DispositionBuyerPoolCandidate.id))) or 0) == 2
+
+    converted = client.post(
+        (
+            f"/api/v1/dispositions/cases/{case_id}/buyer-pool/candidates/"
+            f"{external_entry['candidate_id']}/conversion"
+        ),
+        headers=HEADERS,
+        json={
+            "expected_version": persisted_external["lock_version"],
+            "decision": "create_new",
+            "reason": "Human reviewed the provider identity and approved network onboarding.",
+        },
+    )
+    assert converted.status_code == 200, converted.text
+    assert int(db_session.scalar(select(func.count(Buyer.id))) or 0) == buyer_count_before + 1
+    approved_entry = next(
+        item
+        for item in converted.json()["entries"]
+        if item["candidate_id"] == external_entry["candidate_id"]
+    )
+    assert approved_entry["buyer_id"] is not None
+    assert approved_entry["source_type"] == "mine"
+    approved_buyer = db_session.get(Buyer, UUID(approved_entry["buyer_id"]))
+    assert approved_buyer is not None
+    assert approved_buyer.status == "needs_review"
+
+    post_conversion_run = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert post_conversion_run.status_code == 200, post_conversion_run.text
+    assert post_conversion_run.json()["run"]["version_number"] == 3
+    assert post_conversion_run.json()["total"] == 2
+    assert all(
+        item["source_type"] != "external"
+        for item in post_conversion_run.json()["entries"]
+    )
+    approved_after_rerun = next(
+        item
+        for item in post_conversion_run.json()["entries"]
+        if item["candidate_id"] == external_entry["candidate_id"]
+    )
+    assert any(
+        evidence.get("type") == "provider_purchase_evidence"
+        for evidence in approved_after_rerun["supporting_evidence"]
+    )
+    assert int(db_session.scalar(select(func.count(DispositionBuyerPoolCandidate.id))) or 0) == 2
+    history = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert history.status_code == 200
+    assert [item["version_number"] for item in history.json()] == [3, 2, 1]
+
+    released = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert released.status_code == 200, released.text
+    campaign = db_session.scalar(
+        select(DispositionCampaign).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert campaign is not None
+    assert campaign.recipient_count == 1

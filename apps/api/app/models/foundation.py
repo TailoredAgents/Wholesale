@@ -5586,6 +5586,48 @@ class BuyerDiscoveryCandidate(UuidPrimaryKeyMixin, TimestampMixin, Base):
     imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class BuyerSourceLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_source_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "external_key",
+            name="uq_buyer_source_links_org_provider_external",
+        ),
+        Index(
+            "ix_buyer_source_links_org_buyer",
+            "organization_id",
+            "buyer_id",
+        ),
+        Index(
+            "ix_buyer_source_links_discovery_candidate",
+            "discovery_candidate_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    external_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    discovery_candidate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("buyer_discovery_candidates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_proof_documents"
 
@@ -5825,6 +5867,263 @@ class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     qualification_status: Mapped[str] = mapped_column(String(40), nullable=False)
     recipient_status: Mapped[str] = mapped_column(String(40), nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class DispositionBuyerPoolRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_pool_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "disposition_case_id",
+            "version_number",
+            name="uq_disposition_buyer_pool_runs_case_version",
+        ),
+        CheckConstraint(
+            "version_number > 0",
+            name="ck_disposition_buyer_pool_runs_version_positive",
+        ),
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_disposition_buyer_pool_runs_asset_class",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_runs_org_case_created",
+            "organization_id",
+            "disposition_case_id",
+            "created_at",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_runs_case_status",
+            "disposition_case_id",
+            "status",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_runs_generated_by",
+            "generated_by_user_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    asset_class: Mapped[str] = mapped_column(String(40), nullable=False)
+    matcher_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    score_policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_counts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DispositionBuyerPoolCandidate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_pool_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "identity_key",
+            name="uq_disposition_buyer_pool_candidates_identity",
+        ),
+        CheckConstraint(
+            "source_type IN ('internal', 'external')",
+            name="ck_disposition_buyer_pool_candidates_source_type",
+        ),
+        CheckConstraint(
+            "lock_version > 0",
+            name="ck_disposition_buyer_pool_candidates_lock_positive",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_case_stage",
+            "organization_id",
+            "disposition_case_id",
+            "lifecycle_stage",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_case_source",
+            "organization_id",
+            "disposition_case_id",
+            "source_type",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_org_buyer",
+            "organization_id",
+            "buyer_id",
+        ),
+        Index(
+            "uq_disposition_buyer_pool_candidates_case_buyer",
+            "organization_id",
+            "disposition_case_id",
+            "buyer_id",
+            unique=True,
+            postgresql_where=text("buyer_id IS NOT NULL"),
+            sqlite_where=text("buyer_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_provider_key",
+            "organization_id",
+            "provider",
+            "external_key",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_case_decision",
+            "organization_id",
+            "disposition_case_id",
+            "decision_status",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_discovery",
+            "latest_discovery_candidate_id",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_candidates_possible_buyer",
+            "possible_buyer_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    identity_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    latest_discovery_candidate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("buyer_discovery_candidates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provenance_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    overlap_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    possible_buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    overlap_evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    decision_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    lifecycle_stage: Mapped[str] = mapped_column(String(40), nullable=False)
+    decision_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    decision_updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decision_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DispositionBuyerPoolEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_pool_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "buyer_pool_run_id",
+            "buyer_pool_candidate_id",
+            name="uq_disposition_buyer_pool_entries_run_candidate",
+        ),
+        CheckConstraint(
+            "source_type IN ('internal', 'external')",
+            name="ck_disposition_buyer_pool_entries_source_type",
+        ),
+        CheckConstraint(
+            "score_basis_points BETWEEN 0 AND 10000",
+            name="ck_disposition_buyer_pool_entries_score_range",
+        ),
+        CheckConstraint(
+            "rank > 0",
+            name="ck_disposition_buyer_pool_entries_rank_positive",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_run_rank",
+            "buyer_pool_run_id",
+            "rank",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_run_eligibility",
+            "buyer_pool_run_id",
+            "eligibility_status",
+            "rank",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_org_buyer",
+            "organization_id",
+            "buyer_id",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_candidate",
+            "buyer_pool_candidate_id",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_buy_box",
+            "buy_box_version_id",
+        ),
+        Index(
+            "ix_disposition_buyer_pool_entries_proof",
+            "proof_document_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    buyer_pool_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_buyer_pool_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    buyer_pool_candidate_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_buyer_pool_candidates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    buy_box_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("buyer_buy_box_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    proof_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("buyer_proof_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    eligibility_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    score_components: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    score_explanation: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    supporting_evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    conflicting_evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    disqualifying_reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    criteria_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class DispositionCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):

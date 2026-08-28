@@ -470,6 +470,7 @@ export function BuyersWorkspace({
 
   return (
     <section aria-label="Buyer management" className={styles.workspace}>
+      {returnTo ? <Link className={styles.returnLink} href={returnTo}><ChevronLeft size={15} />Back to buyer pool</Link> : null}
       <DealControlStrip
         authority={{ label: "Authority", value: canEdit ? "Buyer CRM editor" : "View only", detail: canEdit ? "Changes remain audited" : "No edit permission", tone: canEdit ? "success" : "warning" }}
         blocker={{ label: "Primary blocker", value: blocker, detail: selected?.name ?? "No buyer evidence", tone: blocker === "No active blocker" ? "success" : "warning" }}

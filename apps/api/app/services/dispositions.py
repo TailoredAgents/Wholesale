@@ -461,6 +461,17 @@ def generate_matches(
                 ),
             )
         )
+    # DS4 records a parallel, append-only evaluation run. The legacy match rows
+    # remain the compatibility projection used by offers and existing releases.
+    from app.services.disposition_buyer_pool import generate_buyer_pool_run
+
+    generate_buyer_pool_run(
+        db,
+        principal,
+        case.id,
+        locked_case=case,
+        commit=False,
+    )
     db.commit()
     return case_read(db, case)
 
@@ -484,6 +495,19 @@ def release_campaign(
             .with_for_update()
         ).all()
     )
+    from app.services.disposition_buyer_pool import (
+        case_has_pool_decisions,
+        shortlisted_buyer_ids,
+    )
+
+    if case_has_pool_decisions(db, principal, case.id):
+        approved_buyer_ids = shortlisted_buyer_ids(db, principal, case.id)
+        matches = [match for match in matches if match.buyer_id in approved_buyer_ids]
+        if not matches:
+            raise ValueError(
+                "Shortlist at least one currently eligible Stonegate buyer before releasing "
+                "the campaign. External candidates must be approved and reviewed first."
+            )
     buyer_ids = {match.buyer_id for match in matches}
     buyers = (
         {

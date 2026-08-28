@@ -15,6 +15,11 @@ from app.schemas.disposition_desk import (
     DispositionDeskScope,
 )
 from app.schemas.dispositions import (
+    BuyerPoolConversionRequest,
+    BuyerPoolDecisionUpdate,
+    BuyerPoolRead,
+    BuyerPoolRunRead,
+    BuyerPoolSourceFilter,
     BuyerSelection,
     DispositionCaseCreate,
     DispositionCaseRead,
@@ -30,7 +35,7 @@ from app.schemas.dispositions import (
     ProofVerificationRequest,
     ReconciliationDecision,
 )
-from app.services import disposition_desk, dispositions
+from app.services import disposition_buyer_pool, disposition_desk, dispositions
 from app.services.disposition_copilot import (
     analyze_disposition,
     get_disposition_copilot_overview,
@@ -40,6 +45,8 @@ from app.services.disposition_copilot import (
 router = APIRouter(prefix="/api/v1/dispositions", tags=["dispositions"])
 view_dependency = require_permission(PermissionKeys.VIEW_DEALS)
 edit_dependency = require_permission(PermissionKeys.EDIT_DEALS)
+buyer_view_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
+buyer_edit_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
 buyer_proof_view_dependency = require_permission(PermissionKeys.VIEW_BUYER_PROOF)
 buyer_proof_manage_dependency = require_permission(PermissionKeys.MANAGE_BUYER_PROOF)
 
@@ -173,6 +180,127 @@ def match_case_buyers(
     principal: Annotated[Principal, Depends(edit_dependency)],
 ) -> DispositionCaseRead:
     return _case_action(dispositions.generate_matches, db, principal, case_id)
+
+
+@router.get(
+    "/cases/{case_id}/buyer-pool",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def read_case_buyer_pool(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+    source: BuyerPoolSourceFilter = "all",
+    stage: Annotated[str, Query(max_length=40)] = "all",
+    search: Annotated[str, Query(max_length=255)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> BuyerPoolRead:
+    result = disposition_buyer_pool.read_buyer_pool(
+        db,
+        principal,
+        case_id,
+        source=source,
+        stage=stage,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/buyer-pool/runs",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def refresh_case_buyer_pool(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> BuyerPoolRead:
+    try:
+        result = dispositions.generate_matches(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    pool = disposition_buyer_pool.read_buyer_pool(db, principal, case_id)
+    if pool is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return pool
+
+
+@router.get(
+    "/cases/{case_id}/buyer-pool/runs",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def read_case_buyer_pool_runs(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> list[BuyerPoolRunRead]:
+    result = disposition_buyer_pool.read_run_history(db, principal, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.patch(
+    "/cases/{case_id}/buyer-pool/candidates/{candidate_id}",
+    dependencies=[Depends(buyer_edit_dependency)],
+)
+def decide_case_buyer_pool_candidate(
+    case_id: UUID,
+    candidate_id: UUID,
+    payload: BuyerPoolDecisionUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> BuyerPoolRead:
+    try:
+        disposition_buyer_pool.update_candidate_decision(
+            db,
+            principal,
+            case_id,
+            candidate_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    result = disposition_buyer_pool.read_buyer_pool(db, principal, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.post("/cases/{case_id}/buyer-pool/candidates/{candidate_id}/conversion")
+def convert_case_buyer_pool_candidate(
+    case_id: UUID,
+    candidate_id: UUID,
+    payload: BuyerPoolConversionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> BuyerPoolRead:
+    if PermissionKeys.EDIT_BUYERS not in principal.permission_keys:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: {PermissionKeys.EDIT_BUYERS}",
+        )
+    try:
+        disposition_buyer_pool.convert_external_candidate(
+            db,
+            principal,
+            case_id,
+            candidate_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    result = disposition_buyer_pool.read_buyer_pool(db, principal, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
 
 
 @router.post("/cases/{case_id}/campaigns/release")
