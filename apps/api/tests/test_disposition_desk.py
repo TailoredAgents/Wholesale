@@ -12,6 +12,7 @@ from app.main import app
 from app.models.foundation import (
     Buyer,
     BuyerOffer,
+    BuyerProofDocument,
     Conversation,
     ConversationContextLink,
     Role,
@@ -29,7 +30,13 @@ from app.services import buyer_discovery
 from app.services import disposition_desk as disposition_desk_service
 from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_desk import read_desk
-from tests.test_dispositions import HEADERS, OWNER_EMAIL, setup_case_foundation
+from tests.test_dispositions import (
+    HEADERS,
+    OWNER_EMAIL,
+    setup_case_foundation,
+    upload_received_proof,
+    verify_proof,
+)
 
 
 def _add_user(db: Session, *, email: str, name: str, role_key: str) -> User:
@@ -284,12 +291,31 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     assert owner is not None and transaction is not None
     assert buyer is not None and conversation is not None
     buyer.relationship_owner_user_id = owner.id
-    buyer.proof_of_funds_status = "verified"
-    buyer.proof_of_funds_expires_at = now + timedelta(days=5)
     conversation.assigned_user_id = owner.id
     conversation.unread_count = 1
     conversation.last_inbound_at = now
     conversation.last_outbound_at = now - timedelta(hours=1)
+    db_session.commit()
+    received_proof = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=5),
+    )
+    verify_proof(
+        client,
+        received_proof["id"],
+        expires_at=now + timedelta(days=5),
+    )
+    relationship_followup = client.post(
+        f"/api/v1/buyers/{buyer_id}/relationship-activities",
+        headers=HEADERS,
+        json={
+            "engagement_type": "follow_up",
+            "scheduled_at": (now - timedelta(minutes=10)).isoformat(),
+            "notes": "Confirm the buyer's current acquisition capacity.",
+        },
+    )
+    assert relationship_followup.status_code == 201, relationship_followup.text
     transaction.earnest_money_due_at = now - timedelta(hours=1)
     transaction.earnest_money_paid_at = None
     transaction.due_diligence_deadline = now + timedelta(days=2)
@@ -342,7 +368,7 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     payload = response.json()
     deal_id = str(transaction.deal_id)
     assert payload["metrics"]["active_deals"] == 1
-    assert payload["metrics"]["buyer_follow_ups"] == 1
+    assert payload["metrics"]["buyer_follow_ups"] == 2
     assert payload["metrics"]["replies"] == 1
     assert payload["metrics"]["offers"] == 1
     assert payload["metrics"]["deadlines"] == 4
@@ -352,6 +378,14 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     assert payload["buyer_follow_ups"][0]["primary_action"]["href"] == (
         f"/os/buyers?buyer={buyer_id}&tab=summary"
     )
+    relationship_item = next(
+        item
+        for item in payload["buyer_follow_ups"]
+        if item["disposition_case_id"] is None
+    )
+    assert relationship_item["deal_id"] is None
+    assert relationship_item["secondary_action"] is None
+    assert relationship_item["context"] == "Buyer relationship"
     assert payload["replies"][0]["primary_action"]["href"] == (
         f"/os/inbox?conversation={conversation.id}"
     )
@@ -411,6 +445,55 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
         item for item in team_response.json()["today"] if item["key"].startswith("task:")
     )
     assert team_task["primary_action"]["href"].startswith("/os/tasks?view=team&")
+
+
+def test_disposition_desk_prefers_current_proof_over_stale_renewal_evidence(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, _, buyer_id = setup_case_foundation(db_session, client)
+    now = datetime.now(UTC)
+    current = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=90),
+    )
+    verify_proof(
+        client,
+        current["id"],
+        expires_at=now + timedelta(days=90),
+    )
+    stale = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=180),
+    )
+    verify_proof(
+        client,
+        stale["id"],
+        expires_at=now + timedelta(days=180),
+    )
+    stale_row = db_session.get(BuyerProofDocument, UUID(stale["id"]))
+    assert stale_row is not None
+    stale_row.expires_at = now - timedelta(days=1)
+    stale_row.verified_at = now + timedelta(minutes=1)
+    db_session.commit()
+    upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=365),
+    )
+
+    response = client.get("/api/v1/dispositions/desk?scope=mine", headers=HEADERS)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["buyer_network"]["missing_proof"] == 0
+    assert payload["buyer_network"]["expiring_proof"] == 0
+    assert f"deadline:buyer_pof:{buyer_id}" not in {
+        item["key"] for item in payload["deadlines"]
+    }
 
 
 def test_disposition_desk_reports_raw_totals_before_section_caps(

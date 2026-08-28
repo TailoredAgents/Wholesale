@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +10,8 @@ from app.domain.rbac import PermissionKeys
 from app.models.foundation import Buyer
 from app.schemas.buyers import (
     BuyerArchiveRequest,
+    BuyerBuyBoxPut,
+    BuyerBuyBoxVersionRead,
     BuyerConversationRead,
     BuyerCreate,
     BuyerDataProviderRead,
@@ -21,21 +23,32 @@ from app.schemas.buyers import (
     BuyerDuplicatePreflightRead,
     BuyerDuplicatePreflightRequest,
     BuyerListResponse,
+    BuyerProfileRead,
+    BuyerProfileVerificationCreate,
     BuyerRead,
+    BuyerRelationshipActivityCreate,
+    BuyerRelationshipActivityRead,
+    BuyerRelationshipActivityUpdate,
     BuyerUpdate,
 )
 from app.services import buyer_discovery
 from app.services.buyers import (
+    BuyerBuyBoxVersionConflictError,
     BuyerOwnerNotFoundError,
     BuyerSourceConflictError,
     DuplicateBuyerError,
     archive_buyer,
     create_buyer,
+    create_relationship_activity,
     get_buyer,
+    get_buyer_profile,
     list_buyers,
     preflight_duplicates,
+    put_buy_box,
     restore_buyer,
     update_buyer,
+    update_relationship_activity,
+    verify_buyer_profile,
 )
 from app.services.inbox import ensure_buyer_conversation
 
@@ -52,6 +65,10 @@ def read_buyers(
     buyer_status: Annotated[str | None, Query(alias="status", max_length=80)] = None,
     owner_id: UUID | None = None,
     source_key: Annotated[str | None, Query(max_length=80)] = None,
+    asset_class: Annotated[
+        Literal["house", "land", "both"] | None,
+        Query(),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> BuyerListResponse:
@@ -63,6 +80,7 @@ def read_buyers(
             buyer_status=buyer_status,
             owner_id=owner_id,
             source_key=source_key,
+            asset_class=asset_class,
             limit=limit,
             offset=offset,
         )
@@ -218,6 +236,104 @@ def read_buyer(
     principal: Annotated[Principal, Depends(view_buyers_dependency)],
 ) -> BuyerRead:
     result = get_buyer(db, principal, buyer_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    return result
+
+
+@router.get("/{buyer_id}/profile")
+def read_buyer_profile(
+    buyer_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
+    timeline_limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    timeline_offset: Annotated[int, Query(ge=0)] = 0,
+) -> BuyerProfileRead:
+    result = get_buyer_profile(
+        db,
+        principal,
+        buyer_id,
+        timeline_limit=timeline_limit,
+        timeline_offset=timeline_offset,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    return result
+
+
+@router.put("/{buyer_id}/buy-boxes/{asset_class}")
+def save_buyer_buy_box(
+    buyer_id: UUID,
+    asset_class: str,
+    payload: BuyerBuyBoxPut,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerBuyBoxVersionRead:
+    try:
+        result = put_buy_box(db, principal, buyer_id, asset_class, payload)
+    except BuyerBuyBoxVersionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "buyer_buy_box_version_conflict",
+                "message": str(exc),
+                "expected_version": exc.expected_version,
+                "current_version": exc.current_version,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    return result
+
+
+@router.post("/{buyer_id}/relationship-activities", status_code=201)
+def add_buyer_relationship_activity(
+    buyer_id: UUID,
+    payload: BuyerRelationshipActivityCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerRelationshipActivityRead:
+    try:
+        result = create_relationship_activity(db, principal, buyer_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    return result
+
+
+@router.patch("/{buyer_id}/relationship-activities/{activity_id}")
+def change_buyer_relationship_activity(
+    buyer_id: UUID,
+    activity_id: UUID,
+    payload: BuyerRelationshipActivityUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerRelationshipActivityRead:
+    result = update_relationship_activity(
+        db, principal, buyer_id, activity_id, payload
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer relationship activity not found.")
+    return result
+
+
+@router.post("/{buyer_id}/verification")
+def record_buyer_profile_verification(
+    buyer_id: UUID,
+    payload: BuyerProfileVerificationCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerRead:
+    result = verify_buyer_profile(db, principal, buyer_id, payload)
     if result is None:
         raise HTTPException(status_code=404, detail="Buyer not found.")
     return result

@@ -5,17 +5,19 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     Buyer,
-    BuyerCriteria,
+    BuyerBuyBox,
+    BuyerBuyBoxVersion,
     BuyerDiscoveryRun,
     BuyerEngagement,
     BuyerOffer,
+    BuyerProofDocument,
     Conversation,
     ConversationContextLink,
     DispositionCase,
@@ -43,6 +45,7 @@ from app.schemas.disposition_desk import (
     DispositionDeskSourceHealthRead,
 )
 from app.services import buyer_discovery, deals
+from app.services.dispositions import _proof_is_current_verified
 
 ACTIVE_CASE_STATUSES = {
     "package_prep",
@@ -386,6 +389,28 @@ def read_desk(
     proof_buyers = [
         buyer for buyer in buyers_all if buyer.id in proof_buyer_ids and buyer.archived_at is None
     ]
+    reviewed_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    verified_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    if proof_buyer_ids:
+        for document in db.scalars(
+            select(BuyerProofDocument)
+            .where(
+                BuyerProofDocument.organization_id == principal.organization_id,
+                BuyerProofDocument.buyer_id.in_(proof_buyer_ids),
+                BuyerProofDocument.status == "verified",
+                BuyerProofDocument.deleted_at.is_(None),
+            )
+            .order_by(
+                BuyerProofDocument.verified_at.desc(),
+                BuyerProofDocument.created_at.desc(),
+            )
+        ).all():
+            reviewed_proof_by_buyer.setdefault(document.buyer_id, document)
+            if (
+                document.buyer_id not in verified_proof_by_buyer
+                and _proof_is_current_verified(document, now=now)
+            ):
+                verified_proof_by_buyer[document.buyer_id] = document
     user_ids.update(buyer.relationship_owner_user_id for buyer in buyers)
     user_ids.update(buyer.relationship_owner_user_id for buyer in proof_buyers)
     user_ids.update(checklist.responsible_user_id for checklist in checklist_rows)
@@ -396,9 +421,17 @@ def read_desk(
                 BuyerEngagement.organization_id == principal.organization_id,
                 BuyerEngagement.engagement_type == "follow_up",
                 BuyerEngagement.status.notin_(COMPLETE_WORK_STATUSES),
-                BuyerEngagement.disposition_case_id.in_(case_ids)
-                if case_ids
-                else BuyerEngagement.id.is_(None),
+                or_(
+                    BuyerEngagement.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else BuyerEngagement.id.is_(None),
+                    and_(
+                        BuyerEngagement.disposition_case_id.is_(None),
+                        BuyerEngagement.buyer_id.in_(buyer_ids)
+                        if buyer_ids
+                        else BuyerEngagement.id.is_(None),
+                    ),
+                ),
             )
         ).all()
     )
@@ -556,34 +589,51 @@ def read_desk(
 
     followup_items: list[DispositionDeskItemRead] = []
     for followup in followups:
-        case = next(value for value in cases if value.id == followup.disposition_case_id)
-        deal = deal_by_id.get(case.deal_id)
+        case = case_by_id.get(followup.disposition_case_id)
+        deal = deal_by_id.get(case.deal_id) if case else None
         buyer = buyer_by_id.get(followup.buyer_id)
-        if deal is None or buyer is None:
+        if buyer is None or (case is not None and deal is None):
             continue
-        owner_id = buyer.relationship_owner_user_id or case.owner_user_id or followup.actor_user_id
+        owner_id = (
+            buyer.relationship_owner_user_id
+            or (case.owner_user_id if case else None)
+            or followup.actor_user_id
+        )
         followup_items.append(
             DispositionDeskItemRead(
                 key=f"followup:{followup.id}",
                 category="buyer_follow_ups",
                 title=f"Follow up with {buyer.name}",
-                context=deal.property_address,
+                context=(
+                    deal.property_address
+                    if deal
+                    else buyer.company_name or "Buyer relationship"
+                ),
                 owner_user_id=owner_id,
                 owner_name=_owner_name(owner_id, users),
                 due_at=followup.scheduled_at,
-                reason=followup.notes or "A buyer follow-up was scheduled for this deal.",
+                reason=followup.notes
+                or (
+                    "A buyer follow-up was scheduled for this deal."
+                    if deal
+                    else "A relationship follow-up was scheduled for this buyer."
+                ),
                 blocker=None if followup.scheduled_at else "No follow-up time was recorded.",
                 severity=_severity(followup.scheduled_at, blocker=followup.scheduled_at is None),
-                deal_id=deal.id,
+                deal_id=deal.id if deal else None,
                 buyer_id=buyer.id,
-                disposition_case_id=case.id,
+                disposition_case_id=case.id if case else None,
                 primary_action=DispositionDeskActionRead(
                     label="Open buyer",
                     href=f"/os/buyers?buyer={buyer.id}&tab=summary",
                 ),
-                secondary_action=DispositionDeskActionRead(
-                    label="Log follow-up",
-                    href=_deal_href(deal.id, section="buyers"),
+                secondary_action=(
+                    DispositionDeskActionRead(
+                        label="Log follow-up",
+                        href=_deal_href(deal.id, section="buyers"),
+                    )
+                    if deal
+                    else None
                 ),
             )
         )
@@ -773,7 +823,10 @@ def read_desk(
 
     proof_window_end = now + timedelta(days=30)
     for buyer in proof_buyers:
-        proof_due_at = buyer.proof_of_funds_expires_at
+        reviewed_proof = verified_proof_by_buyer.get(
+            buyer.id
+        ) or reviewed_proof_by_buyer.get(buyer.id)
+        proof_due_at = reviewed_proof.expires_at if reviewed_proof else None
         if proof_due_at is None or _aware(proof_due_at) > proof_window_end:
             continue
         proof_owner_id = buyer.relationship_owner_user_id
@@ -806,28 +859,34 @@ def read_desk(
 
     criteria_buyer_ids = set(
         db.scalars(
-            select(BuyerCriteria.buyer_id).where(
-                BuyerCriteria.organization_id == principal.organization_id,
-                BuyerCriteria.buyer_id.in_(buyer_ids) if buyer_ids else BuyerCriteria.id.is_(None),
-                BuyerCriteria.is_current.is_(True),
+            select(BuyerBuyBox.buyer_id)
+            .join(
+                BuyerBuyBoxVersion,
+                BuyerBuyBoxVersion.buy_box_id == BuyerBuyBox.id,
+            )
+            .where(
+                BuyerBuyBox.organization_id == principal.organization_id,
+                BuyerBuyBox.buyer_id.in_(buyer_ids)
+                if buyer_ids
+                else BuyerBuyBox.id.is_(None),
+                BuyerBuyBoxVersion.organization_id == principal.organization_id,
+                BuyerBuyBoxVersion.is_current.is_(True),
+                BuyerBuyBoxVersion.verification_status == "verified",
             )
         ).all()
     )
     active_buyers = [
         buyer for buyer in buyers if buyer.archived_at is None and buyer.status == "active"
     ]
-    current_proof = {"received", "verified"}
-    missing_proof = sum(
-        buyer.proof_of_funds_status not in current_proof
-        or bool(buyer.proof_of_funds_expires_at and _aware(buyer.proof_of_funds_expires_at) < now)
-        for buyer in active_buyers
-    )
+    active_buyer_ids = {buyer.id for buyer in active_buyers}
+    missing_proof = len(active_buyer_ids - set(verified_proof_by_buyer))
     expiring_proof = sum(
         bool(
-            buyer.proof_of_funds_expires_at
-            and now <= _aware(buyer.proof_of_funds_expires_at) <= now + timedelta(days=30)
+            document.expires_at
+            and now <= _aware(document.expires_at) <= now + timedelta(days=30)
         )
-        for buyer in active_buyers
+        for buyer_id, document in verified_proof_by_buyer.items()
+        if buyer_id in active_buyer_ids
     )
     buyer_health = DispositionDeskBuyerHealthRead(
         total=len(buyers),

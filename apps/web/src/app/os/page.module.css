@@ -1531,9 +1531,9 @@
 }
 
 .buyerForm fieldset label {
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 7px;
   font-size: 12px;
   line-height: 1.4;
 }

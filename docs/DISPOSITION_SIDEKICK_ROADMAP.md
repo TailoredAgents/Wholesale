@@ -2,12 +2,13 @@
 
 Last updated: August 27, 2026
 
-> **Current status: DS0-DS2 complete; DS3-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS3 complete; DS4-DS12 planned.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
-> Desk described in DS2, alongside its existing deal-specific disposition cases, package generation,
-> buyer ranking, proof-of-funds evidence, engagement and offer records, primary and backup buyer
-> selection, reconciliation, and review-only Disposition Copilot. Later phases remain plans and are
-> not proof that those capabilities are live.
+> Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
+> relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
+> Existing deal-specific disposition cases, package generation, engagement and offer records,
+> primary and backup buyer selection, reconciliation, and review-only Disposition Copilot remain in
+> place. Later phases remain plans and are not proof that those capabilities are live.
 
 ## 1. Purpose And Authority
 
@@ -87,7 +88,7 @@ negotiations, recipient approval, offer recommendations, and placement results.
 | Existing capability | Current location | Decision |
 | --- | --- | --- |
 | Manual buyer creation and list | `apps/api/app/routers/buyers.py`, `apps/web/src/app/os/buyers` | Extend |
-| Buyer criteria and reliability history | `Buyer`, `BuyerCriteria`, and buyer read models | Extend and normalize |
+| Buyer criteria and reliability history | `Buyer`, `BuyerBuyBox`, `BuyerBuyBoxVersion`, legacy `BuyerCriteria`, and buyer read models | Reuse and extend in DS4 |
 | Buyer Inbox conversation | `apps/api/app/services/inbox.py` | Reuse with explicit relationship ownership |
 | Disposition access roles | `apps/api/app/domain/rbac.py` | Reuse and refine only if required |
 | Unified Deal workspace | `apps/web/src/app/os/deals` | Reuse as the deal source of truth |
@@ -95,7 +96,7 @@ negotiations, recipient approval, offer recommendations, and placement results.
 | Assignment, double-close, and novation strategy selection | Disposition case setup | Reuse |
 | Investor package approval and PDF | Disposition workspace and disposition services | Extend |
 | Internal buyer ranking | Disposition services | Replace exact-token limitations with structured matching |
-| Proof-of-funds upload | Disposition buyer proof workflow | Surface on the buyer profile and reuse |
+| Proof-of-funds evidence and review | Buyer profile and disposition proof workflows | Reuse with explicit verification |
 | Inquiry, showing, follow-up, and deposit logs | Disposition workspace | Reuse and improve |
 | Offer records and primary/backup selection | Disposition workspace | Reuse and improve |
 | Reconciliation and accounting export | Disposition workspace | Reuse |
@@ -105,7 +106,8 @@ negotiations, recipient approval, offer recommendations, and placement results.
 
 ## 6. Known Starting Gaps
 
-The current foundation is not yet the intended daily disposition system.
+The audited starting foundation was not yet the intended daily disposition system. Completed-phase
+sections below supersede the starting gaps that those phases resolved.
 
 ### 6.1 Buyer Network Gaps
 
@@ -116,12 +118,8 @@ The current foundation is not yet the intended daily disposition system.
 - The newest 100 buyers are returned without true pagination or server-side network search.
 - Buyer source, relationship owner, creator, import batch, external IDs, and last verification are
   not structured.
-- Incomplete buyers can enter the active matching pool instead of a Needs Review stage.
-- Buyer records do not provide a complete relationship timeline, next follow-up, tier, tags, or
-  assigned specialist.
-- Proof of funds is primarily handled inside a matched deal rather than as reusable buyer evidence.
 - One phone and one email do not adequately represent organizations with several contacts.
-- House and Land buy boxes are not yet modeled and matched with sufficient precision.
+- Land matching and immutable historical match-run records are not yet implemented.
 
 ### 6.2 Deal Disposition Gaps
 
@@ -418,26 +416,52 @@ next-follow-up field.
 
 ## DS3 - Buyer Profiles And Asset-Aware Buy Boxes
 
-**Status: Planned.**
+**Status: Complete as of August 27, 2026.**
 
 ### Goal
 
 Turn a contact list into reusable relationship and purchasing intelligence.
 
-### Work
+### Completed
 
-- Add House, Land, or Both asset focus.
-- Add strategy, property type, state, county, city, ZIP, radius, and exclusion criteria.
-- Add minimum and maximum price, preferred margin, funding method, and capacity.
-- Add House rehab tolerance and residential preferences.
-- Add Land acreage, use, zoning, access, utilities, terrain, flood or wetlands tolerance, and other
-  appropriately sourced criteria.
-- Add tier, temperature, tags, relationship status, last contact, next follow-up, and verification.
-- Surface calls, messages, inquiries, offers, purchases, closes, retrades, fallout, and notes on one
-  timeline.
-- Surface reusable proof-of-funds evidence with amount, source, verification, expiration, and
-  document access.
-- Version buy-box changes so historical deal matches remain explainable.
+- Added independently maintained and versioned House and Land buy boxes. **Both** is a derived
+  asset focus when a buyer has both boxes; it is not a third editable criteria record that can drift
+  from them.
+- Added typed strategy, property type, state, county, city, ZIP, radius, exclusion, price, funding,
+  capacity, House preference, and Land preference criteria with asset-specific validation.
+- Added buyer tier, temperature, tags, relationship status, profile verification, derived last
+  contact, next follow-up, and relationship follow-up controls.
+- Added a permission-filtered buyer timeline for saved relationship notes and follow-ups, buyer
+  audit activity, communications, and offers the signed-in user is authorized to review.
+- Purchase, close, fallout, and retrade history remains future scope and will be added when those
+  lifecycle events have authoritative records in a later phase.
+- Added reusable proof-of-funds evidence with amount, source, expiration, private document access,
+  and an explicit review decision.
+- Added dedicated permissions for viewing and managing proof, organization isolation, private
+  downloads, and download and review audit events.
+- Updated the current House matcher to require a verified structured House buy box and current
+  verified proof where applicable. Each saved match records the exact buy-box version, criteria
+  snapshot, and matcher version used to make the decision.
+- Preserved legacy free-text `BuyerCriteria` records for history and review while excluding them
+  from authoritative matching.
+
+### Delivered Scope Decision
+
+Uploading proof records it as **Received** only. It cannot qualify a buyer until an authorized
+human explicitly verifies the amount, source, and expiration. Generic buyer editing cannot bypass
+that review workflow, and proof access and decisions remain auditable.
+
+House and Land boxes are versioned independently, and identical saves do not create meaningless
+new versions. A verified box must contain enough structured information to be operationally useful.
+The profile labels reliability as insufficient when Stonegate has no performance history rather
+than treating an untested buyer as reliable.
+
+DS3 does not implement automated Land matching or immutable historical match runs. The current
+House matcher stores the exact version and criteria snapshot on its current match records, but a
+future regeneration can still replace those rows. Land matching, a unified asset-aware score, and
+preserved match-run history remain DS4 work. A generic preferred-margin field was also not added
+because its economic basis is not yet consistently defined across House and Land strategies; DS4
+must introduce any such field with explicit, asset-specific calculation semantics.
 
 ### Exit Criteria
 
@@ -797,7 +821,7 @@ Quality and safety measures:
 | DS0 | Repository Audit And Boundary Decision | Complete |
 | DS1 | Buyer Network Foundation | Complete |
 | DS2 | Disposition Desk | Complete |
-| DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Planned |
+| DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Complete |
 | DS4 | Unified Explainable Deal Buyer Pool | Planned |
 | DS5 | Deal Launch And Investor Package Readiness | Planned |
 | DS6 | Governed Live Outreach And Reply Loop | Planned |
@@ -826,8 +850,9 @@ With DS1 complete, the specialist may transfer high-quality, authorized buyer re
 the Buyer Network using duplicate review, editing, ownership, lifecycle controls, and pagination.
 Ambiguous records should remain in Needs Review rather than being forced into an existing buyer.
 
-DS2 now provides the specialist's daily command center. DS3-DS7 continue turning the current
-provider-independent foundation into the complete relationship, matching, package, outreach,
+DS2 provides the specialist's daily command center, and DS3 provides the canonical buyer profile,
+separate versioned House and Land buy boxes, proof review, and current House match evidence. DS4-DS7
+continue turning that provider-independent foundation into the unified matching, package, outreach,
 offer, and closing system. DS8 follows only after InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly

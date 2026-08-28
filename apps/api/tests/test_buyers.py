@@ -54,7 +54,6 @@ def test_create_and_list_buyer_with_criteria(
             "phone": "(404) 555-0199",
             "buyer_type": "cash_buyer",
             "status": "active",
-            "proof_of_funds_status": "received",
             "max_purchase_price_cents": 35000000,
             "notes": "Prefers light rehab in Atlanta.",
             "phone_contact_permission": True,
@@ -75,7 +74,7 @@ def test_create_and_list_buyer_with_criteria(
     assert created["name"] == "Acme Cash Buyer"
     assert created["status"] == "needs_review"
     assert created["criteria"]["markets"] == "Atlanta, Decatur"
-    assert created["proof_of_funds_status"] == "received"
+    assert created["proof_of_funds_status"] == "unknown"
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(BuyerCriteria)) or 0) == 1
     conversation = db_session.scalar(select(Conversation))
@@ -500,7 +499,7 @@ def test_archive_restore_and_legacy_inactive_read_compatibility(
     assert client.get("/api/v1/buyers?status=paused", headers=headers).json()["total"] == 1
 
 
-def test_unrelated_edit_preserves_legacy_verified_proof_status(
+def test_unrelated_edit_preserves_legacy_scalar_but_does_not_report_it_as_evidence(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -535,9 +534,31 @@ def test_unrelated_edit_preserves_legacy_verified_proof_status(
     )
     assert response.status_code == 200, response.text
     assert response.json()["notes"] == "Relationship details refreshed."
-    assert response.json()["proof_of_funds_status"] == "verified"
+    assert response.json()["proof_of_funds_status"] == "unknown"
     db_session.refresh(buyer)
     assert buyer.proof_of_funds_status == "verified"
+
+
+def test_buyer_editor_cannot_manually_claim_proof_status(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/buyers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"name": "Evidence Guard Buyer", "email": "evidence-guard@example.com"},
+    )
+    assert created.status_code == 201, created.text
+
+    changed = client.patch(
+        f"/api/v1/buyers/{created.json()['id']}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"proof_of_funds_status": "verified"},
+    )
+    assert changed.status_code == 422
+    assert "derived from reviewed evidence" in changed.json()["detail"]
 
 
 def test_list_buyers_paginates_past_one_hundred_with_stable_filters(
@@ -853,6 +874,48 @@ def test_do_not_contact_suppression_overrides_existing_granted_permissions(
     assert voice.consent_status == "granted"
     assert sms.is_suppressed is True and sms.can_send is False
     assert voice.is_suppressed is True and voice.can_call is False
+
+
+def test_relationship_do_not_contact_suppresses_and_can_be_released(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    created = client.post(
+        "/api/v1/buyers",
+        headers=headers,
+        json={
+            "name": "Relationship DNC Buyer",
+            "phone": "404-555-0166",
+            "relationship_status": "do_not_contact",
+            "phone_contact_permission": True,
+            "sms_consent": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["relationship_status"] == "do_not_contact"
+
+    def suppression_states() -> set[tuple[str, str]]:
+        return {
+            (row.channel, row.status)
+            for row in db_session.scalars(
+                select(SuppressionRecord).where(
+                    SuppressionRecord.normalized_address == "+14045550166"
+                )
+            ).all()
+        }
+
+    assert suppression_states() == {("phone", "active"), ("sms", "active")}
+
+    released = client.patch(
+        f"/api/v1/buyers/{created.json()['id']}",
+        headers=headers,
+        json={"relationship_status": "active"},
+    )
+    assert released.status_code == 200, released.text
+    assert suppression_states() == {("phone", "lifted"), ("sms", "lifted")}
 
 
 def test_archiving_and_restoring_dnc_buyer_preserves_contact_suppression(

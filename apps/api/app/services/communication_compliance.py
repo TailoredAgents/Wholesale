@@ -193,6 +193,10 @@ def phone_lookup_values(value: str) -> tuple[str, ...]:
     values = {digits}
     if len(digits) == 11 and digits.startswith("1"):
         values.add(digits[1:])
+        values.add(f"+{digits}")
+    elif len(digits) == 10:
+        values.add(f"1{digits}")
+        values.add(f"+1{digits}")
     return tuple(value for value in values if value)
 
 

@@ -14,7 +14,7 @@ from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     AuditEvent,
     Buyer,
-    BuyerCriteria,
+    BuyerBuyBoxVersion,
     BuyerEngagement,
     BuyerOffer,
     BuyerProofDocument,
@@ -49,9 +49,11 @@ from app.schemas.dispositions import (
     OfferRead,
     PayoutRead,
     ProofDocumentRead,
+    ProofVerificationRequest,
     ReconciliationDecision,
     ReconciliationRead,
 )
+from app.services.buyers import get_current_buy_box_version
 from app.services.document_storage import read_content, store_content
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
@@ -60,6 +62,7 @@ from app.services.lead_lifecycle import (
 )
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
+REVIEWABLE_PROOF_SCAN_STATUSES = {"clean", "not_configured"}
 
 
 def scoped_case(db: Session, principal: Principal, case_id: UUID) -> DispositionCase | None:
@@ -334,81 +337,101 @@ def generate_matches(
         raise ValueError("Approve the deal package before matching buyers.")
     property_record = db.get(Property, case.property_id)
     db.execute(delete(DispositionMatch).where(DispositionMatch.disposition_case_id == case.id))
-    scored: list[tuple[Buyer, int, dict[str, int], str]] = []
+    scored: list[
+        tuple[
+            Buyer,
+            int,
+            dict[str, int],
+            str,
+            BuyerBuyBoxVersion | None,
+            dict[str, object] | None,
+        ]
+    ] = []
     now = datetime.now(UTC)
     buyers = db.scalars(
         select(Buyer).where(
             Buyer.organization_id == principal.organization_id,
             Buyer.status == "active",
+            Buyer.relationship_status != "do_not_contact",
             Buyer.archived_at.is_(None),
         )
     ).all()
     for buyer in buyers:
-        criteria = db.scalar(
-            select(BuyerCriteria)
-            .where(
-                BuyerCriteria.organization_id == principal.organization_id,
-                BuyerCriteria.buyer_id == buyer.id,
-                BuyerCriteria.is_current.is_(True),
-            )
-            .order_by(BuyerCriteria.version_number.desc(), BuyerCriteria.created_at.desc())
+        buy_box_result = get_current_buy_box_version(
+            db,
+            principal,
+            buyer.id,
+            "house",
+            require_verified=True,
         )
-        buyer_maximums = [
-            value
-            for value in (
-                buyer.max_purchase_price_cents,
-                criteria.max_price_cents if criteria else None,
-            )
-            if value is not None
-        ]
-        price_ok = (
-            not buyer_maximums or min(buyer_maximums) >= case.minimum_acceptable_cents
-        ) and (
-            criteria is None
-            or criteria.min_price_cents is None
-            or criteria.min_price_cents <= case.asking_price_cents
+        buy_box_version = buy_box_result[1] if buy_box_result else None
+        criteria = dict(buy_box_version.criteria_payload) if buy_box_version else None
+        price_ok = _structured_price_match(criteria, case.asking_price_cents)
+        market_ok = _structured_market_match(criteria, property_record)
+        type_ok = _structured_house_type_match(criteria, property_record)
+        strategy_ok = _structured_strategy_match(criteria, case.strategy)
+        proof = next(
+            (
+                item
+                for item in db.scalars(
+                    select(BuyerProofDocument)
+                    .where(
+                        BuyerProofDocument.buyer_id == buyer.id,
+                        BuyerProofDocument.organization_id == principal.organization_id,
+                        BuyerProofDocument.status == "verified",
+                        BuyerProofDocument.deleted_at.is_(None),
+                    )
+                    .order_by(
+                        BuyerProofDocument.verified_at.desc(),
+                        BuyerProofDocument.created_at.desc(),
+                    )
+                ).all()
+                if _proof_is_current_verified(item, now=now)
+            ),
+            None,
         )
-        market_terms = csv_terms(criteria.markets if criteria else None)
-        property_markets = {
-            value.strip().lower()
-            for value in (
-                property_record.city if property_record else None,
-                property_record.state if property_record else None,
-                property_record.county if property_record else None,
-            )
-            if value and value.strip()
-        }
-        market_ok = not market_terms or bool(market_terms & property_markets)
-        property_types = csv_terms(criteria.property_types if criteria else None)
-        subject_type = (
-            (property_record.property_type or "").strip().lower() if property_record else ""
-        )
-        type_ok = not property_types or subject_type in property_types
-        proof = db.scalar(
-            select(BuyerProofDocument)
-            .where(
-                BuyerProofDocument.buyer_id == buyer.id,
-                BuyerProofDocument.organization_id == principal.organization_id,
-                BuyerProofDocument.status == "verified",
-            )
-            .order_by(BuyerProofDocument.created_at.desc())
-            .limit(1)
-        )
-        pof_ok = proof is not None and (proof.expires_at is None or aware(proof.expires_at) >= now)
+        pof_ok = proof is not None
         if pof_ok and proof and proof.verified_amount_cents is not None:
-            pof_ok = proof.verified_amount_cents >= case.minimum_acceptable_cents
+            pof_ok = proof.verified_amount_cents >= case.asking_price_cents
         components = {
             "proof": 3000 if pof_ok else 0,
             "price": 2500 if price_ok else 0,
             "market": 2000 if market_ok else 0,
-            "reliability": round(buyer.reliability_score_basis_points * 0.15),
+            "reliability": (
+                round(buyer.reliability_score_basis_points * 0.15)
+                if buyer.completed_deals + buyer.failed_deals > 0
+                else 0
+            ),
             "property_type": 1000 if type_ok else 0,
         }
         score = sum(components.values())
-        qualified = price_ok and market_ok and type_ok and pof_ok
-        scored.append((buyer, score, components, "qualified" if qualified else "review_required"))
+        qualified = bool(
+            buy_box_version
+            and price_ok
+            and market_ok
+            and type_ok
+            and strategy_ok
+            and pof_ok
+        )
+        scored.append(
+            (
+                buyer,
+                score,
+                components,
+                "qualified" if qualified else "review_required",
+                buy_box_version,
+                criteria,
+            )
+        )
     scored.sort(key=lambda value: value[1], reverse=True)
-    for rank, (buyer, score, components, qualification) in enumerate(scored, 1):
+    for rank, (
+        buyer,
+        score,
+        components,
+        qualification,
+        buy_box_version,
+        criteria,
+    ) in enumerate(scored, 1):
         db.add(
             DispositionMatch(
                 organization_id=principal.organization_id,
@@ -419,6 +442,23 @@ def generate_matches(
                 qualification_status=qualification,
                 recipient_status="proposed" if qualification == "qualified" else "excluded",
                 rank=rank,
+                buy_box_version_id=buy_box_version.id if buy_box_version else None,
+                matcher_version="house_buy_box_v1",
+                criteria_snapshot=(
+                    {
+                        "asset_class": "house",
+                        "verification_status": buy_box_version.verification_status,
+                        "version_number": buy_box_version.version_number,
+                        "criteria": criteria,
+                    }
+                    if buy_box_version
+                    else {
+                        "asset_class": "house",
+                        "verification_status": "missing",
+                        "criteria": None,
+                        "legacy_criteria_excluded": True,
+                    }
+                ),
             )
         )
     db.commit()
@@ -461,9 +501,51 @@ def release_campaign(
         else {}
     )
     eligible_matches: list[DispositionMatch] = []
+    now = datetime.now(UTC)
     for match in matches:
         buyer = buyers.get(match.buyer_id)
-        if buyer is None or buyer.status != "active" or buyer.archived_at is not None:
+        if (
+            buyer is None
+            or buyer.status != "active"
+            or buyer.relationship_status == "do_not_contact"
+            or buyer.archived_at is not None
+        ):
+            match.qualification_status = "ineligible"
+            match.recipient_status = "excluded"
+            continue
+        current_buy_box = get_current_buy_box_version(
+            db,
+            principal,
+            buyer.id,
+            "house",
+            require_verified=True,
+        )
+        if (
+            current_buy_box is None
+            or match.buy_box_version_id is None
+            or current_buy_box[1].id != match.buy_box_version_id
+        ):
+            match.qualification_status = "ineligible"
+            match.recipient_status = "excluded"
+            continue
+        current_proof = next(
+            (
+                document
+                for document in db.scalars(
+                    select(BuyerProofDocument).where(
+                        BuyerProofDocument.organization_id == principal.organization_id,
+                        BuyerProofDocument.buyer_id == buyer.id,
+                        BuyerProofDocument.status == "verified",
+                        BuyerProofDocument.deleted_at.is_(None),
+                    )
+                ).all()
+                if _proof_is_current_verified(document, now=now)
+                and document.verified_amount_cents is not None
+                and document.verified_amount_cents >= case.asking_price_cents
+            ),
+            None,
+        )
+        if current_proof is None:
             match.qualification_status = "ineligible"
             match.recipient_status = "excluded"
             continue
@@ -505,14 +587,17 @@ def upload_proof(
     expires_at: datetime | None,
 ) -> ProofDocumentRead:
     buyer = db.scalar(
-        select(Buyer).where(
-            Buyer.id == buyer_id, Buyer.organization_id == principal.organization_id
-        )
+        select(Buyer)
+        .where(Buyer.id == buyer_id, Buyer.organization_id == principal.organization_id)
+        .with_for_update()
     )
     if buyer is None:
         raise ValueError("Buyer not found.")
     if not content or len(content) > MAX_FILE_BYTES:
         raise ValueError("Proof document must be between 1 byte and 15 MB.")
+    file_name = file_name.strip()
+    if not file_name or "\r" in file_name or "\n" in file_name:
+        raise ValueError("Proof document file name is invalid.")
     document_id = uuid4()
     stored = store_content(
         organization_id=principal.organization_id,
@@ -527,7 +612,10 @@ def upload_proof(
         organization_id=principal.organization_id,
         buyer_id=buyer.id,
         uploaded_by_user_id=principal.user_id,
-        status="verified",
+        status="received",
+        verified_by_user_id=None,
+        verified_at=None,
+        verification_source=None,
         institution_name=institution_name,
         verified_amount_cents=verified_amount_cents,
         expires_at=expires_at,
@@ -544,8 +632,124 @@ def upload_proof(
         notes=None,
     )
     db.add(document)
-    buyer.proof_of_funds_status = "received"
-    buyer.proof_of_funds_expires_at = expires_at
+    # A renewal upload must not downgrade a still-current verified document.
+    # This aggregate is always projected from the underlying evidence records.
+    _refresh_buyer_proof_summary(db, buyer)
+    audit(
+        db,
+        principal,
+        "buyer.proof_received",
+        "buyer_proof_document",
+        document.id,
+        {
+            "buyer_id": str(buyer.id),
+            "status": "received",
+            "sha256": document.sha256,
+            "malware_scan_status": document.malware_scan_status,
+        },
+        "Proof-of-funds evidence received for human review",
+    )
+    db.commit()
+    db.refresh(document)
+    return proof_read(document)
+
+
+def list_proof(
+    db: Session,
+    principal: Principal,
+    buyer_id: UUID,
+) -> list[ProofDocumentRead] | None:
+    buyer = db.scalar(
+        select(Buyer.id).where(
+            Buyer.id == buyer_id,
+            Buyer.organization_id == principal.organization_id,
+        )
+    )
+    if buyer is None:
+        return None
+    return [
+        proof_read(document)
+        for document in db.scalars(
+            select(BuyerProofDocument)
+            .where(
+                BuyerProofDocument.organization_id == principal.organization_id,
+                BuyerProofDocument.buyer_id == buyer_id,
+                BuyerProofDocument.deleted_at.is_(None),
+            )
+            .order_by(BuyerProofDocument.created_at.desc())
+        ).all()
+    ]
+
+
+def review_proof(
+    db: Session,
+    principal: Principal,
+    document_id: UUID,
+    payload: ProofVerificationRequest,
+) -> ProofDocumentRead | None:
+    document = db.scalar(
+        select(BuyerProofDocument)
+        .where(
+            BuyerProofDocument.id == document_id,
+            BuyerProofDocument.organization_id == principal.organization_id,
+            BuyerProofDocument.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if document is None:
+        return None
+    buyer = db.scalar(
+        select(Buyer)
+        .where(
+            Buyer.id == document.buyer_id,
+            Buyer.organization_id == principal.organization_id,
+        )
+        .with_for_update()
+    )
+    if buyer is None:
+        return None
+    previous_status = document.status
+    now = datetime.now(UTC)
+    if payload.decision == "verified":
+        if document.malware_scan_status not in REVIEWABLE_PROOF_SCAN_STATUSES:
+            raise ValueError("Proof of funds cannot be verified until its safety review passes.")
+        verified_amount = payload.verified_amount_cents or document.verified_amount_cents
+        expires_at = payload.expires_at or document.expires_at
+        if verified_amount is None or verified_amount <= 0:
+            raise ValueError("Enter the amount confirmed by the proof-of-funds review.")
+        if expires_at is None or aware(expires_at) <= now:
+            raise ValueError("Verified proof of funds requires a future expiration date.")
+        document.status = "verified"
+        document.verified_amount_cents = verified_amount
+        document.expires_at = expires_at
+        document.institution_name = payload.institution_name or document.institution_name
+        document.verified_by_user_id = principal.user_id
+        document.verified_at = now
+        document.verification_source = payload.verification_source.strip()
+        document.notes = payload.notes.strip()
+    else:
+        document.status = "rejected"
+        document.verified_by_user_id = principal.user_id
+        document.verified_at = now
+        document.verification_source = payload.verification_source.strip()
+        document.notes = payload.notes.strip()
+    _refresh_buyer_proof_summary(db, buyer, now=now)
+    audit(
+        db,
+        principal,
+        f"buyer.proof_{payload.decision}",
+        "buyer_proof_document",
+        document.id,
+        {
+            "buyer_id": str(buyer.id),
+            "previous_status": previous_status,
+            "status": document.status,
+            "verified_amount_cents": document.verified_amount_cents,
+            "expires_at": document.expires_at.isoformat() if document.expires_at else None,
+            "verification_source": document.verification_source,
+        },
+        payload.notes.strip(),
+    )
     db.commit()
     db.refresh(document)
     return proof_read(document)
@@ -565,11 +769,86 @@ def get_proof_content(
     )
     if document is None:
         return None
-    return document, read_content(
+    if document.malware_scan_status not in REVIEWABLE_PROOF_SCAN_STATUSES:
+        return None
+    content = read_content(
         provider=document.storage_provider,
         key=document.storage_key,
         database_bytes=document.file_data,
     )
+    audit(
+        db,
+        principal,
+        "buyer.proof_download",
+        "buyer_proof_document",
+        document.id,
+        {
+            "buyer_id": str(document.buyer_id),
+            "file_name": document.file_name,
+            "sha256": document.sha256,
+        },
+        "Restricted proof-of-funds evidence accessed",
+    )
+    db.commit()
+    return document, content
+
+
+def _proof_is_current_verified(document: BuyerProofDocument, *, now: datetime) -> bool:
+    return bool(
+        document.deleted_at is None
+        and document.status == "verified"
+        and document.verified_by_user_id is not None
+        and document.verified_at is not None
+        and document.verified_amount_cents is not None
+        and document.verified_amount_cents > 0
+        and document.expires_at is not None
+        and aware(document.expires_at) > now
+        and document.malware_scan_status in REVIEWABLE_PROOF_SCAN_STATUSES
+    )
+
+
+def _refresh_buyer_proof_summary(
+    db: Session,
+    buyer: Buyer,
+    *,
+    now: datetime | None = None,
+) -> None:
+    checked_at = now or datetime.now(UTC)
+    documents = list(
+        db.scalars(
+            select(BuyerProofDocument)
+            .where(
+                BuyerProofDocument.organization_id == buyer.organization_id,
+                BuyerProofDocument.buyer_id == buyer.id,
+                BuyerProofDocument.deleted_at.is_(None),
+            )
+            .order_by(BuyerProofDocument.created_at.desc())
+        ).all()
+    )
+    current = next(
+        (item for item in documents if _proof_is_current_verified(item, now=checked_at)),
+        None,
+    )
+    if current is not None:
+        buyer.proof_of_funds_status = "verified"
+        buyer.proof_of_funds_expires_at = current.expires_at
+    elif any(item.status == "received" for item in documents):
+        buyer.proof_of_funds_status = "received"
+        buyer.proof_of_funds_expires_at = None
+    elif any(
+        item.status == "verified"
+        and item.expires_at is not None
+        and aware(item.expires_at) <= checked_at
+        for item in documents
+    ):
+        buyer.proof_of_funds_status = "expired"
+        buyer.proof_of_funds_expires_at = None
+    elif any(item.status == "rejected" for item in documents):
+        buyer.proof_of_funds_status = "rejected"
+        buyer.proof_of_funds_expires_at = None
+    else:
+        buyer.proof_of_funds_status = "unknown"
+        buyer.proof_of_funds_expires_at = None
 
 
 def create_offer(
@@ -591,15 +870,26 @@ def create_offer(
     if buyer is None:
         raise ValueError("Buyer not found.")
     proof = (
-        db.get(BuyerProofDocument, payload.proof_document_id) if payload.proof_document_id else None
+        db.scalar(
+            select(BuyerProofDocument).where(
+                BuyerProofDocument.id == payload.proof_document_id,
+                BuyerProofDocument.organization_id == principal.organization_id,
+                BuyerProofDocument.buyer_id == buyer.id,
+                BuyerProofDocument.deleted_at.is_(None),
+            )
+        )
+        if payload.proof_document_id
+        else None
     )
+    if payload.proof_document_id is not None and proof is None:
+        raise ValueError("The selected proof-of-funds document is unavailable for this buyer.")
     offer = BuyerOffer(
         organization_id=principal.organization_id,
         lead_id=case.lead_id,
         deal_id=case.deal_id,
         buyer_id=buyer.id,
         disposition_case_id=case.id,
-        proof_document_id=proof.id if proof and proof.buyer_id == buyer.id else None,
+        proof_document_id=proof.id if proof else None,
         amount_cents=payload.amount_cents,
         earnest_money_cents=payload.earnest_money_cents,
         financing_type=payload.financing_type,
@@ -678,12 +968,22 @@ def select_buyer(
     if backup and backup.id == primary.id:
         raise ValueError("Primary and backup offers must be different.")
     proof = (
-        db.get(BuyerProofDocument, primary.proof_document_id) if primary.proof_document_id else None
+        db.scalar(
+            select(BuyerProofDocument).where(
+                BuyerProofDocument.id == primary.proof_document_id,
+                BuyerProofDocument.organization_id == principal.organization_id,
+                BuyerProofDocument.buyer_id == primary.buyer_id,
+                BuyerProofDocument.deleted_at.is_(None),
+            )
+        )
+        if primary.proof_document_id
+        else None
     )
     if (
         proof is None
-        or proof.status != "verified"
-        or (proof.expires_at and aware(proof.expires_at) < datetime.now(UTC))
+        or not _proof_is_current_verified(proof, now=datetime.now(UTC))
+        or proof.verified_amount_cents is None
+        or proof.verified_amount_cents < primary.amount_cents
     ):
         raise ValueError("A current verified proof-of-funds document is required.")
     now = datetime.now(UTC)
@@ -1049,12 +1349,22 @@ def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
         ).all()
     }
     latest_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    current_verified_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    proof_checked_at = datetime.now(UTC)
     for proof in db.scalars(
         select(BuyerProofDocument)
-        .where(BuyerProofDocument.organization_id == case.organization_id)
+        .where(
+            BuyerProofDocument.organization_id == case.organization_id,
+            BuyerProofDocument.deleted_at.is_(None),
+        )
         .order_by(BuyerProofDocument.created_at.desc())
     ).all():
         latest_proof_by_buyer.setdefault(proof.buyer_id, proof)
+        if (
+            proof.buyer_id not in current_verified_proof_by_buyer
+            and _proof_is_current_verified(proof, now=proof_checked_at)
+        ):
+            current_verified_proof_by_buyer[proof.buyer_id] = proof
     matches = db.scalars(
         select(DispositionMatch)
         .where(DispositionMatch.disposition_case_id == case.id)
@@ -1100,10 +1410,22 @@ def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
                 qualification_status=item.qualification_status,
                 recipient_status=item.recipient_status,
                 rank=item.rank,
-                proof_status=buyers[item.buyer_id].proof_of_funds_status,
-                proof_expires_at=buyers[item.buyer_id].proof_of_funds_expires_at,
+                proof_status=(
+                    "verified"
+                    if item.buyer_id in current_verified_proof_by_buyer
+                    else latest_proof_by_buyer[item.buyer_id].status
+                    if item.buyer_id in latest_proof_by_buyer
+                    else "unknown"
+                ),
+                proof_expires_at=(
+                    current_verified_proof_by_buyer[item.buyer_id].expires_at
+                    if item.buyer_id in current_verified_proof_by_buyer
+                    else None
+                ),
                 latest_proof_document_id=(
-                    latest_proof_by_buyer[item.buyer_id].id
+                    current_verified_proof_by_buyer[item.buyer_id].id
+                    if item.buyer_id in current_verified_proof_by_buyer
+                    else latest_proof_by_buyer[item.buyer_id].id
                     if item.buyer_id in latest_proof_by_buyer
                     else None
                 ),
@@ -1199,6 +1521,10 @@ def proof_read(item: BuyerProofDocument) -> ProofDocumentRead:
         storage_provider=item.storage_provider,
         malware_scan_status=item.malware_scan_status,
         retention_until=item.retention_until,
+        verified_by_user_id=item.verified_by_user_id,
+        verified_at=item.verified_at,
+        verification_source=item.verification_source,
+        notes=item.notes,
         content_url=f"/api/v1/dispositions/proof-documents/{item.id}/content",
         created_at=item.created_at,
     )
@@ -1216,7 +1542,108 @@ def aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def csv_terms(value: str | None) -> set[str]:
-    if not value:
-        return set()
-    return {item.strip().lower() for item in value.split(",") if item.strip()}
+def _structured_price_match(criteria: dict[str, object] | None, asking_price_cents: int) -> bool:
+    if criteria is None:
+        return False
+    minimum = criteria.get("min_price_cents")
+    maximum = criteria.get("max_price_cents")
+    if minimum is None and maximum is None:
+        return False
+    return bool(
+        (minimum is None or asking_price_cents >= int(minimum))
+        and (maximum is None or asking_price_cents <= int(maximum))
+    )
+
+
+def _structured_market_match(
+    criteria: dict[str, object] | None,
+    property_record: Property | None,
+) -> bool:
+    if criteria is None or property_record is None:
+        return False
+    included = criteria.get("geographies")
+    excluded = criteria.get("excluded_geographies")
+    if not isinstance(included, list) or not included:
+        return False
+    if isinstance(excluded, list):
+        for entry in excluded:
+            if not isinstance(entry, dict):
+                return False
+            if entry.get("jurisdiction") == "radius":
+                # Property coordinates are not canonical on the current House disposition record.
+                # Unknown exclusion evidence must force review instead of silently passing.
+                return False
+            if _geography_matches_property(entry, property_record):
+                return False
+    return any(
+        _geography_matches_property(entry, property_record)
+        for entry in included
+        if isinstance(entry, dict)
+    )
+
+
+def _geography_matches_property(entry: dict[object, object], property_record: Property) -> bool:
+    jurisdiction = str(entry.get("jurisdiction") or "").strip().lower()
+    value = _normalized_match_text(entry.get("value"))
+    state = _normalized_match_text(entry.get("state"))
+    property_state = _normalized_match_text(property_record.state)
+    if jurisdiction == "state":
+        return bool(value and value == property_state)
+    if jurisdiction == "county":
+        if not state or state != property_state:
+            return False
+        return _normalized_county(value) == _normalized_county(property_record.county)
+    if jurisdiction == "city":
+        return bool(
+            state
+            and state == property_state
+            and value == _normalized_match_text(property_record.city)
+        )
+    if jurisdiction == "postal_code":
+        requested_zip = "".join(character for character in value if character.isdigit())[:5]
+        property_zip = "".join(
+            character for character in (property_record.postal_code or "") if character.isdigit()
+        )[:5]
+        return bool(requested_zip and requested_zip == property_zip)
+    # Radius entries remain review-required until canonical subject coordinates are available.
+    return False
+
+
+def _structured_house_type_match(
+    criteria: dict[str, object] | None,
+    property_record: Property | None,
+) -> bool:
+    if criteria is None or property_record is None:
+        return False
+    requested = criteria.get("property_types")
+    if not isinstance(requested, list) or not requested:
+        return False
+    subject_type = _normalized_key(property_record.property_type)
+    return bool(subject_type and subject_type in {_normalized_key(value) for value in requested})
+
+
+def _structured_strategy_match(criteria: dict[str, object] | None, strategy: str) -> bool:
+    if criteria is None:
+        return False
+    strategies = criteria.get("strategies")
+    if not isinstance(strategies, list) or not strategies:
+        return True
+    normalized_strategy = {
+        "assignment": "wholesale_assignment",
+        "double_close": "double_close",
+        "novation": "novation",
+    }.get(_normalized_key(strategy), _normalized_key(strategy))
+    return normalized_strategy in {_normalized_key(value) for value in strategies}
+
+
+def _normalized_key(value: object) -> str:
+    return "_".join(str(value or "").strip().lower().replace("-", " ").split())
+
+
+def _normalized_match_text(value: object) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _normalized_county(value: object) -> str:
+    normalized = _normalized_match_text(value)
+    return normalized.removesuffix(" county").strip()

@@ -269,7 +269,7 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(buyerPage, /initialBuyerId=\{params\?\.buyer\}/);
   assert.match(
     buyerWorkspace,
-    /window\.history\.replaceState\(null, "", locationFor\(/,
+    /router\.replace\(locationFor\(/,
   );
   assert.match(buyerWorkspace, /styles\.detailOpen/);
   assert.match(leadRecord, /RecordTimeline/);

@@ -2675,6 +2675,129 @@ export type LeadDetail = LeadListItem & {
   };
 };
 
+export type BuyerAssetFocus = "house" | "land" | "both";
+
+export type BuyerBuyBoxAsset = "house" | "land";
+
+export type BuyerBuyBoxGeography = {
+  jurisdiction: "state" | "county" | "city" | "postal_code" | "radius";
+  value: string;
+  state: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  radius_miles: number | null;
+};
+
+export type BuyerPurchaseCapacity = {
+  available_capital_cents: number | null;
+  max_concurrent_purchases: number | null;
+  target_purchases_per_month: number | null;
+};
+
+export type BuyerBuyBoxCriteriaBase = {
+  asset_class: BuyerBuyBoxAsset;
+  geographies: BuyerBuyBoxGeography[];
+  excluded_geographies: BuyerBuyBoxGeography[];
+  strategies: string[];
+  exclusions: string[];
+  min_price_cents: number | null;
+  max_price_cents: number | null;
+  funding_methods: string[];
+  capacity: BuyerPurchaseCapacity;
+};
+
+export type HouseBuyerBuyBoxCriteria = BuyerBuyBoxCriteriaBase & {
+  asset_class: "house";
+  property_types: string[];
+  rehab_tolerance: string[];
+  occupancy_preferences: string[];
+  min_bedrooms: number | null;
+  max_bedrooms: number | null;
+  min_bathrooms: number | null;
+  max_bathrooms: number | null;
+  min_living_area_sqft: number | null;
+  max_living_area_sqft: number | null;
+  min_year_built: number | null;
+  max_year_built: number | null;
+};
+
+export type LandBuyerBuyBoxCriteria = BuyerBuyBoxCriteriaBase & {
+  asset_class: "land";
+  min_acres: number | null;
+  max_acres: number | null;
+  intended_uses: string[];
+  zoning_codes: string[];
+  access_preferences: string[];
+  utility_preferences: string[];
+  terrain_preferences: string[];
+  flood_zone_tolerance: "avoid" | "review" | "accepted";
+  wetlands_tolerance: "avoid" | "review" | "accepted";
+};
+
+export type BuyerBuyBoxCriteria = HouseBuyerBuyBoxCriteria | LandBuyerBuyBoxCriteria;
+
+export type BuyerBuyBoxVersion = {
+  id: string;
+  buy_box_id: string;
+  asset_class: BuyerBuyBoxAsset;
+  version_number: number;
+  is_current: boolean;
+  verification_status: string;
+  source: string;
+  change_reason: string | null;
+  criteria: BuyerBuyBoxCriteria;
+  created_by_user_id: string | null;
+  verified_by_user_id: string | null;
+  verified_at: string | null;
+  effective_at: string;
+  superseded_at: string | null;
+  created_at: string;
+};
+
+export type BuyerBuyBoxSummary = {
+  buy_box_id: string;
+  asset_class: BuyerBuyBoxAsset;
+  current_version: number;
+  verification_status: string;
+  verified_at: string | null;
+  updated_at: string;
+  criteria: BuyerBuyBoxCriteria;
+};
+
+export type BuyerTimelineItem = {
+  id: string;
+  category: string;
+  event_type: string;
+  occurred_at: string;
+  status: string | null;
+  summary: string;
+  body: string | null;
+  direction: string | null;
+  channel: string | null;
+  disposition_case_id: string | null;
+};
+
+export type BuyerProofDocument = {
+  id: string;
+  buyer_id: string;
+  status: string;
+  institution_name: string | null;
+  verified_amount_cents: number | null;
+  expires_at: string | null;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  malware_scan_status: string;
+  storage_provider: string;
+  retention_until: string | null;
+  verified_by_user_id: string | null;
+  verified_at: string | null;
+  verification_source: string | null;
+  notes: string | null;
+  content_url: string;
+  created_at: string;
+};
+
 export type BuyerListItem = {
   id: string;
   name: string;
@@ -2693,6 +2816,16 @@ export type BuyerListItem = {
   created_by_email: string | null;
   relationship_owner_user_id: string | null;
   relationship_owner_name: string | null;
+  relationship_status: string;
+  tier: string;
+  temperature: string;
+  tags: string[];
+  asset_focus: BuyerAssetFocus | null;
+  last_contact_at: string | null;
+  next_follow_up_at: string | null;
+  verification_status: string;
+  verified_by_user_id: string | null;
+  verified_at: string | null;
   last_verified_at: string | null;
   archived_at: string | null;
   archived_by_user_id: string | null;
@@ -2716,8 +2849,26 @@ export type BuyerListItem = {
     rehab_levels: string | null;
     notes: string | null;
   } | null;
+  buy_boxes: BuyerBuyBoxSummary[];
   created_at: string;
   updated_at: string;
+};
+
+export type BuyerProfile = {
+  buyer: BuyerListItem;
+  asset_focus: BuyerAssetFocus | null;
+  legacy_criteria: {
+    verification_status: "unverified";
+    criteria: NonNullable<BuyerListItem["criteria"]>;
+  } | null;
+  criteria_versions: BuyerBuyBoxVersion[];
+  timeline: {
+    items: BuyerTimelineItem[];
+    total: number;
+    limit: number;
+    offset: number;
+    has_more: boolean;
+  };
 };
 
 export type BuyerPermissionEvidence = {
@@ -2758,6 +2909,7 @@ export type BuyerDuplicatePreflight = {
 };
 
 export type BuyerQuery = {
+  assetClass?: BuyerAssetFocus | "";
   q?: string;
   page?: number;
   pageSize?: number;
@@ -5689,6 +5841,7 @@ export async function getBuyers(query: BuyerQuery = {}): Promise<BuyerPage> {
     offset: String((page - 1) * pageSize),
   });
   if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.assetClass?.trim()) params.set("asset_class", query.assetClass.trim());
   if (query.status?.trim()) params.set("status", query.status.trim());
   if (query.ownerUserId?.trim()) {
     params.set("owner_id", query.ownerUserId.trim());
@@ -5745,6 +5898,31 @@ export async function getBuyer(buyerId: string): Promise<BuyerListItem | null> {
   } catch (error) {
     console.error("Stonegate buyer detail request failed.", error);
     return null;
+  }
+}
+
+export async function getBuyerProfile(buyerId: string): Promise<{
+  profile: BuyerProfile | null;
+  errorMessage: string | null;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/buyers/${encodeURIComponent(buyerId)}/profile`,
+      { headers: await getServerApiHeaders(), cache: "no-store" },
+    );
+    if (!response.ok) throw await apiError(response);
+    return {
+      profile: (await response.json()) as BuyerProfile,
+      errorMessage: null,
+    };
+  } catch (error) {
+    console.error("Stonegate buyer profile request failed.", error);
+    return {
+      profile: null,
+      errorMessage:
+        error instanceof Error ? error.message : "Buyer history is temporarily unavailable.",
+    };
   }
 }
 

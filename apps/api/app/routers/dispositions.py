@@ -27,6 +27,7 @@ from app.schemas.dispositions import (
     EngagementCreate,
     OfferCreate,
     ProofDocumentRead,
+    ProofVerificationRequest,
     ReconciliationDecision,
 )
 from app.services import disposition_desk, dispositions
@@ -39,7 +40,8 @@ from app.services.disposition_copilot import (
 router = APIRouter(prefix="/api/v1/dispositions", tags=["dispositions"])
 view_dependency = require_permission(PermissionKeys.VIEW_DEALS)
 edit_dependency = require_permission(PermissionKeys.EDIT_DEALS)
-buyer_edit_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
+buyer_proof_view_dependency = require_permission(PermissionKeys.VIEW_BUYER_PROOF)
+buyer_proof_manage_dependency = require_permission(PermissionKeys.MANAGE_BUYER_PROOF)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -269,7 +271,7 @@ async def upload_buyer_proof(
     buyer_id: UUID,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(buyer_edit_dependency)],
+    principal: Annotated[Principal, Depends(buyer_proof_manage_dependency)],
     file_name: Annotated[str, Query(min_length=1, max_length=255)],
     content_type: Annotated[str, Query(min_length=1, max_length=120)],
     institution_name: Annotated[str | None, Query(max_length=255)] = None,
@@ -292,11 +294,39 @@ async def upload_buyer_proof(
         raise invalid(exc) from exc
 
 
+@router.get("/buyers/{buyer_id}/proof")
+def list_buyer_proof(
+    buyer_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(buyer_proof_view_dependency)],
+) -> list[ProofDocumentRead]:
+    result = dispositions.list_proof(db, principal, buyer_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    return result
+
+
+@router.post("/proof-documents/{document_id}/verification")
+def review_buyer_proof(
+    document_id: UUID,
+    payload: ProofVerificationRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(buyer_proof_manage_dependency)],
+) -> ProofDocumentRead:
+    try:
+        result = dispositions.review_proof(db, principal, document_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Proof-of-funds document not found.")
+    return result
+
+
 @router.get("/proof-documents/{document_id}/content")
 def download_buyer_proof(
     document_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(view_dependency)],
+    principal: Annotated[Principal, Depends(buyer_proof_view_dependency)],
 ) -> Response:
     result = dispositions.get_proof_content(db, principal, document_id)
     if result is None:

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DispositionCaseCreate(BaseModel):
@@ -27,8 +27,29 @@ class ProofDocumentRead(BaseModel):
     storage_provider: str
     malware_scan_status: str
     retention_until: datetime | None
+    verified_by_user_id: UUID | None
+    verified_at: datetime | None
+    verification_source: str | None
+    notes: str | None
     content_url: str
     created_at: datetime
+
+
+class ProofVerificationRequest(BaseModel):
+    decision: Literal["verified", "rejected"]
+    verification_source: str = Field(min_length=2, max_length=120)
+    institution_name: str | None = Field(default=None, max_length=255)
+    verified_amount_cents: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+    notes: str = Field(min_length=2, max_length=1000)
+
+    @field_validator("verification_source", "notes")
+    @classmethod
+    def require_meaningful_review_evidence(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 2:
+            raise ValueError("Proof review evidence must contain at least 2 characters.")
+        return normalized
 
 
 class MatchRead(BaseModel):

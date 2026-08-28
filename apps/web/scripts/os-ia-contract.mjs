@@ -785,6 +785,8 @@ export const permissionInventory = [
   "marketing:manage_experiments",
   "buyers:view",
   "buyers:edit",
+  "buyers:view_proof",
+  "buyers:manage_proof",
   "deals:view",
   "deals:edit",
   "operations:view",

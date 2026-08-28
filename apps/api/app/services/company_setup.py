@@ -11,6 +11,7 @@ from app.models.foundation import (
     AuditEvent,
     BusinessCounterparty,
     Buyer,
+    BuyerProofDocument,
     CloserDispatchProfile,
     CompensationPlanVersion,
     LeadQualificationScriptVersion,
@@ -528,12 +529,26 @@ def _setup_checks(
         ).intersection(OWNER_ROLE_KEYS)
     }
     role_acceptance_ready = covered_non_owner_ids.issubset(approved_user_ids)
-    buyers_ready = _count(
-        db,
-        Buyer,
-        Buyer.organization_id == organization_id,
-        Buyer.status == "active",
-        Buyer.proof_of_funds_status.in_({"received", "verified"}),
+    buyers_ready = int(
+        db.scalar(
+            select(func.count(func.distinct(BuyerProofDocument.buyer_id)))
+            .join(Buyer, Buyer.id == BuyerProofDocument.buyer_id)
+            .where(
+                BuyerProofDocument.organization_id == organization_id,
+                BuyerProofDocument.status == "verified",
+                BuyerProofDocument.verified_by_user_id.is_not(None),
+                BuyerProofDocument.verified_at.is_not(None),
+                BuyerProofDocument.verified_amount_cents > 0,
+                BuyerProofDocument.expires_at.is_not(None),
+                BuyerProofDocument.expires_at > datetime.now(UTC),
+                BuyerProofDocument.deleted_at.is_(None),
+                BuyerProofDocument.malware_scan_status.in_({"clean", "not_configured"}),
+                Buyer.organization_id == organization_id,
+                Buyer.status == "active",
+                Buyer.archived_at.is_(None),
+            )
+        )
+        or 0
     )
     checks = [
         _check(

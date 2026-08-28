@@ -3479,7 +3479,6 @@ def test_record_lead_buyer_offer_creates_offer_and_audit(
             "email": "buyer@example.com",
             "buyer_type": "cash_buyer",
             "status": "active",
-            "proof_of_funds_status": "received",
             "max_purchase_price_cents": 24000000,
         },
     )

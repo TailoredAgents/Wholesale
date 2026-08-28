@@ -1,6 +1,8 @@
+from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -10,6 +12,15 @@ from app.main import app
 from app.models.foundation import Buyer, BuyerDiscoveryCandidate, BuyerDiscoveryRun
 from app.services import buyer_discovery
 from tests.test_dispositions import HEADERS, setup_case_foundation
+
+
+@pytest.fixture(autouse=True)
+def reset_settings_cache() -> Iterator[None]:
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        get_settings.cache_clear()
 
 
 class FakeDealMachineClient:
@@ -231,8 +242,9 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         headers=HEADERS,
     ).json()["matches"]
     imported_match = next(item for item in matches if item["buyer_id"] == imported_buyer_id)
-    assert imported_match["score_components"]["property_type"] == 1000
+    assert imported_match["score_components"]["property_type"] == 0
     assert imported_match["qualification_status"] == "review_required"
+    assert imported_match["recipient_status"] == "excluded"
 
     second_run = client.post(
         "/api/v1/buyers/discovery-runs",

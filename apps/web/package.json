@@ -23,6 +23,7 @@
     "audit:land-acquisition": "node --test scripts/land-acquisition-experience-contract.test.mjs",
     "audit:acquisitions-performance": "node --test scripts/acquisitions-performance-contract.test.mjs",
     "audit:buyer-network": "node --test scripts/buyer-network-contract.test.mjs",
+    "audit:buyer-profile": "node --test scripts/buyer-profile-contract.test.mjs",
     "audit:disposition-desk": "node --test scripts/disposition-desk-contract.test.mjs",
     "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:prospecting-pilot": "node --test scripts/prospecting-pilot-acceptance-contract.test.mjs",

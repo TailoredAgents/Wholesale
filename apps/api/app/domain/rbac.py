@@ -48,6 +48,8 @@ class PermissionKeys:
     MANAGE_MARKETING_EXPERIMENTS = "marketing:manage_experiments"
     VIEW_BUYERS = "buyers:view"
     EDIT_BUYERS = "buyers:edit"
+    VIEW_BUYER_PROOF = "buyers:view_proof"
+    MANAGE_BUYER_PROOF = "buyers:manage_proof"
     VIEW_DEALS = "deals:view"
     EDIT_DEALS = "deals:edit"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
@@ -261,6 +263,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     ),
     PermissionDefinition(PermissionKeys.VIEW_BUYERS, "View buyers", "View buyer records."),
     PermissionDefinition(PermissionKeys.EDIT_BUYERS, "Edit buyers", "Create and update buyers."),
+    PermissionDefinition(
+        PermissionKeys.VIEW_BUYER_PROOF,
+        "View buyer proof of funds",
+        "View and download restricted buyer proof-of-funds evidence.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_BUYER_PROOF,
+        "Manage buyer proof of funds",
+        "Upload, verify, reject, and maintain buyer proof-of-funds evidence.",
+    ),
     PermissionDefinition(PermissionKeys.VIEW_DEALS, "View deals", "View deal records."),
     PermissionDefinition(PermissionKeys.EDIT_DEALS, "Edit deals", "Create and update deals."),
     PermissionDefinition(
@@ -304,6 +316,8 @@ DISPOSITION_KEYS = (
     PermissionKeys.EDIT_DEALS,
     PermissionKeys.VIEW_BUYERS,
     PermissionKeys.EDIT_BUYERS,
+    PermissionKeys.VIEW_BUYER_PROOF,
+    PermissionKeys.MANAGE_BUYER_PROOF,
     PermissionKeys.VIEW_CONVERSATIONS,
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_EMAIL,

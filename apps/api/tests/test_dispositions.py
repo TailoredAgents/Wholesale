@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    AuditEvent,
     Buyer,
+    BuyerProofDocument,
     CompensationPlanRole,
     CompensationPlanVersion,
     DealDeduction,
@@ -21,6 +23,8 @@ from app.models.foundation import (
     DispositionOperatingMode,
     Lead,
     RevenueRecord,
+    Role,
+    RoleAssignment,
     RoleCredit,
     Transaction,
     User,
@@ -29,6 +33,109 @@ from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
 HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
+
+
+def put_verified_buy_box(
+    client: TestClient,
+    buyer_id: str,
+    *,
+    asset_class: str = "house",
+) -> dict[str, Any]:
+    if asset_class == "house":
+        criteria: dict[str, Any] = {
+            "asset_class": "house",
+            "geographies": [
+                {"jurisdiction": "city", "value": "Atlanta", "state": "GA"}
+            ],
+            "strategies": ["wholesale_assignment"],
+            "min_price_cents": 10000000,
+            "max_price_cents": 30000000,
+            "funding_methods": ["cash"],
+            "property_types": ["single_family"],
+        }
+    else:
+        criteria = {
+            "asset_class": "land",
+            "geographies": [
+                {"jurisdiction": "city", "value": "Atlanta", "state": "GA"}
+            ],
+            "strategies": ["land_hold"],
+            "min_price_cents": 1000000,
+            "max_price_cents": 30000000,
+            "funding_methods": ["cash"],
+            "min_acres": 1,
+            "max_acres": 20,
+            "intended_uses": ["hold"],
+        }
+    response = client.put(
+        f"/api/v1/buyers/{buyer_id}/buy-boxes/{asset_class}",
+        headers=HEADERS,
+        json={
+            "expected_version": 0,
+            "source": "buyer_interview",
+            "change_reason": f"Confirmed {asset_class} criteria for disposition testing.",
+            "verification_status": "verified",
+            "criteria": criteria,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def upload_received_proof(
+    client: TestClient,
+    buyer_id: str,
+    *,
+    amount_cents: int = 40000000,
+    expires_at: datetime | None = None,
+) -> dict[str, Any]:
+    response = client.post(
+        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "file_name": "proof.pdf",
+            "content_type": "application/pdf",
+            "institution_name": "Example Bank",
+            "verified_amount_cents": amount_cents,
+            "expires_at": (
+                expires_at or datetime.now(UTC) + timedelta(days=90)
+            ).isoformat(),
+        },
+        content=b"%PDF proof of funds awaiting human verification",
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "received"
+    assert response.json()["verified_by_user_id"] is None
+    assert response.json()["verified_at"] is None
+    return response.json()
+
+
+def verify_proof(
+    client: TestClient,
+    proof_id: str,
+    *,
+    amount_cents: int = 40000000,
+    expires_at: datetime | None = None,
+) -> dict[str, Any]:
+    response = client.post(
+        f"/api/v1/dispositions/proof-documents/{proof_id}/verification",
+        headers=HEADERS,
+        json={
+            "decision": "verified",
+            "verification_source": "manual_document_review",
+            "institution_name": "Example Bank",
+            "verified_amount_cents": amount_cents,
+            "expires_at": (
+                expires_at or datetime.now(UTC) + timedelta(days=90)
+            ).isoformat(),
+            "notes": "Amount, institution, and expiration were reviewed by a human.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "verified"
+    assert response.json()["verified_by_user_id"] is not None
+    assert response.json()["verified_at"] is not None
+    return response.json()
 
 
 def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, str]:
@@ -200,28 +307,66 @@ def test_disposition_buyer_selection_and_reconciliation(
         == 422
     )
 
-    expires_at = (datetime.now(UTC) + timedelta(days=90)).isoformat()
-    proof = client.post(
-        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
-        headers={**HEADERS, "Content-Type": "application/pdf"},
-        params={
-            "file_name": "proof.pdf",
-            "content_type": "application/pdf",
-            "institution_name": "Example Bank",
-            "verified_amount_cents": 40000000,
-            "expires_at": expires_at,
-        },
-        content=b"%PDF verified proof of funds",
-    )
-    assert proof.status_code == 201, proof.text
-    assert proof.json()["storage_provider"] == "database"
-    assert proof.json()["malware_scan_status"] == "not_configured"
-    proof_content = client.get(proof.json()["content_url"], headers=HEADERS)
+    proof = upload_received_proof(client, buyer_id)
+    assert proof["storage_provider"] == "database"
+    assert proof["malware_scan_status"] == "not_configured"
+    proof_content = client.get(proof["content_url"], headers=HEADERS)
     assert proof_content.status_code == 200
-    assert proof_content.content == b"%PDF verified proof of funds"
+    assert proof_content.content == b"%PDF proof of funds awaiting human verification"
+    download_audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "buyer.proof_download",
+            AuditEvent.entity_id == UUID(proof["id"]),
+        )
+    )
+    assert download_audit is not None
+
+    # Uploading a document does not verify it, and the legacy free-text criteria are
+    # deliberately excluded from authoritative House matching.
     matched = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
+    assert matched.status_code == 200, matched.text
+    assert matched.json()["matches"][0]["qualification_status"] == "review_required"
+
+    verified_proof = verify_proof(client, proof["id"])
+    assert verified_proof["verified_amount_cents"] == 40000000
+    legacy_only = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS
+    )
+    assert legacy_only.status_code == 200, legacy_only.text
+    assert legacy_only.json()["matches"][0]["qualification_status"] == "review_required"
+    legacy_match = db_session.scalar(
+        select(DispositionMatch).where(
+            DispositionMatch.disposition_case_id == UUID(case_id),
+            DispositionMatch.buyer_id == UUID(buyer_id),
+        )
+    )
+    assert legacy_match is not None
+    assert legacy_match.buy_box_version_id is None
+    assert legacy_match.criteria_snapshot["legacy_criteria_excluded"] is True
+
+    # A verified Land buy box remains isolated from a House disposition case.
+    put_verified_buy_box(client, buyer_id, asset_class="land")
+    land_only = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS
+    )
+    assert land_only.status_code == 200, land_only.text
+    assert land_only.json()["matches"][0]["qualification_status"] == "review_required"
+
+    house_box = put_verified_buy_box(client, buyer_id, asset_class="house")
+    matched = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
+    assert matched.status_code == 200, matched.text
     assert matched.json()["matches"][0]["qualification_status"] == "qualified"
-    assert matched.json()["matches"][0]["score_basis_points"] == 9250
+    assert matched.json()["matches"][0]["score_basis_points"] == 8500
+    stored_match = db_session.scalar(
+        select(DispositionMatch).where(
+            DispositionMatch.disposition_case_id == UUID(case_id),
+            DispositionMatch.buyer_id == UUID(buyer_id),
+        )
+    )
+    assert stored_match is not None
+    assert str(stored_match.buy_box_version_id) == house_box["id"]
+    assert stored_match.matcher_version == "house_buy_box_v1"
+    assert stored_match.criteria_snapshot["criteria"]["asset_class"] == "house"
     assert (
         client.post(
             f"/api/v1/dispositions/cases/{case_id}/campaigns/release", headers=HEADERS
@@ -237,7 +382,7 @@ def test_disposition_buyer_selection_and_reconciliation(
             "amount_cents": 19000000,
             "earnest_money_cents": 500000,
             "financing_type": "cash",
-            "proof_document_id": proof.json()["id"],
+            "proof_document_id": proof["id"],
         },
     )
     assert offer.status_code == 200, offer.text
@@ -319,11 +464,22 @@ def test_buyer_selection_requires_current_proof_of_funds(
             "minimum_acceptable_cents": 18000000,
         },
     ).json()
+    proof = upload_received_proof(client, buyer_id)
+    verify_proof(client, proof["id"])
     offer = client.post(
         f"/api/v1/dispositions/cases/{case['id']}/offers",
         headers=HEADERS,
-        json={"buyer_id": buyer_id, "amount_cents": 19000000},
+        json={
+            "buyer_id": buyer_id,
+            "amount_cents": 19000000,
+            "proof_document_id": proof["id"],
+        },
     )
+    assert offer.status_code == 200, offer.text
+    proof_row = db_session.get(BuyerProofDocument, UUID(proof["id"]))
+    assert proof_row is not None
+    proof_row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
     response = client.post(
         f"/api/v1/dispositions/cases/{case['id']}/buyer-selection",
         headers=HEADERS,
@@ -336,18 +492,368 @@ def test_buyer_selection_requires_current_proof_of_funds(
     assert "proof-of-funds" in response.json()["detail"]
 
 
+def test_proof_upload_requires_explicit_complete_human_verification(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, _, buyer_id = setup_case_foundation(db_session, client)
+    uploaded = client.post(
+        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "file_name": "unreviewed-proof.pdf",
+            "content_type": "application/pdf",
+        },
+        content=b"%PDF unreviewed proof evidence",
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    document = uploaded.json()
+    assert document["status"] == "received"
+    assert document["verified_amount_cents"] is None
+    assert document["expires_at"] is None
+
+    missing_amount = client.post(
+        f"/api/v1/dispositions/proof-documents/{document['id']}/verification",
+        headers=HEADERS,
+        json={
+            "decision": "verified",
+            "verification_source": "manual_document_review",
+            "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+            "notes": "Controlled review missing the verified amount.",
+        },
+    )
+    assert missing_amount.status_code == 422
+    assert "amount" in missing_amount.json()["detail"].lower()
+
+    expired = client.post(
+        f"/api/v1/dispositions/proof-documents/{document['id']}/verification",
+        headers=HEADERS,
+        json={
+            "decision": "verified",
+            "verification_source": "manual_document_review",
+            "verified_amount_cents": 40000000,
+            "expires_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "notes": "Controlled review with stale evidence.",
+        },
+    )
+    assert expired.status_code == 422
+    assert "future expiration" in expired.json()["detail"].lower()
+
+    for invalid_field in ("verification_source", "notes"):
+        review_payload = {
+            "decision": "verified",
+            "verification_source": "manual_document_review",
+            "verified_amount_cents": 40000000,
+            "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+            "notes": "Controlled complete human review.",
+        }
+        review_payload[invalid_field] = "  "
+        whitespace_only = client.post(
+            f"/api/v1/dispositions/proof-documents/{document['id']}/verification",
+            headers=HEADERS,
+            json=review_payload,
+        )
+        assert whitespace_only.status_code == 422
+
+    verified = verify_proof(client, document["id"])
+    assert verified["verification_source"] == "manual_document_review"
+
+
+def test_proof_renewal_keeps_current_verified_document_attached_to_match(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/approve",
+        headers=HEADERS,
+    )
+    assert approved.status_code == 200, approved.text
+    put_verified_buy_box(client, buyer_id)
+
+    current = upload_received_proof(client, buyer_id)
+    verify_proof(client, current["id"])
+    renewal = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=datetime.now(UTC) + timedelta(days=180),
+    )
+
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    match = matched.json()["matches"][0]
+    assert match["qualification_status"] == "qualified"
+    assert match["proof_status"] == "verified"
+    assert match["latest_proof_document_id"] == current["id"]
+    assert match["latest_proof_document_id"] != renewal["id"]
+
+    offer = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offers",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "amount_cents": 19000000,
+            "financing_type": "cash",
+            "proof_document_id": match["latest_proof_document_id"],
+        },
+    )
+    assert offer.status_code == 200, offer.text
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-selection",
+        headers=HEADERS,
+        json={
+            "primary_offer_id": offer.json()["offers"][0]["id"],
+            "reason": "Current verified proof remains attached during renewal review.",
+        },
+    )
+    assert selected.status_code == 200, selected.text
+
+
+def test_disposition_copilot_prefers_current_proof_over_stale_renewal_evidence(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    assert (
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/package/approve",
+            headers=HEADERS,
+        ).status_code
+        == 200
+    )
+    put_verified_buy_box(client, buyer_id)
+    now = datetime.now(UTC)
+    current = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=90),
+    )
+    verify_proof(
+        client,
+        current["id"],
+        expires_at=now + timedelta(days=90),
+    )
+    stale = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=180),
+    )
+    verify_proof(
+        client,
+        stale["id"],
+        expires_at=now + timedelta(days=180),
+    )
+    stale_row = db_session.get(BuyerProofDocument, UUID(stale["id"]))
+    assert stale_row is not None
+    stale_row.expires_at = now - timedelta(days=1)
+    stale_row.verified_at = now + timedelta(minutes=1)
+    db_session.commit()
+    upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=365),
+    )
+
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    assert matched.json()["matches"][0]["qualification_status"] == "qualified"
+    overview = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=HEADERS,
+    )
+
+    assert overview.status_code == 200, overview.text
+    payload = overview.json()
+    assert payload["verified_buyer_count"] == 1
+    assert all(
+        risk["reason"] != "Proof of funds is expired."
+        for risk in payload["risk_alerts"]
+    )
+
+
+def test_campaign_release_rechecks_expired_proof_after_match(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/approve",
+        headers=HEADERS,
+    )
+    assert approved.status_code == 200, approved.text
+    put_verified_buy_box(client, buyer_id)
+    proof = upload_received_proof(client, buyer_id)
+    verify_proof(client, proof["id"])
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    assert matched.json()["matches"][0]["qualification_status"] == "qualified"
+
+    proof_row = db_session.get(BuyerProofDocument, UUID(proof["id"]))
+    assert proof_row is not None
+    proof_row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
+    released = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert released.status_code == 422, released.text
+    assert "currently active qualified buyers" in released.json()["detail"]
+    db_session.expire_all()
+    stored_match = db_session.scalar(
+        select(DispositionMatch).where(
+            DispositionMatch.disposition_case_id == UUID(case_id),
+            DispositionMatch.buyer_id == UUID(buyer_id),
+        )
+    )
+    assert stored_match is not None
+    assert stored_match.qualification_status == "ineligible"
+    assert stored_match.recipient_status == "excluded"
+
+
+def test_proof_document_is_tenant_scoped_permissioned_and_download_audited(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, _, buyer_id = setup_case_foundation(db_session, client)
+    proof = upload_received_proof(client, buyer_id)
+
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    read_only_role = db_session.scalar(
+        select(Role).where(
+            Role.organization_id == owner.organization_id,
+            Role.key == "read_only_partner",
+        )
+    )
+    assert read_only_role is not None
+    viewer = User(
+        organization_id=owner.organization_id,
+        email="proof-viewer@example.com",
+        display_name="Proof Viewer Without Permission",
+        external_auth_id=None,
+        is_active=True,
+        calling_enabled=False,
+    )
+    db_session.add(viewer)
+    db_session.flush()
+    db_session.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=viewer.id,
+            role_id=read_only_role.id,
+        )
+    )
+    db_session.commit()
+    viewer_headers = {"X-Dev-User-Email": viewer.email}
+    assert client.get(proof["content_url"], headers=viewer_headers).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/dispositions/proof-documents/{proof['id']}/verification",
+            headers=viewer_headers,
+            json={
+                "decision": "rejected",
+                "verification_source": "manual_document_review",
+                "notes": "Viewer must not be able to decide restricted evidence.",
+            },
+        ).status_code
+        == 403
+    )
+
+    other = bootstrap_foundation(
+        db_session,
+        organization_name="Other Buyer Organization",
+        admin_email="other-proof-owner@example.com",
+        admin_name="Other Owner",
+    )
+    other_headers = {"X-Dev-User-Email": other.admin_user.email}
+    assert client.get(proof["content_url"], headers=other_headers).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/dispositions/proof-documents/{proof['id']}/verification",
+            headers=other_headers,
+            json={
+                "decision": "rejected",
+                "verification_source": "manual_document_review",
+                "notes": "Cross-tenant access must not reveal document existence.",
+            },
+        ).status_code
+        == 404
+    )
+
+    downloaded = client.get(proof["content_url"], headers=HEADERS)
+    assert downloaded.status_code == 200
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "buyer.proof_download",
+            AuditEvent.entity_id == UUID(proof["id"]),
+            AuditEvent.actor_user_id == owner.id,
+        )
+    )
+    assert audit_event is not None
+
+
 @pytest.mark.parametrize(
-    ("buyer_status", "archived"),
+    ("buyer_status", "relationship_status", "archived"),
     [
-        ("paused", False),
-        ("do_not_contact", False),
-        ("archived", True),
+        ("paused", "active", False),
+        ("do_not_contact", "active", False),
+        ("active", "do_not_contact", False),
+        ("archived", "active", True),
     ],
 )
 def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
     db_session: Session,
     api_db_override: None,
     buyer_status: str,
+    relationship_status: str,
     archived: bool,
 ) -> None:
     client = TestClient(app)
@@ -370,19 +876,9 @@ def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
         ).status_code
         == 200
     )
-    proof = client.post(
-        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
-        headers={**HEADERS, "Content-Type": "application/pdf"},
-        params={
-            "file_name": "proof.pdf",
-            "content_type": "application/pdf",
-            "institution_name": "Example Bank",
-            "verified_amount_cents": 40000000,
-            "expires_at": (datetime.now(UTC) + timedelta(days=90)).isoformat(),
-        },
-        content=b"%PDF verified proof of funds",
-    )
-    assert proof.status_code == 201, proof.text
+    put_verified_buy_box(client, buyer_id)
+    proof = upload_received_proof(client, buyer_id)
+    verify_proof(client, proof["id"])
     matched = client.post(
         f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
@@ -393,6 +889,7 @@ def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
     buyer = db_session.get(Buyer, UUID(buyer_id))
     assert buyer is not None
     buyer.status = buyer_status
+    buyer.relationship_status = relationship_status
     buyer.archived_at = datetime.now(UTC) if archived else None
     db_session.commit()
 
@@ -454,28 +951,14 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         ).status_code
         == 200
     )
-    proof = client.post(
-        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
-        headers={**HEADERS, "Content-Type": "application/pdf"},
-        params={
-            "file_name": "proof.pdf",
-            "content_type": "application/pdf",
-            "institution_name": "Example Bank",
-            "verified_amount_cents": 40000000,
-            "expires_at": (datetime.now(UTC) + timedelta(days=90)).isoformat(),
-        },
-        content=b"%PDF verified proof of funds",
-    )
-    assert proof.status_code == 201
+    put_verified_buy_box(client, buyer_id)
+    proof = upload_received_proof(client, buyer_id)
+    verify_proof(client, proof["id"])
     matched = client.post(
         f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
     )
     assert matched.status_code == 200
-    buyer = db_session.get(Buyer, UUID(buyer_id))
-    assert buyer is not None
-    buyer.proof_of_funds_status = "verified"
-    db_session.commit()
     copilot_overview = client.get(
         f"/api/v1/dispositions/cases/{case_id}/copilot",
         headers=HEADERS,
@@ -490,7 +973,7 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
             "amount_cents": 19000000,
             "earnest_money_cents": 500000,
             "financing_type": "cash",
-            "proof_document_id": proof.json()["id"],
+            "proof_document_id": proof["id"],
         },
     )
     assert offer.status_code == 200

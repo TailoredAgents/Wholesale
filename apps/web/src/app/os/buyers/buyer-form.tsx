@@ -35,23 +35,6 @@ function optionalString(formData: FormData, key: string) {
   return formString(formData, key) || null;
 }
 
-function optionalCents(formData: FormData, key: string, label: string) {
-  const rawValue = formString(formData, key);
-  if (!rawValue) return { error: null, value: null };
-  if (!/^\$?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(rawValue)) {
-    return {
-      error: `${label} must be a non-negative dollar amount, such as 250000 or 250,000.00.`,
-      value: null,
-    };
-  }
-  const amount = Number(rawValue.replace(/[$,]/g, ""));
-  return { error: null, value: Math.round(amount * 100) };
-}
-
-function moneyInput(cents: number | null | undefined) {
-  return cents === null || cents === undefined ? "" : String(cents / 100);
-}
-
 function dateTimeInput(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
@@ -138,14 +121,6 @@ export function BuyerForm({
       setError("Enter a phone number before recording call or text permission as granted.");
       return null;
     }
-    const maxPurchasePrice = optionalCents(data, "max_purchase_price", "Max purchase");
-    const minPrice = optionalCents(data, "min_price", "Min price");
-    const maxPrice = optionalCents(data, "max_price", "Max price");
-    const invalidMoney = [maxPurchasePrice, minPrice, maxPrice].find((result) => result.error);
-    if (invalidMoney?.error) {
-      setError(invalidMoney.error);
-      return null;
-    }
     const payload: BuyerPayload = {
       name,
       company_name: optionalString(data, "company_name"),
@@ -157,19 +132,14 @@ export function BuyerForm({
       source_detail: optionalString(data, "source_detail"),
       source_external_key: optionalString(data, "source_external_key"),
       relationship_owner_user_id: optionalString(data, "relationship_owner_user_id"),
+      relationship_status: formString(data, "relationship_status") || "new",
+      tier: formString(data, "tier") || "unclassified",
+      temperature: formString(data, "temperature") || "unknown",
+      tags: formString(data, "tags").split(",").map((tag) => tag.trim()).filter(Boolean),
+      next_follow_up_at: optionalDateTimeIso(data, "next_follow_up_at"),
       last_verified_at: optionalDateTimeIso(data, "last_verified_at"),
-      proof_of_funds_status: formString(data, "proof_of_funds_status"),
-      max_purchase_price_cents: maxPurchasePrice.value,
       notes: optionalString(data, "notes"),
       permission_evidence_source: formString(data, "permission_evidence_source") || "buyer_crm_manual",
-      criteria: {
-        markets: optionalString(data, "markets"),
-        property_types: optionalString(data, "property_types"),
-        min_price_cents: minPrice.value,
-        max_price_cents: maxPrice.value,
-        rehab_levels: optionalString(data, "rehab_levels"),
-        notes: optionalString(data, "criteria_notes"),
-      },
     };
     if (!buyer || phonePermission !== "preserve") {
       payload.phone_contact_permission = phonePermission === "grant";
@@ -256,7 +226,7 @@ export function BuyerForm({
     <form className={formStyles.buyerForm} onSubmit={handleSubmit}>
       <div className={styles.formIntro}>
         <strong>{buyer ? "Update the relationship record" : "Start in Needs review"}</strong>
-        <p>{buyer ? "Changes are audited." : "Confirm contact details and the buy box before making this buyer Active."}</p>
+        <p>{buyer ? "Identity and relationship changes are audited." : "Add the relationship first, then verify each House or Land buy box before matching."}</p>
       </div>
       <label><span>Buyer name</span><input defaultValue={buyer?.name} name="name" maxLength={255} placeholder="Jordan Smith" required /></label>
       <label><span>Company</span><input defaultValue={buyer?.company_name ?? ""} name="company_name" maxLength={255} placeholder="Smith Investments" /></label>
@@ -265,7 +235,7 @@ export function BuyerForm({
         <label><span>Phone</span><input autoComplete="tel" defaultValue={buyer?.phone ?? ""} inputMode="tel" name="phone" maxLength={80} placeholder="404-555-0101" /></label>
       </div>
       <p className={styles.fieldHint}>A phone number or email address is required.</p>
-      <fieldset>
+      <fieldset className={styles.permissionFields}>
         <legend>Contact permission</legend>
         <label><span>Phone calls</span><select defaultValue={buyer ? "preserve" : "not_recorded"} name="phone_permission_action">{buyer ? <option value="preserve">Keep current: {labelize(buyer.phone_permission.status)}</option> : <option value="not_recorded">Not recorded</option>}<option value="grant">Record permission granted</option>{buyer ? <option value="revoke">Record permission not granted</option> : null}</select></label>
         <label><span>Text messages</span><select defaultValue={buyer ? "preserve" : "not_recorded"} name="sms_permission_action">{buyer ? <option value="preserve">Keep current: {labelize(buyer.sms_permission.status)}</option> : <option value="not_recorded">Not recorded</option>}<option value="grant">Record permission granted</option>{buyer ? <option value="revoke">Record permission not granted</option> : null}</select></label>
@@ -275,27 +245,22 @@ export function BuyerForm({
         <label><span>Type</span><select defaultValue={buyer?.buyer_type ?? "cash_buyer"} name="buyer_type"><option value="cash_buyer">Cash buyer</option><option value="landlord">Landlord</option><option value="flipper">Flipper</option><option value="builder">Builder</option><option value="hedge_fund">Fund</option><option value="agent">Agent</option></select></label>
         {buyer ? <label><span>Status</span><select defaultValue={buyer.status === "archived" ? "needs_review" : buyer.status} name="status"><option value="needs_review">Needs review</option><option value="active">Active</option><option value="paused">Paused</option><option value="do_not_contact">Do not contact</option></select></label> : <label><span>Status</span><input aria-describedby="new-buyer-status-help" readOnly value="Needs review" /><input name="status" type="hidden" value="needs_review" /><small id="new-buyer-status-help">Activate after verifying the buyer.</small></label>}
       </div>
+      <label><span>Relationship</span><select defaultValue={buyer?.relationship_status ?? "new"} name="relationship_status"><option value="new">New</option><option value="active">Active</option><option value="nurture">Nurture</option><option value="paused">Paused</option><option value="do_not_contact">Do not contact</option><option value="inactive">Inactive</option></select></label>
+      <div className={formStyles.formGrid}>
+        <label><span>Tier</span><select defaultValue={buyer?.tier ?? "unclassified"} name="tier"><option value="unclassified">Unclassified</option><option value="a">A - proven priority buyer</option><option value="b">B - qualified buyer</option><option value="c">C - developing relationship</option></select></label>
+        <label><span>Temperature</span><select defaultValue={buyer?.temperature ?? "unknown"} name="temperature"><option value="unknown">Unknown</option><option value="cold">Cold</option><option value="warm">Warm</option><option value="hot">Hot</option></select></label>
+      </div>
+      <label><span>Tags</span><input defaultValue={buyer?.tags?.join(", ") ?? ""} name="tags" placeholder="land developer, fast close, north Georgia" /><small>Separate tags with commas.</small></label>
       <div className={formStyles.formGrid}>
         <label><span>Relationship owner</span><select defaultValue={buyer?.relationship_owner_user_id ?? ""} name="relationship_owner_user_id"><option value="">Unassigned</option>{relationshipOwners.map((owner) => <option key={owner.user_id} value={owner.user_id}>{owner.display_name} - {owner.email}</option>)}</select></label>
         <label><span>Last verified</span><input defaultValue={dateTimeInput(buyer?.last_verified_at)} name="last_verified_at" type="datetime-local" /></label>
       </div>
+      <label><span>Next relationship follow-up</span><input defaultValue={dateTimeInput(buyer?.next_follow_up_at)} name="next_follow_up_at" type="datetime-local" /></label>
       <div className={formStyles.formGrid}>
         <label><span>Source</span><select defaultValue={buyer?.source_key ?? "manual"} name="source_key">{availableSources.map((source) => <option key={source} value={source}>{labelize(source)}</option>)}</select></label>
         <label><span>Source detail</span><input defaultValue={buyer?.source_detail ?? ""} name="source_detail" maxLength={255} placeholder="Alex's investor list" /></label>
       </div>
       <label><span>External source ID (optional)</span><input defaultValue={buyer?.source_external_key ?? ""} name="source_external_key" maxLength={255} placeholder="Original system record ID" /></label>
-      <div className={formStyles.formGrid}>
-        <label><span>Proof of funds</span><select defaultValue={buyer?.proof_of_funds_status ?? "unknown"} name="proof_of_funds_status"><option value="unknown">Unknown</option><option value="requested">Requested</option><option value="received">Received</option><option value="verified">Verified</option><option value="expired">Expired</option><option value="rejected">Rejected</option></select></label>
-        <label><span>Max purchase</span><input defaultValue={moneyInput(buyer?.max_purchase_price_cents)} name="max_purchase_price" inputMode="decimal" placeholder="250000" /></label>
-      </div>
-      <label><span>Markets</span><input defaultValue={buyer?.criteria?.markets ?? ""} name="markets" placeholder="Atlanta, Decatur, Marietta" /></label>
-      <label><span>Property types</span><input defaultValue={buyer?.criteria?.property_types ?? ""} name="property_types" placeholder="single_family, duplex, land" /></label>
-      <div className={formStyles.formGrid}>
-        <label><span>Min price</span><input defaultValue={moneyInput(buyer?.criteria?.min_price_cents)} name="min_price" inputMode="decimal" placeholder="75000" /></label>
-        <label><span>Max price</span><input defaultValue={moneyInput(buyer?.criteria?.max_price_cents)} name="max_price" inputMode="decimal" placeholder="250000" /></label>
-      </div>
-      <label><span>Rehab levels</span><input defaultValue={buyer?.criteria?.rehab_levels ?? ""} name="rehab_levels" placeholder="cosmetic, heavy, teardown" /></label>
-      <label><span>Criteria notes</span><textarea defaultValue={buyer?.criteria?.notes ?? ""} name="criteria_notes" maxLength={1000} rows={3} /></label>
       <label><span>Buyer notes</span><textarea defaultValue={buyer?.notes ?? ""} name="notes" maxLength={2000} rows={3} /></label>
 
       {duplicateMatches.length ? (

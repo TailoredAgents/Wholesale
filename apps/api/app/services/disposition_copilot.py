@@ -15,6 +15,7 @@ from app.models.foundation import (
     Buyer,
     BuyerEngagement,
     BuyerOffer,
+    BuyerProofDocument,
     DispositionCase,
     DispositionCopilotRecommendation,
     DispositionCopilotReview,
@@ -33,7 +34,11 @@ from app.schemas.dispositions import (
     DispositionRiskAlert,
 )
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
-from app.services.dispositions import require_house_case_workflow, scoped_case
+from app.services.dispositions import (
+    _proof_is_current_verified,
+    require_house_case_workflow,
+    scoped_case,
+)
 
 
 class DispositionFacts(TypedDict):
@@ -368,9 +373,38 @@ def _disposition_facts(
         if (
             match.buyer_id in buyers
             and buyers[match.buyer_id].status == "active"
+            and buyers[match.buyer_id].relationship_status != "do_not_contact"
             and buyers[match.buyer_id].archived_at is None
         )
     ]
+    now = datetime.now(UTC)
+    proof_documents = (
+        list(
+            db.scalars(
+                select(BuyerProofDocument).where(
+                    BuyerProofDocument.organization_id == principal.organization_id,
+                    BuyerProofDocument.buyer_id.in_(buyer_ids),
+                    BuyerProofDocument.deleted_at.is_(None),
+                    BuyerProofDocument.status == "verified",
+                ).order_by(
+                    BuyerProofDocument.verified_at.desc(),
+                    BuyerProofDocument.created_at.desc(),
+                )
+            ).all()
+        )
+        if buyer_ids
+        else []
+    )
+    reviewed_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    verified_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
+    for document in proof_documents:
+        reviewed_proof_by_buyer.setdefault(document.buyer_id, document)
+        if (
+            document.buyer_id not in verified_proof_by_buyer
+            and _proof_is_current_verified(document, now=now)
+        ):
+            verified_proof_by_buyer[document.buyer_id] = document
+    verified_buyer_ids = set(verified_proof_by_buyer)
     offers = list(
         db.scalars(
             select(BuyerOffer)
@@ -415,7 +449,7 @@ def _disposition_facts(
     verified = [
         item
         for item in qualified
-        if item.buyer_id in buyers and _has_current_proof_of_funds(buyers[item.buyer_id])
+        if item.buyer_id in verified_buyer_ids
     ]
     if qualified and not verified:
         gaps.append("Verify current proof of funds for at least one qualified buyer.")
@@ -424,12 +458,16 @@ def _disposition_facts(
         gaps.append("Record buyer responses and offers.")
         score -= 10
 
-    now = datetime.now(UTC)
     for match in matches:
         buyer = buyers.get(match.buyer_id)
         if buyer is None:
             continue
-        if buyer.proof_of_funds_expires_at and _aware(buyer.proof_of_funds_expires_at) < now:
+        reviewed_proof = verified_proof_by_buyer.get(
+            buyer.id
+        ) or reviewed_proof_by_buyer.get(buyer.id)
+        if reviewed_proof is not None and not _proof_is_current_verified(
+            reviewed_proof, now=now
+        ):
             risks.append(
                 DispositionRiskAlert(
                     severity="critical",
@@ -638,10 +676,3 @@ def _audit(
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-def _has_current_proof_of_funds(buyer: Buyer) -> bool:
-    expires_at = buyer.proof_of_funds_expires_at
-    return buyer.proof_of_funds_status in {"received", "verified"} and (
-        expires_at is None or _aware(expires_at) >= datetime.now(UTC)
-    )

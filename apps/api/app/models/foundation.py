@@ -5450,6 +5450,12 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_buyers_org_normalized_email", "organization_id", "normalized_email"),
         Index("ix_buyers_org_normalized_company", "organization_id", "normalized_company_name"),
         Index("ix_buyers_org_status_created", "organization_id", "status", "created_at"),
+        Index(
+            "ix_buyers_org_relationship_follow_up",
+            "organization_id",
+            "relationship_status",
+            "next_follow_up_at",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -5476,6 +5482,26 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tier: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unclassified", server_default="unclassified"
+    )
+    temperature: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unknown", server_default="unknown"
+    )
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    relationship_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="new", server_default="new", index=True
+    )
+    next_follow_up_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    verification_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unverified", server_default="unverified", index=True
+    )
+    verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -5566,6 +5592,11 @@ class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
     uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     institution_name: Mapped[str | None] = mapped_column(String(255))
     verified_amount_cents: Mapped[int | None] = mapped_column(BigInteger)
@@ -5624,6 +5655,82 @@ class BuyerCriteria(UuidPrimaryKeyMixin, TimestampMixin, Base):
         JSON, nullable=False, default=dict, server_default="{}"
     )
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class BuyerBuyBox(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_buy_boxes"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "buyer_id",
+            "asset_class",
+            name="uq_buyer_buy_boxes_org_buyer_asset",
+        ),
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_buyer_buy_boxes_asset_class",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    asset_class: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+
+
+class BuyerBuyBoxVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_buy_box_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "buy_box_id",
+            "version_number",
+            name="uq_buyer_buy_box_versions_number",
+        ),
+        Index(
+            "uq_buyer_buy_box_versions_current",
+            "organization_id",
+            "buy_box_id",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+            sqlite_where=text("is_current = 1"),
+        ),
+        Index(
+            "ix_buyer_buy_box_versions_history",
+            "organization_id",
+            "buy_box_id",
+            "version_number",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    buy_box_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyer_buy_boxes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    criteria_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    change_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    verification_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unverified", server_default="unverified"
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False, index=True
+    )
+    verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -5707,6 +5814,12 @@ class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), index=True
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    buy_box_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyer_buy_box_versions.id", ondelete="SET NULL"), nullable=True,
+        index=True,
+    )
+    matcher_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    criteria_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
     score_components: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     qualification_status: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -5731,10 +5844,19 @@ class DispositionCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_engagements"
+    __table_args__ = (
+        Index(
+            "ix_buyer_engagements_relationship_schedule",
+            "organization_id",
+            "buyer_id",
+            "status",
+            "scheduled_at",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
-    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE")
+    disposition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=True
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"))
     actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
@@ -5742,6 +5864,7 @@ class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1000))
 
 
