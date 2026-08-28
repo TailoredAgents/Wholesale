@@ -25,6 +25,12 @@ from app.models.foundation import (
     User,
 )
 from app.services.bootstrap import bootstrap_foundation
+from tests.test_transactions import (
+    HEADERS,
+    OWNER_EMAIL,
+    approve_purchase_package,
+    setup_transaction,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -352,7 +358,9 @@ def test_stale_and_out_of_order_events_are_audited_without_state_regression(
         applied_at.timestamp()
     )
     events = list(
-        db_session.scalars(select(EsignProviderEvent).order_by(EsignProviderEvent.occurred_at)).all()
+        db_session.scalars(
+            select(EsignProviderEvent).order_by(EsignProviderEvent.occurred_at)
+        ).all()
     )
     assert [event.status for event in events] == ["processed", "ignored_out_of_order"]
     assert all(event.processed_at is not None for event in events)
@@ -475,9 +483,21 @@ def test_failed_completion_is_atomic_and_exact_retry_finishes_execution(
     api_db_override: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    organization, user = create_workspace(db_session, "Atomic")
+    client = TestClient(app)
+    _, transaction_id = setup_transaction(db_session, client)
+    package_payload = approve_purchase_package(client, transaction_id)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    package = db_session.get(ContractPackage, UUID(str(package_payload["id"])))
+    user = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert transaction is not None and package is not None and user is not None
+    organization = db_session.get(Organization, transaction.organization_id)
+    assert organization is not None
     configure_signwell(db_session, organization, user, "atomic-webhook-secret")
-    transaction, package = create_assignment_transaction(db_session, organization, user)
+    marked_sent = client.post(
+        f"/api/v1/transactions/{transaction.id}/contract-packages/{package.id}/mark-sent",
+        headers=HEADERS,
+    )
+    assert marked_sent.status_code == 200, marked_sent.text
     envelope, recipient = create_envelope(
         db_session,
         organization,
@@ -510,8 +530,6 @@ def test_failed_completion_is_atomic_and_exact_retry_finishes_execution(
         provider_document_id=envelope.provider_document_id,
         document_status="completed",
     )
-    client = TestClient(app)
-
     failed = client.post("/api/v1/webhooks/esign/signwell", json=payload)
     assert failed.status_code == 422, failed.text
     assert "completed PDF is not available" in failed.json()["detail"]
@@ -532,7 +550,7 @@ def test_failed_completion_is_atomic_and_exact_retry_finishes_execution(
     assert failed_recipient.signed_at is None
     assert failed_package.status == "sent"
     assert failed_package.executed_at is None
-    assert failed_transaction.status == "contract_sent"
+    assert failed_transaction.status == "sent"
     assert list(db_session.scalars(select(TransactionDocument)).all()) == []
     provider_events = list(db_session.scalars(select(EsignProviderEvent)).all())
     assert len(provider_events) == 1

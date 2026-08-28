@@ -68,7 +68,6 @@ from app.services.leads import (
     close_out_lead,
     create_lead,
     create_lead_appointment,
-    create_lead_buyer_offer,
     create_lead_follow_up_task,
     create_lead_market_analysis,
     create_lead_transaction,
@@ -802,16 +801,11 @@ def record_lead_buyer_offer(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadDetail:
-    try:
-        lead = create_lead_buyer_offer(db, principal, lead_id, payload)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-    if lead is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
-    return lead
+    del lead_id, payload, db, principal
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Legacy buyer-offer entry is retired. Record normalized terms in the Offer Room.",
+    )
 
 
 @router.patch("/{lead_id}")

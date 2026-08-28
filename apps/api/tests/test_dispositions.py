@@ -149,6 +149,96 @@ def verify_proof(
     return response.json()
 
 
+def create_active_buyer(
+    client: TestClient,
+    *,
+    name: str,
+    email: str,
+) -> str:
+    created = client.post(
+        "/api/v1/buyers",
+        headers=HEADERS,
+        json={
+            "name": name,
+            "email": email,
+            "buyer_type": "cash_buyer",
+            "status": "active",
+            "max_purchase_price_cents": 30000000,
+            "criteria": {
+                "markets": "Atlanta, GA",
+                "property_types": "single_family",
+                "max_price_cents": 30000000,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    buyer_id = created.json()["id"]
+    activated = client.patch(
+        f"/api/v1/buyers/{buyer_id}",
+        headers=HEADERS,
+        json={"status": "active"},
+    )
+    assert activated.status_code == 200, activated.text
+    return buyer_id
+
+
+def record_offer_room_offer(
+    client: TestClient,
+    case_id: str,
+    buyer_id: str,
+    *,
+    amount_cents: int,
+    proof_document_id: str | None,
+    idempotency_key: str,
+    earnest_money_cents: int = 500000,
+) -> dict[str, Any]:
+    recorded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/offers",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "amount_cents": amount_cents,
+            "earnest_money_cents": earnest_money_cents,
+            "deposit_due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "due_diligence_days": 7,
+            "contingencies": [],
+            "contingencies_confirmed": True,
+            "proposed_closing_at": (datetime.now(UTC) + timedelta(days=21)).isoformat(),
+            "funding_method": "cash",
+            "funding_confidence_basis_points": 9000,
+            "proof_document_id": proof_document_id,
+            "change_reason": "Normalized buyer offer for disposition regression coverage.",
+            "idempotency_key": idempotency_key,
+        },
+    )
+    assert recorded.status_code == 201, recorded.text
+    return next(item for item in recorded.json()["offers"] if item["buyer_id"] == buyer_id)
+
+
+def select_offer_room_buyers(
+    client: TestClient,
+    case_id: str,
+    primary: dict[str, Any],
+    backups: list[dict[str, Any]],
+    *,
+    idempotency_key: str,
+):
+    selected_offers = [primary, *backups]
+    return client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json={
+            "primary_offer_id": primary["id"],
+            "backup_offer_ids": [item["id"] for item in backups],
+            "expected_offer_lock_versions": {
+                item["id"]: item["lock_version"] for item in selected_offers
+            },
+            "reason": "Verified funds, executable terms, and ranked backup coverage.",
+            "idempotency_key": idempotency_key,
+        },
+    )
+
+
 def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, str]:
     bootstrap_foundation(
         db,
@@ -723,7 +813,7 @@ def test_private_economics_permission_guards_writes_and_redacts_reads(
             DispositionCopilotAnalyzeRequest(idempotency_key="restricted-service-call"),
         )
 
-    below_floor = client.post(
+    retired_offer_entry = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offers",
         headers=HEADERS,
         json={
@@ -732,7 +822,16 @@ def test_private_economics_permission_guards_writes_and_redacts_reads(
             "financing_type": "cash",
         },
     )
-    assert below_floor.status_code == 200, below_floor.text
+    assert retired_offer_entry.status_code == 410, retired_offer_entry.text
+    assert "Offer Room" in retired_offer_entry.json()["detail"]
+    record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=17000000,
+        proof_document_id=None,
+        idempotency_key="private-floor-offer-room",
+    )
     db_session.add(
         DispositionCopilotRecommendation(
             organization_id=case.organization_id,
@@ -772,7 +871,9 @@ def test_private_economics_permission_guards_writes_and_redacts_reads(
     assert owner_copilot.status_code == 200, owner_copilot.text
     assert owner_copilot.json()["recommendations"]
     assert any(
-        "internal floor" in risk["reason"].lower() for risk in owner_copilot.json()["risk_alerts"]
+        "internal floor" in risk.lower()
+        for recommendation in owner_copilot.json()["recommendations"]
+        for risk in recommendation["output_payload"]["risk_alerts"]
     )
     restricted_copilot = client.get(
         f"/api/v1/dispositions/cases/{case_id}/copilot",
@@ -1356,29 +1457,49 @@ def test_disposition_buyer_selection_and_reconciliation(
     assert db_session.get(DispositionCampaign, campaign_id) is not None
     assert db_session.get(DispositionCampaignRecipient, recipient_id) is not None
 
-    offer = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/offers",
-        headers=HEADERS,
-        json={
-            "buyer_id": buyer_id,
-            "amount_cents": 19000000,
-            "earnest_money_cents": 500000,
-            "financing_type": "cash",
-            "proof_document_id": proof["id"],
-        },
+    backup_buyer_id = create_active_buyer(
+        client,
+        name="Reconciliation Backup Buyer",
+        email="reconciliation-backup@example.com",
     )
-    assert offer.status_code == 200, offer.text
-    offer_id = offer.json()["offers"][0]["id"]
-    selection = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/buyer-selection",
+    put_verified_buy_box(client, backup_buyer_id)
+    backup_proof = upload_received_proof(client, backup_buyer_id)
+    verify_proof(client, backup_proof["id"])
+    refreshed_matches = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
-        json={
-            "primary_offer_id": offer_id,
-            "reason": "Verified funds, acceptable price, and local closing history.",
-        },
     )
-    assert selection.status_code == 200, selection.text
-    assert selection.json()["selected_buyer_id"] == buyer_id
+    assert refreshed_matches.status_code == 200, refreshed_matches.text
+    assert {
+        item["buyer_id"]
+        for item in refreshed_matches.json()["matches"]
+        if item["qualification_status"] == "qualified"
+    }.issuperset({buyer_id, backup_buyer_id})
+    primary_offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=proof["id"],
+        idempotency_key="reconciliation-primary-offer",
+    )
+    backup_offer = record_offer_room_offer(
+        client,
+        case_id,
+        backup_buyer_id,
+        amount_cents=18500000,
+        proof_document_id=backup_proof["id"],
+        idempotency_key="reconciliation-backup-offer",
+    )
+    selection = select_offer_room_buyers(
+        client,
+        case_id,
+        primary_offer,
+        [backup_offer],
+        idempotency_key="reconciliation-selection",
+    )
+    assert selection.status_code == 201, selection.text
+    assert selection.json()["current_selection"]["primary"]["buyer_id"] == buyer_id
 
     transaction = db_session.get(Transaction, UUID(transaction_id))
     assert transaction is not None
@@ -1437,41 +1558,52 @@ def test_buyer_selection_requires_current_proof_of_funds(
 ) -> None:
     client = TestClient(app)
     _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
-    case = client.post(
-        "/api/v1/dispositions/cases",
-        headers=HEADERS,
-        json={
-            "transaction_id": transaction_id,
-            "asking_price_cents": 19000000,
-            "minimum_acceptable_cents": 18000000,
-        },
-    ).json()
+    case_id = create_approved_disposition_case(client, transaction_id)
+    put_verified_buy_box(client, buyer_id)
     proof = upload_received_proof(client, buyer_id)
     verify_proof(client, proof["id"])
-    offer = client.post(
-        f"/api/v1/dispositions/cases/{case['id']}/offers",
-        headers=HEADERS,
-        json={
-            "buyer_id": buyer_id,
-            "amount_cents": 19000000,
-            "proof_document_id": proof["id"],
-        },
+    backup_buyer_id = create_active_buyer(
+        client,
+        name="Current Proof Backup Buyer",
+        email="current-proof-backup@example.com",
     )
-    assert offer.status_code == 200, offer.text
+    put_verified_buy_box(client, backup_buyer_id)
+    backup_proof = upload_received_proof(client, backup_buyer_id)
+    verify_proof(client, backup_proof["id"])
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    primary_offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=proof["id"],
+        idempotency_key="current-proof-primary-offer",
+    )
+    backup_offer = record_offer_room_offer(
+        client,
+        case_id,
+        backup_buyer_id,
+        amount_cents=18500000,
+        proof_document_id=backup_proof["id"],
+        idempotency_key="current-proof-backup-offer",
+    )
     proof_row = db_session.get(BuyerProofDocument, UUID(proof["id"]))
     assert proof_row is not None
     proof_row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     db_session.commit()
-    response = client.post(
-        f"/api/v1/dispositions/cases/{case['id']}/buyer-selection",
-        headers=HEADERS,
-        json={
-            "primary_offer_id": offer.json()["offers"][0]["id"],
-            "reason": "Attempt without verified evidence.",
-        },
+    response = select_offer_room_buyers(
+        client,
+        case_id,
+        primary_offer,
+        [backup_offer],
+        idempotency_key="current-proof-selection",
     )
     assert response.status_code == 422
-    assert "proof-of-funds" in response.json()["detail"]
+    assert "current verified proof" in response.json()["detail"].lower()
 
 
 def test_proof_upload_requires_explicit_complete_human_verification(
@@ -1582,26 +1714,43 @@ def test_proof_renewal_keeps_current_verified_document_attached_to_match(
     assert match["latest_proof_document_id"] == current["id"]
     assert match["latest_proof_document_id"] != renewal["id"]
 
-    offer = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/offers",
-        headers=HEADERS,
-        json={
-            "buyer_id": buyer_id,
-            "amount_cents": 19000000,
-            "financing_type": "cash",
-            "proof_document_id": match["latest_proof_document_id"],
-        },
+    backup_buyer_id = create_active_buyer(
+        client,
+        name="Proof Renewal Backup Buyer",
+        email="proof-renewal-backup@example.com",
     )
-    assert offer.status_code == 200, offer.text
-    selected = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/buyer-selection",
+    put_verified_buy_box(client, backup_buyer_id)
+    backup_proof = upload_received_proof(client, backup_buyer_id)
+    verify_proof(client, backup_proof["id"])
+    rematched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
-        json={
-            "primary_offer_id": offer.json()["offers"][0]["id"],
-            "reason": "Current verified proof remains attached during renewal review.",
-        },
     )
-    assert selected.status_code == 200, selected.text
+    assert rematched.status_code == 200, rematched.text
+    primary_offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=match["latest_proof_document_id"],
+        idempotency_key="proof-renewal-primary-offer",
+    )
+    backup_offer = record_offer_room_offer(
+        client,
+        case_id,
+        backup_buyer_id,
+        amount_cents=18500000,
+        proof_document_id=backup_proof["id"],
+        idempotency_key="proof-renewal-backup-offer",
+    )
+    selected = select_offer_room_buyers(
+        client,
+        case_id,
+        primary_offer,
+        [backup_offer],
+        idempotency_key="proof-renewal-selection",
+    )
+    assert selected.status_code == 201, selected.text
 
 
 def test_disposition_copilot_prefers_current_proof_over_stale_renewal_evidence(
@@ -1920,19 +2069,15 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
     )
     assert copilot_overview.status_code == 200, copilot_overview.text
     assert copilot_overview.json()["verified_buyer_count"] == 1
-    offer = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/offers",
-        headers=HEADERS,
-        json={
-            "buyer_id": buyer_id,
-            "amount_cents": 19000000,
-            "earnest_money_cents": 500000,
-            "financing_type": "cash",
-            "proof_document_id": proof["id"],
-        },
+    offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=proof["id"],
+        idempotency_key="copilot-primary-offer",
     )
-    assert offer.status_code == 200
-    offer_id = offer.json()["offers"][0]["id"]
+    offer_id = offer["id"]
 
     with monkeypatch.context() as configured_environment:
         configured_environment.setenv("AI_ENABLED", "true")

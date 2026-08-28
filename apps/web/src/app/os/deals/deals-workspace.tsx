@@ -104,6 +104,7 @@ function hrefFor(current: { deal?: string; display: Display; tab: DealTab; view:
 }
 
 export function DealsWorkspace({
+  canApproveBuyerSelection,
   canEditBuyers,
   canEditDeals,
   canManageOutreach,
@@ -120,6 +121,7 @@ export function DealsWorkspace({
   initialView,
   transactions,
 }: {
+  canApproveBuyerSelection: boolean;
   canEditBuyers: boolean;
   canEditDeals: boolean;
   canManageOutreach: boolean;
@@ -195,8 +197,8 @@ export function DealsWorkspace({
           {tab === "summary" ? <DealSummary canViewEconomics={deals.can_view_economics} deal={selected} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
-          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
-          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
+          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveBuyerSelection={canApproveBuyerSelection} canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
+          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveBuyerSelection={canApproveBuyerSelection} canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
           {(tab === "disposition" || tab === "finance") && selected.disposition_case_id && !dispositions ? <SubsystemUnavailable label="Disposition details" /> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions?transaction=${selected.transaction_id}`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>

@@ -45,7 +45,7 @@ from app.schemas.transactions import (
 from app.services.contract_authority import (
     ACCEPTABLE_EXECUTION_SCAN_STATUSES,
     package_document_type,
-    validate_purchase_contract_authority,
+    validate_contract_package_authority,
 )
 from app.services.contract_documents import GeneratedContract, generate_contract_pdf
 from app.services.document_storage import store_content
@@ -328,12 +328,30 @@ def send_contract_for_signature(
         )
         if configuration is None and not active.esign_signwell_webhook_id:
             raise ValueError("Connect SignWell in Transactions before sending a signature request.")
+    candidate = db.scalar(
+        select(Transaction).where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
+    if candidate is None:
+        return None
+    db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == candidate.lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
     transaction = db.scalar(
         select(Transaction)
         .where(
             Transaction.id == transaction_id,
             Transaction.organization_id == principal.organization_id,
         )
+        .execution_options(populate_existing=True)
         .with_for_update(of=Transaction)
     )
     if transaction is None:
@@ -361,11 +379,12 @@ def send_contract_for_signature(
     )
     if existing is not None:
         if package.status == "sending" and existing.status == "draft":
-            validate_purchase_contract_authority(
+            validate_contract_package_authority(
                 db,
                 transaction,
                 package,
                 gate="resuming the saved signature draft",
+                lock_assignment=True,
             )
             requested_recipients = normalize_contract_recipients(
                 db,
@@ -395,11 +414,12 @@ def send_contract_for_signature(
         raise ValueError("This package already has an active signature request.")
     if package.status != "approved":
         raise ValueError("Approve this exact contract package before sending it for signature.")
-    validate_purchase_contract_authority(
+    validate_contract_package_authority(
         db,
         transaction,
         package,
         gate="reserving the signature request",
+        lock_assignment=True,
     )
     document_type = str(
         package.terms_snapshot.get("document_type")
@@ -417,6 +437,33 @@ def send_contract_for_signature(
     signing_orders = [item.signing_order for item in recipients]
     if len(signing_orders) != len(set(signing_orders)):
         raise ValueError("Each signer must use a unique signing order.")
+    assignment_execution_identity: dict[str, Any] | None = None
+    if document_type == "assignment_contract":
+        binding = (package.terms_snapshot or {}).get("disposition_buyer_binding")
+        if not isinstance(binding, dict):
+            raise ValueError("The assignment package is missing its selected-buyer binding.")
+        assignees = [
+            item
+            for item in recipients
+            if any(
+                role in item.placeholder_name.strip().casefold()
+                for role in ("assignee", "end buyer")
+            )
+        ]
+        if len(assignees) != 1:
+            raise ValueError(
+                "An assignment signature request requires exactly one Assignee/end-buyer signer."
+            )
+        from app.services.disposition_offer_room import (
+            assignment_signer_identity_snapshot,
+        )
+
+        assignment_execution_identity = assignment_signer_identity_snapshot(
+            binding,
+            signer_name=assignees[0].name,
+            signer_email=str(assignees[0].email),
+            source="esign_recipient",
+        )
     property_record = db.get(Property, transaction.property_id)
     generated = generate_contract_pdf(
         transaction,
@@ -458,6 +505,11 @@ def send_contract_for_signature(
         provider_payload={
             "phase": "creating_draft",
             "source_document_id": str(source_document.id),
+            **(
+                {"assignment_execution_identity": assignment_execution_identity}
+                if assignment_execution_identity is not None
+                else {}
+            ),
         },
         sent_at=None,
         completed_at=None,
@@ -565,6 +617,7 @@ def send_contract_for_signature(
         )
     persisted_envelope.provider_document_id = provider_document_id
     persisted_envelope.provider_payload = {
+        **(persisted_envelope.provider_payload or {}),
         **provider_response,
         "phase": "draft",
         "source_document_id": str(source_document.id),
@@ -708,18 +761,20 @@ def finalize_local_esign_send(
     # offer-authority changes must not relabel or reject the completed send.
     if package.status in {"sent", "executed"}:
         return
-    validate_purchase_contract_authority(
+    validate_contract_package_authority(
         db,
         transaction,
         package,
         gate="recording provider delivery",
+        lock_assignment=True,
     )
     if package.status != "sending":
         raise ValueError("The contract package is not reserved for this signature request.")
     package.status = "sent"
     package.sent_at = package.sent_at or occurred_at
-    transaction.status = "sent"
-    transaction.contract_sent_at = transaction.contract_sent_at or occurred_at
+    if package_document_type(package) == "purchase_agreement":
+        transaction.status = "sent"
+        transaction.contract_sent_at = transaction.contract_sent_at or occurred_at
     db.add(
         TransactionEvent(
             organization_id=envelope.organization_id,
@@ -786,11 +841,12 @@ def send_saved_esign_draft(
         raise ValueError("The saved signature draft is no longer available.")
     if locked_package.status != "sending" or locked_envelope.status != "draft":
         raise ValueError("The saved signature draft is not ready to send.")
-    validate_purchase_contract_authority(
+    validate_contract_package_authority(
         db,
         locked_transaction,
         locked_package,
         gate="sending the saved provider draft",
+        lock_assignment=True,
     )
     locked_envelope.status = "sending"
     locked_envelope.provider_payload = {
@@ -904,11 +960,12 @@ def send_saved_esign_draft(
         db.commit()
         return envelope_read(db, locked_envelope)
     try:
-        validate_purchase_contract_authority(
+        validate_contract_package_authority(
             db,
             locked_transaction,
             locked_package,
             gate="recording the provider send",
+            lock_assignment=True,
         )
     except ValueError as exc:
         locked_envelope.status = "send_uncertain"
@@ -1025,11 +1082,12 @@ def attach_verified_esign_draft(
     if transaction is None or package is None:
         raise ValueError("The signature recovery intent no longer matches its transaction.")
     validate_local_recovery_intent(envelope, package)
-    validate_purchase_contract_authority(
+    validate_contract_package_authority(
         db,
         transaction,
         package,
         gate="recovering the verified provider draft",
+        lock_assignment=True,
     )
     try:
         provider_document = SignWellClient(active).get_document(provider_document_id)
@@ -1074,8 +1132,7 @@ def attach_verified_esign_draft(
             actor_user_id=principal.user_id,
             event_type="esign.draft_recovered",
             summary=(
-                f"Attached verified SignWell draft to contract package "
-                f"v{package.version_number}."
+                f"Attached verified SignWell draft to contract package v{package.version_number}."
             ),
             details={
                 "envelope_id": str(envelope.id),
@@ -1434,21 +1491,41 @@ def normalize_contract_recipients(
 ) -> list[EsignRecipientCreate]:
     recipients = sorted(requested, key=lambda item: item.signing_order)
     stonegate_roles = {"stonegate", "buyer", "assignor"}
-    has_stonegate = any(
-        item.placeholder_name.strip().lower() in stonegate_roles for item in recipients
-    )
-    if not has_stonegate:
-        user = db.get(User, principal.user_id)
-        recipients.append(
-            EsignRecipientCreate(
-                placeholder_name=(
-                    "Assignor" if document_type == "assignment_contract" else "Stonegate"
-                ),
-                name=user.display_name if user else "Stonegate Home Buyers",
-                email=principal.email,
-                signing_order=max((item.signing_order for item in recipients), default=0) + 1,
-            )
+
+    def is_internal_role(item: EsignRecipientCreate) -> bool:
+        role = item.placeholder_name.strip().casefold()
+        return role in stonegate_roles or (
+            document_type == "assignment_contract" and ("assignor" in role or "stonegate" in role)
         )
+
+    stonegate_indexes = [index for index, item in enumerate(recipients) if is_internal_role(item)]
+    if len(stonegate_indexes) > 1:
+        raise ValueError("A contract package can have only one Stonegate signer.")
+    user = db.scalar(
+        select(User).where(
+            User.id == principal.user_id,
+            User.organization_id == principal.organization_id,
+            User.is_active.is_(True),
+        )
+    )
+    if user is None:
+        raise ValueError("The Stonegate signer must be an active organization user.")
+    internal_signer = EsignRecipientCreate(
+        placeholder_name=("Assignor" if document_type == "assignment_contract" else "Stonegate"),
+        name=user.display_name,
+        email=user.email,
+        signing_order=(
+            recipients[stonegate_indexes[0]].signing_order
+            if stonegate_indexes
+            else max((item.signing_order for item in recipients), default=0) + 1
+        ),
+    )
+    if stonegate_indexes:
+        # The caller may choose the signing order, but never the legal identity of the
+        # Stonegate assignor/buyer. Freeze that identity from the authenticated user.
+        recipients[stonegate_indexes[0]] = internal_signer
+    else:
+        recipients.append(internal_signer)
     if len(recipients) > 10:
         raise ValueError("A contract package cannot have more than ten signers.")
     return recipients
@@ -1856,35 +1933,30 @@ def apply_provider_event(
     if event_type == "document_completed":
         assert transaction is not None and package is not None
         quarantine_reason = provider_completion_quarantine_reason(db, transaction, package)
-        if quarantine_reason is not None:
-            db.add(
-                TransactionEvent(
-                    organization_id=envelope.organization_id,
-                    transaction_id=transaction.id,
-                    lead_id=transaction.lead_id,
-                    actor_user_id=None,
-                    event_type="esign.completion_quarantined",
-                    summary=(
-                        "A delayed provider completion was quarantined because the transaction "
-                        "or lead is closed."
-                    ),
-                    details={
-                        "envelope_id": str(envelope.id),
-                        "provider_document_id": envelope.provider_document_id,
-                        "provider_event_type": event_type,
-                        "reason": quarantine_reason,
-                        "transaction_status": transaction.status,
-                    },
-                    occurred_at=occurred_at,
+        if quarantine_reason is None:
+            try:
+                validate_contract_package_authority(
+                    db,
+                    transaction,
+                    package,
+                    gate="accepting provider execution",
+                    lock_assignment=True,
                 )
+            except ValueError as exc:
+                quarantine_reason = str(exc)
+        if quarantine_reason is not None:
+            envelope.provider_payload = {**envelope.provider_payload, **document_data}
+            quarantine_completed_envelope(
+                db,
+                envelope,
+                transaction,
+                package,
+                document_data,
+                settings,
+                occurred_at=occurred_at,
+                reason=quarantine_reason,
             )
             return quarantine_reason
-        validate_purchase_contract_authority(
-            db,
-            transaction,
-            package,
-            gate="accepting provider execution",
-        )
     if envelope.last_provider_event_at is None or occurred_at > as_utc(
         envelope.last_provider_event_at
     ):
@@ -2007,15 +2079,29 @@ def lock_provider_event_contract(
     db: Session,
     envelope: EsignEnvelope,
 ) -> tuple[Transaction, ContractPackage]:
-    """Complete the provider-event lock order: envelope -> transaction -> package."""
+    """Complete the provider-event lock order: envelope -> lead -> transaction -> package."""
+    candidate = db.scalar(select(Transaction).where(Transaction.id == envelope.transaction_id))
+    if candidate is None:
+        raise ValueError("The provider envelope no longer matches a Stonegate transaction.")
+    db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == candidate.lead_id,
+            Lead.organization_id == envelope.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
     transaction = db.scalar(
         select(Transaction)
         .where(Transaction.id == envelope.transaction_id)
+        .execution_options(populate_existing=True)
         .with_for_update(of=Transaction)
     )
     package = db.scalar(
         select(ContractPackage)
         .where(ContractPackage.id == envelope.contract_package_id)
+        .execution_options(populate_existing=True)
         .with_for_update(of=ContractPackage)
     )
     if transaction is None or package is None:
@@ -2027,6 +2113,137 @@ def lock_provider_event_contract(
     ):
         raise ValueError("The provider envelope contract binding is invalid.")
     return transaction, package
+
+
+def quarantine_completed_envelope(
+    db: Session,
+    envelope: EsignEnvelope,
+    transaction: Transaction,
+    package: ContractPackage,
+    document_data: dict[str, Any],
+    settings: Settings,
+    *,
+    occurred_at: datetime,
+    reason: str,
+) -> None:
+    """Preserve signed evidence without accepting stale or terminal execution authority."""
+    if envelope.completed_document_id is not None:
+        return
+    if envelope.provider == "simulate":
+        encoded = str(document_data.get("completed_pdf_base64") or "")
+        content = base64.b64decode(encoded) if encoded else b"%PDF simulated signed agreement"
+    else:
+        content = SignWellClient(settings).completed_pdf(envelope.provider_document_id)
+    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
+    template_type = str(
+        package.terms_snapshot.get("document_type")
+        or (template.document_type if template else "purchase_agreement")
+    )
+    file_stem, document_label = {
+        "assignment_contract": (
+            "quarantined-assignment-agreement",
+            "assignment agreement",
+        ),
+        "addendum": ("quarantined-addendum", "contract addendum"),
+        "purchase_agreement": (
+            "quarantined-purchase-agreement",
+            "purchase agreement",
+        ),
+    }.get(template_type, ("quarantined-contract", "contract"))
+    document_id = uuid4()
+    file_name = f"{file_stem}-v{package.version_number}.pdf"
+    stored = store_content(
+        organization_id=envelope.organization_id,
+        namespace=f"transactions/{transaction.id}",
+        record_id=document_id,
+        file_name=file_name,
+        content_type="application/pdf",
+        content=content,
+        settings=settings,
+    )
+    document = TransactionDocument(
+        id=document_id,
+        organization_id=envelope.organization_id,
+        transaction_id=transaction.id,
+        contract_package_id=package.id,
+        uploaded_by_user_id=envelope.created_by_user_id,
+        document_type=f"quarantined_{template_type}",
+        title=f"Quarantined provider-completed {document_label} v{package.version_number}",
+        status="quarantined",
+        file_name=file_name,
+        content_type="application/pdf",
+        file_size=len(content),
+        sha256=sha256(content).hexdigest(),
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
+        occurred_at=occurred_at,
+        notes=(
+            f"Retrieved from {envelope.provider} document {envelope.provider_document_id}; "
+            f"execution quarantined: {reason}"
+        )[:1000],
+    )
+    db.add(document)
+    db.flush()
+    envelope.status = "completed"
+    envelope.completed_at = envelope.completed_at or occurred_at
+    envelope.completed_document_id = document.id
+    envelope.last_provider_event_at = max(
+        occurred_at,
+        as_utc(envelope.last_provider_event_at) if envelope.last_provider_event_at else occurred_at,
+    )
+    envelope.provider_payload = {
+        **envelope.provider_payload,
+        "completion_quarantine": {
+            "reason": reason,
+            "document_id": str(document.id),
+            "occurred_at": occurred_at.isoformat(),
+        },
+    }
+    for recipient in db.scalars(
+        select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope.id)
+    ).all():
+        recipient.status = "signed"
+        recipient.signed_at = recipient.signed_at or occurred_at
+    if package.status in {"approved", "sending"}:
+        package.status = "sent"
+        package.sent_at = package.sent_at or envelope.sent_at or occurred_at
+    if (
+        package_document_type(package) == "purchase_agreement"
+        and transaction.status not in TERMINAL_TRANSACTION_STATUSES
+        and transaction.cancelled_at is None
+        and transaction.closed_at is None
+        and transaction.funded_at is None
+    ):
+        transaction.status = "sent"
+        transaction.contract_sent_at = (
+            transaction.contract_sent_at or envelope.sent_at or occurred_at
+        )
+    db.add(
+        TransactionEvent(
+            organization_id=envelope.organization_id,
+            transaction_id=transaction.id,
+            lead_id=transaction.lead_id,
+            actor_user_id=None,
+            event_type="esign.completion_quarantined",
+            summary=(
+                f"Provider-completed {document_label} v{package.version_number} was preserved "
+                "for review but not accepted as executed."
+            ),
+            details={
+                "envelope_id": str(envelope.id),
+                "provider_document_id": envelope.provider_document_id,
+                "document_id": str(document.id),
+                "reason": reason,
+                "transaction_status": transaction.status,
+                "malware_scan_status": document.malware_scan_status,
+            },
+            occurred_at=occurred_at,
+        )
+    )
 
 
 def release_failed_esign_reservation(
@@ -2046,7 +2263,7 @@ def release_failed_esign_reservation(
         return
     prior_package_status = package.status
     package.status = "approved"
-    if transaction.status == "sent":
+    if package_document_type(package) == "purchase_agreement" and transaction.status == "sent":
         transaction.status = "contract_prep"
     db.add(
         TransactionEvent(
@@ -2085,11 +2302,12 @@ def complete_envelope(
         content = base64.b64decode(encoded) if encoded else b"%PDF simulated signed agreement"
     else:
         content = SignWellClient(settings).completed_pdf(envelope.provider_document_id)
-    validate_purchase_contract_authority(
+    validate_contract_package_authority(
         db,
         transaction,
         package,
         gate="recording provider execution",
+        lock_assignment=True,
     )
     template = db.get(ContractTemplate, package.template_id) if package.template_id else None
     template_type = str(
@@ -2152,8 +2370,8 @@ def complete_envelope(
     envelope.completed_document_id = document.id
     package.status = "executed"
     package.executed_at = envelope.completed_at or datetime.now(UTC)
-    transaction.status = "executed"
     if template_type == "purchase_agreement":
+        transaction.status = "executed"
         transaction.contract_executed_at = package.executed_at
         lead = db.get(Lead, transaction.lead_id)
         deal = db.get(Deal, transaction.deal_id)

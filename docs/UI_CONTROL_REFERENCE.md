@@ -1489,7 +1489,7 @@ governed House Outreach workflow.
 ## Dispositions
 
 The Dispositions workspace opens a case for a contracted property and uses **Package**,
-**Buyers**, **Outreach**, **Offers**, and **Reconciliation** views.
+**Buyers**, **Outreach**, **Offer Room**, and **Reconciliation** views.
 
 ### Case And Package
 
@@ -1557,21 +1557,29 @@ claimed, provider-accepted, sent, delivered, failed, delivery-unknown, suppresse
 replied, or cancelled outcomes. No Outreach control accepts an offer, selects a buyer, changes deal
 economics, sends through InvestorLift, or enables Land outreach.
 
-### Offers
+### Offer Room
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Buyer | Selects the submitting buyer | Required |
-| Offer amount | Records gross buyer offer | Required |
-| Earnest money | Records proposed deposit | Optional until offered |
-| Closing date | Records proposed timing | Required for comparison |
-| Inspection/contingencies | Records buyer conditions | Used in offer quality |
-| Financing | Records cash/funding context | Used in readiness |
-| Notes | Records additional terms | Internal |
-| **Record buyer offer** | Saves a versioned buyer offer | Requires selected case and buyer |
-| **Select primary** | Marks the preferred offer | Requires disposition authority/approval rules |
-| **Select backup** | Marks a backup offer | Cannot duplicate the active primary selection |
-| Offer score | Compares price, speed, contingencies, funding, and buyer reliability | Decision support, not automatic acceptance |
+| Offer comparison cards | Compares price, EMD, due diligence, contingencies, close date, funding, proof, reliability, risk, and execution evidence | House cases only; evidence and ranking are advisory |
+| Proof coverage and risk flags | Explains expired or insufficient proof, weak deposit, incompatible timing, contingencies, or buyer-history risk | Read-only evidence; a flag never rejects or selects an offer automatically |
+| **Record offer** | Saves normalized terms and creates immutable revision 1 | Requires deal editing, an available buyer, amount, funding context, and a unique request key |
+| **Revise offer** | Saves a new immutable terms/risk revision | Requires the current offer lock version, a viable offer, and a change reason |
+| **Record negotiation** | Appends an inbound, outbound, or internal negotiation event | Does not change buyer selection by itself |
+| Primary and backup selectors | Defines one primary and one or more different-buyer backups | Requires distinct viable offers; primary must meet the approved minimum and selection-readiness rules or a documented manager override where allowed |
+| **Approve primary and backup** | Creates a versioned human-approved selection and freezes reviewed evidence per slot | Requires `dispositions:approve_buyer_selection`; a disposition rep or AI recommendation cannot approve it |
+| Current coverage | Shows primary, ranked backups, their reviewed offer amount, and ready/provisional evidence | Read-only; provisional backup blockers remain visible |
+| Closing checkpoint row | Shows response, agreement, signature, deposit, access, title, closing, or other deadlines | House selection required |
+| **Add milestone** | Creates an Offer Room-specific deadline with owner, notes, and evidence | Use Transaction for canonical closing/title/access checklist dates |
+| **Complete** / **Waive** | Completes an Offer Room milestone or documents a supported buyer-deposit waiver | Canonical Transaction/checklist rows are read-only here; deposit completion requires evidence and a deposit waiver is manager-only with a substantive note |
+| **Update in Deal / Transaction** | Opens the canonical source for a Transaction or checklist-controlled milestone | Prevents divergent closing records |
+| Deadline alert | Shows one versioned alert for a missed checkpoint | Created by the worker; acknowledgement records review but does not complete the milestone |
+| **Acknowledge** | Records who accepted responsibility for the alert and why | Open alerts only; the original due date and missed evidence remain |
+| Ranked replacement options | Shows eligible backups from the current approved selection with execution/risk evidence | A missing eligible option requires a new manager-approved selection, not a forced promotion |
+| **Replace primary** | Activates an eligible backup and records the prior buyer outcome/cause/evidence | Requires buyer-selection approval, the current selection lock version, and unchanged approved backup terms; stale terms require a new selection version |
+| **Record outcome** | Records pass, withdrawal, fallout, or retrade without erasing evidence | Buyer history changes only for buyer-responsible failure/retrade; completed close is funding-driven |
+| Negotiation / selection / outcome history | Shows immutable human and buyer decision history | Read-only |
+| Funded close gate | Atomically records the selected buyer's completed close and history | Assignment funding requires current approved primary coverage, an agreement bound to the same buyer and offer economics, matching assignee identity, executed evidence, and deposit evidence or a documented manager waiver |
 
 ### Reconciliation
 

@@ -447,6 +447,8 @@ class LeadStageConflictError(ValueError):
 
 
 TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
+
+
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
     if payload.stage_key in TERMINAL_CLOSE_OUT_STAGES:
         raise ValueError("Create the lead in an active stage, then use Close out lead.")
@@ -507,17 +509,15 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         payload.property.property_type,
         explicit_asset_class=payload.asset_class,
     )
-    property_record, normalized_property_key, normalized_parcel_key = (
-        find_property_by_identity(
-            db,
-            organization_id=principal.organization_id,
-            street_address=payload.property.street_address,
-            city=payload.property.city,
-            state=payload.property.state,
-            postal_code=payload.property.postal_code,
-            parcel_id=payload.property.parcel_id,
-            county=payload.property.county,
-        )
+    property_record, normalized_property_key, normalized_parcel_key = find_property_by_identity(
+        db,
+        organization_id=principal.organization_id,
+        street_address=payload.property.street_address,
+        city=payload.property.city,
+        state=payload.property.state,
+        postal_code=payload.property.postal_code,
+        parcel_id=payload.property.parcel_id,
+        county=payload.property.county,
     )
     if property_record is None:
         property_record = Property(
@@ -714,11 +714,7 @@ def list_leads(
         else (Lead.created_at.desc(), Lead.id.desc())
     )
     leads = db.scalars(
-        select(Lead)
-        .where(*filters)
-        .order_by(*order_by)
-        .offset(offset)
-        .limit(limit)
+        select(Lead).where(*filters).order_by(*order_by).offset(offset).limit(limit)
     ).all()
     return [lead_to_read(db, lead) for lead in leads]
 
@@ -1224,9 +1220,7 @@ def get_missing_fields(
             )
         )
     is_land = normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS
-    qualification_fields = (
-        LAND_PROFILE_QUALIFICATION_FIELDS if is_land else QUALIFICATION_FIELDS
-    )
+    qualification_fields = LAND_PROFILE_QUALIFICATION_FIELDS if is_land else QUALIFICATION_FIELDS
     for field_key, label, question, severity in qualification_fields:
         if is_land:
             profile_fact = (
@@ -1237,8 +1231,7 @@ def get_missing_fields(
             has_value = (
                 profile_fact is not None
                 and land_acquisition_profile is not None
-                and field_key
-                not in land_acquisition_profile.readiness.unanswered_fields
+                and field_key not in land_acquisition_profile.readiness.unanswered_fields
             )
             if profile_fact is None:
                 fallback_value = {
@@ -1251,9 +1244,7 @@ def get_missing_fields(
                 )
         else:
             value = getattr(lead, field_key)
-            has_value = value is not None and (
-                not isinstance(value, str) or bool(value.strip())
-            )
+            has_value = value is not None and (not isinstance(value, str) or bool(value.strip()))
         if not has_value:
             missing_fields.append(
                 LeadMissingField(
@@ -3470,9 +3461,7 @@ def _update_lead_contact_permission(
         return None
     require_lead_open_for_work(lead)
     global_channel_permission = (
-        PermissionKeys.SEND_SMS
-        if channel == "sms"
-        else PermissionKeys.PLACE_CALLS
+        PermissionKeys.SEND_SMS if channel == "sms" else PermissionKeys.PLACE_CALLS
     )
     assigned_channel_permission = (
         PermissionKeys.SEND_ASSIGNED_SMS
@@ -3852,9 +3841,9 @@ def update_lead_staff_details(
             value=payload.email,
         )
 
-    property_identity_changed = property_fields_changed(
-        previous_values
-    ) or property_fields_changed(new_values)
+    property_identity_changed = property_fields_changed(previous_values) or property_fields_changed(
+        new_values
+    )
     asset_class_changed = "asset_class" in previous_values or "asset_class" in new_values
     if property_identity_changed or asset_class_changed:
         require_valid_property_identity(property_record, asset_class=lead.asset_class)
@@ -4219,9 +4208,7 @@ def apply_lead_close_out_transition(
         or lead.closed_out_at is None
         or lead.closed_out_by_user_id is None
     )
-    appointment_status_requires_close = (
-        lead.appointment_status in ACTIVE_LEAD_APPOINTMENT_STATUSES
-    )
+    appointment_status_requires_close = lead.appointment_status in ACTIVE_LEAD_APPOINTMENT_STATUSES
     lead_changed = (
         lead.stage_key != payload.disposition
         or lead.archived_at is None
@@ -4304,7 +4291,8 @@ def apply_lead_close_out_transition(
         approval
         for approval in pending_lead_approvals
         if (
-            approval.entity_type == "lead" and approval.entity_id == lead.id
+            approval.entity_type == "lead"
+            and approval.entity_id == lead.id
             or str((approval.approval_metadata or {}).get("lead_id", "")) == str(lead.id)
         )
     ]
@@ -4743,9 +4731,7 @@ def reopen_lead(
         management_case.accepted_by_user_id = (
             management_case.accepted_by_user_id or principal.user_id
         )
-        management_case.qualification_started_at = (
-            management_case.qualification_started_at or now
-        )
+        management_case.qualification_started_at = management_case.qualification_started_at or now
         management_case.next_action_type = "follow_up"
         management_case.next_action_due_at = next_action_due_at
 
@@ -4823,9 +4809,7 @@ def _sync_cancelled_internal_calendar_event(db: Session, appointment: Appointmen
         "appointment_type": appointment.appointment_type,
         "status": appointment.status,
         "start": appointment.scheduled_start_at.isoformat(),
-        "end": (
-            appointment.scheduled_end_at.isoformat() if appointment.scheduled_end_at else None
-        ),
+        "end": (appointment.scheduled_end_at.isoformat() if appointment.scheduled_end_at else None),
         "location": appointment.location,
         "notes": appointment.notes,
     }
@@ -5019,6 +5003,14 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                         disposition_model.disposition_case_id.in_(disposition_case_ids)
                     )
                 )
+            # Break the nullable legacy offer-to-case reference first. Deleting the case then
+            # cascades DS7 selection, checkpoint, alert, outcome, negotiation, and revision
+            # evidence before the lead's buyer offers are removed below.
+            db.execute(
+                update(BuyerOffer)
+                .where(BuyerOffer.disposition_case_id.in_(disposition_case_ids))
+                .values(disposition_case_id=None)
+            )
             db.execute(delete(DispositionCase).where(DispositionCase.id.in_(disposition_case_ids)))
         package_ids = list(
             db.scalars(

@@ -24,6 +24,9 @@ from app.services.call_intelligence import (
     process_next_call_transcript,
     process_next_pending_call_note_approval,
 )
+from app.services.disposition_offer_room import (
+    process_next_closing_deadline_escalation,
+)
 from app.services.disposition_outreach_delivery import (
     process_next_disposition_outreach_delivery,
     process_next_disposition_outreach_reconciliation,
@@ -91,6 +94,7 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
         "disposition_outreach_reconciliation",
         process_next_disposition_outreach_reconciliation,
     ),
+    ("disposition_closing_deadlines", process_next_closing_deadline_escalation),
     ("mailbox_notifications", process_next_mailbox_notification),
     ("acquisition_reminders", process_next_acquisition_reminder),
     ("lead_manager_escalations", process_next_escalation),
@@ -149,9 +153,7 @@ def run_worker(stop_event: threading.Event) -> None:
         meta_access_token_present=meta_runtime_metadata["meta_access_token_present"],
         meta_test_mode_enabled=meta_runtime_metadata["meta_test_mode_enabled"],
         batchdialer_direct_configured=settings.batchdialer_configured,
-        batchdialer_direct_configuration_blockers=list(
-            settings.batchdialer_configuration_blockers
-        ),
+        batchdialer_direct_configuration_blockers=list(settings.batchdialer_configuration_blockers),
         batchdialer_direct_poll_seconds=settings.batchdialer_poll_seconds,
         batchdialer_account_timezone=settings.batchdialer_account_timezone,
         batchdialer_qualification_transcript_required=(

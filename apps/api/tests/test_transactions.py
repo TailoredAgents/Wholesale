@@ -37,6 +37,13 @@ from app.services import esign as esign_service
 from app.services.bootstrap import bootstrap_foundation
 from app.services.contract_authority_locks import lock_offer_authority_for_mutation
 from app.services.offer_concessions import record_field_agreement
+from tests.test_dispositions import (
+    create_approved_disposition_case,
+    put_verified_buy_box,
+    setup_case_foundation,
+    upload_received_proof,
+    verify_proof,
+)
 
 OWNER_EMAIL = "owner@example.com"
 HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
@@ -246,6 +253,102 @@ def esign_send_payload() -> dict[str, object]:
             }
         ],
     }
+
+
+def setup_governed_assignment_selection(
+    db: Session,
+    client: TestClient,
+    transaction_id: str,
+) -> dict[str, str]:
+    # Seed the active compensation/operating model required by the governed
+    # disposition case. The returned fixture transaction is intentionally unused.
+    setup_case_foundation(db, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    buyers: list[dict[str, str]] = []
+    for name, email in (
+        ("Ready Cash Buyer LLC", "buyer@example.com"),
+        ("Backup Cash Buyer LLC", "backup-buyer@example.com"),
+    ):
+        created = client.post(
+            "/api/v1/buyers",
+            headers=HEADERS,
+            json={
+                "name": name,
+                "email": email,
+                "buyer_type": "cash_buyer",
+                "status": "active",
+                "max_purchase_price_cents": 40_000_000,
+                "criteria": {
+                    "markets": "Atlanta, GA",
+                    "property_types": "single_family",
+                    "max_price_cents": 40_000_000,
+                },
+            },
+        )
+        assert created.status_code == 201, created.text
+        buyer_id = created.json()["id"]
+        activated = client.patch(
+            f"/api/v1/buyers/{buyer_id}",
+            headers=HEADERS,
+            json={"status": "active"},
+        )
+        assert activated.status_code == 200, activated.text
+        put_verified_buy_box(client, buyer_id)
+        proof = upload_received_proof(client, buyer_id, amount_cents=40_000_000)
+        verify_proof(client, proof["id"], amount_cents=40_000_000)
+        buyers.append({"id": buyer_id, "name": name, "email": email, "proof_id": proof["id"]})
+
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    offers: list[dict[str, object]] = []
+    for index, buyer in enumerate(buyers):
+        offered = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/offer-room/offers",
+            headers=HEADERS,
+            json={
+                "buyer_id": buyer["id"],
+                "amount_cents": 20_000_000 - index * 100_000,
+                "earnest_money_cents": 100_000,
+                "deposit_due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+                "due_diligence_days": 7,
+                "contingencies": [],
+                "contingencies_confirmed": True,
+                "proposed_closing_at": (datetime.now(UTC) + timedelta(days=21)).isoformat(),
+                "funding_method": "cash",
+                "funding_confidence_basis_points": 9000,
+                "proof_document_id": buyer["proof_id"],
+                "change_reason": "Governed assignment e-sign completion fixture.",
+                "idempotency_key": f"f4-governed-offer-{index + 1}",
+            },
+        )
+        assert offered.status_code == 201, offered.text
+        offers.append(
+            next(item for item in offered.json()["offers"] if item["buyer_id"] == buyer["id"])
+        )
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json={
+            "primary_offer_id": offers[0]["id"],
+            "backup_offer_ids": [offers[1]["id"]],
+            "expected_offer_lock_versions": {
+                str(item["id"]): item["lock_version"] for item in offers
+            },
+            "reason": "Approved primary and backup coverage for assignment e-sign completion.",
+            "idempotency_key": "f4-governed-assignment-selection",
+        },
+    )
+    assert selected.status_code == 201, selected.text
+    transaction = db.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.assignment_fee_cents = (
+        int(offers[0]["amount_cents"]) - transaction.purchase_price_cents
+    )
+    db.commit()
+    return buyers[0]
 
 
 def test_contract_approval_execution_and_funding_gates(
@@ -1573,9 +1676,7 @@ def test_signwell_document_error_releases_an_uncertain_send_reservation(
     )
     monkeypatch.setattr(
         "app.services.esign.SignWellClient.send_document",
-        lambda _client, _document_id: (_ for _ in ()).throw(
-            httpx.ReadTimeout("uncertain send")
-        ),
+        lambda _client, _document_id: (_ for _ in ()).throw(httpx.ReadTimeout("uncertain send")),
     )
     failed = client.post(
         f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/esign",
@@ -1663,9 +1764,7 @@ def test_signwell_delayed_completion_advances_after_newer_reconcile_timestamp(
                 "time": delayed_time,
                 "type": "document_completed",
             },
-            "data": {
-                "object": {"id": "signwell-delayed-completion", "status": "completed"}
-            },
+            "data": {"object": {"id": "signwell-delayed-completion", "status": "completed"}},
         },
         get_settings(),
         verification=esign_service.SignWellWebhookVerification(
@@ -1754,13 +1853,8 @@ def test_delayed_provider_completion_is_quarantined_after_terminal_state(
         lead.closed_out_at = terminal_at
         lead.close_out_disposition = "dead"
         lead.close_out_reason = "Seller confirmed they do not want to proceed."
-    original_provider_payload = dict(envelope.provider_payload or {})
     db_session.commit()
-
-    def reject_completed_document_storage(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("A quarantined completion must not store an executed document.")
-
-    monkeypatch.setattr(esign_service, "store_content", reject_completed_document_storage)
+    completed_pdf = b"%PDF delayed terminal agreement"
     processed = esign_service.process_signwell_event(
         db_session,
         {
@@ -1773,9 +1867,7 @@ def test_delayed_provider_completion_is_quarantined_after_terminal_state(
                 "object": {
                     "id": envelope.provider_document_id,
                     "status": "completed",
-                    "completed_pdf_base64": base64.b64encode(
-                        b"%PDF delayed terminal agreement"
-                    ).decode(),
+                    "completed_pdf_base64": base64.b64encode(completed_pdf).decode(),
                 }
             },
         },
@@ -1792,10 +1884,12 @@ def test_delayed_provider_completion_is_quarantined_after_terminal_state(
     stored_package = db_session.get(ContractPackage, package_id)
     stored_transaction = db_session.get(Transaction, UUID(transaction_id))
     stored_lead = db_session.get(Lead, UUID(lead_id))
-    assert stored_envelope is not None and stored_envelope.status == "sent"
-    assert stored_envelope.completed_at is None
-    assert stored_envelope.completed_document_id is None
-    assert stored_envelope.provider_payload == original_provider_payload
+    assert stored_envelope is not None and stored_envelope.status == "completed"
+    assert stored_envelope.completed_at is not None
+    assert stored_envelope.completed_document_id is not None
+    quarantine_payload = stored_envelope.provider_payload["completion_quarantine"]
+    assert quarantine_payload["document_id"] == str(stored_envelope.completed_document_id)
+    assert "cannot execute" in quarantine_payload["reason"]
     assert stored_package is not None and stored_package.status == "sent"
     assert stored_transaction is not None
     assert stored_transaction.status == (
@@ -1821,6 +1915,16 @@ def test_delayed_provider_completion_is_quarantined_after_terminal_state(
         )
     )
     assert quarantine_event is not None
+    quarantined_document = db_session.get(
+        TransactionDocument,
+        stored_envelope.completed_document_id,
+    )
+    assert quarantined_document is not None
+    assert quarantined_document.contract_package_id == package_id
+    assert quarantined_document.document_type == "quarantined_purchase_agreement"
+    assert quarantined_document.status == "quarantined"
+    assert quarantined_document.sha256 == sha256(completed_pdf).hexdigest()
+    assert quarantine_event.details["document_id"] == str(quarantined_document.id)
     assert (
         db_session.scalar(
             select(TransactionDocument.id).where(
@@ -1833,7 +1937,8 @@ def test_delayed_provider_completion_is_quarantined_after_terminal_state(
     recipient = db_session.scalar(
         select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope_id)
     )
-    assert recipient is not None and recipient.status == "sent"
+    assert recipient is not None and recipient.status == "signed"
+    assert recipient.signed_at is not None
     get_settings.cache_clear()
 
 
@@ -2297,6 +2402,11 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
         "under_contract"
     )
 
+    selected_assignee = setup_governed_assignment_selection(
+        db_session,
+        client,
+        transaction_id,
+    )
     assignment_package = client.post(
         f"/api/v1/transactions/{transaction_id}/contract-packages",
         headers=HEADERS,
@@ -2328,8 +2438,8 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
             "recipients": [
                 {
                     "placeholder_name": "Assignee",
-                    "name": "Ready Cash Buyer LLC",
-                    "email": "buyer@example.com",
+                    "name": selected_assignee["name"],
+                    "email": selected_assignee["email"],
                     "signing_order": 1,
                 }
             ],

@@ -3096,6 +3096,165 @@ export type DispositionOffer = {
   received_at: string;
 };
 
+export type DispositionOfferRiskFlag = {
+  code: string;
+  severity: "info" | "warning" | "danger";
+  message: string;
+  evidence: Record<string, unknown>;
+};
+
+export type DispositionOfferRoomOffer = {
+  id: string;
+  buyer_id: string;
+  buyer_name: string;
+  amount_cents: number;
+  earnest_money_cents: number | null;
+  deposit_due_at: string | null;
+  due_diligence_days: number | null;
+  contingencies: string[];
+  contingencies_confirmed: boolean;
+  proposed_closing_at: string | null;
+  funding_method: string;
+  funding_confidence_basis_points: number;
+  proof_document_id: string | null;
+  proof_status: string;
+  proof_verified_amount_cents: number | null;
+  proof_expires_at: string | null;
+  special_terms: string | null;
+  notes: string | null;
+  status: string;
+  lock_version: number;
+  received_at: string;
+  updated_at: string;
+  risk_score_basis_points: number;
+  risk_flags: DispositionOfferRiskFlag[];
+  strengths: string[];
+  execution_score_basis_points: number;
+  reliability_score_basis_points: number;
+  reliability_evidence: string[];
+  comparison_rank: number;
+  is_recommended: boolean;
+};
+
+export type DispositionOfferSelectionSlot = {
+  role: "primary" | "backup";
+  rank: number;
+  offer_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  amount_cents: number;
+  offer_snapshot: Record<string, unknown>;
+  readiness_status: "ready" | "provisional";
+  readiness_blockers: string[];
+};
+
+export type DispositionOfferSelection = {
+  id: string;
+  status: string;
+  lock_version: number;
+  primary: DispositionOfferSelectionSlot | null;
+  backups: DispositionOfferSelectionSlot[];
+  reason: string;
+  evidence_hash: string;
+  approved_by_user_id: string;
+  approved_at: string;
+  replaced_at: string | null;
+};
+
+export type DispositionOfferNegotiationEvent = {
+  id: string;
+  offer_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  event_type: string;
+  direction: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  occurred_at: string;
+  actor_user_id: string;
+};
+
+export type DispositionDeadlineAlert = {
+  id: string;
+  checkpoint_id: string;
+  status: string;
+  severity: string;
+  title: string;
+  message: string;
+  due_at: string;
+  deadline_version: number;
+  acknowledged_by_user_id: string | null;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+};
+
+export type DispositionClosingCheckpoint = {
+  id: string;
+  selection_id: string | null;
+  checkpoint_type: string;
+  label: string;
+  canonical_source: string;
+  source_record_id: string | null;
+  due_at: string;
+  status: string;
+  lock_version: number;
+  deadline_version: number;
+  offer_id: string | null;
+  buyer_id: string | null;
+  buyer_name: string | null;
+  responsible_user_id: string | null;
+  completed_at: string | null;
+  notes: string | null;
+  evidence: Record<string, unknown>;
+  is_overdue: boolean;
+  active_alert: DispositionDeadlineAlert | null;
+};
+
+export type DispositionReplacementOption = {
+  offer_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  backup_rank: number | null;
+  comparison_rank: number;
+  amount_cents: number;
+  execution_score_basis_points: number;
+  risk_score_basis_points: number;
+  eligible: boolean;
+  blockers: string[];
+};
+
+export type DispositionOfferOutcome = {
+  id: string;
+  selection_id: string | null;
+  offer_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  outcome_type: string;
+  cause_category: string;
+  reason: string;
+  details: string | null;
+  evidence: Record<string, unknown>;
+  occurred_at: string;
+  completed_delta: number;
+  failed_delta: number;
+  reliability_delta_basis_points: number;
+};
+
+export type DispositionOfferRoomWorkspace = {
+  case_id: string;
+  case_status: string;
+  currency: string;
+  generated_at: string;
+  offers: DispositionOfferRoomOffer[];
+  current_selection: DispositionOfferSelection | null;
+  selection_history: DispositionOfferSelection[];
+  negotiation_history: DispositionOfferNegotiationEvent[];
+  checkpoints: DispositionClosingCheckpoint[];
+  alerts: DispositionDeadlineAlert[];
+  replacement_options: DispositionReplacementOption[];
+  outcomes: DispositionOfferOutcome[];
+};
+
 export type DispositionCase = {
   id: string;
   transaction_id: string;
@@ -5252,6 +5411,8 @@ export type TransactionDetail = {
     status: string;
     seller_name: string;
     buyer_entity_name: string;
+    assignee_name: string | null;
+    assignee_email: string | null;
     purchase_price_cents: number;
     earnest_money_cents: number | null;
     closing_date: string | null;

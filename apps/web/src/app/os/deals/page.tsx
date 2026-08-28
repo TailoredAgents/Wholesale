@@ -131,6 +131,7 @@ export default async function DealsPage({
       ) : null}
       {dealResult.deals ? (
         <DealsWorkspace
+          canApproveBuyerSelection={Boolean(profile?.permissions.includes("dispositions:approve_buyer_selection"))}
           canApproveOutreach={canApproveOutreach}
           canEditBuyers={Boolean(profile?.permissions.includes("buyers:edit"))}
           canEditDeals={Boolean(profile?.permissions.includes("deals:edit"))}

@@ -3450,7 +3450,7 @@ def test_open_lead_transaction_rejects_duplicate_active_transaction(
     assert second_response.status_code == 422
 
 
-def test_record_lead_buyer_offer_creates_offer_and_audit(
+def test_legacy_lead_buyer_offer_entry_is_retired_without_writes(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -3499,16 +3499,9 @@ def test_record_lead_buyer_offer_creates_offer_and_audit(
         },
     )
 
-    assert response.status_code == 201
-    payload = response.json()
-    assert payload["buyer_offers"][0]["buyer_name"] == "Acme Cash Buyer"
-    assert payload["buyer_offers"][0]["amount_cents"] == 19500000
-    assert payload["buyer_offers"][0]["earnest_money_cents"] == 500000
-    assert payload["buyer_offers"][0]["proof_of_funds_received"] is True
-    assert "lead.buyer_offer_received" in [
-        activity["event_type"] for activity in payload["recent_activity"]
-    ]
-    assert int(db_session.scalar(select(func.count()).select_from(BuyerOffer)) or 0) == 1
+    assert response.status_code == 410, response.text
+    assert "Offer Room" in response.json()["detail"]
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerOffer)) or 0) == 0
     assert (
         int(
             db_session.scalar(
@@ -3518,7 +3511,7 @@ def test_record_lead_buyer_offer_creates_offer_and_audit(
             )
             or 0
         )
-        == 1
+        == 0
     )
 
 

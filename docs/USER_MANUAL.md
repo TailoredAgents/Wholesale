@@ -2241,7 +2241,7 @@ For an existing case, the embedded tabs are:
 - **Package**
 - **Buyers**
 - **Outreach**
-- **Offers**
+- **Offer Room**
 - **Reconciliation**
 
 If the record says disposition has not started, use **Open disposition setup**. This opens the
@@ -2343,11 +2343,52 @@ InvestorLift and Land outreach remain disabled. Repository implementation does n
 Resend/Twilio acceptance; the owner must complete a controlled, capped production test before broad
 use.
 
-### Offers
+### Offer Room
 
-1. Record each buyer offer, terms, proof, deposit readiness, and expiration.
-2. Compare net economics and execution risk.
-3. Select the primary and backup buyer only through human approval.
+The Offer Room is available for a contracted **House** disposition case. Open the Deal, select
+**Disposition**, then select **Offer Room**.
+
+1. Select **Record offer** and save the buyer's amount, earnest money, deposit deadline,
+   due-diligence period, contingencies, proposed closing, funding method and confidence, proof of
+   funds, special terms, and notes. Use factual terms from the buyer; do not infer missing terms.
+2. Use **Revise offer** when a material term changes. Enter why it changed. Stonegate creates a new
+   immutable revision instead of replacing the prior evidence.
+3. Record counters, retrades, buyer messages, and internal negotiation events in **Negotiation
+   history**. This history does not itself change or accept the offer.
+4. Compare the offer cards. Review price, proof coverage and expiration, deposit strength, closing
+   compatibility, contingencies, funding confidence, buyer reliability, risk flags, strengths, and
+   execution score. The highest offer is not automatically the strongest executable offer.
+5. A user with buyer-selection approval chooses one primary and at least one backup from a different
+   buyer, records a decision reason, and approves the selection. Other disposition staff can record
+   and compare offers but cannot activate the choice. The system and Copilot never select a buyer.
+   Any later revision to a selected offer makes that reviewed slot stale; compare the current terms
+   and approve a new coverage version before promotion, assignment delivery, or funding.
+6. Review **Closing protection** after selection. Transaction closing and relevant title, access,
+   and closing-checklist dates are canonical and must be changed in the Deal's Transaction sections.
+   The selected buyer's deposit deadline remains tied to the offer. Add buyer-response, agreement,
+   signature, or other deal-specific milestones in the Offer Room when needed.
+   Deposit completion requires substantive evidence. Only a manager may record a documented deposit
+   waiver, and a waiver does not silently change the buyer's approved offer terms.
+7. When an alert appears, review the actual source evidence. Acknowledge it to record that someone
+   owns the response; acknowledgement does not complete or erase the missed deadline. Complete the
+   milestone, change the canonical source, or use the governed replacement control as appropriate.
+8. If the primary buyer cannot perform, an authorized manager chooses an eligible ranked backup and
+   records the prior buyer's outcome, cause, reason, details, and evidence. The original selection,
+   checkpoints, and offer remain in history.
+9. Use **Record outcome** for a pass, withdrawal, fallout, or retrade. Choose the factual cause.
+   Seller, title, property, Stonegate, and external causes do not reduce the buyer's reliability.
+   Buyer-responsible failures and retrades do. Do not use a buyer cause merely because the deal did
+   not close.
+10. Record the funded close in the Transaction workspace. Funding records the completed buyer close
+    automatically and exactly once. For an assignment, Stonegate requires the current approved
+    buyer selection, an assignment bound to the selected buyer and reviewed offer economics, the
+    matching assignee signer identity, executed assignment evidence, and buyer-deposit evidence or
+    a documented manager waiver before funding. If the primary buyer or terms change, create and
+    execute a new assignment version; the old agreement cannot move through later contract gates.
+
+The Offer Room preserves viable unselected offers for replacement review. After a backup is
+promoted, qualify and approve new backup coverage if none remains. Land Offer Room, Land outreach,
+and InvestorLift synchronization are not active.
 
 ### Disposition Copilot
 

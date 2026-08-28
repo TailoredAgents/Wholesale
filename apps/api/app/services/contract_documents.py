@@ -44,6 +44,7 @@ FIELD_KEYS = (
     "buyer_entity_name",
     "purchase_price",
     "earnest_money",
+    "deposit_due_at",
     "closing_date",
     "inspection_period_days",
     "special_terms",
@@ -193,12 +194,16 @@ def _contract_context(
             f"{property_record.state} {property_record.postal_code}"
         )
     special_terms = str(package.terms_snapshot.get("special_terms") or "").strip()
+    binding = package.terms_snapshot.get("disposition_buyer_binding") or {}
+    economics = binding.get("offer_economics_snapshot") if isinstance(binding, dict) else None
+    deposit_due_at = economics.get("deposit_due_at") if isinstance(economics, dict) else None
     return {
         "seller_name": package.seller_name,
         "property_address": property_address,
         "buyer_entity_name": package.buyer_entity_name,
         "purchase_price": _money(package.purchase_price_cents),
         "earnest_money": _money(package.earnest_money_cents),
+        "deposit_due_at": _date_time(deposit_due_at),
         "closing_date": _date(package.closing_date),
         "inspection_period_days": (
             str(package.inspection_period_days)
@@ -561,3 +566,21 @@ def _date(value: date | datetime | None) -> str:
         return ""
     normalized = value.date() if isinstance(value, datetime) else value
     return f"{normalized.strftime('%B')} {normalized.day}, {normalized.year}"
+
+
+def _date_time(value: str | datetime | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        try:
+            normalized = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+    else:
+        normalized = value
+    hour = normalized.strftime("%I").lstrip("0") or "12"
+    timezone_name = normalized.tzname() or ""
+    return (
+        f"{normalized.strftime('%B')} {normalized.day}, {normalized.year} at "
+        f"{hour}:{normalized.strftime('%M %p')} {timezone_name}"
+    ).strip()

@@ -177,6 +177,36 @@ def validate_purchase_contract_authority(
     return snapshot
 
 
+def validate_contract_package_authority(
+    db: Session,
+    transaction: Transaction,
+    package: ContractPackage,
+    *,
+    gate: str,
+    lock_assignment: bool = False,
+) -> dict[str, Any] | None:
+    """Validate the current governed authority for either seller or buyer contracts."""
+    document_type = package_document_type(package)
+    if document_type == "assignment_contract":
+        from app.services.disposition_offer_room import (
+            validate_assignment_package_authority,
+        )
+
+        return validate_assignment_package_authority(
+            db,
+            transaction,
+            package,
+            gate=gate,
+            lock=lock_assignment,
+        )
+    return validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate=gate,
+    )
+
+
 def latest_seller_agreement(
     db: Session,
     plan: OfferNegotiationPlan,

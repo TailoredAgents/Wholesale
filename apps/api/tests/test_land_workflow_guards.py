@@ -180,20 +180,24 @@ def test_land_lead_is_blocked_from_residential_underwriting_entry_points(
                 "notes": "Residential transaction creation must remain blocked.",
             },
         ),
-        (
-            f"/api/v1/leads/{lead_id}/buyer-offers",
-            {
-                "buyer_id": str(uuid4()),
-                "amount_cents": 12_000_000,
-                "financing_type": "cash",
-                "status": "received",
-            },
-        ),
     )
     for path, payload in write_requests:
         response = client.post(path, headers=headers, json=payload)
         assert response.status_code == 409, (path, response.text)
         assert "not available for Land leads yet" in response.json()["detail"]
+
+    retired_offer_entry = client.post(
+        f"/api/v1/leads/{lead_id}/buyer-offers",
+        headers=headers,
+        json={
+            "buyer_id": str(uuid4()),
+            "amount_cents": 12_000_000,
+            "financing_type": "cash",
+            "status": "received",
+        },
+    )
+    assert retired_offer_entry.status_code == 410, retired_offer_entry.text
+    assert "Offer Room" in retired_offer_entry.json()["detail"]
 
     for model in (
         UnderwritingVersion,

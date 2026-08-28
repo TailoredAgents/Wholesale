@@ -5771,6 +5771,19 @@ class BuyerBuyBoxVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_offers"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_buyer_offer_case_idempotency",
+        ),
+        CheckConstraint("lock_version >= 1", name="ck_buyer_offer_lock_version"),
+        CheckConstraint(
+            "funding_confidence_basis_points BETWEEN 0 AND 10000",
+            name="ck_buyer_offer_funding_confidence",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -5784,9 +5797,25 @@ class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     proof_document_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("buyer_proof_documents.id")
     )
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     earnest_money_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     financing_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    funding_confidence_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    due_diligence_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contingencies: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    contingencies_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    proposed_closing_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    special_terms: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     proof_of_funds_received: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
@@ -5796,6 +5825,307 @@ class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     deposit_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deposit_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     selected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositionOfferRevision(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_offer_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "offer_id", "revision_number", name="uq_disposition_offer_revision_number"
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_disposition_offer_revision_idempotency",
+        ),
+        CheckConstraint("revision_number >= 1", name="ck_disposition_offer_revision_positive"),
+        Index(
+            "ix_disposition_offer_revision_case",
+            "organization_id",
+            "disposition_case_id",
+            "created_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    offer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyer_offers.id", ondelete="CASCADE"), nullable=False
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    terms_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    risk_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    change_reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+
+class DispositionOfferNegotiationEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_offer_negotiations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_disposition_offer_negotiation_idem",
+        ),
+        Index(
+            "ix_disposition_offer_negotiation_case",
+            "organization_id",
+            "disposition_case_id",
+            "occurred_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    offer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyer_offers.id", ondelete="CASCADE"), nullable=False
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    direction: Mapped[str] = mapped_column(String(20), nullable=False)
+    summary: Mapped[str] = mapped_column(String(2000), nullable=False)
+    metadata_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+
+
+class DispositionBuyerSelection(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_selections"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_disposition_selection_idempotency",
+        ),
+        CheckConstraint("lock_version >= 1", name="ck_disposition_selection_lock_version"),
+        Index(
+            "uq_disposition_selection_current",
+            "organization_id",
+            "disposition_case_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    approved_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    superseded_by_selection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_buyer_selections.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositionBuyerSelectionSlot(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_selection_slots"
+    __table_args__ = (
+        UniqueConstraint("selection_id", "role", "rank", name="uq_disposition_selection_slot_rank"),
+        UniqueConstraint("selection_id", "offer_id", name="uq_disposition_selection_slot_offer"),
+        CheckConstraint("rank >= 1", name="ck_disposition_selection_slot_rank"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    selection_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_buyer_selections.id", ondelete="CASCADE"), nullable=False
+    )
+    offer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyer_offers.id"), nullable=False)
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    offer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class DispositionClosingCheckpoint(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_closing_checkpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_disposition_checkpoint_idempotency",
+        ),
+        CheckConstraint("lock_version >= 1", name="ck_disposition_checkpoint_lock_version"),
+        CheckConstraint("deadline_version >= 1", name="ck_disposition_checkpoint_deadline_version"),
+        Index(
+            "ix_disposition_checkpoint_due",
+            "organization_id",
+            "status",
+            "due_at",
+        ),
+        Index(
+            "ix_disposition_checkpoint_case",
+            "organization_id",
+            "disposition_case_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    selection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_buyer_selections.id", ondelete="SET NULL")
+    )
+    offer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyer_offers.id", ondelete="SET NULL")
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL")
+    )
+    responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    checkpoint_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="offer_room", server_default="offer_room"
+    )
+    source_record_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    deadline_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class DispositionDeadlineAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_deadline_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "dedupe_key", name="uq_disposition_deadline_alert_dedupe"
+        ),
+        Index(
+            "ix_disposition_deadline_alert_case",
+            "organization_id",
+            "disposition_case_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    checkpoint_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_closing_checkpoints.id", ondelete="CASCADE"), nullable=False
+    )
+    deadline_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositionBuyerOutcome(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_buyer_outcomes"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_disposition_buyer_outcome_idempotency",
+        ),
+        Index(
+            "ix_disposition_buyer_outcome_buyer",
+            "organization_id",
+            "buyer_id",
+            "occurred_at",
+        ),
+        Index(
+            "uq_disposition_buyer_outcome_completed_close",
+            "organization_id",
+            "disposition_case_id",
+            unique=True,
+            postgresql_where=text("outcome_type = 'completed_close'"),
+            sqlite_where=text("outcome_type = 'completed_close'"),
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    selection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_buyer_selections.id", ondelete="SET NULL")
+    )
+    offer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyer_offers.id"), nullable=False)
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), nullable=False)
+    recorded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    outcome_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    cause_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    details: Mapped[str | None] = mapped_column(String(2000))
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    history_applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_delta: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed_delta: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    reliability_delta_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
 
 
 class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -6546,9 +6876,7 @@ class DispositionOutreachDelivery(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=0,
         server_default="0",
     )
-    next_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processing_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

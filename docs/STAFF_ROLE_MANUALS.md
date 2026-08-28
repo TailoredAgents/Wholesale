@@ -589,11 +589,37 @@ so through Stonegate's existing communication providers.
 
 ### Offers
 
-1. Record every material buyer offer and terms.
-2. Compare price, closing speed, contingencies, funding, and reliability.
-3. Select primary and backup buyers through the governed workflow.
-4. Do not mark a buyer selected merely because they offered the highest amount.
-5. Keep the transaction coordinator informed of deadlines and changed terms.
+1. Open the contracted House Deal, select **Disposition**, then **Offer Room**.
+2. Record every material offer with amount, EMD, deposit deadline, due diligence, contingencies,
+   proposed closing, funding confidence, proof, special terms, and notes. Revise the offer instead of
+   overwriting it, and record counters or retrades in negotiation history.
+3. Compare execution evidence, not price alone. Review proof coverage and expiration, deposit
+   strength, closing compatibility, contingencies, funding confidence, buyer reliability, risk
+   flags, and prior outcomes.
+4. A disposition representative may record and compare offers. Only a user with buyer-selection
+   approval may activate one primary and at least one different-buyer backup. AI and scores are
+   advisory and never approve the choice.
+   If either approved offer changes later, treat the coverage as stale and approve a new version
+   before promotion, assignment delivery, or funding.
+5. After selection, review closing protection daily. Change canonical closing, title, and access
+   checklist dates in the Transaction workspace; use Offer Room milestones for buyer response,
+   agreement, signature, deposit, and other buyer-specific obligations.
+6. Acknowledge a deadline alert only after taking ownership. Acknowledgement does not complete the
+   missed item. Resolve the source obligation or escalate to the manager.
+7. If the primary fails, the manager records the factual outcome and cause, then promotes an
+   eligible ranked backup. Never erase or rewrite the old offer, selection, checkpoint, or failure.
+8. Record pass, withdrawal, fallout, and retrade causes accurately. Only buyer-responsible outcomes
+   should reduce the buyer's performance record; do not blame the buyer for seller, title, property,
+   Stonegate, or external failures.
+9. Record funding in the Transaction workspace. Funding automatically records the completed buyer
+   close exactly once. Assignment funding requires approved buyer coverage, executed assignment
+   evidence bound to the current buyer, offer economics, and assignee identity, plus buyer-deposit
+   evidence or an explicit manager-approved waiver.
+10. After promoting the last backup, qualify and approve replacement backup coverage. Keep the
+    transaction coordinator informed of changed terms and deadlines.
+
+This Offer Room workflow is House-only. Land disposition and InvestorLift remain outside the live
+workflow.
 
 ### Devon And Austin Work Split
 

@@ -655,6 +655,17 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   `prepared_not_sent` recipients and sends no buyer communication. The separate House **Outreach**
   view can turn selected owned-network recipients into an immutable exact-message revision, but an
   authorized human must approve and release it. Land package release and outreach remain blocked.
+- The House **Offer Room** compares normalized offer terms and execution evidence side by side. It
+  keeps immutable offer revisions, negotiation events, selection versions, replacements, and buyer
+  outcomes; a score or AI recommendation cannot select a buyer.
+- Only a user with the dedicated buyer-selection approval permission can approve the primary and
+  different-buyer backups or activate a replacement. Unselected viable offers remain available.
+- Offer Room closing checkpoints reuse the transaction's closing date and relevant checklist dates,
+  plus the selected buyer's deposit deadline. Canonical rows are changed in their source record,
+  while Offer Room-specific response, agreement, and signature deadlines are managed in the Offer
+  Room.
+- The worker raises one versioned alert per missed checkpoint. The same alert appears in the Offer
+  Room and Disposition Desk instead of creating competing deadline records.
 
 **Buyers (`/os/buyers`)**
 
@@ -1011,8 +1022,22 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 12. Safely matched replies stay in the canonical Buyer Inbox and create reply-review tasks linked
     to the buyer and disposition case. Ambiguous replies create reconciliation work rather than
     changing interest, offer, or buyer-selection state automatically.
-13. Staff record engagement, offers, deposits, and proof; buyer selection remains a human approval.
-14. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+13. Staff record engagement, proof, and fully normalized offers. Each material offer revision and
+    negotiation event remains in the case history.
+14. The Offer Room compares price with deposit strength, timing, contingencies, proof coverage,
+    funding confidence, and buyer reliability. A manager approves a primary and at least one
+    different-buyer backup; the comparison never accepts an offer automatically.
+15. Closing, title/access checklist, and buyer-deposit dates synchronize into the Offer Room. Staff
+    add any buyer-response, agreement, signature, or other deal-specific checkpoints. The worker
+    creates a deduplicated missed-deadline alert and links the Disposition Desk back to the Offer
+    Room.
+16. When the primary cannot perform, a manager records the factual outcome and cause, then activates
+    an eligible ranked backup. The old selection, checkpoints, offer terms, and outcome remain in
+    history.
+17. Funding records the selected buyer's completed close exactly once in the same transaction. For
+    an assignment, funding is blocked until the current selection, executed assignment evidence,
+    and buyer deposit or documented waiver are present.
+18. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
 
 This workflow is House-only. Governed outreach is limited to recipients already in Stonegate's
 owned Buyer Network. Land disposition packaging, buyer release, and outreach remain blocked until
@@ -1431,6 +1456,38 @@ campaign, and disposition case. Ambiguous replies create reconciliation review w
 not automatically accept an offer, select a buyer, change economics, or infer interest from a
 reply. The repository implementation exists, but real Resend/Twilio delivery and reply acceptance is
 still an external production test requirement.
+
+### 13.5 House Offer Room And Closing Protection
+
+The House Offer Room stores the full executable offer rather than only a price. Amount, earnest
+money, deposit date, due-diligence period, contingencies, proposed close, funding method and
+confidence, proof of funds, special terms, and internal notes are versioned. A deterministic
+comparison shows strengths, risk flags, and the evidence behind the execution score. The ranking is
+advisory; only an authorized human can approve or replace buyer coverage.
+
+An approved selection is a versioned record containing one primary and one or more different-buyer
+backups. Each slot freezes the offer and readiness evidence reviewed at approval. Later offer
+changes make that slot stale until a manager approves a new coverage version. Selection
+replacements, negotiations, passes, withdrawals, fallouts, retrades, and closes append new evidence
+without erasing the original decision.
+
+Closing checkpoints combine canonical Transaction and checklist deadlines with buyer-deposit and
+Offer Room-specific milestones. Transaction-controlled rows are read-only here so closing dates do
+not diverge between workspaces. The communications worker marks overdue checkpoints missed and
+creates one alert per checkpoint deadline version. Rescheduling resolves the prior alert and allows
+one new alert for the new deadline if that deadline is later missed.
+
+The funded-close path is the authority for a completed buyer outcome. It requires the active
+manager-approved selection; assignment packages freeze the selected buyer identity and offer
+economics, then revalidate that authority at approval, delivery, execution, and funding. Assignment
+deals also require matching executed-assignee evidence and a completed buyer deposit or documented
+manager waiver. The same database transaction updates funding and buyer history, preventing partial
+or duplicate credit. Buyer performance is reduced only for an
+outcome explicitly attributed to the buyer; seller, title, property, Stonegate, and external causes
+remain visible without changing buyer reliability.
+
+This implementation is private, tenant-scoped, and House-only. It does not enable InvestorLift or
+Land disposition.
 
 ## 14. Finance And Accounting
 

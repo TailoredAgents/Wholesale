@@ -16,7 +16,8 @@ test("DS6 outreach lives between the canonical buyer pool and offers tabs", () =
   assert.match(deals, /"package" \| "buyers" \| "outreach" \| "offers" \| "reconciliation"/);
   assert.match(disposition, /\["package", "buyers", "outreach", "offers", "reconciliation"\]/);
   assert.match(disposition, /<DispositionOutreachWorkspace/);
-  assert.match(disposition, /item === "buyers" \? "Buyer pool" : labelize\(item\)/);
+  assert.match(disposition, /item === "buyers" \? "Buyer pool"/);
+  assert.match(disposition, /item === "offers" \? "Offer Room"/);
   assert.match(disposition, /aria-label="Disposition deal sections"/);
 });
 

@@ -34,6 +34,7 @@ from tests.test_dispositions import (
     HEADERS,
     OWNER_EMAIL,
     approve_disposition_package,
+    put_verified_buy_box,
     setup_case_foundation,
     upload_received_proof,
     verify_proof,
@@ -249,6 +250,22 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     assert approved.status_code == 200, approved.text
 
     now = datetime.now(UTC)
+    put_verified_buy_box(client, buyer_id)
+    received_proof = upload_received_proof(
+        client,
+        buyer_id,
+        expires_at=now + timedelta(days=5),
+    )
+    verify_proof(
+        client,
+        received_proof["id"],
+        expires_at=now + timedelta(days=5),
+    )
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
     followup = client.post(
         f"/api/v1/dispositions/cases/{case_id}/engagements",
         headers=HEADERS,
@@ -262,17 +279,25 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     )
     assert followup.status_code == 200, followup.text
     offer = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/offers",
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/offers",
         headers=HEADERS,
         json={
             "buyer_id": buyer_id,
             "amount_cents": 19000000,
             "earnest_money_cents": 500000,
-            "financing_type": "cash",
             "deposit_due_at": (now - timedelta(minutes=15)).isoformat(),
+            "due_diligence_days": 7,
+            "contingencies": [],
+            "contingencies_confirmed": True,
+            "proposed_closing_at": (now + timedelta(days=14)).isoformat(),
+            "funding_method": "cash",
+            "funding_confidence_basis_points": 9000,
+            "proof_document_id": received_proof["id"],
+            "change_reason": "Normalized offer for disposition desk aggregation coverage.",
+            "idempotency_key": "desk-canonical-offer-01",
         },
     )
-    assert offer.status_code == 200, offer.text
+    assert offer.status_code == 201, offer.text
     offer_id = offer.json()["offers"][0]["id"]
 
     owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
@@ -294,16 +319,6 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     conversation.last_inbound_at = now
     conversation.last_outbound_at = now - timedelta(hours=1)
     db_session.commit()
-    received_proof = upload_received_proof(
-        client,
-        buyer_id,
-        expires_at=now + timedelta(days=5),
-    )
-    verify_proof(
-        client,
-        received_proof["id"],
-        expires_at=now + timedelta(days=5),
-    )
     relationship_followup = client.post(
         f"/api/v1/buyers/{buyer_id}/relationship-activities",
         headers=HEADERS,

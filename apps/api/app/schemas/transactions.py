@@ -56,6 +56,8 @@ class ContractPackageRead(BaseModel):
     status: str
     seller_name: str
     buyer_entity_name: str
+    assignee_name: str | None = None
+    assignee_email: str | None = None
     purchase_price_cents: int
     earnest_money_cents: int | None
     closing_date: datetime | None
@@ -73,6 +75,8 @@ class ManualContractExecutionAttestation(BaseModel):
     document_id: UUID
     confirm_fully_executed: Literal[True]
     reason: str = Field(min_length=10, max_length=1000)
+    assignee_name: str | None = Field(default=None, min_length=1, max_length=255)
+    assignee_email: str | None = Field(default=None, min_length=3, max_length=320)
 
 
 class ManualContractWithdrawalAttestation(BaseModel):

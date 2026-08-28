@@ -14,6 +14,18 @@ from app.schemas.disposition_desk import (
     DispositionDeskRead,
     DispositionDeskScope,
 )
+from app.schemas.disposition_offer_room import (
+    BuyerOutcomeCreate,
+    ClosingCheckpointCreate,
+    ClosingCheckpointUpdate,
+    DeadlineAlertAcknowledge,
+    OfferNegotiationCreate,
+    OfferPrimaryReplacementCreate,
+    OfferRoomOfferCreate,
+    OfferRoomOfferUpdate,
+    OfferRoomRead,
+    OfferSelectionCreate,
+)
 from app.schemas.disposition_outreach import (
     DispositionOutreachApprovalRequest,
     DispositionOutreachControlRequest,
@@ -49,6 +61,7 @@ from app.schemas.dispositions import (
 from app.services import (
     disposition_buyer_pool,
     disposition_desk,
+    disposition_offer_room,
     disposition_outreach,
     disposition_packages,
     dispositions,
@@ -69,6 +82,9 @@ buyer_proof_manage_dependency = require_permission(PermissionKeys.MANAGE_BUYER_P
 package_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSITION_PACKAGES)
 outreach_manage_dependency = require_permission(PermissionKeys.MANAGE_DISPOSITION_OUTREACH)
 outreach_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSITION_OUTREACH)
+buyer_selection_approve_dependency = require_permission(
+    PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION
+)
 outreach_view_dependency = require_any_permission(
     PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
     PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
@@ -161,6 +177,275 @@ def read_case(
     if case is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
     return dispositions.case_read(db, case, principal)
+
+
+def _offer_room_result(
+    action: Callable[..., OfferRoomRead],
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    response: Response,
+    *args: object,
+    **kwargs: object,
+) -> OfferRoomRead:
+    try:
+        result = action(db, principal, case_id, *args, **kwargs)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.get(
+    "/cases/{case_id}/offer-room",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def read_offer_room(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_view_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.read_workspace,
+        db,
+        principal,
+        case_id,
+        response,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/offers",
+    status_code=201,
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def create_offer_room_offer(
+    case_id: UUID,
+    payload: OfferRoomOfferCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.create_offer,
+        db,
+        principal,
+        case_id,
+        response,
+        payload,
+    )
+
+
+@router.patch(
+    "/cases/{case_id}/offer-room/offers/{offer_id}",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def revise_offer_room_offer(
+    case_id: UUID,
+    offer_id: UUID,
+    payload: OfferRoomOfferUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.revise_offer,
+        db,
+        principal,
+        case_id,
+        response,
+        offer_id,
+        payload,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/offers/{offer_id}/negotiations",
+    status_code=201,
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def record_offer_room_negotiation(
+    case_id: UUID,
+    offer_id: UUID,
+    payload: OfferNegotiationCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.record_negotiation,
+        db,
+        principal,
+        case_id,
+        response,
+        offer_id,
+        payload,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/selections",
+    status_code=201,
+    dependencies=[
+        Depends(buyer_view_dependency),
+        Depends(buyer_selection_approve_dependency),
+    ],
+)
+def approve_offer_room_selection(
+    case_id: UUID,
+    payload: OfferSelectionCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.select_buyers,
+        db,
+        principal,
+        case_id,
+        response,
+        payload,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/selections/{selection_id}/replace-primary",
+    dependencies=[
+        Depends(buyer_view_dependency),
+        Depends(buyer_selection_approve_dependency),
+    ],
+)
+def replace_offer_room_primary(
+    case_id: UUID,
+    selection_id: UUID,
+    payload: OfferPrimaryReplacementCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.replace_primary,
+        db,
+        principal,
+        case_id,
+        response,
+        selection_id,
+        payload,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/checkpoints",
+    status_code=201,
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def create_offer_room_checkpoint(
+    case_id: UUID,
+    payload: ClosingCheckpointCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.create_checkpoint,
+        db,
+        principal,
+        case_id,
+        response,
+        payload,
+    )
+
+
+@router.patch(
+    "/cases/{case_id}/offer-room/checkpoints/{checkpoint_id}",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def update_offer_room_checkpoint(
+    case_id: UUID,
+    checkpoint_id: UUID,
+    payload: ClosingCheckpointUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.update_checkpoint,
+        db,
+        principal,
+        case_id,
+        response,
+        checkpoint_id,
+        payload,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/deadlines/scan",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def scan_offer_room_deadlines(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.scan_case_deadlines,
+        db,
+        principal,
+        case_id,
+        response,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/alerts/{alert_id}/acknowledge",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def acknowledge_offer_room_alert(
+    case_id: UUID,
+    alert_id: UUID,
+    payload: DeadlineAlertAcknowledge,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.acknowledge_alert,
+        db,
+        principal,
+        case_id,
+        response,
+        alert_id,
+        reason=payload.reason,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/offer-room/outcomes",
+    status_code=201,
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def record_offer_room_outcome(
+    case_id: UUID,
+    payload: BuyerOutcomeCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+) -> OfferRoomRead:
+    return _offer_room_result(
+        disposition_offer_room.record_outcome,
+        db,
+        principal,
+        case_id,
+        response,
+        payload,
+    )
 
 
 @router.get("/cases/{case_id}/package")
@@ -641,7 +926,10 @@ def record_offer(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_dependency)],
 ) -> DispositionCaseRead:
-    return _case_action(dispositions.create_offer, db, principal, case_id, payload)
+    raise HTTPException(
+        status_code=410,
+        detail=("Legacy offer entry is retired. Record normalized terms through the Offer Room."),
+    )
 
 
 @router.post("/cases/{case_id}/engagements")
@@ -661,7 +949,13 @@ def approve_buyer_selection(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCaseRead:
-    return _case_action(dispositions.select_buyer, db, principal, case_id, payload)
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Legacy buyer selection is retired. A disposition manager must approve primary "
+            "and backup coverage through the Offer Room."
+        ),
+    )
 
 
 @router.post("/cases/{case_id}/reconciliation")

@@ -2,7 +2,7 @@
 
 Last updated: August 28, 2026
 
-> **Current status: DS0-DS6 complete; DS7-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS7 complete; DS8-DS12 planned.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -15,7 +15,10 @@ Last updated: August 28, 2026
 > immutable exact-message revisions, a 25 recipient-channel cap, separate human approval, dynamic
 > eligibility checks, durable delivery state, and Buyer Inbox reply review. Existing deal-specific
 > engagement and offer records, primary and backup buyer selection, reconciliation, and review-only
-> Disposition Copilot remain in place. InvestorLift, Land outreach, and DS7-DS12 remain plans. DS6
+> Disposition Copilot remain in place. DS7 adds the governed House Offer Room, immutable offer and
+> negotiation history, manager-approved primary and backup coverage, canonical closing checkpoints,
+> deduplicated deadline escalation, controlled replacement, and evidence-based buyer outcomes.
+> InvestorLift, Land outreach, and DS8-DS12 remain plans. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
@@ -664,7 +667,7 @@ existing communication providers.
 
 ## DS7 - Offer Room And Closing Protection
 
-**Status: Planned.**
+**Status: Complete for the current House disposition workflow as of August 28, 2026.**
 
 ### Goal
 
@@ -683,6 +686,41 @@ closing.
 - Track agreement, signature, deposit, access, title, closing, and buyer-response deadlines.
 - Escalate missed deadlines and support rapid replacement from ranked backups.
 - Capture pass, withdrawal, fallout, retrade, and completed-close reasons.
+
+### Delivered Behavior
+
+- The Deal's **Offer Room** normalizes each buyer's amount, earnest money, deposit deadline, due
+  diligence, contingencies, proposed closing, funding confidence, proof, special terms, and notes.
+- Every material offer change creates an immutable revision. Negotiation events, selection versions,
+  replacements, and outcomes remain visible instead of rewriting prior evidence.
+- Price, verified funds, proof freshness, buyer reliability, timing, contingencies, and prior buyer
+  performance produce explainable risk and execution evidence. The ranking is decision support only.
+- A human with the separate buyer-selection approval permission must approve one primary and at
+  least one different-buyer backup. Recording or ranking an offer never selects it automatically.
+  Revised selected terms make the frozen slot stale and require a new approved coverage version.
+- Transaction closing, buyer-deposit, and relevant title/access/closing checklist dates synchronize
+  into the Offer Room. Canonical transaction rows remain editable only in their source workspace.
+- The communications worker raises one versioned alert for a missed deadline. Alerts flow to the
+  Disposition Desk and can be acknowledged without erasing the missed checkpoint.
+- A manager can replace the primary with an eligible ranked backup while recording the prior
+  buyer's outcome, cause, details, and supporting evidence.
+- House assignment packages bind the approved buyer identity and offer economics. Approval,
+  delivery, execution, replacement, and funding revalidate that authority so an old-buyer or stale-
+  terms agreement cannot advance after the selection changes.
+- Funded transaction close atomically records the selected buyer's completed-close outcome. House
+  assignment funding requires the current approved selection, matching executed-assignee evidence,
+  and buyer-deposit evidence or an explicit manager-documented waiver.
+- Only buyer-responsible failure or retrade outcomes reduce buyer history. Seller, title, property,
+  Stonegate, and external causes retain the evidence without unfairly penalizing the buyer.
+
+### Known Boundaries
+
+- The Offer Room is House-only. It does not enable Land packaging, Land buyer matching, or Land
+  outreach.
+- InvestorLift remains unconnected. Offer Room decisions use Stonegate-owned buyer and deal data.
+- A promoted backup can leave the deal without another approved backup; the visible coverage warning
+  tells staff to qualify and approve new backup coverage.
+- Repository verification is not the DS12 supervised production-acceptance test.
 
 ### Exit Criteria
 
@@ -932,7 +970,7 @@ Quality and safety measures:
 | DS4 | Unified Explainable Deal Buyer Pool | Complete for current House disposition workflow |
 | DS5 | Deal Launch And Investor Package Readiness | Complete for current House disposition workflow |
 | DS6 | Governed Live Outreach And Reply Loop | Complete for owned Buyer Network recipients in the current House disposition workflow; production acceptance pending DS12 |
-| DS7 | Offer Room And Closing Protection | Planned |
+| DS7 | Offer Room And Closing Protection | Complete for current House disposition workflow |
 | DS8 | InvestorLift Provider Adapter | Planned; provider verification required |
 | DS9 | Governed Disposition Copilot | Planned; foundation exists |
 | DS10 | Management Intelligence And Learning | Planned |
@@ -960,9 +998,10 @@ Ambiguous records should remain in Needs Review rather than being forced into an
 DS2 provides the specialist's daily command center, DS3 provides the canonical buyer profile,
 separate versioned House and Land buy boxes and proof review, DS4 provides the unified, versioned,
 explainable House deal buyer pool, DS5 provides the evidence-backed, approval-gated House package
-and prepared-recipient audit trail, and DS6 provides the governed owned-buyer email/SMS and reply
-loop. DS7 remains the offer-room and closing-protection work. Land matching and release must receive
-their own asset-safe implementation before being described as live. DS8 follows only after
+  and prepared-recipient audit trail, DS6 provides the governed owned-buyer email/SMS and reply
+  loop, and DS7 provides the human-controlled Offer Room and closing-protection workflow. Land
+  matching and release must receive their own asset-safe implementation before being described as
+  live. DS8 follows only after
 InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly

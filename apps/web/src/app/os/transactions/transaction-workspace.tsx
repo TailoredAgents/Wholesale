@@ -153,11 +153,18 @@ export function TransactionWorkspace({
     }));
   }
 
-  async function withdrawManualPackage(packageId: string) {
+  async function withdrawManualPackage(packageId: string, packageStatus: string) {
+    const isApproved = packageStatus === "approved";
     if (!detail || !window.confirm(
-      "Confirm the delivered agreement has been withdrawn from every recipient and cannot still be signed.",
+      isApproved
+        ? "Void this approved agreement? It will no longer be eligible for signature."
+        : "Confirm the delivered agreement has been withdrawn from every recipient and cannot still be signed.",
     )) return;
-    const reason = window.prompt("Record how the agreement was withdrawn or destroyed.")?.trim();
+    const reason = window.prompt(
+      isApproved
+        ? "Record why this approved agreement is being voided."
+        : "Record how the agreement was withdrawn or destroyed.",
+    )?.trim();
     if (!reason) return;
     await action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${packageId}/withdraw`, {
       method: "POST",
@@ -257,7 +264,19 @@ export function TransactionWorkspace({
     setSignaturePackageId(null);
   }
 
-  async function recordManualExecution(packageId: string, documentId: string) {
+  async function recordManualExecution(
+    packageId: string,
+    documentId: string,
+    documentType: string,
+    assigneeName: string | null,
+    assigneeEmail: string | null,
+  ) {
+    if (documentType === "assignment_contract" && (!assigneeName || !assigneeEmail)) {
+      setMessage(
+        "This assignment is missing its approved buyer identity. Rebuild it from the current Offer Room selection before recording execution.",
+      );
+      return;
+    }
     const response = window.prompt(
       "Manual execution attestation: explain how you verified that every required party signed this exact approved agreement.",
     );
@@ -275,6 +294,8 @@ export function TransactionWorkspace({
           document_id: documentId,
           confirm_fully_executed: true,
           reason,
+          assignee_name: documentType === "assignment_contract" ? assigneeName : null,
+          assignee_email: documentType === "assignment_contract" ? assigneeEmail : null,
         }),
       },
     ));
@@ -358,9 +379,10 @@ export function TransactionWorkspace({
   }
 
   const sellerParty = detail?.parties.find((item) => item.party_type === "seller" && item.email);
-  const signatureDocumentType = detail?.contract_packages.find(
+  const signaturePackage = detail?.contract_packages.find(
     (item) => item.id === signaturePackageId,
-  )?.document_type;
+  );
+  const signatureDocumentType = signaturePackage?.document_type;
   const primarySignerRole = signatureDocumentType === "assignment_contract" ? "Assignee" : "Seller";
 
   return (
@@ -422,7 +444,7 @@ export function TransactionWorkspace({
                       envelope.contract_package_id === pkg.id
                       && !["completed", "declined", "expired", "cancelled", "error"].includes(envelope.status)
                     ));
-                    return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}><button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{pkg.status === "sent" && !activeEnvelope ? <button disabled={busy} onClick={() => void withdrawManualPackage(pkg.id)} type="button">Withdraw sent package</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void recordManualExecution(pkg.id, signedDocument.id)} type="button">Attest executed</button> : null}</div></article>;
+                  return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}><button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{["approved", "sent"].includes(pkg.status) && !activeEnvelope ? <button disabled={busy} onClick={() => void withdrawManualPackage(pkg.id, pkg.status)} type="button">{pkg.status === "approved" ? "Void approved package" : "Withdraw sent package"}</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void recordManualExecution(pkg.id, signedDocument.id, pkg.document_type, pkg.assignee_name, pkg.assignee_email)} type="button">Attest executed</button> : null}</div></article>;
                   })}</div>
                 </section>
                 <section className={styles.section}>
@@ -441,7 +463,7 @@ export function TransactionWorkspace({
                   </dl>
                   <button disabled={busy || f4Status?.esign_provider !== "signwell"} onClick={() => void connectSignWell()} type="button"><RefreshCw size={16} />{f4Status?.esign_account_connected ? "Verify connection" : "Connect SignWell"}</button>
                 </section>
-                <form className={styles.form} onSubmit={(event) => void sendForSignature(event)}><div className={styles.sectionTitle}><div><span>Signature delivery</span><h4>Send agreement</h4></div><PenLine size={18} /></div><label><span>Approved package</span><select name="package_id" onChange={(event) => setSignaturePackageId(event.target.value || null)} required><option value="">Select package</option>{detail.contract_packages.filter((item) => item.status === "approved").map((item) => <option key={item.id} value={item.id}>{labelize(item.document_type)} · version {item.version_number}</option>)}</select></label><label><span>{primarySignerRole}</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.name ?? detail.seller_name : ""} key={`signer-name-${primarySignerRole}`} name="signer_name" required /></label><label><span>{primarySignerRole} email</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.email ?? "" : ""} key={`signer-email-${primarySignerRole}`} name="signer_email" required type="email" /></label><input name="placeholder_name" type="hidden" value={primarySignerRole} /><label><span>Second {primarySignerRole.toLowerCase()}</span><input name="signer_name_2" placeholder="Optional" /></label><label><span>Second {primarySignerRole.toLowerCase()} email</span><input name="signer_email_2" placeholder="Optional" type="email" /></label><input name="placeholder_name_2" type="hidden" value={`${primarySignerRole} 2`} /><label><span>Email subject</span><input defaultValue={`Stonegate agreement for ${detail.property_address}`} name="subject" required /></label><label><span>Message</span><textarea defaultValue="Please review and sign the attached agreement." name="message" rows={3} /></label><small>Stonegate creates the completed PDF and adds your company signer automatically.</small><button disabled={busy || !f4Status?.esign_configured} type="submit"><PenLine size={16} />Send for signature</button></form>
+                <form className={styles.form} onSubmit={(event) => void sendForSignature(event)}><div className={styles.sectionTitle}><div><span>Signature delivery</span><h4>Send agreement</h4></div><PenLine size={18} /></div><label><span>Approved package</span><select name="package_id" onChange={(event) => setSignaturePackageId(event.target.value || null)} required><option value="">Select package</option>{detail.contract_packages.filter((item) => item.status === "approved").map((item) => <option key={item.id} value={item.id}>{labelize(item.document_type)} · version {item.version_number}</option>)}</select></label><label><span>{primarySignerRole}</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.name ?? detail.seller_name : signaturePackage?.assignee_name ?? ""} key={`signer-name-${signaturePackageId ?? primarySignerRole}`} name="signer_name" readOnly={signatureDocumentType === "assignment_contract"} required /></label><label><span>{primarySignerRole} email</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.email ?? "" : signaturePackage?.assignee_email ?? ""} key={`signer-email-${signaturePackageId ?? primarySignerRole}`} name="signer_email" readOnly={signatureDocumentType === "assignment_contract"} required type="email" /></label><input name="placeholder_name" type="hidden" value={primarySignerRole} />{signatureDocumentType !== "assignment_contract" ? <><label><span>Second {primarySignerRole.toLowerCase()}</span><input name="signer_name_2" placeholder="Optional" /></label><label><span>Second {primarySignerRole.toLowerCase()} email</span><input name="signer_email_2" placeholder="Optional" type="email" /></label><input name="placeholder_name_2" type="hidden" value={`${primarySignerRole} 2`} /></> : <small>The assignee is frozen from the approved Offer Room buyer selection. Change buyer coverage there before creating a different assignment.</small>}<label><span>Email subject</span><input defaultValue={`Stonegate agreement for ${detail.property_address}`} name="subject" required /></label><label><span>Message</span><textarea defaultValue="Please review and sign the attached agreement." name="message" rows={3} /></label><small>Stonegate creates the completed PDF and adds your company signer automatically.</small><button disabled={busy || !f4Status?.esign_configured || (signatureDocumentType === "assignment_contract" && (!signaturePackage?.assignee_name || !signaturePackage.assignee_email))} type="submit"><PenLine size={16} />Send for signature</button></form>
                 <form className={styles.form} onSubmit={(event) => void draftContract(event)}><div className={styles.sectionTitle}><div><span>New version</span><h4>Draft agreement</h4></div></div><label><span>Document</span><select name="document_type"><option value="purchase_agreement">Purchase agreement</option><option value="assignment_contract">Assignment agreement</option><option value="addendum">Contract addendum</option></select></label><label><span>Seller</span><input defaultValue={detail.seller_name} name="seller_name" required /></label><label><span>Buyer entity</span><input name="buyer_entity_name" placeholder="Stonegate purchasing entity" required /></label><div className={styles.twoFields}><label><span>Purchase price</span><input defaultValue={detail.purchase_price_cents / 100} min="1" name="purchase_price" required type="number" /></label><label><span>Earnest money</span><input defaultValue={(detail.earnest_money_cents ?? 0) / 100} min="0" name="earnest_money" type="number" /></label></div><div className={styles.twoFields}><label><span>Closing date</span><input defaultValue={detail.closing_date?.slice(0, 10)} name="closing_date" type="date" /></label><label><span>Inspection days</span><input defaultValue={detail.inspection_period_days ?? ""} min="0" name="inspection_period_days" type="number" /></label></div><label><span>Special terms</span><textarea name="special_terms" rows={3} /></label><small>Stonegate will generate the signing PDF from these approved terms.</small><button disabled={busy} type="submit"><Plus size={16} />Create version</button></form>
               </div>
             </div> : null}

@@ -19,6 +19,7 @@ import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import { DispositionBuyerPool } from "./disposition-buyer-pool";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
+import { DispositionOfferRoom } from "./disposition-offer-room";
 import { DispositionPackageReadiness } from "./disposition-package-readiness";
 import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
@@ -40,6 +41,7 @@ function cents(value: FormDataEntryValue | null) {
 }
 
 export function DispositionWorkspace({
+  canApproveBuyerSelection,
   canEditBuyers,
   canEditDeals,
   canManageOutreach,
@@ -51,6 +53,7 @@ export function DispositionWorkspace({
   initialData,
   initialTab = "package",
 }: {
+  canApproveBuyerSelection: boolean;
   canEditBuyers: boolean;
   canEditDeals: boolean;
   canManageOutreach: boolean;
@@ -70,7 +73,10 @@ export function DispositionWorkspace({
       : initialData.cases[0]?.id ?? null,
   );
   const [tab, setTab] = useState<Tab>(
-    initialTab === "outreach" && !canViewOutreach ? "package" : initialTab,
+    (initialTab === "outreach" && !canViewOutreach) ||
+      (initialTab === "offers" && !initialData.can_view_private_economics)
+      ? "package"
+      : initialTab,
   );
   const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
   const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
@@ -170,35 +176,6 @@ export function DispositionWorkspace({
     }
   }
 
-  async function offer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canEditDeals) {
-      setMessage("Your role can view this disposition record but cannot change it.");
-      return;
-    }
-    if (!selected) return;
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    const buyerId = String(values.get("buyer_id"));
-    const match = selected.matches.find((item) => item.buyer_id === buyerId);
-    await action(
-      () =>
-        request(`/api/v1/dispositions/cases/${selected.id}/offers`, {
-          method: "POST",
-          body: JSON.stringify({
-            buyer_id: buyerId,
-            amount_cents: cents(values.get("amount")),
-            earnest_money_cents: cents(values.get("earnest_money")),
-            financing_type: values.get("financing_type"),
-            proof_document_id: match?.latest_proof_document_id ?? null,
-            notes: values.get("notes") || null,
-          }),
-        }),
-      "Buyer offer recorded.",
-    );
-    form.reset();
-  }
-
   async function engagement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canEditDeals) {
@@ -228,28 +205,6 @@ export function DispositionWorkspace({
       "Buyer activity logged.",
     );
     form.reset();
-  }
-
-  async function selectBuyer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canEditDeals) {
-      setMessage("Your role can view this disposition record but cannot change it.");
-      return;
-    }
-    if (!selected) return;
-    const values = new FormData(event.currentTarget);
-    await action(
-      () =>
-        request(`/api/v1/dispositions/cases/${selected.id}/buyer-selection`, {
-          method: "POST",
-          body: JSON.stringify({
-            primary_offer_id: values.get("primary_offer_id"),
-            backup_offer_id: values.get("backup_offer_id") || null,
-            reason: values.get("reason"),
-          }),
-        }),
-      "Buyer selection approved and documented.",
-    );
   }
 
   async function generateCopilot() {
@@ -345,9 +300,14 @@ export function DispositionWorkspace({
   const post = (path: string) => request(path, { method: "POST", body: "{}" });
 
   function selectWorkspaceTab(nextTab: Tab) {
-    setTab(nextTab);
+    const allowedTab =
+      (nextTab === "outreach" && !canViewOutreach) ||
+      (nextTab === "offers" && !data.can_view_private_economics)
+        ? "package"
+        : nextTab;
+    setTab(allowedTab);
     const url = new URL(window.location.href);
-    url.searchParams.set("dispositionTab", nextTab);
+    url.searchParams.set("dispositionTab", allowedTab);
     window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
   }
 
@@ -381,7 +341,7 @@ export function DispositionWorkspace({
                   />
                 </CopilotLauncher>
               ) : null}
-              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "reconciliation"] as Tab[]).filter((item) => item !== "outreach" || canViewOutreach).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : labelize(item)}</button>)}</nav>
+              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "offers" ? "Offer Room" : labelize(item)}</button>)}</nav>
 
               {tab === "package" ? (
                 <DispositionPackageReadiness
@@ -427,11 +387,19 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "offers" ? <div className={styles.sectionGrid}>
-                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Offer control</span><h4>Buyer offers</h4></div><strong>{selected.offers.length}</strong></div><div className={styles.offerList}>{selected.offers.map((item) => <article key={item.id}><div><strong>{item.buyer_name}</strong><span>{labelize(item.status)}</span></div><b>{money(item.amount_cents)}</b><small>{money(item.earnest_money_cents)} deposit - {labelize(item.financing_type)}</small></article>)}{!selected.offers.length ? <p className={styles.emptyRow}>No buyer offers recorded.</p> : null}</div></section>
-                <div className={styles.rightStack}><form className={styles.form} onSubmit={offer}><div className={styles.sectionTitle}><div><span>Document evidence</span><h4>Record offer</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><div className={styles.twoFields}><label><span>Offer</span><input name="amount" inputMode="decimal" required /></label><label><span>Earnest money</span><input name="earnest_money" defaultValue="5000" inputMode="decimal" required /></label></div><label><span>Financing</span><select name="financing_type"><option value="cash">Cash</option><option value="hard_money">Hard money</option><option value="private_money">Private money</option></select></label><label><span>Notes</span><textarea name="notes" rows={3} /></label><button disabled={busy || !canEditDeals || !selected.matches.length} type="submit">Record offer</button></form>
-                  <form className={styles.form} onSubmit={selectBuyer}><div className={styles.sectionTitle}><div><span>Human decision</span><h4>Approve buyer</h4></div></div><label><span>Primary offer</span><select name="primary_offer_id" required>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} - {money(item.amount_cents)}</option>)}</select></label><label><span>Backup offer</span><select name="backup_offer_id"><option value="">No backup</option>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} - {money(item.amount_cents)}</option>)}</select></label><label><span>Selection reason</span><textarea name="reason" required rows={3} placeholder="Price, verified funds, reliability, and closing capacity" /></label><button disabled={busy || !canEditDeals || !selected.offers.length} type="submit"><Check size={15} />Approve selection</button></form></div>
-              </div> : null}
+              {tab === "offers" && data.can_view_private_economics ? (
+                <DispositionOfferRoom
+                  buyers={selected.matches.map((item) => ({ buyer_id: item.buyer_id, buyer_name: item.buyer_name, latest_proof_document_id: item.latest_proof_document_id }))}
+                  canApproveBuyerSelection={canApproveBuyerSelection}
+                  canEditDeals={canEditDeals}
+                  canViewPrivateEconomics={data.can_view_private_economics}
+                  caseId={selected.id}
+                  key={selected.id}
+                  onCaseChanged={() => reload(selected.id)}
+                  onMessage={setMessage}
+                  request={request}
+                />
+              ) : null}
 
               {tab === "reconciliation" ? <div className={styles.sectionGrid}>
                 <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing statement</span><h4>Deal reconciliation</h4></div><strong>{selected.reconciliation ? labelize(selected.reconciliation.status) : "Not calculated"}</strong></div>{selected.reconciliation ? <><dl className={styles.facts}><div><dt>Collected deal revenue</dt><dd>{money(selected.reconciliation.gross_revenue_cents)}</dd></div><div><dt>Acquisition reserve</dt><dd>-{money(selected.reconciliation.acquisition_reserve_cents)}</dd></div><div><dt>Deal-specific costs</dt><dd>-{money(selected.reconciliation.deal_deductions_cents)}</dd></div><div><dt>Adjusted deal margin</dt><dd>{money(selected.reconciliation.adjusted_deal_margin_cents)}</dd></div><div><dt>Commission payouts</dt><dd>{money(selected.reconciliation.total_compensation_cents)}</dd></div><div><dt>Company profit</dt><dd>{money(selected.reconciliation.company_profit_cents)}</dd></div><div><dt>Company share</dt><dd>{(selected.reconciliation.company_margin_basis_points / 100).toFixed(1)}% / {(selected.reconciliation.target_margin_basis_points / 100).toFixed(0)}% target</dd></div></dl><div className={styles.payouts}>{selected.reconciliation.payouts.map((item) => <div key={item.id}><span>{labelize(item.role_key)} - {item.user_name ?? "Unassigned"}</span><strong>{money(item.amount_cents)}</strong></div>)}</div></> : <p className={styles.emptyRow}>Fund the transaction and record collected revenue in Finance before calculating.</p>}</section>

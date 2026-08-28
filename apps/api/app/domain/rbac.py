@@ -56,6 +56,7 @@ class PermissionKeys:
     APPROVE_DISPOSITION_PACKAGES = "dispositions:approve_packages"
     MANAGE_DISPOSITION_OUTREACH = "dispositions:manage_outreach"
     APPROVE_DISPOSITION_OUTREACH = "dispositions:approve_outreach"
+    APPROVE_DISPOSITION_BUYER_SELECTION = "dispositions:approve_buyer_selection"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
     MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
     MANAGE_OPERATING_MODEL = "operating_model:manage"
@@ -300,6 +301,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Approve immutable recipient and message revisions for supervised buyer outreach.",
     ),
     PermissionDefinition(
+        PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION,
+        "Approve disposition buyer selection",
+        "Approve primary buyers, ranked backups, and governed buyer replacements.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
         "View acquisition operations",
         "View team capacity, calling lists, notifications, and acquisition workflow controls.",
@@ -426,6 +432,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.EXPORT_BUYERS,
             PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
             PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+            PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION,
             PermissionKeys.SEND_BULK_COMMUNICATIONS,
         ),
     ),

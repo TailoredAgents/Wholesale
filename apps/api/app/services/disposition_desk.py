@@ -20,7 +20,11 @@ from app.models.foundation import (
     BuyerProofDocument,
     Conversation,
     ConversationContextLink,
+    DispositionBuyerSelection,
+    DispositionBuyerSelectionSlot,
     DispositionCase,
+    DispositionClosingCheckpoint,
+    DispositionDeadlineAlert,
     DispositionMatch,
     Role,
     RoleAssignment,
@@ -195,6 +199,10 @@ def _deal_href(deal_id: UUID, *, section: str = "package") -> str:
     )
 
 
+def _offer_room_href(deal_id: UUID) -> str:
+    return f"{_deal_href(deal_id, section='offers')}#offer-room"
+
+
 def _sort(items: list[DispositionDeskItemRead]) -> list[DispositionDeskItemRead]:
     severity = {"danger": 0, "warning": 1, "info": 2}
     far_future = datetime.max.replace(tzinfo=UTC)
@@ -239,6 +247,8 @@ def _today(
 def _coverage_warning(
     item: DealQueueItemRead,
     case: DispositionCase | None,
+    *,
+    has_viable_approved_backup: bool,
 ) -> DispositionDeskItemRead | None:
     blocker: str | None = None
     reason = "Buyer coverage needs review."
@@ -253,7 +263,7 @@ def _coverage_warning(
         blocker = f"Only {item.buyer_match_count} buyer match{suffix} are available."
     elif item.buyer_offer_count == 0:
         blocker = "No buyer offer has been recorded."
-    elif item.selected_buyer_name and case.backup_buyer_id is None:
+    elif item.selected_buyer_name and not has_viable_approved_backup:
         blocker = "A primary buyer is selected without backup coverage."
     if blocker is None:
         return None
@@ -354,6 +364,35 @@ def read_desk(
             checklist_item
         )
 
+    offer_room_checkpoints = list(
+        db.scalars(
+            select(DispositionClosingCheckpoint).where(
+                DispositionClosingCheckpoint.organization_id == principal.organization_id,
+                DispositionClosingCheckpoint.disposition_case_id.in_(case_ids)
+                if case_ids
+                else DispositionClosingCheckpoint.id.is_(None),
+                DispositionClosingCheckpoint.status.in_(("pending", "in_progress", "missed")),
+            )
+        ).all()
+    )
+    checkpoint_ids = {checkpoint.id for checkpoint in offer_room_checkpoints}
+    deadline_alerts = list(
+        db.scalars(
+            select(DispositionDeadlineAlert)
+            .where(
+                DispositionDeadlineAlert.organization_id == principal.organization_id,
+                DispositionDeadlineAlert.checkpoint_id.in_(checkpoint_ids)
+                if checkpoint_ids
+                else DispositionDeadlineAlert.id.is_(None),
+                DispositionDeadlineAlert.status.in_(("open", "acknowledged")),
+            )
+            .order_by(DispositionDeadlineAlert.created_at.desc())
+        ).all()
+    )
+    active_alert_by_checkpoint: dict[UUID, DispositionDeadlineAlert] = {}
+    for alert in deadline_alerts:
+        active_alert_by_checkpoint.setdefault(alert.checkpoint_id, alert)
+
     match_rows = list(
         db.scalars(
             select(DispositionMatch).where(
@@ -406,14 +445,14 @@ def read_desk(
             )
         ).all():
             reviewed_proof_by_buyer.setdefault(document.buyer_id, document)
-            if (
-                document.buyer_id not in verified_proof_by_buyer
-                and _proof_is_current_verified(document, now=now)
+            if document.buyer_id not in verified_proof_by_buyer and _proof_is_current_verified(
+                document, now=now
             ):
                 verified_proof_by_buyer[document.buyer_id] = document
     user_ids.update(buyer.relationship_owner_user_id for buyer in buyers)
     user_ids.update(buyer.relationship_owner_user_id for buyer in proof_buyers)
     user_ids.update(checklist.responsible_user_id for checklist in checklist_rows)
+    user_ids.update(checkpoint.responsible_user_id for checkpoint in offer_room_checkpoints)
 
     followup_rows = list(
         db.scalars(
@@ -507,6 +546,36 @@ def read_desk(
         and offer.deposit_due_at is not None
         and offer.deposit_received_at is None
     ]
+    offer_by_id = {offer.id: offer for offer in offer_rows}
+    active_selections = list(
+        db.scalars(
+            select(DispositionBuyerSelection).where(
+                DispositionBuyerSelection.organization_id == principal.organization_id,
+                DispositionBuyerSelection.disposition_case_id.in_(case_ids)
+                if case_ids
+                else DispositionBuyerSelection.id.is_(None),
+                DispositionBuyerSelection.status == "active",
+            )
+        ).all()
+    )
+    active_selection_case = {
+        selection.id: selection.disposition_case_id for selection in active_selections
+    }
+    viable_backup_case_ids: set[UUID] = set()
+    if active_selection_case:
+        for slot in db.scalars(
+            select(DispositionBuyerSelectionSlot).where(
+                DispositionBuyerSelectionSlot.selection_id.in_(active_selection_case),
+                DispositionBuyerSelectionSlot.role == "backup",
+            )
+        ).all():
+            live_offer = offer_by_id.get(slot.offer_id)
+            if (
+                live_offer is not None
+                and live_offer.status == "backup"
+                and live_offer.lock_version == int(slot.offer_snapshot.get("lock_version", 0))
+            ):
+                viable_backup_case_ids.add(active_selection_case[slot.selection_id])
     users = _users(db, principal.organization_id, user_ids)
     deal_by_id = {item.id: item for item in active_records}
 
@@ -549,7 +618,11 @@ def read_desk(
                 ),
             )
         )
-        warning = _coverage_warning(item, case)
+        warning = _coverage_warning(
+            item,
+            case,
+            has_viable_approved_backup=(case is not None and case.id in viable_backup_case_ids),
+        )
         if warning:
             coverage_warnings.append(warning)
 
@@ -605,9 +678,7 @@ def read_desk(
                 category="buyer_follow_ups",
                 title=f"Follow up with {buyer.name}",
                 context=(
-                    deal.property_address
-                    if deal
-                    else buyer.company_name or "Buyer relationship"
+                    deal.property_address if deal else buyer.company_name or "Buyer relationship"
                 ),
                 owner_user_id=owner_id,
                 owner_name=_owner_name(owner_id, users),
@@ -711,6 +782,75 @@ def read_desk(
         )
 
     deadline_items: list[DispositionDeskItemRead] = []
+    canonical_transaction_deadlines = {
+        (checkpoint.source_record_id, checkpoint.checkpoint_type)
+        for checkpoint in offer_room_checkpoints
+        if checkpoint.canonical_source == "transaction" and checkpoint.source_record_id is not None
+    }
+    canonical_checklist_ids = {
+        checkpoint.source_record_id
+        for checkpoint in offer_room_checkpoints
+        if checkpoint.canonical_source == "transaction_checklist"
+        and checkpoint.source_record_id is not None
+    }
+    canonical_offer_ids = {
+        checkpoint.source_record_id
+        for checkpoint in offer_room_checkpoints
+        if checkpoint.canonical_source == "buyer_offer" and checkpoint.source_record_id is not None
+    }
+    for checkpoint in offer_room_checkpoints:
+        case = case_by_id.get(checkpoint.disposition_case_id)
+        deal = active_records_by_id.get(case.deal_id) if case else None
+        if case is None or deal is None:
+            continue
+        buyer = buyer_by_id.get(checkpoint.buyer_id) if checkpoint.buyer_id else None
+        alert = active_alert_by_checkpoint.get(checkpoint.id)
+        overdue = _aware(checkpoint.due_at) < now
+        blocker = None
+        if checkpoint.status == "missed" or alert is not None:
+            blocker = "Missed closing checkpoint requires action."
+        elif overdue:
+            blocker = "Closing checkpoint is overdue."
+        checkpoint_owner_id = checkpoint.responsible_user_id or case.owner_user_id
+        context = deal.property_address
+        if buyer is not None:
+            context = f"{buyer.name} | {context}"
+        deadline_items.append(
+            DispositionDeskItemRead(
+                key=f"deadline:offer_room:{checkpoint.id}",
+                category="deadlines",
+                title=checkpoint.label,
+                context=context,
+                owner_user_id=checkpoint_owner_id,
+                owner_name=_owner_name(checkpoint_owner_id, users),
+                due_at=checkpoint.due_at,
+                reason=checkpoint.notes or "An Offer Room closing checkpoint is active.",
+                blocker=blocker,
+                severity=(
+                    "danger"
+                    if checkpoint.status == "missed" or overdue
+                    else "warning"
+                    if alert is not None
+                    else _severity(checkpoint.due_at)
+                ),
+                deal_id=deal.id,
+                buyer_id=checkpoint.buyer_id,
+                offer_id=checkpoint.offer_id,
+                disposition_case_id=case.id,
+                primary_action=DispositionDeskActionRead(
+                    label="Open Offer Room",
+                    href=_offer_room_href(deal.id),
+                ),
+                secondary_action=(
+                    DispositionDeskActionRead(
+                        label="Open buyer",
+                        href=f"/os/buyers?buyer={buyer.id}&tab=summary",
+                    )
+                    if buyer is not None
+                    else None
+                ),
+            )
+        )
     for deal_record in active_records:
         transaction = transaction_by_deal.get(deal_record.id)
         case = case_by_deal.get(deal_record.id)
@@ -734,6 +874,8 @@ def read_desk(
         for key, title, due_at, completed in values:
             if due_at is None or completed:
                 continue
+            if key == "closing" and (transaction.id, "closing") in canonical_transaction_deadlines:
+                continue
             deadline_items.append(
                 DispositionDeskItemRead(
                     key=f"deadline:{key}:{transaction.id}",
@@ -756,6 +898,8 @@ def read_desk(
             )
 
         for checklist_item in checklist_by_transaction.get(transaction.id, []):
+            if checklist_item.id in canonical_checklist_ids:
+                continue
             checklist_owner_id = checklist_item.responsible_user_id or deadline_owner_id
             checklist_due_at = checklist_item.due_at
             deadline_items.append(
@@ -788,6 +932,8 @@ def read_desk(
             )
 
     for offer in deposit_offers:
+        if offer.id in canonical_offer_ids:
+            continue
         deposit_due_at = offer.deposit_due_at
         case = case_by_id.get(offer.disposition_case_id) if offer.disposition_case_id else None
         offer_deal = deal_by_id.get(case.deal_id) if case else None
@@ -823,9 +969,9 @@ def read_desk(
 
     proof_window_end = now + timedelta(days=30)
     for buyer in proof_buyers:
-        reviewed_proof = verified_proof_by_buyer.get(
+        reviewed_proof = verified_proof_by_buyer.get(buyer.id) or reviewed_proof_by_buyer.get(
             buyer.id
-        ) or reviewed_proof_by_buyer.get(buyer.id)
+        )
         proof_due_at = reviewed_proof.expires_at if reviewed_proof else None
         if proof_due_at is None or _aware(proof_due_at) > proof_window_end:
             continue
@@ -866,9 +1012,7 @@ def read_desk(
             )
             .where(
                 BuyerBuyBox.organization_id == principal.organization_id,
-                BuyerBuyBox.buyer_id.in_(buyer_ids)
-                if buyer_ids
-                else BuyerBuyBox.id.is_(None),
+                BuyerBuyBox.buyer_id.in_(buyer_ids) if buyer_ids else BuyerBuyBox.id.is_(None),
                 BuyerBuyBoxVersion.organization_id == principal.organization_id,
                 BuyerBuyBoxVersion.is_current.is_(True),
                 BuyerBuyBoxVersion.verification_status == "verified",
@@ -881,10 +1025,7 @@ def read_desk(
     active_buyer_ids = {buyer.id for buyer in active_buyers}
     missing_proof = len(active_buyer_ids - set(verified_proof_by_buyer))
     expiring_proof = sum(
-        bool(
-            document.expires_at
-            and now <= _aware(document.expires_at) <= now + timedelta(days=30)
-        )
+        bool(document.expires_at and now <= _aware(document.expires_at) <= now + timedelta(days=30))
         for buyer_id, document in verified_proof_by_buyer.items()
         if buyer_id in active_buyer_ids
     )
