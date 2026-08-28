@@ -23,6 +23,23 @@ def test_native_prospecting_dialer_defaults_to_disabled_single_line() -> None:
     assert settings.prospecting_native_dialer_effective_line_cap == 1
 
 
+def test_disposition_outreach_postal_address_defaults_blank_and_reads_env_alias() -> None:
+    default_settings = Settings.model_validate({"APP_ENV": "test"})
+    configured_settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "DISPOSITION_OUTREACH_PHYSICAL_POSTAL_ADDRESS": (
+                "Configured business postal address"
+            ),
+        }
+    )
+
+    assert default_settings.disposition_outreach_physical_postal_address == ""
+    assert configured_settings.disposition_outreach_physical_postal_address == (
+        "Configured business postal address"
+    )
+
+
 def test_native_prospecting_dialer_stores_future_limit_without_activating_it() -> None:
     settings = Settings.model_validate(
         {

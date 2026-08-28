@@ -20,6 +20,7 @@ from app.integrations.resend_email import (
 from app.main import app
 from app.models.foundation import (
     AuditEvent,
+    CommunicationDispatch,
     CommunicationParticipant,
     CommunicationProviderEvent,
     CommunicationRecord,
@@ -27,6 +28,7 @@ from app.models.foundation import (
     ContactMethod,
     Conversation,
     EmailAttachment,
+    SuppressionRecord,
     User,
 )
 from app.routers import resend_webhooks as resend_webhooks_router
@@ -743,6 +745,80 @@ def test_delivery_events_are_idempotent_and_cannot_regress_status(
         },
     )
     assert invalid.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("event_type", "expected_status"),
+    [
+        ("email.bounced", "bounced"),
+        ("email.complained", "complained"),
+        ("email.suppressed", "suppressed"),
+    ],
+)
+def test_terminal_resend_event_suppresses_actual_dispatch_recipient(
+    event_type: str,
+    expected_status: str,
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, outbound = prepare_conversation(db_session, client)
+    dispatch = CommunicationDispatch(
+        organization_id=conversation.organization_id,
+        conversation_id=conversation.id,
+        lead_id=conversation.lead_id,
+        contact_id=conversation.contact_id,
+        actor_user_id=None,
+        communication_record_id=outbound.id,
+        idempotency_key=f"terminal-suppression-{expected_status}",
+        channel="email",
+        recipient="Seller@Example.com",
+        request_body_hash="a" * 64,
+        status="sent",
+        provider="resend",
+        provider_message_id="outbound-1",
+        error_code=None,
+        error_message=None,
+        completed_at=outbound.occurred_at,
+        dispatch_metadata={"source": "test"},
+    )
+    db_session.add(dispatch)
+    db_session.commit()
+    event_id = f"evt-{expected_status}-suppression"
+    accepted = signed_webhook(
+        client,
+        event_id=event_id,
+        payload={
+            "type": event_type,
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "outbound-1",
+                expected_status: {"message": f"Provider reported {expected_status}."},
+            },
+        },
+    )
+
+    assert accepted.status_code == 200, accepted.text
+    assert process_next_resend_event(db_session, resend_inbound_settings) is not None
+    db_session.refresh(outbound)
+    db_session.refresh(dispatch)
+    suppression = db_session.scalar(
+        select(SuppressionRecord).where(
+            SuppressionRecord.organization_id == conversation.organization_id,
+            SuppressionRecord.channel == "email",
+            SuppressionRecord.normalized_address == "seller@example.com",
+        )
+    )
+    assert outbound.status == expected_status
+    assert dispatch.status == expected_status
+    assert suppression is not None
+    assert suppression.contact_id == conversation.contact_id
+    assert suppression.status == "active"
+    assert suppression.source == "resend_lifecycle"
+    assert suppression.provider == "resend"
+    assert suppression.external_event_id == event_id
+    assert suppression.lifted_at is None
 
 
 def test_recovery_scan_enqueues_and_imports_a_missed_received_email(

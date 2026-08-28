@@ -26,6 +26,7 @@
     "audit:buyer-profile": "node --test scripts/buyer-profile-contract.test.mjs",
     "audit:disposition-desk": "node --test scripts/disposition-desk-contract.test.mjs",
     "audit:disposition-package": "node --test scripts/disposition-package-readiness-contract.test.mjs",
+    "audit:disposition-outreach": "node --test scripts/disposition-outreach-contract.test.mjs",
     "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:prospecting-pilot": "node --test scripts/prospecting-pilot-acceptance-contract.test.mjs",
     "audit:prospecting-dormancy": "node --test scripts/prospecting-dormancy-contract.test.mjs",

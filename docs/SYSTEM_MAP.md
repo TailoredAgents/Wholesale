@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 27, 2026
+Last verified against the repository: August 28, 2026
 
 ## 1. Document Authority
 
@@ -651,9 +651,10 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   evidence manifest, email/SMS summaries, and stored PDF bytes; material source changes make the
   approval stale and require a rebuilt, reapproved version.
 - Deal packages, matches, engagement, offers, proof, buyer selection, reconciliation, and
-  Disposition Copilot drafts remain server governed. Simulated release records exact
-  `prepared_not_sent` recipients and sends no buyer communication. Land package release remains
-  blocked.
+  Disposition Copilot drafts remain server governed. **Prepare recipient pool** records exact
+  `prepared_not_sent` recipients and sends no buyer communication. The separate House **Outreach**
+  view can turn selected owned-network recipients into an immutable exact-message revision, but an
+  authorized human must approve and release it. Land package release and outreach remain blocked.
 
 **Buyers (`/os/buyers`)**
 
@@ -993,13 +994,29 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 7. Candidates keep provider/import provenance and enter **Needs Review** before activation;
    external data does not overwrite trusted buyer records.
 8. **Prepare recipient pool** records the exact approved package version, artifact hash, and
-   observed recipient identity/destination as `prepared_not_sent`; it sends no email or SMS.
-9. Staff record separately performed outreach, engagement, offers, deposits, and proof.
-10. Buyer selection is a human approval.
-11. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+   observed recipient identity/destination as `prepared_not_sent`; that action sends no email or
+   SMS.
+9. In **Outreach**, authorized staff select owned-network recipients and an eligible email and/or
+   SMS path, choose an active Resend alias or Twilio Dispositions buyer-relations line, and review
+   the exact rendered message. One immutable revision may contain no more than 25 recipient-channel
+   deliveries.
+10. A human with the separate outreach-approval permission approves the exact package, PDF hash,
+    recipient/channel manifest, and rendered message with an attestation and reason. Release
+    rechecks buyer state, destination, suppression, SMS permission, sender, package, and provider
+    readiness before queueing. The campaign records its first release time and the case advances
+    from Buyer Matching to Marketed only when at least one delivery is actually queued.
+11. The worker records durable dispatch and provider state. Email carries the frozen approved PDF;
+    SMS uses the selected buyer-relations line. Staff can pause, resume, cancel unsent work, and
+    retry only failures classified as safely retryable.
+12. Safely matched replies stay in the canonical Buyer Inbox and create reply-review tasks linked
+    to the buyer and disposition case. Ambiguous replies create reconciliation work rather than
+    changing interest, offer, or buyer-selection state automatically.
+13. Staff record engagement, offers, deposits, and proof; buyer selection remains a human approval.
+14. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
 
-This workflow is House-only. Land disposition packaging, buyer release, and live outreach remain
-blocked until their separate asset-safe workflows are implemented and accepted.
+This workflow is House-only. Governed outreach is limited to recipients already in Stonegate's
+owned Buyer Network. Land disposition packaging, buyer release, and outreach remain blocked until
+their separate asset-safe workflows are implemented and accepted.
 
 ### 8.11 Closing, Reconciliation, And Compensation
 
@@ -1368,8 +1385,9 @@ when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the work
 
 The adapter is not required for Stonegate's current launch and should not be treated as an active
 buyer source unless the Owner deliberately reactivates and accepts it later. InvestorLift outreach
-and synchronization are not active in this foundation. No Buyer Network action sends an
-InvestorLift campaign or other live buyer outreach.
+and synchronization are not active. Creating, editing, activating, or matching a Buyer Network
+record never sends an InvestorLift campaign. The separate governed House Outreach workflow can
+contact selected owned-network buyers through Stonegate's approved Resend or Twilio configuration.
 
 ### 13.3 House Package Readiness And Disposition Authority
 
@@ -1386,9 +1404,33 @@ changes, Stonegate marks the prior approval stale and blocks buyer ranking or re
 until a new version is approved.
 
 AI can organize evidence, rank buyers, and draft communication. Humans approve the package,
-simulated recipient preparation, buyer selection, contract terms, and reconciliation. Simulated
-recipients remain `prepared_not_sent`; no DS5 control sends email or SMS. The package workflow is
+prepared recipient pool, exact outreach revision, release, buyer selection, contract terms, and
+reconciliation. Prepared recipients remain `prepared_not_sent`; no DS5 preparation control sends
+email or SMS. DS6's separate Outreach workflow is the only implemented send path, and it excludes
+private economics from its bounded public template fields. The package and outreach workflow is
 House-only, and Land remains blocked.
+
+### 13.4 Governed Owned-Buyer Outreach
+
+For a current approved House package and prepared campaign, Stonegate stores each outreach attempt
+as an immutable supervised revision. The revision binds the exact selected recipients and channels,
+captured destinations, sender configuration, rendered copy, package source fingerprint, stored PDF
+hash, and approval hash. A revision is limited to 25 recipient-channel deliveries; email and SMS to
+the same buyer count separately.
+
+The release path revalidates Active buyer status, Do Not Contact/archive state, current destination,
+suppression, SMS permission, sender configuration, package currency, and provider readiness before
+queueing and again before provider submission. Resend sends the approved email and frozen investor
+PDF. Twilio sends from the selected active Dispositions buyer-relations line. Durable dispatch and
+provider identifiers prevent known replay from duplicating delivery; an uncertain SMS submission is
+held for review instead of being retried automatically.
+
+Delivery outcomes and replies reconcile asynchronously. A safely correlated reply remains in the
+canonical Buyer Inbox conversation and creates a human review task linked to the buyer, delivery,
+campaign, and disposition case. Ambiguous replies create reconciliation review work. Stonegate does
+not automatically accept an offer, select a buyer, change economics, or infer interest from a
+reply. The repository implementation exists, but real Resend/Twilio delivery and reply acceptance is
+still an external production test requirement.
 
 ## 14. Finance And Accounting
 
@@ -1649,8 +1691,8 @@ telemarketing, recording, or real-estate advice.
 | OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
 | RentCast | Independent recorded-sale, rent, and market evidence | Implemented | Configured; address coverage varies |
 | RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Active; controlled property research passed |
-| Resend | Outbound and inbound operational email | Implemented with signed events, UUID-fenced leases, durable route checkpointing, bounded retry, manager-only audited dead-letter recovery, restricted-mailbox isolation, and bounded attachment downloads | DNS and webhook configured; controlled mailbox acceptance and malware-scanning decision remain |
-| Twilio | SMS, Voice, recordings, and Call Intelligence | Implemented with transcript backoff, exhaustion visibility, and audited manual retry | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS and Voice/recording/transcription/AI-note acceptance remain |
+| Resend | Outbound and inbound operational email, including approved House buyer outreach with the frozen investor PDF | Implemented with signed events, UUID-fenced leases, durable route checkpointing, bounded retry, manager-only audited dead-letter recovery, restricted-mailbox isolation, bounded attachment downloads, and DS6 exact-message delivery/reply reconciliation | DNS and webhook configured; controlled mailbox and disposition-outreach acceptance plus malware-scanning decision remain |
+| Twilio | SMS, Voice, recordings, Call Intelligence, and approved House buyer SMS outreach | Implemented with transcript backoff, exhaustion visibility, audited manual retry, DS6 sender/permission/suppression preflight, delivery reconciliation, and uncertain-submission duplicate protection | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS, buyer-outreach SMS, and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
 | InvestorLift | Future buyer-list enrichment or disposition outreach | Not implemented | Disabled; Buyer Network changes do not send or synchronize data |
@@ -1666,7 +1708,7 @@ telemarketing, recording, or real-estate advice.
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 211 operational model classes. They group into:
+The primary SQLAlchemy model file contains 226 operational model classes. They group into:
 
 ### Identity And Organization
 
@@ -1721,8 +1763,9 @@ Transaction Copilot records.
 ### Buyers And Dispositions
 
 `Buyer`, criteria, proof documents, discovery runs and candidates, offers, disposition cases,
-immutable package versions, matches, simulated campaigns and prepared recipients, engagements,
-Copilot records, reconciliation, payouts, revenue, deductions, operating mode, and role credits.
+immutable package versions, matches, prepared campaigns and recipients, supervised outreach
+revisions and deliveries, reply links, engagements, Copilot records, reconciliation, payouts,
+revenue, deductions, operating mode, and role credits.
 
 ### Company Operations
 
@@ -1805,8 +1848,9 @@ acceptance and evidence:
 - real backup restoration and optional monitoring-provider configuration
 - one real Facebook-form-to-CRM-to-property-research-to-staff-alert acceptance run using the
   production form allowlist, plus continued monitoring of the secretless-ingress residual risk
-- a controlled manual buyer-outreach procedure or a separately implemented live disposition
-  delivery channel; the current campaign release records simulation evidence only
+- controlled production acceptance of the DS6 House owned-buyer email/SMS workflow: exact revision
+  approval, 25-delivery cap, Resend PDF delivery, Twilio buyer-line delivery, suppression/permission
+  exclusion, pause/cancel/retry controls, Buyer Inbox reply matching, and ambiguous-reply review
 - an explicit production decision on malware scanning and distributed edge throttling before scale;
   process-local key storage is bounded but is not a shared multi-instance control
 

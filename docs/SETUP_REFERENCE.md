@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: August 22, 2026
+Last verified against the repository: August 28, 2026
 
 ## Purpose
 
@@ -525,6 +525,9 @@ Test each approved alias:
 16. one early lifecycle webhook that retries until its outbound CRM record exists
 17. one inbound message whose validated route survives a later attachment/provider failure
 18. automatic and manual denial of a standard-visibility destination for a restricted alias
+19. one controlled House disposition email using an active approved alias, the exact approved
+    outreach copy, and the frozen investor PDF; confirm provider state and the buyer's reply in the
+    same Buyer Inbox conversation without a duplicate send
 
 These checks do not complete external mailbox acceptance by themselves. Confirm real sender/reply
 behavior and either activate malware scanning or approve a documented limited safe-attachment
@@ -539,8 +542,10 @@ and recipient engagement. A successful API response alone does not establish inb
 
 - The approved seller-inquiry A2P registration belongs to the shared acquisitions number. A
   Messaging Service is optional when Stonegate sends directly from that number.
-- A future dispositions number needs its own accurate buyer/investor messaging registration when
-  its use differs from the seller-inquiry campaign.
+- DS6 buyer SMS can select only an active Stonegate line classified as **Dispositions** / **Buyer
+  Relations**. Before live use, that number needs accurate buyer/investor messaging registration
+  when its use differs from the seller-inquiry campaign; the acquisitions registration must not be
+  assumed to cover it.
 - BatchDialer owns VA cold-call numbers; those numbers are not added to Stonegate's Twilio
   Messaging Service.
 
@@ -645,6 +650,43 @@ After campaign approval and direct-number configuration:
 5. Test STOP, blocked send, START, and HELP behavior.
 6. Confirm staff assignments do not break the seller thread and an unauthorized user cannot fetch
    its private attachment URL.
+7. With an approved buyer test recipient and the registered Dispositions buyer-relations line, run
+   one capped House outreach revision. Confirm permission and suppression preflight, provider state,
+   one matching Buyer Inbox reply/review task, one ambiguous-reply review case, and no duplicate
+   message after callback replay or worker restart.
+
+### Governed House Buyer Outreach
+
+DS6 adds no separate provider credential. Before any commercial buyer email outreach, set
+`DISPOSITION_OUTREACH_PHYSICAL_POSTAL_ADDRESS` to Stonegate's complete, valid business postal
+address on both the API service and the communications worker. The two services must use the same
+value. This setting is intentionally blank by default and is non-secret because it is recipient-
+visible compliance text; do not use a placeholder. A missing value blocks email outreach only.
+Governed buyer SMS remains usable without this setting when its existing Twilio, permission, and
+suppression requirements pass.
+
+Both API and communications worker must also retain the same existing Resend and Twilio
+configuration, and production must use `COMMUNICATION_PROVIDER_MODE=live`. In **Settings >
+Communications** configure:
+
+1. At least one active, outbound-enabled Resend sender alias that Stonegate is authorized to use for
+   buyer outreach.
+2. For SMS, an active Twilio company line with department **Dispositions** and purpose **Buyer
+   Relations**, backed by the correct registration for the intended buyer messaging use.
+3. The inbound Resend and Twilio webhook routes already documented above so delivery changes,
+   opt-outs, and replies can reconcile.
+
+The House Outreach workspace remains blocked until the current approved package and frozen PDF,
+prepared recipient pool, selected sender, and recipient paths are available. Email/SMS selection is
+still subject to current buyer status, destination, suppression, and SMS permission at draft,
+release, and delivery time. The implementation hard-caps each revision at 25 recipient-channel
+deliveries. It does not enable InvestorLift or Land outreach and it does not place private economics
+in the message template.
+
+Repository and automated tests do not establish provider acceptance. Before broad use, complete the
+controlled email/SMS acceptance above with authorized test recipients, confirm pause and
+cancel-unsent behavior, and verify that **Retry failed** is offered only for safely retryable
+failures. An SMS in `delivery_unknown` must be investigated rather than retried automatically.
 
 ## Twilio Voice
 
@@ -1736,7 +1778,7 @@ After a production deployment:
 | Sentry and alert webhook | Owner/developer | Optional |
 | Real production Facebook form through CRM, research, and staff-alert acceptance | Owner/developer | Before paid Meta traffic scales |
 | Secretless Zapier allowlist, circuits, Zap History, and volume-monitoring review | Owner/developer | Every live Meta campaign |
-| Controlled manual buyer outreach or implemented live disposition delivery | Owner/dispositions | Before marketing the first contracted deal |
+| Controlled production acceptance of governed House owned-buyer email/SMS outreach and reply reconciliation | Owner/dispositions/developer | Before broad buyer outreach for the first contracted deal |
 | Malware-scanning and distributed edge-rate-limit decision; restrict origin/header trust | Owner/developer | Before broad scale |
 
 ## Change Procedure

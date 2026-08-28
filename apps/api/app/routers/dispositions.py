@@ -6,13 +6,20 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_permission
+from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.disposition_desk import (
     DispositionDeskCategory,
     DispositionDeskRead,
     DispositionDeskScope,
+)
+from app.schemas.disposition_outreach import (
+    DispositionOutreachApprovalRequest,
+    DispositionOutreachControlRequest,
+    DispositionOutreachDraftCreate,
+    DispositionOutreachRevisionRead,
+    DispositionOutreachWorkspaceRead,
 )
 from app.schemas.dispositions import (
     BuyerPoolConversionRequest,
@@ -42,6 +49,7 @@ from app.schemas.dispositions import (
 from app.services import (
     disposition_buyer_pool,
     disposition_desk,
+    disposition_outreach,
     disposition_packages,
     dispositions,
 )
@@ -59,6 +67,13 @@ buyer_edit_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
 buyer_proof_view_dependency = require_permission(PermissionKeys.VIEW_BUYER_PROOF)
 buyer_proof_manage_dependency = require_permission(PermissionKeys.MANAGE_BUYER_PROOF)
 package_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSITION_PACKAGES)
+outreach_manage_dependency = require_permission(PermissionKeys.MANAGE_DISPOSITION_OUTREACH)
+outreach_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSITION_OUTREACH)
+outreach_view_dependency = require_any_permission(
+    PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
+    PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+)
+bulk_send_dependency = require_permission(PermissionKeys.SEND_BULK_COMMUNICATIONS)
 
 
 def _require_private_economics(principal: Principal) -> Principal:
@@ -163,6 +178,191 @@ def read_case_package(
         raise HTTPException(status_code=404, detail="Disposition case not found.")
     response.headers["Cache-Control"] = "private, no-store"
     return result
+
+
+@router.get(
+    "/cases/{case_id}/outreach",
+    dependencies=[Depends(view_dependency), Depends(buyer_view_dependency)],
+)
+def read_case_outreach(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_view_dependency)],
+) -> DispositionOutreachWorkspaceRead:
+    try:
+        result = disposition_outreach.read_workspace(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/outreach/drafts",
+    status_code=201,
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def create_case_outreach_draft(
+    case_id: UUID,
+    payload: DispositionOutreachDraftCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> DispositionOutreachRevisionRead:
+    try:
+        result = disposition_outreach.create_draft(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/approve",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def approve_campaign_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachApprovalRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_approve_dependency)],
+) -> DispositionOutreachRevisionRead:
+    try:
+        result = disposition_outreach.approve_revision(
+            db,
+            principal,
+            campaign_id,
+            revision_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Outreach revision not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/release",
+    dependencies=[Depends(buyer_view_dependency), Depends(bulk_send_dependency)],
+)
+def release_campaign_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_approve_dependency)],
+) -> DispositionOutreachRevisionRead:
+    return _outreach_control(
+        disposition_outreach.release_revision,
+        db,
+        principal,
+        campaign_id,
+        revision_id,
+        payload,
+        response,
+    )
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/pause",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def pause_campaign_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> DispositionOutreachRevisionRead:
+    return _outreach_control(
+        disposition_outreach.pause_revision,
+        db,
+        principal,
+        campaign_id,
+        revision_id,
+        payload,
+        response,
+    )
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/resume",
+    dependencies=[Depends(buyer_view_dependency), Depends(bulk_send_dependency)],
+)
+def resume_campaign_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_approve_dependency)],
+) -> DispositionOutreachRevisionRead:
+    return _outreach_control(
+        disposition_outreach.resume_revision,
+        db,
+        principal,
+        campaign_id,
+        revision_id,
+        payload,
+        response,
+    )
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/cancel-unsent",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def cancel_campaign_unsent_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> DispositionOutreachRevisionRead:
+    return _outreach_control(
+        disposition_outreach.cancel_unsent,
+        db,
+        principal,
+        campaign_id,
+        revision_id,
+        payload,
+        response,
+    )
+
+
+@router.post(
+    "/campaigns/{campaign_id}/outreach/{revision_id}/retry-failed",
+    dependencies=[Depends(buyer_view_dependency), Depends(bulk_send_dependency)],
+)
+def retry_campaign_failed_outreach(
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_approve_dependency)],
+) -> DispositionOutreachRevisionRead:
+    return _outreach_control(
+        disposition_outreach.retry_failed,
+        db,
+        principal,
+        campaign_id,
+        revision_id,
+        payload,
+        response,
+    )
 
 
 @router.get("/cases/{case_id}/package/versions")
@@ -634,4 +834,31 @@ def _case_action(
         raise invalid(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+def _outreach_control(
+    function: Callable[..., DispositionOutreachRevisionRead | None],
+    db: Session,
+    principal: Principal,
+    campaign_id: UUID,
+    revision_id: UUID,
+    payload: DispositionOutreachControlRequest,
+    response: Response,
+) -> DispositionOutreachRevisionRead:
+    try:
+        result = function(
+            db,
+            principal,
+            campaign_id,
+            revision_id,
+            payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Outreach revision not found.")
+    response.headers["Cache-Control"] = "private, no-store"
     return result

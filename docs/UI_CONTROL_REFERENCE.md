@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 27, 2026
+Last verified against the application: August 28, 2026
 
 ## Purpose
 
@@ -1352,7 +1352,7 @@ disposition, buyer, task, document, and reconciliation records through one emplo
 | Closing | Embeds checklist, dates, title, funding, and closing controls | Uses existing deal edit permission |
 | Documents | Embeds the transaction file room and evidence controls | Document access remains role controlled |
 | Parties | Embeds closing-party records | Uses transaction edit permission |
-| Disposition | Embeds Package, Buyers, Offers, and Reconciliation for an existing House case | A new case is opened from the compatibility setup route; Land package and release controls remain blocked |
+| Disposition | Embeds Package, Buyers, Outreach, Offers, and Reconciliation for an existing House case | A new case is opened from the compatibility setup route; Land package and outreach controls remain blocked |
 | Finance | Opens the disposition reconciliation view in deal context | Economics are redacted from the aggregate unless authorized |
 | Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
 | Transaction / Disposition Copilot | Opens the active domain assistant in a drawer | Draft and review only; does not hide or replace source evidence |
@@ -1482,13 +1482,14 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 
 The Buyer Network does not include a merge control. Use the existing record when a duplicate match
 represents the same investor; use **Create separate** only for a truly distinct record and document
-why. InvestorLift synchronization and live buyer outreach remain disabled, so no control in this
-section sends an InvestorLift campaign.
+why. InvestorLift synchronization and outreach remain disabled, so no control in this section sends
+an InvestorLift campaign. Buyer profile maintenance also does not trigger Stonegate's separate
+governed House Outreach workflow.
 
 ## Dispositions
 
 The Dispositions workspace opens a case for a contracted property and uses **Package**,
-**Buyers**, **Offers**, and **Reconciliation** views.
+**Buyers**, **Outreach**, **Offers**, and **Reconciliation** views.
 
 ### Case And Package
 
@@ -1507,7 +1508,7 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | **Download approved vN PDF** / version **PDF** | Downloads the exact PDF bytes stored when that version was approved | Available only for an approved stored artifact; later source changes do not rewrite it |
 | Version history | Shows immutable version number, status, evidence currency, fingerprint, approver, reason, and artifact | A material source change marks the prior approval non-current and requires rebuild/reapproval |
 | **Refresh buyer ranking** | Scores the buyer pool against the current approved package | Disabled when approval is missing or stale |
-| **Prepare recipient pool** | Records qualified recipients against the exact package version and artifact hash as `prepared_not_sent` | Sends no email or SMS; Land and live delivery remain blocked |
+| **Prepare recipient pool** | Records qualified recipients against the exact package version and artifact hash as `prepared_not_sent` | Sends no email or SMS; the separate House Outreach view is required for delivery, and Land remains blocked |
 
 ### Buyer Matching
 
@@ -1525,6 +1526,36 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | **Verify POF** | Uploads the evidence and records the supplied verification facts | Authorized staff only; controlled launch acceptance must verify the operating review procedure |
 | Buyer activity | Logs contact, interest, showing, pass reason, and follow-up | Requires selected buyer |
 | **Log activity** | Saves the buyer touchpoint | Does not send communication unless explicitly using a channel action |
+
+### Governed Outreach
+
+The **Outreach** view is available only for the current House disposition workflow and buyers in
+Stonegate's owned Buyer Network. Its repository implementation uses existing Resend and Twilio
+configuration; a visible ready state is not evidence that real provider acceptance has passed.
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Readiness | Confirms a current approved package, frozen PDF artifact, and prepared recipient campaign exist | Blocked by stale/missing package approval, missing PDF, missing prepared campaign, or no prepared recipients |
+| Recipient and channel selection | Selects the exact owned-network buyers and email and/or SMS paths included in the revision | Only prepared recipients and their currently available channels appear; email plus SMS to one buyer counts as two deliveries |
+| Delivery cap | Shows the number of recipient-channel deliveries in the current selection | Hard maximum of 25 per immutable revision |
+| Email sender | Selects the active Stonegate Resend alias captured in the revision | Required when any email path is selected; inactive, non-Resend, or outbound-disabled aliases are unavailable |
+| SMS sender | Selects the active Stonegate Dispositions buyer-relations Twilio line captured in the revision | Required when any SMS path is selected; acquisitions or inactive lines are not eligible |
+| Email subject/body and SMS body | Defines the exact copy rendered and hashed for each selected delivery | Merge fields are limited to buyer name, company name, public property address, and package reference; no private economics are inserted automatically |
+| Create review revision | Freezes recipient identity, destination, channel, sender, exact rendered copy, package fingerprint, PDF hash, and manifest for approval | Requires outreach-management permission and one to 25 structurally valid recipient-channel selections; it sends nothing |
+| Revision preview and delivery rows | Displays the immutable content, destination, eligibility/exclusion reason, status, attempt count, and Buyer Inbox link | Refresh before approval when the lock version or hash changed |
+| Approval reason and attestation | Records why the exact package/recipient/channel/message revision is approved | Requires outreach-approval permission, an affirmative attestation, current lock version, and matching approval hash |
+| Approve exact outreach | Approves the immutable revision | Approval does not send; at least one structurally eligible delivery is required |
+| Release | Rechecks live buyer, destination, suppression, permission, sender, package, and provider state, then queues eligible work | Requires outreach approval plus bulk-send authority and a meaningful reason; production provider acceptance remains separate |
+| Pause | Prevents remaining unsent deliveries from being claimed while preserving history | Available for queued, sending, or provider-degraded revisions; requires outreach-management permission and a reason |
+| Resume | Rechecks the approved revision and current delivery eligibility before queueing remaining work | Available only for paused or provider-degraded revisions; requires approval/bulk-send authority and a reason |
+| Cancel unsent | Permanently cancels remaining prepared, approved, queued, or safely retryable work without erasing sent history | Requires outreach-management permission and a reason; it cannot recall provider-accepted messages |
+| Retry failed | Requeues only failures Stonegate has classified as safely retryable after a fresh preflight | Manager-gated; never use it for `delivery_unknown` SMS |
+| Buyer Inbox link | Opens the canonical buyer conversation for a delivery or safely matched reply | Appears after the delivery has a conversation; ambiguous replies create reconciliation work instead of an automatic buyer-state change |
+
+Delivery and reply status updates are asynchronous. Stonegate may show prepared, approved, queued,
+claimed, provider-accepted, sent, delivered, failed, delivery-unknown, suppressed, opted-out,
+replied, or cancelled outcomes. No Outreach control accepts an offer, selects a buyer, changes deal
+economics, sends through InvestorLift, or enables Land outreach.
 
 ### Offers
 

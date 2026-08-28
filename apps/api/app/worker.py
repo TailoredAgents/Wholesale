@@ -24,10 +24,15 @@ from app.services.call_intelligence import (
     process_next_call_transcript,
     process_next_pending_call_note_approval,
 )
+from app.services.disposition_outreach_delivery import (
+    process_next_disposition_outreach_delivery,
+    process_next_disposition_outreach_reconciliation,
+)
 from app.services.email import sync_next_email_account
 from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
+from app.services.messaging import process_next_twilio_status_recovery
 from app.services.meta_lead_ads import (
     process_next_meta_address_enrichment,
     process_next_meta_lead_event,
@@ -70,6 +75,7 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("batchdialer_direct_events", process_next_batchdialer_direct_event),
     ("meta_lead_ads", process_next_meta_lead_event),
     ("staff_lead_alerts", process_next_staff_lead_alert),
+    ("twilio_status_recovery", process_next_twilio_status_recovery),
     ("twilio_mms_media", process_next_twilio_mms_media),
     ("meta_address_enrichment", process_next_meta_address_enrichment),
     ("property_intelligence", process_next_property_research),
@@ -80,6 +86,11 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("email_sync", sync_next_email_account),
     ("resend_email_events", process_next_resend_event),
     ("resend_email_recovery", recover_next_received_email),
+    ("disposition_outreach_delivery", process_next_disposition_outreach_delivery),
+    (
+        "disposition_outreach_reconciliation",
+        process_next_disposition_outreach_reconciliation,
+    ),
     ("mailbox_notifications", process_next_mailbox_notification),
     ("acquisition_reminders", process_next_acquisition_reminder),
     ("lead_manager_escalations", process_next_escalation),

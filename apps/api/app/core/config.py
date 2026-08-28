@@ -239,6 +239,10 @@ class Settings(BaseSettings):
         default="offers@stonegatehb.com",
         validation_alias="RESEND_DEFAULT_FROM_EMAIL",
     )
+    disposition_outreach_physical_postal_address: str = Field(
+        default="",
+        validation_alias="DISPOSITION_OUTREACH_PHYSICAL_POSTAL_ADDRESS",
+    )
     resend_webhook_base_url: str = Field(
         default="http://localhost:8000",
         validation_alias="RESEND_WEBHOOK_BASE_URL",

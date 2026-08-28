@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 22, 2026
+Last updated: August 28, 2026
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
 | F4 Documents and e-signature | Storage, offer-authority snapshots, execution evidence, and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM implemented; optional DealMachine adapter disabled; campaign delivery is simulation-only | Controlled buyer placement plus a manual or implemented live delivery procedure |
+| F5 Buyers and dispositions | Buyer CRM plus governed House owned-buyer Resend/Twilio outreach and Buyer Inbox reply review implemented; optional DealMachine adapter, InvestorLift, and Land outreach disabled | Controlled capped production delivery/reply acceptance and buyer placement |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
@@ -64,6 +64,8 @@ Do not mark a phase finished from code alone when its exit criteria require prod
   the existing platform without authorizing a second CRM or duplicate business records.
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
+- `DISPOSITION_SIDEKICK_ROADMAP.md` owns the Buyer Network, House package, governed owned-buyer
+  outreach, later offer/closing protection, and future InvestorLift/Land boundaries.
 - `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` owns the approved production-dialer architecture,
   native-dialer dormancy, constrained official API contract, sole direct synchronization, manual
   Stonegate appointment boundary, health, reconciliation, and production acceptance.
@@ -293,7 +295,8 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - optional disabled DealMachine adapter retained only for deliberate future reactivation
 - duplicate protection and audit history
 - Disposition Copilot in supervised draft-only mode
-- simulation-only campaign release that records the approved recipients without sending outreach
+- non-sending prepared-recipient campaign evidence plus a separate immutable, exact-message House
+  outreach revision, approval, delivery, and reply-review loop for selected owned-network buyers
 
 ### Current Provider Decision
 
@@ -301,21 +304,25 @@ DealMachine is not part of the current launch plan. Its adapter remains disabled
 presented to staff as a working buyer source. It can be evaluated later only through a deliberate
 Owner decision and a new quality, billing, contact-permission, and production acceptance test.
 
-The current **release campaign** action is also not an external send. It creates a
-`simulated_released` campaign, marks reviewed recipients in the case, and records audit evidence.
-Stonegate therefore needs either a documented controlled manual email/call procedure for the first
-deal or a separately implemented and accepted live disposition-delivery channel.
+The DS5 **Prepare recipient pool** action remains non-sending `prepared_not_sent` evidence. DS6 now
+implements a separate House Outreach workflow that can send an approved immutable revision through
+Resend or Twilio after dynamic preflight. It is limited to 25 recipient-channel deliveries and
+buyers already in Stonegate's owned Buyer Network. InvestorLift and Land outreach remain disabled.
+Repository completion does not establish production-provider acceptance.
 
 ### Remaining Actions
 
 1. Build the first internal buyer list and verify criteria, contact permission, capacity, and proof.
-2. Decide and document whether the first controlled deal will use individually reviewed manual
-   email/calls or wait for an implemented live campaign channel.
-3. Send one approved deal package only after operational email and the selected delivery procedure
-   are accepted.
-4. Confirm the simulation action itself sends no email or SMS and cannot be mistaken for delivery.
+2. Configure and verify the authorized Resend alias and, if SMS will be used, the registered Twilio
+   Dispositions buyer-relations line.
+3. Run one owner-approved, capped House revision with controlled recipients. Verify exact package,
+   recipients, channels, messages, suppression/permission exclusions, provider state, Buyer Inbox
+   reply review, pause/cancel behavior, and no duplicate delivery before broader use.
+4. Confirm **Prepare recipient pool** itself sends no email or SMS and cannot be mistaken for an
+   approved Outreach release.
 5. Record engagement, offers, deposits, primary buyer, backup buyer, and verified proof.
-6. Complete one contract-to-buyer-to-reconciliation simulation before the first live assignment.
+6. Complete one controlled contract-to-buyer-to-reconciliation run before the first live
+   assignment.
 7. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
    quality, credit/cost, duplicate, DNC, and selective-import acceptance phase first.
 
@@ -326,7 +333,7 @@ deal or a separately implemented and accepted live disposition-delivery channel.
 - Replies and offers attach to the correct case.
 - Proof and buyer-selection approval cannot be bypassed.
 - Reconciliation produces the expected revenue, deductions, compensation, and margin.
-- Staff can tell the difference between simulation evidence and an actual external delivery.
+- Staff can tell the difference between prepared-recipient evidence and an actual Outreach delivery.
 
 ## F6. Accounting And Marketing Acceptance
 
@@ -670,7 +677,8 @@ Stonegate is ready for controlled first-market operations when:
 5. Dedicated Twilio SMS and Voice pass after A2P approval. Because call notes are launch-critical,
    the approved recording authorization, private media, transcription, structured AI draft, human
    correction/rejection/apply, failure visibility, retention, and deletion also pass end to end.
-6. One buyer and disposition simulation reaches reconciliation.
+6. One controlled buyer/disposition package and governed outreach reaches reply review, offer work,
+   and reconciliation without duplicate communication.
 7. The accounting process has an accepted opening and first close plan.
 8. Underwriting outcomes are recorded from the first live analyses onward.
 9. Copilots remain supervised until their own pilots pass.
@@ -680,9 +688,9 @@ Stonegate is ready for controlled first-market operations when:
     secretless-ingress monitoring procedure are recorded.
 12. Purchase-agreement authority and manual/provider execution evidence pass both success and
     stale-source blocking tests.
-13. Before the first deal is marketed, Stonegate has either an accepted controlled manual buyer-
-    outreach procedure or an implemented live disposition-delivery channel. A simulated campaign
-    alone is not delivery.
+13. Before broad marketing of the first deal, the implemented DS6 House owned-buyer delivery and
+    reply loop passes controlled production acceptance. A prepared-recipient campaign alone is not
+    delivery.
 
 Launch-ready does not mean autonomous. It means the human operation can run through one controlled,
 auditable system while unaccepted providers and AI actions remain clearly bounded.

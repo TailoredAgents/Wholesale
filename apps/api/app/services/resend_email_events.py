@@ -18,6 +18,7 @@ from app.integrations.resend_email import (
 )
 from app.models.foundation import (
     ActivityEvent,
+    AuditEvent,
     CommunicationDispatch,
     CommunicationProviderEvent,
     CommunicationRecord,
@@ -28,6 +29,7 @@ from app.models.foundation import (
     EmailSenderAlias,
     Lead,
     Organization,
+    SuppressionRecord,
     User,
 )
 from app.services.communication_participants import record_email_participants
@@ -56,6 +58,7 @@ STATUS_RANK = {
     "complained": 50,
 }
 TERMINAL_STATUSES = {"bounced", "failed", "suppressed", "complained"}
+EMAIL_SUPPRESSION_STATUSES = {"bounced", "suppressed", "complained"}
 RESEND_DEAD_LETTER_STATUS = "dead_letter"
 
 
@@ -497,6 +500,13 @@ def process_lifecycle_event(
     current_status = communication.status
     event_at = parse_datetime(event.payload.get("created_at")) or event.received_at
     current_at = parse_datetime(metadata.get("provider_status_at"))
+    dispatch = db.scalar(
+        select(CommunicationDispatch).where(
+            CommunicationDispatch.organization_id == event.organization_id,
+            CommunicationDispatch.provider == "resend",
+            CommunicationDispatch.provider_message_id == provider_message_id,
+        )
+    )
     if should_apply_status(current_status, new_status, current_at, event_at):
         communication.status = new_status
         communication.communication_metadata = {
@@ -508,21 +518,118 @@ def process_lifecycle_event(
             **(communication.external_payload or {}),
             "last_provider_event": data,
         }
-        dispatch = db.scalar(
-            select(CommunicationDispatch).where(
-                CommunicationDispatch.organization_id == event.organization_id,
-                CommunicationDispatch.provider == "resend",
-                CommunicationDispatch.provider_message_id == provider_message_id,
-            )
-        )
         if dispatch is not None:
             dispatch.status = new_status
             dispatch.completed_at = event_at
             if new_status in TERMINAL_STATUSES:
                 dispatch.error_code = new_status
                 dispatch.error_message = provider_failure_message(data)
+    if new_status in EMAIL_SUPPRESSION_STATUSES and dispatch is not None:
+        upsert_resend_email_suppression(
+            db,
+            event=event,
+            dispatch=dispatch,
+            provider_message_id=provider_message_id,
+            lifecycle_status=new_status,
+            event_at=event_at,
+            data=data,
+        )
     event.conversation_id = communication.conversation_id
     complete_resend_event(event, "processed")
+
+
+def upsert_resend_email_suppression(
+    db: Session,
+    *,
+    event: CommunicationProviderEvent,
+    dispatch: CommunicationDispatch,
+    provider_message_id: str,
+    lifecycle_status: str,
+    event_at: datetime,
+    data: dict[str, Any],
+) -> None:
+    addresses = normalized_addresses([dispatch.recipient])
+    if not addresses:
+        raise ValueError("Resend terminal event has no valid dispatch recipient.")
+    normalized_address = addresses[0]
+    suppression = db.scalar(
+        select(SuppressionRecord).where(
+            SuppressionRecord.organization_id == event.organization_id,
+            SuppressionRecord.channel == "email",
+            SuppressionRecord.normalized_address == normalized_address,
+        )
+    )
+    previous_value = None
+    if suppression is None:
+        suppression = SuppressionRecord(
+            organization_id=event.organization_id,
+            contact_id=dispatch.contact_id,
+            channel="email",
+            normalized_address=normalized_address,
+            status="active",
+            reason=resend_suppression_reason(lifecycle_status),
+            source="resend_lifecycle",
+            provider="resend",
+            external_event_id=event.external_event_id,
+            suppressed_at=event_at,
+            lifted_at=None,
+            suppression_metadata={
+                "provider_message_id": provider_message_id,
+                "provider_event_type": event.event_type,
+                "lifecycle_status": lifecycle_status,
+                "provider_failure": provider_failure_message(data),
+            },
+        )
+        db.add(suppression)
+    else:
+        previous_value = {
+            "status": suppression.status,
+            "source": suppression.source,
+            "external_event_id": suppression.external_event_id,
+        }
+        suppression.contact_id = dispatch.contact_id
+        suppression.status = "active"
+        suppression.reason = resend_suppression_reason(lifecycle_status)
+        suppression.source = "resend_lifecycle"
+        suppression.provider = "resend"
+        suppression.external_event_id = event.external_event_id
+        suppression.suppressed_at = event_at
+        suppression.lifted_at = None
+        suppression.suppression_metadata = {
+            "provider_message_id": provider_message_id,
+            "provider_event_type": event.event_type,
+            "lifecycle_status": lifecycle_status,
+            "provider_failure": provider_failure_message(data),
+        }
+    db.flush()
+    db.add(
+        AuditEvent(
+            organization_id=event.organization_id,
+            actor_user_id=None,
+            actor_type="provider",
+            action="communication.email_suppress",
+            entity_type="suppression_record",
+            entity_id=suppression.id,
+            previous_value=previous_value,
+            new_value={
+                "channel": "email",
+                "status": "active",
+                "normalized_address": normalized_address,
+                "contact_id": str(dispatch.contact_id),
+                "provider_message_id": provider_message_id,
+                "lifecycle_status": lifecycle_status,
+            },
+            reason=f"Resend reported {event.event_type} for the outbound recipient.",
+        )
+    )
+
+
+def resend_suppression_reason(lifecycle_status: str) -> str:
+    return {
+        "bounced": "Resend reported a hard bounce",
+        "complained": "Recipient reported the email as spam",
+        "suppressed": "Resend suppressed delivery to this recipient",
+    }[lifecycle_status]
 
 
 def recover_next_received_email(

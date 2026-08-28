@@ -1,8 +1,8 @@
 # Stonegate Buyer Network And Disposition Sidekick Roadmap
 
-Last updated: August 27, 2026
+Last updated: August 28, 2026
 
-> **Current status: DS0-DS5 complete; DS6-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS6 complete; DS7-DS12 planned.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -10,10 +10,13 @@ Last updated: August 27, 2026
 > external-to-network review, versioned score history, and shortlist-aware House release controls.
 > DS5 adds the House-only, evidence-classified launch-readiness workspace; immutable package
 > versions; approval-gated, stored investor PDFs; private-economics separation; material-change
-> invalidation; and exact package-version linkage for simulated recipients. Existing deal-specific
+> invalidation; and exact package-version linkage for prepared recipients. DS6 adds governed,
+> House-only email and SMS outreach to selected buyers already in Stonegate's owned Buyer Network:
+> immutable exact-message revisions, a 25 recipient-channel cap, separate human approval, dynamic
+> eligibility checks, durable delivery state, and Buyer Inbox reply review. Existing deal-specific
 > engagement and offer records, primary and backup buyer selection, reconciliation, and review-only
-> Disposition Copilot remain in place. DS5 sends no email or SMS. Land package release, live
-> outreach, and later phases remain plans and are not proof that those capabilities are live.
+> Disposition Copilot remain in place. InvestorLift, Land outreach, and DS7-DS12 remain plans. DS6
+> repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
 
@@ -133,12 +136,15 @@ sections below supersede the starting gaps that those phases resolved.
   pool. A corresponding Land execution and release lane is not yet active.
 - House pool scoring now evaluates structured market, asset, price, strategy, funding, capacity,
   proof, activity, reliability, and relationship evidence. Land scoring remains future work.
-- Deal-candidate lifecycle and reviewed shortlist/pass decisions are implemented. Live contacted,
-  reply, delivery, and campaign progression remain bounded by the future DS6 outreach loop.
+- Deal-candidate lifecycle and reviewed shortlist/pass decisions are implemented. DS6 now records
+  governed delivery state and reply review for selected owned-network recipients. Broader operator
+  workflow and offer-room progression remain later-phase work.
 - There is no operator-focused Today view combining deals, buyer replies, follow-ups, offers, POF,
   deposits, and closing deadlines.
-- The approved campaign release is simulated and sends no email or SMS.
-- Buyer replies and campaign delivery state are not yet a governed disposition loop.
+- The DS5 **Prepare recipient pool** action remains a non-sending `prepared_not_sent` audit step.
+  DS6's separate Outreach review and release path is the only implemented live-send path.
+- DS6 reconciles replies only when they can be tied safely to prior governed outreach; ambiguous
+  replies create review work instead of changing buyer or offer state automatically.
 - Offer comparison and risk explanation need a clearer operator experience.
 
 ### 6.3 Provider Gaps
@@ -520,10 +526,10 @@ Stonegate does not yet claim automated Land buyer eligibility, Land pool scoring
 release, or a production-ready Land disposition workflow. Residential evidence and release rules
 must not be reused as a substitute for those missing Land controls.
 
-DS4 also does not activate live email or SMS outreach. Campaign release remains governed by the
-existing House disposition boundary, and live delivery, reply reconciliation, suppression, retry,
-and idempotency controls remain DS6 work. DealMachine results are staged provider evidence; the
-future InvestorLift adapter and its verified provider contract remain DS8 work.
+DS4 itself did not activate live email or SMS outreach. DS6 subsequently added the governed owned
+Buyer Network delivery and reply loop for the current House workflow. DealMachine results remain
+staged provider evidence; the future InvestorLift adapter and its verified provider contract remain
+DS8 work.
 
 ### Exit Criteria
 
@@ -570,9 +576,9 @@ deal.
 - DS5 is available only for the current House disposition workflow. Land package readiness and Land
   release require a separate asset-safe implementation.
 - Campaign release in DS5 is preparation and audit simulation only. Recipient rows remain
-  `prepared_not_sent`; DS5 sends no email or SMS and does not claim delivery or reply handling.
-- Governed live delivery, suppression, provider reconciliation, replies, retries, and pause/cancel
-  behavior remain DS6 work.
+  `prepared_not_sent`, and **Prepare recipient pool** itself sends no email or SMS.
+- DS6 subsequently added a separate governed outreach revision, approval, delivery, suppression,
+  reconciliation, reply, retry, pause, and cancel-unsent workflow for eligible House recipients.
 
 ### Exit Criteria
 
@@ -583,24 +589,70 @@ deal.
 
 ## DS6 - Governed Live Outreach And Reply Loop
 
-**Status: Planned.**
+**Status: Complete as of August 28, 2026, for governed outreach to Stonegate-owned buyers in the
+current House disposition workflow. Production-provider acceptance remains DS12 work.**
 
 ### Goal
 
 Replace the simulated release with bounded, human-approved buyer communication using Stonegate's
 existing communication providers.
 
-### Work
+### Delivered
 
-- Add recipient selection, channel eligibility, suppression, and permission preflight.
-- Draft email and SMS from the approved package without inventing facts.
-- Require an authorized human to review and approve the package, recipients, and messages.
-- Send idempotently through approved Resend and Twilio configurations.
-- Record queued, sent, delivered, failed, bounced, blocked, replied, and opted-out states.
-- Route buyer replies into the correct Buyer Inbox conversation and deal candidate.
-- Create follow-up tasks from replies and approved cadence rules.
-- Provide pause, cancel-unsent, retry-failed, and provider-degraded controls.
-- Prevent provider callbacks or worker retries from duplicating delivery.
+- Adds a House-only **Outreach** workspace after the approved package and prepared recipient pool.
+  Staff select the exact owned-network buyers and email and/or SMS channel for each buyer.
+- Enforces a hard limit of 25 recipient-channel deliveries per immutable revision. Choosing email
+  and SMS for one buyer counts as two deliveries.
+- Captures the exact Resend alias or Twilio Dispositions buyer-relations line, recipient identity,
+  destination, package version, approved PDF hash, rendered subject/body, body hash, and recipient
+  manifest in the approval record.
+- Limits merge fields to buyer name, company name, public property address, and package reference.
+  Private economics, seller notes, and unverified claims are not automatically available to the
+  outreach template.
+- Requires an authorized human to review the exact recipient/channel/message revision, affirm an
+  attestation, record a reason, and approve its SHA-256-bound manifest before release. Managing a
+  buyer or preparing a recipient pool does not send a message.
+- Rechecks buyer Active status, relationship restrictions, archive state, current destination,
+  email suppression, SMS permission/suppression, approved sender state, provider readiness, current
+  package fingerprint, and frozen PDF artifact before queueing and again before provider delivery.
+- Records the prepared campaign's first live release time and advances a House case from Buyer
+  Matching to Marketed only after at least one delivery passes the live release preflight and is
+  actually queued.
+- Delivers email through Resend with the exact approved PDF and SMS through the selected Twilio
+  buyer-relations line. Durable dispatch and idempotency records prevent known callback or worker
+  replay from creating another send. An uncertain SMS or email provider boundary is held for review
+  rather than retried automatically; Resend concurrent-idempotency responses are also treated as
+  acceptance-unknown instead of safely retryable.
+- Records prepared, approved, queued, claimed, provider-accepted, sent, delivered, failed,
+  delivery-unknown, suppressed, opted-out, replied, and cancelled outcomes, and aggregates them on
+  the revision without erasing earlier audit history.
+- Provides reason-required **Pause**, **Resume**, **Cancel unsent**, and manager-gated **Retry
+  failed** controls. Retry is limited to failures Stonegate can identify as safely retryable.
+- Routes safely matched email and SMS replies into the canonical Buyer Inbox conversation, links
+  the disposition case, campaign, revision, delivery, and buyer, and creates reply-review tasks.
+  Ambiguous replies create reconciliation review work. A clear email unsubscribe from one
+  structured sender address creates durable address-level suppression immediately even when the
+  campaign match still needs review. Replies never select a buyer, accept an offer, or change
+  economics automatically.
+
+### Current Boundary
+
+- DS6 applies only to the current **House** disposition workflow and buyers already approved into
+  Stonegate's owned Buyer Network. Land package release and Land outreach remain disabled.
+- InvestorLift synchronization and outreach remain disabled. DS6 does not call InvestorLift or
+  convert provider candidates into permanent buyers.
+- The 25-delivery hard cap is not configurable upward through this workspace. A manager must still
+  approve the exact revision and explicitly release or resume it.
+- **Prepare recipient pool** remains a non-sending DS5 action; communication starts only from the
+  separately approved DS6 Outreach revision.
+- DS6 uses the existing Resend and Twilio configurations and does not prove that DNS, mailbox,
+  carrier registration, phone-number configuration, or real recipient delivery has passed in
+  production. Controlled production acceptance and broader rollout remain DS12 work.
+- Commercial buyer email requires the non-secret
+  `DISPOSITION_OUTREACH_PHYSICAL_POSTAL_ADDRESS` setting to contain Stonegate's complete, valid
+  business postal address. Configure the same value on both API and communications worker before
+  email outreach; the blank default keeps email blocked. Buyer SMS remains usable without this
+  setting when all existing Twilio, permission, and suppression checks pass.
 
 ### Exit Criteria
 
@@ -879,7 +931,7 @@ Quality and safety measures:
 | DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Complete |
 | DS4 | Unified Explainable Deal Buyer Pool | Complete for current House disposition workflow |
 | DS5 | Deal Launch And Investor Package Readiness | Complete for current House disposition workflow |
-| DS6 | Governed Live Outreach And Reply Loop | Planned |
+| DS6 | Governed Live Outreach And Reply Loop | Complete for owned Buyer Network recipients in the current House disposition workflow; production acceptance pending DS12 |
 | DS7 | Offer Room And Closing Protection | Planned |
 | DS8 | InvestorLift Provider Adapter | Planned; provider verification required |
 | DS9 | Governed Disposition Copilot | Planned; foundation exists |
@@ -907,10 +959,11 @@ Ambiguous records should remain in Needs Review rather than being forced into an
 
 DS2 provides the specialist's daily command center, DS3 provides the canonical buyer profile,
 separate versioned House and Land buy boxes and proof review, DS4 provides the unified, versioned,
-explainable House deal buyer pool, and DS5 provides the evidence-backed, approval-gated House
-package and simulated recipient audit trail. DS6 and DS7 remain the live-outreach, offer, and
-closing-protection work. Land matching and release must receive their own asset-safe implementation
-before being described as live. DS8 follows only after InvestorLift supplies a
+explainable House deal buyer pool, DS5 provides the evidence-backed, approval-gated House package
+and prepared-recipient audit trail, and DS6 provides the governed owned-buyer email/SMS and reply
+loop. DS7 remains the offer-room and closing-protection work. Land matching and release must receive
+their own asset-safe implementation before being described as live. DS8 follows only after
+InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may

@@ -3241,6 +3241,104 @@ export type DispositionPackageWorkspace = {
   versions: DispositionPackageVersion[];
 };
 
+export type DispositionOutreachChannel = "email" | "sms";
+
+export type DispositionOutreachRevisionStatus =
+  | "draft"
+  | "review_required"
+  | "approved"
+  | "queued"
+  | "sending"
+  | "paused"
+  | "provider_degraded"
+  | "completed"
+  | "completed_with_failures"
+  | "cancelled"
+  | "invalidated";
+
+export type DispositionOutreachSender = {
+  id: string;
+  channel: DispositionOutreachChannel;
+  label: string;
+  address: string;
+  is_default: boolean;
+};
+
+export type DispositionOutreachPreparedRecipient = {
+  id: string;
+  buyer_id: string;
+  buyer_name: string;
+  company_name: string | null;
+  available_channels: DispositionOutreachChannel[];
+  captured_email: string | null;
+  captured_phone: string | null;
+};
+
+export type DispositionOutreachDelivery = {
+  id: string;
+  campaign_recipient_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  company_name: string | null;
+  channel: DispositionOutreachChannel;
+  destination: string;
+  conversation_id: string | null;
+  subject: string | null;
+  body: string;
+  body_hash: string;
+  eligibility_status: "eligible" | "ineligible";
+  eligibility_snapshot: Record<string, unknown>;
+  exclusion_reason: string | null;
+  status: string;
+  attempt_count: number;
+  provider: string | null;
+  provider_message_id: string | null;
+  created_at: string;
+};
+
+export type DispositionOutreachRevision = {
+  id: string;
+  campaign_id: string;
+  case_id: string;
+  package_version_id: string;
+  revision_number: number;
+  lock_version: number;
+  status: DispositionOutreachRevisionStatus;
+  mode: "supervised";
+  recipient_cap: number;
+  recipient_manifest_hash: string;
+  approval_hash: string | null;
+  package_source_fingerprint: string;
+  artifact_sha256: string;
+  sender_snapshot: Record<string, unknown>;
+  created_by_user_id: string;
+  approved_by_user_id: string | null;
+  approval_reason: string | null;
+  approved_at: string | null;
+  queued_at: string | null;
+  paused_at: string | null;
+  cancelled_at: string | null;
+  completed_at: string | null;
+  delivery_counts: Record<string, number>;
+  deliveries: DispositionOutreachDelivery[];
+  created_at: string;
+};
+
+export type DispositionOutreachWorkspace = {
+  case_id: string;
+  campaign_id: string | null;
+  package_version_id: string | null;
+  package_source_fingerprint: string | null;
+  artifact_sha256: string | null;
+  hard_recipient_cap: number;
+  readiness_status: "ready" | "blocked";
+  blockers: string[];
+  prepared_recipients: DispositionOutreachPreparedRecipient[];
+  available_senders: DispositionOutreachSender[];
+  latest_revision: DispositionOutreachRevision | null;
+  revisions: DispositionOutreachRevision[];
+};
+
 export type DispositionDeskScope = "mine" | "team";
 
 export type DispositionDeskCategory =

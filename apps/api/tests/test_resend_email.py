@@ -12,7 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.integrations.resend_email import ResendEmailDeliveryProvider
+from app.integrations.email_delivery import EmailDeliveryRequest
+from app.integrations.resend_email import ResendEmailDeliveryProvider, ResendEmailError
 from app.main import app
 from app.models.foundation import (
     CommunicationDispatch,
@@ -26,6 +27,56 @@ from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
 OWNER_HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
+
+
+def _provider_test_request() -> EmailDeliveryRequest:
+    return EmailDeliveryRequest(
+        lead_id=None,
+        contact_id="contact-test",
+        sender_name="Stonegate Home Buyers",
+        sender_email="offers@stonegatehb.com",
+        recipient="buyer@example.com",
+        subject="Property opportunity",
+        body="Please review this property opportunity.",
+        idempotency_key="disposition-provider-classification-test",
+    )
+
+
+@pytest.mark.parametrize(
+    ("status_code", "payload", "acceptance_unknown", "retry_safe"),
+    (
+        (
+            409,
+            {
+                "name": "concurrent_idempotent_requests",
+                "message": "Another request with the same key is still in progress.",
+            },
+            True,
+            False,
+        ),
+        (429, {"name": "rate_limit_exceeded", "message": "Slow down."}, False, True),
+        (500, {"name": "internal_server_error", "message": "Try later."}, True, False),
+        (400, {"name": "validation_error", "message": "Invalid request."}, False, False),
+    ),
+)
+def test_resend_submission_error_classification(
+    status_code: int,
+    payload: dict[str, str],
+    acceptance_unknown: bool,
+    retry_safe: bool,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json=payload, request=request)
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ResendEmailError) as caught:
+        provider.send(_provider_test_request())
+    assert caught.value.status_code == status_code
+    assert caught.value.acceptance_unknown is acceptance_unknown
+    assert caught.value.retry_safe is retry_safe
 
 
 @pytest.fixture

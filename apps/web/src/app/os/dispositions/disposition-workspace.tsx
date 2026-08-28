@@ -20,9 +20,10 @@ import { labelize } from "../os-utils";
 import { DispositionBuyerPool } from "./disposition-buyer-pool";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
 import { DispositionPackageReadiness } from "./disposition-package-readiness";
+import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
 
-type Tab = "package" | "buyers" | "offers" | "reconciliation";
+type Tab = "package" | "buyers" | "outreach" | "offers" | "reconciliation";
 
 function money(cents: number | null) {
   return cents == null
@@ -41,6 +42,10 @@ function cents(value: FormDataEntryValue | null) {
 export function DispositionWorkspace({
   canEditBuyers,
   canEditDeals,
+  canManageOutreach,
+  canApproveOutreach,
+  canSendBulk,
+  canViewOutreach,
   dealId,
   initialCaseId,
   initialData,
@@ -48,6 +53,10 @@ export function DispositionWorkspace({
 }: {
   canEditBuyers: boolean;
   canEditDeals: boolean;
+  canManageOutreach: boolean;
+  canApproveOutreach: boolean;
+  canSendBulk: boolean;
+  canViewOutreach: boolean;
   dealId: string;
   initialCaseId?: string;
   initialData: DispositionOverview;
@@ -60,7 +69,9 @@ export function DispositionWorkspace({
       ? initialCaseId ?? null
       : initialData.cases[0]?.id ?? null,
   );
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(
+    initialTab === "outreach" && !canViewOutreach ? "package" : initialTab,
+  );
   const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
   const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -370,7 +381,7 @@ export function DispositionWorkspace({
                   />
                 </CopilotLauncher>
               ) : null}
-              <nav className={styles.tabs}>{(["package", "buyers", "offers", "reconciliation"] as Tab[]).map((item) => <button className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : labelize(item)}</button>)}</nav>
+              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "reconciliation"] as Tab[]).filter((item) => item !== "outreach" || canViewOutreach).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : labelize(item)}</button>)}</nav>
 
               {tab === "package" ? (
                 <DispositionPackageReadiness
@@ -400,6 +411,18 @@ export function DispositionWorkspace({
                   onUploadProof={uploadProof}
                   packageApproved={selected.package_status === "approved"}
                   parentBusy={busy}
+                  request={request}
+                />
+              ) : null}
+
+              {tab === "outreach" && canViewOutreach ? (
+                <DispositionOutreachWorkspace
+                  canApprove={canApproveOutreach}
+                  canManage={canManageOutreach}
+                  canSendBulk={canSendBulk}
+                  caseId={selected.id}
+                  key={selected.id}
+                  onMessage={setMessage}
                   request={request}
                 />
               ) : null}

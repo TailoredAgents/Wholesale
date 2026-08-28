@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last verified: August 27, 2026
+Last verified: August 28, 2026
 
 ## How To Use This Guide
 
@@ -159,6 +159,10 @@ transaction work.
 Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for Disposition**, then
 the selected Deal's Disposition section for package, buyer, and offer work.
 
+The Disposition representative may prepare and manage supervised outreach. Exact revision approval
+requires the separate outreach-approval permission. Release, resume, and safe-failure retry require
+both outreach approval and bulk-send authority; the standard Disposition manager role has both.
+
 - For House deals, resolve the package launch-readiness checklist, review evidence classifications,
   and match only appropriate buyers against a current approved package version.
 - Search the Buyer Network before adding an investor, resolve duplicate warnings, and assign a
@@ -175,7 +179,13 @@ the selected Deal's Disposition section for package, buyer, and offer work.
   participate in future automated matching.
 - Do not select a buyer or release a package by bypassing approval gates.
 - Treat **Prepare recipient pool** as an audited `prepared_not_sent` record only. It sends no
-  email or SMS. Land package readiness and release remain blocked.
+  email or SMS. Use the separate House **Outreach** view for exact-message review, approval, and
+  release; Land package readiness and outreach remain blocked.
+- Confirm every selected recipient, channel, destination, sender, rendered message, exclusion, and
+  delivery count before requesting outreach approval. One revision is capped at 25
+  recipient-channel deliveries.
+- Work Buyer Inbox reply-review tasks promptly. Never treat an ambiguous reply as an offer or buyer
+  commitment without human review.
 - Do not treat a provider/imported buyer as verified or assume that adding a buyer sends outreach.
 
 ## Finance And Accounting
@@ -528,9 +538,25 @@ current human disposition work according to the active compensation policy.
 8. Download and review the stored approved-version PDF. The file is the exact artifact frozen at
    approval.
 9. Select **Prepare recipient pool** only after buyer qualification. Confirm that the prepared
-   recipients and exact version were recorded as `prepared_not_sent`.
-10. Contact buyers separately through an approved company channel. The simulation sends nothing;
-    live automated outreach and Land release are not available.
+   recipients and exact version were recorded as `prepared_not_sent`; this step sends nothing.
+10. Open **Outreach**. Select only the intended owned-network buyers and eligible email and/or SMS
+    paths. Confirm the active Resend alias or Dispositions buyer-relations Twilio line, and keep the
+    total at or below 25 recipient-channel deliveries.
+11. Review the exact subject/body rendered for every delivery. Do not add purchase basis, minimum
+    acceptable economics, desired assignment fee, seller notes, approval authority, or unsupported
+    claims to buyer-visible copy.
+12. Create the immutable review revision. A human with outreach-approval permission must verify its
+    package, PDF hash, senders, recipients, destinations, channels, messages, exclusions, and delivery count;
+    then record a reason, affirm the attestation, and approve the exact revision.
+13. An authorized manager explicitly releases it. Approval alone does not send. Watch delivery
+    states; pause or cancel unsent work when needed, and retry only a failure the control identifies
+    as safely retryable. Never force-retry `delivery_unknown` SMS.
+14. Work safely matched replies in the linked Buyer Inbox conversation and complete the review task.
+    Ambiguous replies require reconciliation review before buyer, interest, or offer state changes.
+
+The governed workflow above is House-only and reaches only selected buyers already in Stonegate's
+owned Buyer Network. InvestorLift and Land outreach remain disabled. Real Resend/Twilio delivery and
+reply acceptance must still pass a controlled, capped production test before broad use.
 
 ### Buyer Work
 
@@ -556,9 +582,10 @@ current human disposition work according to the active compensation policy.
     permission, offer, or deal history to clean up a list.
 
 Provider or file imports must retain their provenance and remain **Needs Review** until a person
-checks the record. The legacy DealMachine adapter is disabled. InvestorLift synchronization and
-live Buyer Network outreach are also disabled, so staff must not assume that saving, activating,
-or matching a buyer sends a message.
+checks the record. The legacy DealMachine adapter is disabled, and InvestorLift synchronization and
+outreach remain disabled. Staff must not assume that saving, activating, matching, or preparing a
+buyer sends a message; only the separately approved and released House **Outreach** revision can do
+so through Stonegate's existing communication providers.
 
 ### Offers
 

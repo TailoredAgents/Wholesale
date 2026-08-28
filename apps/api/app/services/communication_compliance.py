@@ -83,7 +83,7 @@ def evaluate_sms_eligibility(
     within_allowed_hours = is_within_sms_allowed_hours(settings, now=now)
     blockers: list[str] = []
     if recipient is None:
-        blockers.append("A valid seller mobile number is required.")
+        blockers.append("A valid recipient mobile number is required.")
     if consent_status != "granted":
         blockers.append("Recorded SMS consent is required.")
     if suppression is not None:

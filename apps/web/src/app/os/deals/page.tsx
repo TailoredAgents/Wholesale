@@ -96,6 +96,16 @@ export default async function DealsPage({
     profile?.permissions.includes("deals:view") &&
     profile.permissions.includes("buyers:view"),
   );
+  const canManageOutreach = Boolean(
+    profile?.permissions.includes("dispositions:manage_outreach"),
+  );
+  const canApproveOutreach = Boolean(
+    profile?.permissions.includes("dispositions:approve_outreach"),
+  );
+  const canViewOutreach = Boolean(
+    profile?.permissions.includes("buyers:view") &&
+    (canManageOutreach || canApproveOutreach),
+  );
 
   return (
     <WorkspacePage>
@@ -121,9 +131,13 @@ export default async function DealsPage({
       ) : null}
       {dealResult.deals ? (
         <DealsWorkspace
+          canApproveOutreach={canApproveOutreach}
           canEditBuyers={Boolean(profile?.permissions.includes("buyers:edit"))}
           canEditDeals={Boolean(profile?.permissions.includes("deals:edit"))}
+          canManageOutreach={canManageOutreach}
+          canSendBulk={Boolean(profile?.permissions.includes("communications:send_bulk"))}
           canViewDisposition={canViewDisposition}
+          canViewOutreach={canViewOutreach}
           initialDealId={params.deal}
           initialDisplay={params.display}
           initialDispositionTab={params.dispositionTab}

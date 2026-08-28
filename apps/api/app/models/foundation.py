@@ -6273,6 +6273,376 @@ class DispositionCampaignRecipient(UuidPrimaryKeyMixin, TimestampMixin, Base):
     prepared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class DispositionOutreachRevision(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_outreach_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "disposition_campaign_id",
+            "revision_number",
+            name="uq_disposition_outreach_revisions_campaign_revision",
+        ),
+        CheckConstraint(
+            "revision_number >= 1",
+            name="ck_disposition_outreach_revisions_revision_number",
+        ),
+        CheckConstraint(
+            "lock_version >= 1",
+            name="ck_disposition_outreach_revisions_lock_version",
+        ),
+        CheckConstraint(
+            "recipient_cap >= 1",
+            name="ck_disposition_outreach_revisions_recipient_cap",
+        ),
+        CheckConstraint(
+            "mode = 'supervised'",
+            name="ck_disposition_outreach_revisions_supervised_mode",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'review_required', 'approved', 'queued', 'sending', "
+            "'paused', 'provider_degraded', 'completed', 'completed_with_failures', "
+            "'cancelled', 'invalidated')",
+            name="ck_disposition_outreach_revisions_status",
+        ),
+        CheckConstraint(
+            "length(recipient_manifest_hash) = 64",
+            name="ck_disposition_outreach_revisions_manifest_hash",
+        ),
+        CheckConstraint(
+            "approval_hash IS NULL OR length(approval_hash) = 64",
+            name="ck_disposition_outreach_revisions_approval_hash",
+        ),
+        CheckConstraint(
+            "length(package_source_fingerprint) = 64",
+            name="ck_disposition_outreach_revisions_source_fingerprint",
+        ),
+        CheckConstraint(
+            "length(artifact_sha256) = 64",
+            name="ck_disposition_outreach_revisions_artifact_hash",
+        ),
+        Index(
+            "ix_disposition_outreach_revisions_campaign_status",
+            "organization_id",
+            "disposition_campaign_id",
+            "status",
+        ),
+        Index(
+            "ix_disposition_outreach_revisions_case_status",
+            "organization_id",
+            "disposition_case_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_campaign_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    package_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="draft",
+        server_default="draft",
+    )
+    mode: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="supervised",
+        server_default="supervised",
+    )
+    recipient_cap: Mapped[int] = mapped_column(Integer, nullable=False)
+    recipient_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    package_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_sender_alias_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("email_sender_aliases.id", ondelete="SET NULL"), nullable=True
+    )
+    sms_voice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("voice_lines.id", ondelete="SET NULL"), nullable=True
+    )
+    sender_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    approval_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DispositionOutreachDelivery(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_outreach_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_disposition_outreach_deliveries_org_idempotency",
+        ),
+        UniqueConstraint(
+            "outreach_revision_id",
+            "buyer_id",
+            "channel",
+            name="uq_disposition_outreach_deliveries_revision_buyer_channel",
+        ),
+        UniqueConstraint(
+            "outreach_revision_id",
+            "channel",
+            "normalized_destination",
+            name="uq_disposition_outreach_deliveries_revision_channel_destination",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_message_id",
+            name="uq_disposition_outreach_deliveries_org_provider_message",
+        ),
+        CheckConstraint(
+            "channel IN ('email', 'sms')",
+            name="ck_disposition_outreach_deliveries_channel",
+        ),
+        CheckConstraint(
+            "eligibility_status IN ('eligible', 'ineligible')",
+            name="ck_disposition_outreach_deliveries_eligibility",
+        ),
+        CheckConstraint(
+            "status IN ('prepared', 'ineligible', 'approved', 'queued', 'claimed', "
+            "'provider_accepted', 'sent', 'delivered', 'replied', 'failed_retryable', "
+            "'failed_terminal', 'delivery_unknown', 'suppressed', 'opted_out', "
+            "'cancelled')",
+            name="ck_disposition_outreach_deliveries_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_disposition_outreach_deliveries_attempt_count",
+        ),
+        CheckConstraint(
+            "length(body_hash) = 64",
+            name="ck_disposition_outreach_deliveries_body_hash",
+        ),
+        Index(
+            "ix_disposition_outreach_deliveries_worker_claim",
+            "organization_id",
+            "status",
+            "next_attempt_at",
+            "processing_started_at",
+            "created_at",
+        ),
+        Index(
+            "ix_disposition_outreach_deliveries_case_status",
+            "organization_id",
+            "disposition_case_id",
+            "status",
+        ),
+        Index(
+            "ix_disposition_outreach_deliveries_campaign_status",
+            "organization_id",
+            "disposition_campaign_id",
+            "status",
+        ),
+        Index(
+            "ix_disposition_outreach_deliveries_conversation_channel",
+            "organization_id",
+            "conversation_id",
+            "channel",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    outreach_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_outreach_revisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    disposition_campaign_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    package_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    disposition_campaign_recipient_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_campaign_recipients.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="RESTRICT"), nullable=False
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    normalized_destination: Mapped[str] = mapped_column(String(320), nullable=False)
+    captured_destination: Mapped[str] = mapped_column(String(320), nullable=False)
+    captured_identity: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    eligibility_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    eligibility_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    exclusion_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="prepared",
+        server_default="prepared",
+    )
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    communication_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("communication_records.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    communication_dispatch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("communication_dispatches.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_token: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    provider_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class DispositionReplyLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_reply_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "communication_record_id",
+            name="uq_disposition_reply_links_communication",
+        ),
+        CheckConstraint(
+            "routing_status IN ('matched', 'ambiguous', 'needs_review')",
+            name="ck_disposition_reply_links_routing_status",
+        ),
+        CheckConstraint(
+            "routing_confidence BETWEEN 0 AND 100",
+            name="ck_disposition_reply_links_routing_confidence",
+        ),
+        Index(
+            "ix_disposition_reply_links_case_routing",
+            "organization_id",
+            "disposition_case_id",
+            "routing_status",
+            "linked_at",
+        ),
+        Index(
+            "ix_disposition_reply_links_delivery",
+            "outreach_delivery_id",
+            "linked_at",
+        ),
+        Index(
+            "ix_disposition_reply_links_campaign",
+            "disposition_campaign_id",
+            "linked_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    communication_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("communication_records.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    outreach_delivery_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_outreach_deliveries.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    outreach_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_outreach_revisions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    disposition_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_campaigns.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    disposition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="RESTRICT"), nullable=True
+    )
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    routing_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    routing_confidence: Mapped[int] = mapped_column(Integer, nullable=False)
+    reply_classification: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="needs_review",
+        server_default="needs_review",
+    )
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_engagements"
     __table_args__ = (

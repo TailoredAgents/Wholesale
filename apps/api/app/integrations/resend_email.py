@@ -14,7 +14,20 @@ from app.integrations.email_delivery import (
 
 
 class ResendEmailError(EmailProviderError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider_error_code: str | None = None,
+        acceptance_unknown: bool = False,
+        retry_safe: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_error_code = provider_error_code
+        self.acceptance_unknown = acceptance_unknown
+        self.retry_safe = retry_safe
 
 
 class ResendAttachmentDownloadUrlError(ResendEmailError):
@@ -97,7 +110,14 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
             json=payload,
             headers={"Idempotency-Key": request.idempotency_key},
         )
-        provider_message_id = required_string(response, "id")
+        try:
+            provider_message_id = required_string(response, "id")
+        except ResendEmailError as exc:
+            raise ResendEmailError(
+                str(exc),
+                acceptance_unknown=True,
+                retry_safe=False,
+            ) from exc
         retrieved = self.retrieve_sent_message(provider_message_id)
         rfc_message_id = str(retrieved.get("message_id", "")).strip() if retrieved else ""
         return EmailDeliveryResult(
@@ -176,6 +196,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        is_email_submission = method.upper() == "POST" and path == "/emails"
         request_headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
@@ -202,15 +223,45 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
                         params=params,
                     )
         except httpx.RequestError as exc:
-            raise ResendEmailError("Resend could not be reached.") from exc
+            raise ResendEmailError(
+                "Resend could not be reached.",
+                acceptance_unknown=is_email_submission,
+                retry_safe=False,
+            ) from exc
         if response.status_code >= 400:
-            raise ResendEmailError(resend_error_message(response))
+            provider_error_code = resend_error_code(response)
+            acceptance_unknown = is_email_submission and (
+                response.status_code == 408
+                or response.status_code >= 500
+                or (
+                    response.status_code == 409
+                    and provider_error_code == "concurrent_idempotent_requests"
+                )
+            )
+            retry_safe = is_email_submission and response.status_code == 429
+            raise ResendEmailError(
+                resend_error_message(response),
+                status_code=response.status_code,
+                provider_error_code=provider_error_code,
+                acceptance_unknown=acceptance_unknown,
+                retry_safe=retry_safe,
+            )
         try:
             data = response.json()
         except ValueError as exc:
-            raise ResendEmailError("Resend returned an invalid response.") from exc
+            raise ResendEmailError(
+                "Resend returned an invalid response.",
+                status_code=response.status_code,
+                acceptance_unknown=is_email_submission,
+                retry_safe=False,
+            ) from exc
         if not isinstance(data, dict):
-            raise ResendEmailError("Resend returned an invalid response.")
+            raise ResendEmailError(
+                "Resend returned an invalid response.",
+                status_code=response.status_code,
+                acceptance_unknown=is_email_submission,
+                retry_safe=False,
+            )
         return data
 
     def _download(self, url: str, *, max_bytes: int) -> bytes:
@@ -309,3 +360,17 @@ def resend_error_message(response: httpx.Response) -> str:
     if isinstance(message, str) and message.strip():
         return f"Resend rejected the email: {message.strip()[:500]}"
     return f"Resend rejected the email with status {response.status_code}."
+
+
+def resend_error_code(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    for key in ("name", "code", "error_code"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None

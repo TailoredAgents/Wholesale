@@ -383,6 +383,19 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     db_session.refresh(alert)
     assert alert.status == "delivered"
 
+    process_twilio_status(
+        db_session,
+        {
+            "MessageSid": alert.provider_message_id,
+            "MessageStatus": "undelivered",
+            "ErrorCode": "30007",
+            "ErrorMessage": "Late callback must not replace delivery evidence.",
+        },
+    )
+    db_session.refresh(alert)
+    assert alert.status == "delivered"
+    assert alert.last_error is None
+
 
 def test_processed_lead_without_eligible_sms_recipient_records_durable_evidence(
     db_session: Session,

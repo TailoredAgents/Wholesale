@@ -1,8 +1,9 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from urllib.parse import urlencode
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,12 +35,17 @@ from app.models.foundation import (
     Conversation,
     EmailAttachment,
     Lead,
+    Organization,
     StaffLeadAlert,
     SuppressionRecord,
     User,
     VoiceLine,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.messaging import (
+    TWILIO_STATUS_RECOVERY_MAX_ATTEMPTS,
+    process_next_twilio_status_recovery,
+)
 from app.services.meta_lead_ads import process_next_staff_lead_alert
 from app.services.twilio_mms import process_next_twilio_mms_media
 
@@ -223,6 +229,121 @@ def add_voice_line(
     db.add(line)
     db.flush()
     return line
+
+
+def add_tenant_conversation(
+    db: Session,
+    *,
+    name: str,
+    slug: str,
+    email: str,
+) -> tuple[Organization, Conversation]:
+    organization = Organization(
+        name=name,
+        slug=slug,
+        is_active=True,
+        prospecting_dialer_enabled=False,
+        prospecting_dialer_max_concurrent_legs=1,
+        prospecting_dialer_acceptance_required=True,
+    )
+    db.add(organization)
+    db.flush()
+    user = User(
+        organization_id=organization.id,
+        email=email,
+        display_name=f"{name} Owner",
+        external_auth_id=None,
+        is_active=True,
+        calling_enabled=False,
+        voice_forwarding_number=None,
+        voice_forwarding_enabled=False,
+        lead_alert_sms_enabled=False,
+        inbound_message_alert_sms_enabled=False,
+    )
+    db.add(user)
+    db.flush()
+    contact = Contact(
+        organization_id=organization.id,
+        legal_name=f"{name} Contact",
+        preferred_name=None,
+        contact_type="buyer",
+        assigned_user_id=user.id,
+    )
+    db.add(contact)
+    db.flush()
+    conversation = Conversation(
+        organization_id=organization.id,
+        conversation_type="buyer",
+        lead_id=None,
+        contact_id=contact.id,
+        assigned_user_id=user.id,
+        assigned_team_id=None,
+        source_alias_id=None,
+        visibility_scope="standard",
+        status="open",
+        queue_key="buyer_inbox",
+        priority="normal",
+        unread_count=0,
+        last_activity_at=None,
+        last_inbound_at=None,
+        last_outbound_at=None,
+        closed_at=None,
+        conversation_metadata={"source": "tenant-resolution-test"},
+    )
+    db.add(conversation)
+    db.flush()
+    return organization, conversation
+
+
+def add_outbound_twilio_message(
+    db: Session,
+    *,
+    conversation: Conversation,
+    message_sid: str,
+    source: str = "shared_inbox",
+) -> tuple[CommunicationRecord, CommunicationDispatch]:
+    now = datetime.now(UTC)
+    communication = CommunicationRecord(
+        organization_id=conversation.organization_id,
+        conversation_id=conversation.id,
+        lead_id=conversation.lead_id,
+        contact_id=conversation.contact_id,
+        actor_user_id=conversation.assigned_user_id,
+        direction="outbound",
+        channel="sms",
+        status="queued",
+        provider="twilio",
+        provider_message_id=message_sid,
+        subject=None,
+        body="Stonegate status recovery test.",
+        occurred_at=now,
+        external_payload={"status": "queued"},
+        communication_metadata={"source": source},
+    )
+    db.add(communication)
+    db.flush()
+    dispatch = CommunicationDispatch(
+        organization_id=conversation.organization_id,
+        conversation_id=conversation.id,
+        lead_id=conversation.lead_id,
+        contact_id=conversation.contact_id,
+        actor_user_id=conversation.assigned_user_id,
+        communication_record_id=communication.id,
+        idempotency_key=f"status-recovery:{message_sid}",
+        channel="sms",
+        recipient="+14045551212",
+        request_body_hash="a" * 64,
+        status="queued",
+        provider="twilio",
+        provider_message_id=message_sid,
+        error_code=None,
+        error_message=None,
+        completed_at=now,
+        dispatch_metadata={"source": source},
+    )
+    db.add(dispatch)
+    db.commit()
+    return communication, dispatch
 
 
 def signed_twilio_headers(path: str, payload: dict[str, str]) -> dict[str, str]:
@@ -416,6 +537,9 @@ def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(
     updated_communication = db_session.get(CommunicationRecord, communication.id)
     assert updated_communication is not None
     assert updated_communication.status == "delivered"
+    updated_dispatch = db_session.get(CommunicationDispatch, dispatch.id)
+    assert updated_dispatch is not None
+    assert updated_dispatch.status == "delivered"
     assert (
         int(
             db_session.scalar(
@@ -427,6 +551,534 @@ def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(
         )
         == 1
     )
+
+    for regressive_status, error_code in (("sent", ""), ("failed", "30007")):
+        regressive_response = post_signed_twilio(
+            client,
+            status_path,
+            {
+                **status_payload,
+                "MessageStatus": regressive_status,
+                "ErrorCode": error_code,
+                "ErrorMessage": "Late callback must not replace delivery evidence.",
+            },
+        )
+        assert regressive_response.status_code == 204
+
+    db_session.expire_all()
+    updated_communication = db_session.get(CommunicationRecord, communication.id)
+    updated_dispatch = db_session.get(CommunicationDispatch, dispatch.id)
+    assert updated_communication is not None
+    assert updated_dispatch is not None
+    assert updated_communication.status == "delivered"
+    assert updated_dispatch.status == "delivered"
+    assert updated_dispatch.error_code is None
+    assert updated_dispatch.error_message is None
+
+
+@pytest.mark.parametrize("sender_line_bound", [True, False])
+def test_twilio_status_recovery_resolves_non_default_tenant_before_local_commit(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    sender_line_bound: bool,
+) -> None:
+    client = TestClient(app)
+    default_conversation = seed_consent_lead(db_session, client)
+    other_organization, other_conversation = add_tenant_conversation(
+        db_session,
+        name="Other Messaging Organization",
+        slug="other-messaging-organization",
+        email="other-messaging-owner@example.com",
+    )
+    sender_line = "+14045550999"
+    if sender_line_bound:
+        add_voice_line(
+            db_session,
+            organization_id=other_organization.id,
+            phone_number=sender_line,
+            assigned_user_id=other_conversation.assigned_user_id,
+        )
+    db_session.commit()
+    message_sid = f"SM-status-non-default-race-{int(sender_line_bound):011d}"
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/status",
+        {
+            "MessageSid": message_sid,
+            "MessageStatus": "delivered",
+            "ErrorCode": "",
+            "MessagingServiceSid": MESSAGING_SERVICE_SID,
+            "From": sender_line,
+            "To": "+14045551212",
+        },
+    )
+
+    assert response.status_code == 204
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id.like(f"status:{message_sid}:%")
+        )
+    )
+    assert event is not None
+    assert event.organization_id == (
+        other_organization.id
+        if sender_line_bound
+        else default_conversation.organization_id
+    )
+    assert event.processing_status == "unmatched"
+    tenant_resolution = event.payload["_tenant_resolution"]
+    assert isinstance(tenant_resolution, dict)
+    assert tenant_resolution == {
+        "status": "resolved_sender_line" if sender_line_bound else "unresolved",
+        "organization_id": str(other_organization.id) if sender_line_bound else None,
+        "candidate_organization_ids": (
+            [str(other_organization.id)] if sender_line_bound else []
+        ),
+        "storage_only": not sender_line_bound,
+    }
+
+    communication, dispatch = add_outbound_twilio_message(
+        db_session,
+        conversation=other_conversation,
+        message_sid=message_sid,
+        source="disposition_outreach",
+    )
+    processed_id = process_next_twilio_status_recovery(
+        db_session,
+        Settings.model_validate({}),
+    )
+
+    assert processed_id == event.id
+    db_session.refresh(event)
+    db_session.refresh(communication)
+    db_session.refresh(dispatch)
+    assert event.organization_id == other_organization.id
+    assert event.conversation_id == other_conversation.id
+    assert event.processing_status == "processed"
+    assert communication.status == "delivered"
+    assert dispatch.status == "delivered"
+    final_resolution = event.payload["_tenant_resolution"]
+    assert isinstance(final_resolution, dict)
+    assert final_resolution["status"] == "resolved_provider_message"
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CommunicationRecord)
+            .where(
+                CommunicationRecord.organization_id == default_conversation.organization_id,
+                CommunicationRecord.provider_message_id == message_sid,
+            )
+        )
+        == 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("resolution_case", "expected_status", "expected_candidates"),
+    [
+        ("unresolved", "unresolved", 0),
+        ("ambiguous", "ambiguous_sender_line", 2),
+    ],
+)
+def test_twilio_status_unassigned_tenant_is_quarantined_without_mutation(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    resolution_case: str,
+    expected_status: str,
+    expected_candidates: int,
+) -> None:
+    client = TestClient(app)
+    default_conversation = seed_consent_lead(db_session, client)
+    sender_line = "+14045559876"
+    if resolution_case == "ambiguous":
+        add_voice_line(
+            db_session,
+            organization_id=default_conversation.organization_id,
+            phone_number=sender_line,
+            assigned_user_id=default_conversation.assigned_user_id,
+        )
+        other_organization, other_conversation = add_tenant_conversation(
+            db_session,
+            name="Ambiguous Messaging Organization",
+            slug="ambiguous-messaging-organization",
+            email="ambiguous-messaging-owner@example.com",
+        )
+        add_voice_line(
+            db_session,
+            organization_id=other_organization.id,
+            phone_number=sender_line,
+            assigned_user_id=other_conversation.assigned_user_id,
+        )
+        db_session.commit()
+    message_sid = f"SM-status-{resolution_case}-tenant-000000001"
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/status",
+        {
+            "MessageSid": message_sid,
+            "MessageStatus": "delivered",
+            "ErrorCode": "",
+            "MessagingServiceSid": MESSAGING_SERVICE_SID,
+            "From": sender_line,
+            "To": "+14045558765",
+        },
+    )
+
+    assert response.status_code == 204
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id.like(f"status:{message_sid}:%")
+        )
+    )
+    assert event is not None
+    assert event.organization_id == default_conversation.organization_id
+    assert event.processing_status == "unmatched"
+    tenant_resolution = event.payload["_tenant_resolution"]
+    assert isinstance(tenant_resolution, dict)
+    assert tenant_resolution["status"] == expected_status
+    assert tenant_resolution["storage_only"] is True
+    assert len(tenant_resolution["candidate_organization_ids"]) == expected_candidates
+
+    processed_id = process_next_twilio_status_recovery(
+        db_session,
+        Settings.model_validate(
+            {
+                "WORKER_RETRY_BASE_SECONDS": 1,
+                "WORKER_RETRY_MAX_SECONDS": 15,
+            }
+        ),
+    )
+
+    assert processed_id == event.id
+    db_session.refresh(event)
+    assert event.processing_status == "retry"
+    assert event.organization_id == default_conversation.organization_id
+    assert "no tenant records were changed" in (event.error_message or "")
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CommunicationRecord)
+            .where(CommunicationRecord.provider_message_id == message_sid)
+        )
+        == 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("conversation_type", "source"),
+    [
+        ("lead", "shared_inbox"),
+        ("buyer", "disposition_outreach"),
+    ],
+)
+def test_twilio_status_recovery_handles_callback_before_seller_or_buyer_record_commit(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    conversation_type: str,
+    source: str,
+) -> None:
+    client = TestClient(app)
+    seller_conversation = seed_consent_lead(db_session, client)
+    target_conversation = seller_conversation
+    if conversation_type == "buyer":
+        target_conversation = Conversation(
+            organization_id=seller_conversation.organization_id,
+            conversation_type="buyer",
+            lead_id=None,
+            contact_id=seller_conversation.contact_id,
+            assigned_user_id=seller_conversation.assigned_user_id,
+            assigned_team_id=None,
+            source_alias_id=None,
+            visibility_scope="standard",
+            status="open",
+            queue_key="buyer_inbox",
+            priority="normal",
+            unread_count=0,
+            last_activity_at=None,
+            last_inbound_at=None,
+            last_outbound_at=None,
+            closed_at=None,
+            conversation_metadata={"source": "disposition_outreach"},
+        )
+        db_session.add(target_conversation)
+        db_session.commit()
+
+    message_sid = f"SM-status-race-{conversation_type}-0000000000001"
+    status_payload = {
+        "MessageSid": message_sid,
+        "MessageStatus": "delivered",
+        "ErrorCode": "",
+        "MessagingServiceSid": MESSAGING_SERVICE_SID,
+    }
+    status_path = "/api/v1/webhooks/twilio/messaging/status"
+
+    first = post_signed_twilio(client, status_path, status_payload)
+    duplicate = post_signed_twilio(client, status_path, status_payload)
+
+    assert first.status_code == 204
+    assert duplicate.status_code == 204
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.event_type == "messaging.status"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "unmatched"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(CommunicationProviderEvent)
+                .where(CommunicationProviderEvent.event_type == "messaging.status")
+            )
+            or 0
+        )
+        == 1
+    )
+
+    communication, dispatch = add_outbound_twilio_message(
+        db_session,
+        conversation=target_conversation,
+        message_sid=message_sid,
+        source=source,
+    )
+    processed_id = process_next_twilio_status_recovery(
+        db_session,
+        Settings.model_validate({}),
+    )
+
+    assert processed_id == event.id
+    db_session.refresh(event)
+    db_session.refresh(communication)
+    db_session.refresh(dispatch)
+    assert event.processing_status == "processed"
+    assert event.attempt_count == 1
+    assert event.conversation_id == target_conversation.id
+    assert event.processing_token is None
+    assert event.next_attempt_at is None
+    assert communication.status == "delivered"
+    assert dispatch.status == "delivered"
+
+
+def test_twilio_status_recovery_handles_callback_before_staff_alert_commit(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    result = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    assert result.admin_user is not None
+    db_session.commit()
+    client = TestClient(app)
+    message_sid = "SM-status-race-staff-000000000000000001"
+    status_payload = {
+        "MessageSid": message_sid,
+        "MessageStatus": "delivered",
+        "ErrorCode": "",
+        "MessagingServiceSid": MESSAGING_SERVICE_SID,
+    }
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/status",
+        status_payload,
+    )
+
+    assert response.status_code == 204
+    event = db_session.scalar(select(CommunicationProviderEvent))
+    assert event is not None
+    assert event.processing_status == "unmatched"
+    alert = StaffLeadAlert(
+        organization_id=result.organization.id,
+        meta_lead_event_id=None,
+        source_type="inbound_sms",
+        source_event_id=uuid4(),
+        lead_id=None,
+        conversation_id=None,
+        recipient_user_id=result.admin_user.id,
+        recipient_phone="+14045550123",
+        message_body="A buyer replied to Stonegate.",
+        status="queued",
+        attempt_count=1,
+        last_attempt_at=datetime.now(UTC),
+        next_attempt_at=None,
+        sent_at=datetime.now(UTC),
+        delivered_at=None,
+        provider="twilio",
+        provider_message_id=message_sid,
+        provider_response={"status": "queued"},
+        last_error=None,
+    )
+    db_session.add(alert)
+    db_session.commit()
+
+    processed_id = process_next_twilio_status_recovery(
+        db_session,
+        Settings.model_validate({}),
+    )
+
+    assert processed_id == event.id
+    db_session.refresh(event)
+    db_session.refresh(alert)
+    assert event.processing_status == "processed"
+    assert alert.status == "delivered"
+    assert alert.delivered_at is not None
+    assert alert.provider_response is not None
+    assert alert.provider_response["message_status"] == "delivered"
+
+
+def test_twilio_status_recovery_is_tenant_scoped_bounded_and_does_not_starve_queue(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    status_path = "/api/v1/webhooks/twilio/messaging/status"
+    orphan_sid = "SM-status-orphan-00000000000000000001"
+    orphan_response = post_signed_twilio(
+        client,
+        status_path,
+        {
+            "MessageSid": orphan_sid,
+            "MessageStatus": "delivered",
+            "ErrorCode": "",
+            "MessagingServiceSid": MESSAGING_SERVICE_SID,
+        },
+    )
+    assert orphan_response.status_code == 204
+    orphan_event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id.like(
+                f"status:{orphan_sid}:%"
+            )
+        )
+    )
+    assert orphan_event is not None
+
+    other_organization, other_conversation = add_tenant_conversation(
+        db_session,
+        name="Other Organization",
+        slug="other-organization",
+        email="other-owner@example.com",
+    )
+    foreign_communication = CommunicationRecord(
+        organization_id=other_organization.id,
+        conversation_id=None,
+        lead_id=None,
+        contact_id=other_conversation.contact_id,
+        actor_user_id=None,
+        direction="outbound",
+        channel="sms",
+        status="queued",
+        provider="twilio",
+        provider_message_id=orphan_sid,
+        subject=None,
+        body="A different tenant's message.",
+        occurred_at=datetime.now(UTC),
+        external_payload={"status": "queued"},
+        communication_metadata={"source": "tenant-scope-test"},
+    )
+    db_session.add(foreign_communication)
+    third_organization, third_conversation = add_tenant_conversation(
+        db_session,
+        name="Third Organization",
+        slug="third-organization",
+        email="third-owner@example.com",
+    )
+    second_foreign_communication = CommunicationRecord(
+        organization_id=third_organization.id,
+        conversation_id=None,
+        lead_id=None,
+        contact_id=third_conversation.contact_id,
+        actor_user_id=None,
+        direction="outbound",
+        channel="sms",
+        status="queued",
+        provider="twilio",
+        provider_message_id=orphan_sid,
+        subject=None,
+        body="Another tenant's message with a conflicting provider identifier.",
+        occurred_at=datetime.now(UTC),
+        external_payload={"status": "queued"},
+        communication_metadata={"source": "tenant-scope-test"},
+    )
+    db_session.add(second_foreign_communication)
+    db_session.commit()
+    settings = Settings.model_validate(
+        {
+            "WORKER_RETRY_BASE_SECONDS": 1,
+            "WORKER_RETRY_MAX_SECONDS": 15,
+        }
+    )
+
+    first_attempt = process_next_twilio_status_recovery(db_session, settings)
+
+    assert first_attempt == orphan_event.id
+    db_session.refresh(orphan_event)
+    db_session.refresh(foreign_communication)
+    db_session.refresh(second_foreign_communication)
+    assert orphan_event.processing_status == "retry"
+    assert orphan_event.attempt_count == 1
+    assert orphan_event.next_attempt_at is not None
+    assert "ambiguous" in (orphan_event.error_message or "")
+    assert foreign_communication.status == "queued"
+    assert second_foreign_communication.status == "queued"
+
+    ready_sid = "SM-status-ready-000000000000000000001"
+    ready_response = post_signed_twilio(
+        client,
+        status_path,
+        {
+            "MessageSid": ready_sid,
+            "MessageStatus": "delivered",
+            "ErrorCode": "",
+            "MessagingServiceSid": MESSAGING_SERVICE_SID,
+        },
+    )
+    assert ready_response.status_code == 204
+    ready_event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id.like(f"status:{ready_sid}:%")
+        )
+    )
+    assert ready_event is not None
+    ready_communication, _ready_dispatch = add_outbound_twilio_message(
+        db_session,
+        conversation=conversation,
+        message_sid=ready_sid,
+    )
+
+    second_attempt = process_next_twilio_status_recovery(db_session, settings)
+
+    assert second_attempt == ready_event.id
+    db_session.refresh(ready_event)
+    db_session.refresh(ready_communication)
+    assert ready_event.processing_status == "processed"
+    assert ready_communication.status == "delivered"
+
+    orphan_event.processing_status = "retry"
+    orphan_event.attempt_count = TWILIO_STATUS_RECOVERY_MAX_ATTEMPTS
+    orphan_event.next_attempt_at = None
+    db_session.commit()
+
+    terminal_attempt = process_next_twilio_status_recovery(db_session, settings)
+
+    assert terminal_attempt == orphan_event.id
+    db_session.refresh(orphan_event)
+    assert orphan_event.processing_status == "orphaned"
+    assert orphan_event.next_attempt_at is None
+    assert orphan_event.processing_token is None
+    assert orphan_event.processed_at is not None
 
 
 def test_outbound_sms_requires_consent_and_respects_suppression(
@@ -580,6 +1232,81 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     assert latest_consent is not None
     assert latest_consent.status == "granted"
     assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+
+def test_unmatched_stop_and_start_persist_organization_wide_sms_suppression(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    organization_id = db_session.scalar(select(User.organization_id))
+    assert organization_id is not None
+    add_voice_line(
+        db_session,
+        organization_id=organization_id,
+        phone_number="+14045550088",
+    )
+    db_session.commit()
+    client = TestClient(app)
+    inbound_path = "/api/v1/webhooks/twilio/messaging/incoming"
+    sender = "+14045559876"
+
+    stop_response = post_signed_twilio(
+        client,
+        inbound_path,
+        {
+            "From": sender,
+            "To": "+14045550088",
+            "Body": "STOP",
+            "OptOutType": "STOP",
+            "MessageSid": "SM-unmatched-stop-000000000000000001",
+        },
+    )
+
+    assert stop_response.status_code == 200
+    suppression = db_session.scalar(
+        select(SuppressionRecord).where(
+            SuppressionRecord.organization_id == organization_id,
+            SuppressionRecord.channel == "sms",
+            SuppressionRecord.normalized_address == sender,
+        )
+    )
+    assert suppression is not None
+    assert suppression.contact_id is None
+    assert suppression.status == "active"
+    stop_event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id
+            == "inbound:SM-unmatched-stop-000000000000000001"
+        )
+    )
+    assert stop_event is not None
+    assert stop_event.processing_status == "compliance_applied"
+    assert db_session.scalar(select(func.count()).select_from(Contact)) == 0
+
+    start_response = post_signed_twilio(
+        client,
+        inbound_path,
+        {
+            "From": sender,
+            "To": "+14045550088",
+            "Body": "START",
+            "OptOutType": "START",
+            "MessageSid": "SM-unmatched-start-00000000000000001",
+        },
+    )
+
+    assert start_response.status_code == 200
+    db_session.refresh(suppression)
+    assert suppression.status == "lifted"
+    assert suppression.lifted_at is not None
+    assert db_session.scalar(select(func.count()).select_from(ConsentRecord)) == 0
 
 
 def test_photo_only_mms_retains_multiple_images_once_and_serves_them_privately(
@@ -982,8 +1709,12 @@ def test_unknown_acquisitions_sms_creates_reviewable_seller_lead_once(
 
 
 @pytest.mark.parametrize(
-    ("keyword", "opt_out_type"),
-    [("STOP", "STOP"), ("START", "START"), ("HELP", "HELP")],
+    ("keyword", "opt_out_type", "expected_event_status", "expected_suppression_status"),
+    [
+        ("STOP", "STOP", "compliance_applied", "active"),
+        ("START", "START", "compliance_applied", "lifted"),
+        ("HELP", "HELP", "ignored_compliance_keyword", None),
+    ],
 )
 def test_unknown_compliance_keyword_does_not_create_contact_or_lead(
     db_session: Session,
@@ -991,6 +1722,8 @@ def test_unknown_compliance_keyword_does_not_create_contact_or_lead(
     twilio_settings: None,
     keyword: str,
     opt_out_type: str,
+    expected_event_status: str,
+    expected_suppression_status: str | None,
 ) -> None:
     client = TestClient(app)
     result = bootstrap_foundation(
@@ -1022,7 +1755,14 @@ def test_unknown_compliance_keyword_does_not_create_contact_or_lead(
     assert response.status_code == 200, response.text
     event = db_session.scalar(select(CommunicationProviderEvent))
     assert event is not None
-    assert event.processing_status == "ignored_compliance_keyword"
+    assert event.processing_status == expected_event_status
+    suppression = db_session.scalar(select(SuppressionRecord))
+    if expected_suppression_status is None:
+        assert suppression is None
+    else:
+        assert suppression is not None
+        assert suppression.status == expected_suppression_status
+        assert suppression.contact_id is None
     assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 0

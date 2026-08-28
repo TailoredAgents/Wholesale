@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 27, 2026
+Last verified against the application: August 28, 2026
 
 ## Purpose
 
@@ -38,7 +38,8 @@ The complete internal workflow is implemented:
 - Warm handoff, Lead Queue, qualification, tasks, Inbox, and appointments.
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
 - Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
-- Buyers, dispositions, buyer offers, selection, reconciliation, and accounting export.
+- Buyers, House disposition packages, governed owned-buyer email/SMS outreach and reply review,
+  buyer offers, selection, reconciliation, and accounting export.
 - The internal double-entry accounting ledger, vendor bills, bank reconciliation, statements, CPA
   export, marketing measurement, operating policy, AI Copilots, and AI governance.
 - Resend email sending, receiving, aliases, mailbox routing, attachments, notifications, and
@@ -53,8 +54,9 @@ The following still require external configuration, approval, or production acce
 - Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
 - Ongoing RealEstateAPI credit, match-quality, and duplicate-refresh monitoring.
-- Live buyer-package delivery and Google conversion delivery; the accepted Meta browser/server
-  path still requires ongoing diagnostics and campaign monitoring.
+- Controlled production acceptance of governed House buyer-package email/SMS delivery and Google
+  conversion delivery; the accepted Meta browser/server path still requires ongoing diagnostics and
+  campaign monitoring.
 - CPA acceptance of opening balances and the first Stonegate month close.
 - Real Georgia underwriting calibration and supervised Copilot pilots.
 - Autonomous AI external delivery.
@@ -224,7 +226,7 @@ intentional.
 | Lead Manager | Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
 | Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
-| Dispositions Manager / Rep | Deals | Buyer matching, package release preparation, offers, buyer outcome, and backup |
+| Dispositions Manager / Rep | Deals | Buyer matching, package and outreach preparation, reply review, offers, buyer outcome, and backup |
 | Transaction Coordinator | Deals | Contract-to-close checklist, parties, documents, dates, funding, and closing evidence |
 | Finance / Accounting | Finance | Revenue, reconciliation, compensation, payment state, and export |
 | Marketing Manager | Marketing | Attribution, funnel, source economics, and conversion exports |
@@ -232,6 +234,11 @@ intentional.
 
 The Owner can see all navigation. Restricted users should see only the pages required for their
 jobs.
+
+A Disposition representative can prepare and manage supervised outreach but cannot approve or
+release it. Outreach approval requires the separate approval permission. Release, resume, and
+safe-failure retry require both outreach approval and bulk-send authority; the standard Disposition
+manager role has both.
 
 Cold calling is also a separate staff capability. An Owner can enable **Cold calling** for a person
 in another role, such as Acquisitions or Dispositions, without changing that person's primary
@@ -451,12 +458,17 @@ hardware, but they must not share Stonegate or Clerk credentials.
    Deal, Buyer, Inbox conversation, Task, or disposition control.
 5. For a House deal, resolve the Package launch-readiness blockers and review the evidence classes,
    buyer-visible preview, and authorized private economics before building a draft.
-6. Approve one exact current package version before ranking buyers or simulating release.
+6. Approve one exact current package version before ranking buyers or preparing recipients.
 7. Verify proof of funds and buyer criteria before recommending placement.
-8. Present the primary and backup buyer for human approval.
+8. In **Outreach**, select only the intended owned-network recipients and eligible channels, review
+   the exact rendered message, and create the immutable approval draft. A manager must approve and
+   explicitly release that exact revision.
+9. Work Buyer Inbox reply-review tasks before recording interest, offers, or follow-up.
+10. Present the primary and backup buyer for human approval.
 
-The current package and release workflow is House-only. **Prepare recipient pool** records
-`prepared_not_sent` recipients but sends no email or SMS. Do not use it for Land.
+The current package and outreach workflow is House-only. **Prepare recipient pool** records
+`prepared_not_sent` recipients but sends no email or SMS. Only the separately approved **Outreach**
+revision can queue a message. Do not use this workflow for Land.
 
 ### Finance And Accounting
 
@@ -2216,8 +2228,10 @@ criteria, permission, Inbox, offer, or deal history. Use **Restore buyer** when 
 return to review, then verify the displayed lifecycle status before making the buyer Active.
 
 Imported and provider-created buyers display their available provenance. Treat that data as a lead
-for review, not as verified buyer criteria or permission. InvestorLift synchronization and live
-buyer outreach are not active; maintaining a buyer or changing status does not send anything.
+for review, not as verified buyer criteria or permission. InvestorLift synchronization and outreach
+are not active. Maintaining a buyer, changing status, or preparing a recipient does not send
+anything; only a separately approved and released House **Outreach** revision can contact selected
+buyers through Stonegate's Resend or Twilio configuration.
 
 ### Disposition Case
 
@@ -2226,6 +2240,7 @@ For an existing case, the embedded tabs are:
 
 - **Package**
 - **Buyers**
+- **Outreach**
 - **Offers**
 - **Reconciliation**
 
@@ -2256,9 +2271,10 @@ The current Package workspace is for contracted **House** deals only:
 8. **Refresh buyer ranking** and **Prepare recipient pool** require the current evidence to match
    the approved version.
 
-The simulation binds each prepared recipient to that exact version and stored artifact hash. Its
-status is `prepared_not_sent`: no email or SMS is sent. Live delivery remains future work, and Land
-package readiness and release remain blocked.
+Preparation binds each recipient to that exact version and stored artifact hash. Its status is
+`prepared_not_sent`: **Prepare recipient pool** sends no email or SMS. The separate **Outreach** tab
+uses this reviewed pool for governed House delivery. Land package readiness and outreach remain
+blocked.
 
 ### Buyers
 
@@ -2290,6 +2306,43 @@ of the current launch plan; maintain buyers manually unless the Owner deliberate
 legacy adapter and completes a new provider-quality, billing, permission, and production acceptance
 test.
 
+### Outreach
+
+Use **Outreach** only after the current House package is approved and **Prepare recipient pool** has
+created the reviewed owned-buyer pool:
+
+1. Read every readiness blocker. Do not work around a stale package, missing prepared campaign, or
+   missing recipient pool.
+2. Select the exact buyer recipients. Choose email, SMS, or both only when that contact path is
+   available and appropriate. The hard limit is 25 recipient-channel deliveries per revision; email
+   plus SMS to one buyer counts as two.
+3. Choose an active Resend sender for email and an active Dispositions buyer-relations Twilio line
+   for SMS. A normal buyer profile change or Inbox message is not a substitute for this sender
+   selection.
+4. Enter or review the exact email subject/body and SMS body. The bounded merge fields may use the
+   buyer name, company name, public property address, and package reference. Never paste purchase
+   basis, minimum acceptable economics, desired assignment fee, approval authority, seller notes,
+   or unsupported claims into buyer-visible copy.
+5. Create the immutable review revision, then inspect every recipient, destination, channel,
+   rendered message, exclusion reason, package/PDF identity, and delivery count.
+6. An authorized approver refreshes if anything changed, records a meaningful reason, affirms the
+   attestation, and approves the exact hash-bound revision. Approval alone does not send it.
+7. The authorized releaser records a reason and explicitly releases the revision. Release checks
+   buyer status, destination, suppression, SMS permission, sender, package currency, and provider
+   readiness again before queueing.
+8. Watch the per-recipient delivery states. Use **Pause** to stop unsent work, **Resume** only after
+   resolving a temporary blocker, **Cancel unsent** to abandon remaining work, and **Retry failed**
+   only when the manager control says the failure is safely retryable. Never retry a
+   `delivery_unknown` SMS manually just to make its status move.
+9. Open the linked Buyer Inbox conversation when a reply arrives and complete the reply-review task.
+   Stonegate does not automatically accept an offer, select a buyer, or treat an ambiguous reply as
+   interest.
+
+This workflow reaches only owned Buyer Network records in the current House disposition case.
+InvestorLift and Land outreach remain disabled. Repository implementation does not establish real
+Resend/Twilio acceptance; the owner must complete a controlled, capped production test before broad
+use.
+
 ### Offers
 
 1. Record each buyer offer, terms, proof, deposit readiness, and expiration.
@@ -2305,10 +2358,10 @@ send campaigns, select the buyer, or change deal economics.
 For an existing case, open the Copilot from the Deal record's **Disposition** or **Finance**
 section. It uses the same reviewed recommendation record as the specialist compatibility route.
 
-**Prepare recipient pool** records which approved recipients would receive the exact approved
-package, including the observed identity and destination, as `prepared_not_sent`. It sends no
-messages. Live campaign delivery remains blocked until its governed delivery workflow is built and
-accepted; Land package release also remains blocked.
+**Prepare recipient pool** records which approved recipients may receive the exact approved package,
+including the observed identity and destination, as `prepared_not_sent`. It sends no messages.
+Governed delivery occurs only through a separately reviewed, approved, and released House
+**Outreach** revision. Land package release and outreach remain blocked.
 
 ### Reconciliation
 
@@ -2863,8 +2916,9 @@ off until market authorization, access, retention, and deletion settings are app
 - Review the current criteria version, market, property type, price capacity, funding, proof, and
   other case requirements. Do not loosen verified criteria merely to create a match.
 - Clear Buyer Network filters or move to another result page before assuming the record is absent.
-- InvestorLift and live Buyer Network outreach are disabled; a saved or matched buyer is not proof
-  that an external campaign ran.
+- InvestorLift synchronization and outreach are disabled. A saved or matched buyer is not proof that
+  any campaign ran; check the House **Outreach** revision and delivery states for Stonegate-owned
+  recipient activity.
 
 ### RealEstateAPI Property Intelligence Is Unavailable
 

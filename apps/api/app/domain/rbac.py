@@ -54,6 +54,8 @@ class PermissionKeys:
     EDIT_DEALS = "deals:edit"
     VIEW_DISPOSITION_PRIVATE_ECONOMICS = "dispositions:view_private_economics"
     APPROVE_DISPOSITION_PACKAGES = "dispositions:approve_packages"
+    MANAGE_DISPOSITION_OUTREACH = "dispositions:manage_outreach"
+    APPROVE_DISPOSITION_OUTREACH = "dispositions:approve_outreach"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
     MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
     MANAGE_OPERATING_MODEL = "operating_model:manage"
@@ -288,6 +290,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Attest to and approve immutable buyer-facing disposition packages.",
     ),
     PermissionDefinition(
+        PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
+        "Manage disposition outreach",
+        "Prepare and manage supervised buyer outreach without approving its release.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+        "Approve disposition outreach",
+        "Approve immutable recipient and message revisions for supervised buyer outreach.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
         "View acquisition operations",
         "View team capacity, calling lists, notifications, and acquisition workflow controls.",
@@ -336,6 +348,7 @@ DISPOSITION_KEYS = (
     PermissionKeys.SEND_EMAIL,
     PermissionKeys.PLACE_CALLS,
     PermissionKeys.ACCESS_RECORDINGS,
+    PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
 )
 
 ROLES: tuple[RoleDefinition, ...] = (
@@ -412,6 +425,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             *DISPOSITION_KEYS,
             PermissionKeys.EXPORT_BUYERS,
             PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
+            PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+            PermissionKeys.SEND_BULK_COMMUNICATIONS,
         ),
     ),
     RoleDefinition("disposition_rep", "Disposition representative", DISPOSITION_KEYS),
