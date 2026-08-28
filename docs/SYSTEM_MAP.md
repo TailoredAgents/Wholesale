@@ -235,7 +235,7 @@ Role-specific default routes include:
 - VA Caller: `/os/prospecting?view=my-calls`
 - Lead Manager: `/os/leads?view=queue`
 - Acquisitions Closer: `/os/calendar?view=day`
-- Dispositions: `/os/deals?view=ready-for-disposition`
+- Dispositions: `/os/deals?view=disposition`
 - Transaction Coordinator: `/os/deals?view=closing-exceptions`
 - Finance: `/os/finance`
 - Marketing: `/os/marketing`
@@ -603,7 +603,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Reads the existing Deal, Transaction, Contract Package, Disposition Case, Buyer Offer,
   reconciliation, task, document, and checklist records without duplicating them.
 - Provides Active, Closing Exceptions, Ready for Disposition, Buyer Needed, Finance Review, and
-  Completed saved views with queue, table, and board displays.
+  Completed saved views with queue, table, and board displays, plus the role-scoped Disposition Desk.
 - Preserves the selected view, display, deal, and record tab in the URL.
 - Shows Contract, Closing, Disposition, and Finance as independent parallel states.
 - Provides Summary, Contract, Closing, Documents, Parties, Disposition, Finance, and Timeline
@@ -633,6 +633,14 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 
 **Disposition work (`/os/deals`)**
 
+- The Disposition Desk at `/os/deals?view=disposition` combines Today, Active Deals, Buyer
+  Follow-ups, Replies, Offers, and Deadlines without copying the underlying records.
+- Mine is the default scope. Authorized disposition managers can switch to their active
+  Dispositions team; owner-level roles can review the organization scope.
+- Every desk item shows its owner, due time, reason, blocker, and a direct link to the canonical
+  Deal, Buyer, Inbox conversation, Task, or disposition control.
+- Buyer-network health and deal-coverage warnings remain available when an external buyer provider
+  is unconfigured or unavailable. Provider state never hides Stonegate-owned records.
 - Existing cases are worked from the Disposition and Finance sections of the selected Deal.
 - `/os/dispositions` is setup-only when an executed transaction needs its first disposition case.
   A legacy `case` bookmark resolves to the same canonical Deal.

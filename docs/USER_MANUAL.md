@@ -325,7 +325,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Tasks: Needs Approval | `/os/tasks?view=approvals` |
 | Legacy Approvals redirect | `/os/approvals` |
 | Deals: Transaction work | `/os/deals?view=closing-exceptions` |
-| Deals: Disposition work | `/os/deals?view=ready-for-disposition` |
+| Deals: Disposition Desk | `/os/deals?view=disposition` |
 | Disposition case setup | `/os/dispositions` |
 | My Setup | `/os/my-setup` |
 | Legacy Company & Policy redirect | `/os/operating-model` |
@@ -443,11 +443,13 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Dispositions
 
-1. Open **Dispositions** and select the most urgent approved package.
-2. Resolve package blockers.
-3. Generate and review buyer matches.
-4. Verify proof of funds and buyer criteria.
-5. Record buyer engagement and offers.
+1. Open **Deals**. The Disposition role opens in the **Disposition Desk** by default.
+2. Start in **Today** and work the highest-severity owned item first.
+3. Use **Active Deals**, **Buyer Follow-ups**, **Replies**, **Offers**, or **Deadlines** when focusing
+   on one kind of work.
+4. Resolve the displayed blocker through the card's direct action. The action opens the canonical
+   Deal, Buyer, Inbox conversation, Task, or disposition control.
+5. Verify proof of funds and buyer criteria before recommending placement.
 6. Present the primary and backup buyer for human approval.
 
 ### Finance And Accounting
@@ -2088,6 +2090,40 @@ Parties, or Timeline. It opens in a drawer so the source evidence remains availa
 the assistant.
 
 ## 14. Buyers And Dispositions
+
+### Disposition Desk
+
+Open **Deals**, then select **Disposition desk**. The URL is `/os/deals?view=disposition`.
+
+The desk has six views:
+
+- **Today**: overdue or due-today work, buyer replies, new offers, imminent deadlines, and weak
+  buyer coverage.
+- **Active Deals**: every active disposition case in scope, including package and coverage blockers.
+- **Buyer Follow-ups**: scheduled deal-specific buyer follow-up records.
+- **Replies**: buyer Inbox conversations that have unread messages or need a response.
+- **Offers**: received offers awaiting human review.
+- **Deadlines**: contract, closing, checklist, buyer POF, and offer-deposit dates that still require
+  attention.
+
+**Mine** is the default scope. If **Team** appears, use it only when reviewing the active
+Dispositions team's workload; it does not change ownership or assignment. Owner-level users may see
+the organization scope. Each card states the owner, due time, reason, blocker, and next action.
+Select that action to complete the work in its source record rather than re-entering it on the desk.
+When a queue contains more than 100 items, use **Previous** and **Next** in the queue notice; the
+total remains the full scoped count rather than the number shown on the current page.
+
+The buyer-network health strip summarizes active and review-needed relationships, missing or
+expiring proof, missing criteria, and unassigned buyers. Deal coverage warnings explain when a
+package is not ready, a deal lacks enough matched buyers or offers, or a selected buyer lacks backup
+coverage. An external-provider warning does not mean the owned Buyer Network is unavailable.
+
+Use **Add buyer** for a new relationship. Use **Open deal** for package, matching, follow-up, offer,
+or deadline work. Use **Open reply** for the actual buyer conversation. Refresh the page if the
+desk reports stale data; cached owned records remain usable when an outside provider is unavailable.
+The route shows a loading state during navigation. If Stonegate cannot verify your access profile,
+the standard Deal queue stays readable where possible but editing and disposition navigation are
+visibly disabled until the profile reloads.
 
 ### Buyer CRM
 

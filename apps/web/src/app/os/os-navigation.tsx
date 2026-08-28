@@ -243,7 +243,7 @@ export function defaultRouteForProfile(profile: WorkspaceProfile) {
   if (profile.role_keys.includes("acquisition_manager")) return "/os/leads?view=queue";
   if (profile.role_keys.includes("acquisition_rep")) return "/os/calendar?view=day";
   if (profile.role_keys.some((role) => dispositionRoles.includes(role))) {
-    return "/os/deals?view=ready-for-disposition";
+    return "/os/deals?view=disposition";
   }
   if (profile.role_keys.includes("transaction_coordinator")) {
     return "/os/deals?view=closing-exceptions";

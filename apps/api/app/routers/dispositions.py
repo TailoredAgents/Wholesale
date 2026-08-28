@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.schemas.disposition_desk import (
+    DispositionDeskCategory,
+    DispositionDeskRead,
+    DispositionDeskScope,
+)
 from app.schemas.dispositions import (
     BuyerSelection,
     DispositionCaseCreate,
@@ -24,7 +29,7 @@ from app.schemas.dispositions import (
     ProofDocumentRead,
     ReconciliationDecision,
 )
-from app.services import dispositions
+from app.services import disposition_desk, dispositions
 from app.services.disposition_copilot import (
     analyze_disposition,
     get_disposition_copilot_overview,
@@ -50,6 +55,31 @@ def read_overview(
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> DispositionOverview:
     return dispositions.overview(db, principal)
+
+
+@router.get("/desk")
+def read_disposition_desk(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+    scope: Annotated[DispositionDeskScope, Query()] = "mine",
+    section: Annotated[DispositionDeskCategory | None, Query()] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> DispositionDeskRead:
+    try:
+        return disposition_desk.read_desk(
+            db,
+            principal,
+            requested_scope=scope,
+            selected_section=section,
+            offset=offset,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
 
 
 @router.post("/cases", status_code=201)

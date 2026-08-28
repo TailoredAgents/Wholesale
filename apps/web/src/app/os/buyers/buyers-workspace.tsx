@@ -69,11 +69,13 @@ export function BuyersWorkspace({
   canEdit,
   contractLeads,
   initialBuyerId,
+  initialCreate,
   initialFilters,
   initialTab,
   page,
   pageSize,
   relationshipOwners,
+  returnTo,
   selectedBuyer,
   sourceOptions,
   total,
@@ -83,11 +85,13 @@ export function BuyersWorkspace({
   canEdit: boolean;
   contractLeads: LeadListItem[];
   initialBuyerId?: string;
+  initialCreate?: boolean;
   initialFilters: BuyerFilters;
   initialTab?: string;
   page: number;
   pageSize: number;
   relationshipOwners: BuyerRelationshipOwner[];
+  returnTo?: string;
   selectedBuyer: BuyerListItem | null;
   sourceOptions: string[];
   total: number;
@@ -102,7 +106,7 @@ export function BuyersWorkspace({
     buyerTabs.some((tab) => tab.key === initialTab) ? initialTab as BuyerTab : "summary",
   );
   const [mobileDetailOpen, setMobileDetailOpen] = useState(Boolean(initialBuyerId));
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(Boolean(initialCreate && canEdit));
   const [showEdit, setShowEdit] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
@@ -302,7 +306,7 @@ export function BuyersWorkspace({
       <section className={styles.comparison}><header><div><span>Current result page</span><h3>Qualification and capacity</h3></div></header><div><table><thead><tr><th>Buyer</th><th>Status</th><th>Owner</th><th>Source</th><th>POF</th><th>Maximum</th><th>Updated</th></tr></thead><tbody>{buyers.map((buyer) => <tr key={buyer.id}><td><button onClick={() => selectBuyer(buyer.id)} type="button">{buyer.name}</button><small>{buyer.company_name}</small></td><td>{labelize(buyer.status)}</td><td>{buyer.relationship_owner_name ?? "Unassigned"}</td><td>{labelize(buyer.source_key)}</td><td>{labelize(buyer.proof_of_funds_status)}</td><td>{money(buyer.max_purchase_price_cents)}</td><td>{displayDate(buyer.updated_at)}</td></tr>)}</tbody></table></div></section>
 
       <Drawer description="Create a buyer in Needs review, then verify the relationship before activating it." onClose={() => setShowCreate(false)} open={showCreate} title="Add buyer">
-        <BuyerForm onCancel={() => setShowCreate(false)} onSaved={(saved) => { setShowCreate(false); setSelectedId(saved.id); router.push(`/os/buyers?buyer=${saved.id}&tab=summary`); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
+        <BuyerForm onCancel={() => setShowCreate(false)} onSaved={(saved) => { setShowCreate(false); setSelectedId(saved.id); router.push(returnTo ?? `/os/buyers?buyer=${saved.id}&tab=summary`); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
       </Drawer>
       <Drawer description="Update contact, ownership, evidence, and buy-box information." onClose={() => setShowEdit(false)} open={showEdit} title={`Edit ${selected?.name ?? "buyer"}`}>
         {selected ? <BuyerForm buyer={selected} onCancel={() => setShowEdit(false)} onSaved={(saved) => { setShowEdit(false); setSelectedId(saved.id); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} /> : null}

@@ -22,11 +22,13 @@ type ReviewDecision = "accepted" | "edited" | "rejected";
 
 export function DispositionCopilotPanel({
   busy,
+  canEdit,
   copilot,
   onGenerate,
   onReview,
 }: {
   busy: boolean;
+  canEdit: boolean;
   copilot: DispositionCopilotOverview;
   onGenerate: () => Promise<void>;
   onReview: (
@@ -120,7 +122,7 @@ export function DispositionCopilotPanel({
 
       <div className={styles.copilotCommand}>
         <button
-          disabled={busy || !enabled}
+          disabled={busy || !canEdit || !enabled}
           onClick={() => void onGenerate()}
           type="button"
         >
@@ -238,7 +240,7 @@ export function DispositionCopilotPanel({
           {selected.status === "draft" ? (
             <div className={styles.copilotReviewActions}>
               <button
-                disabled={busy}
+                disabled={busy || !canEdit}
                 onClick={() => void onReview(selected, "accepted")}
                 type="button"
               >
@@ -246,7 +248,7 @@ export function DispositionCopilotPanel({
                 Accept
               </button>
               <button
-                disabled={busy || correctedSummary === draft.status_summary}
+                disabled={busy || !canEdit || correctedSummary === draft.status_summary}
                 onClick={() =>
                   void onReview(selected, "edited", {
                     ...draft,
@@ -259,7 +261,7 @@ export function DispositionCopilotPanel({
                 Save correction
               </button>
               <button
-                disabled={busy}
+                disabled={busy || !canEdit}
                 onClick={() => void onReview(selected, "rejected")}
                 type="button"
               >

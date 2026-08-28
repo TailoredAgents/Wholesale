@@ -16,14 +16,20 @@ import {
 import Link from "next/link";
 import { useMemo } from "react";
 
-import type { DealOverview, DealQueueItem, DispositionOverview, TransactionOverview } from "../../lib/api";
+import type {
+  DealOverview,
+  DealQueueItem,
+  DispositionOverview,
+  TransactionOverview,
+} from "../../lib/api";
 import { labelize } from "../os-utils";
 import { DispositionWorkspace } from "../dispositions/disposition-workspace";
 import { TransactionWorkspace } from "../transactions/transaction-workspace";
 import styles from "./deals.module.css";
 
 type DealTab = "summary" | "contract" | "closing" | "documents" | "parties" | "disposition" | "finance" | "timeline";
-type DealView = "all" | "closing-exceptions" | "ready-for-disposition" | "buyer-needed" | "finance-review" | "completed";
+type DealView = "all" | "closing-exceptions" | "ready-for-disposition" | "buyer-needed" | "finance-review" | "completed" | "disposition";
+type DispositionTab = "package" | "buyers" | "offers" | "reconciliation";
 type Display = "queue" | "table" | "board";
 
 const views: Array<{ key: DealView; label: string }> = [
@@ -33,6 +39,7 @@ const views: Array<{ key: DealView; label: string }> = [
   { key: "buyer-needed", label: "Buyer needed" },
   { key: "finance-review", label: "Finance review" },
   { key: "completed", label: "Completed" },
+  { key: "disposition", label: "Disposition desk" },
 ];
 
 const tabs: Array<{ key: DealTab; label: string }> = [
@@ -66,6 +73,7 @@ function Status({ label, value }: { label: string; value: string }) {
 }
 
 function includesView(item: DealQueueItem, view: DealView) {
+  if (view === "disposition") return item.disposition_case_id !== null && !["funded", "cancelled"].includes(item.closing_status);
   if (view === "completed") return ["funded", "cancelled"].includes(item.closing_status);
   if (["funded", "cancelled"].includes(item.closing_status)) return false;
   if (view === "closing-exceptions") return item.blockers.some((blocker) => blocker.domain === "closing");
@@ -96,18 +104,26 @@ function hrefFor(current: { deal?: string; display: Display; tab: DealTab; view:
 }
 
 export function DealsWorkspace({
+  canEditBuyers,
+  canEditDeals,
+  canViewDisposition,
   deals,
   dispositions,
   initialDealId,
   initialDisplay,
+  initialDispositionTab,
   initialTab,
   initialView,
   transactions,
 }: {
+  canEditBuyers: boolean;
+  canEditDeals: boolean;
+  canViewDisposition: boolean;
   deals: DealOverview;
   dispositions: DispositionOverview | null;
   initialDealId?: string;
   initialDisplay?: string;
+  initialDispositionTab?: string;
   initialTab?: string;
   initialView?: string;
   transactions: TransactionOverview | null;
@@ -115,10 +131,14 @@ export function DealsWorkspace({
   const view = views.some((item) => item.key === initialView) ? initialView as DealView : "all";
   const display = ["queue", "table", "board"].includes(initialDisplay ?? "") ? initialDisplay as Display : "queue";
   const tab = tabs.some((item) => item.key === initialTab) ? initialTab as DealTab : "summary";
+  const dispositionTab = (["package", "buyers", "offers", "reconciliation"] as DispositionTab[]).includes(initialDispositionTab as DispositionTab)
+    ? initialDispositionTab as DispositionTab
+    : "package";
   const filtered = useMemo(() => deals.items.filter((item) => includesView(item, view)), [deals.items, view]);
   const selected = deals.items.find((item) => item.id === initialDealId) ?? filtered[0] ?? null;
   const current = { deal: selected?.id, display, tab, view };
   const counts = Object.fromEntries(views.map((item) => [item.key, deals.items.filter((deal) => includesView(deal, item.key)).length]));
+  const availableViews = canViewDisposition ? views : views.filter((item) => item.key !== "disposition");
 
   return (
     <div className={styles.workspace}>
@@ -133,7 +153,7 @@ export function DealsWorkspace({
       <section className={styles.index}>
         <header className={styles.indexHeader}>
           <nav aria-label="Saved deal views" className={styles.savedViews}>
-            {views.map((item) => <Link className={view === item.key ? styles.activeView : ""} href={hrefFor(current, { deal: undefined, view: item.key })} key={item.key}>{item.label}<span>{counts[item.key]}</span></Link>)}
+            {availableViews.map((item) => <Link className={view === item.key ? styles.activeView : ""} href={item.key === "disposition" ? "/os/deals?view=disposition" : hrefFor(current, { deal: undefined, view: item.key })} key={item.key}>{item.label}<span>{counts[item.key]}</span></Link>)}
           </nav>
           <div className={styles.displaySwitch} aria-label="Deal display">
             <Link aria-label="Queue view" className={display === "queue" ? styles.activeDisplay : ""} href={hrefFor(current, { display: "queue" })} title="Queue"><List size={16} /></Link>
@@ -164,8 +184,8 @@ export function DealsWorkspace({
           {tab === "summary" ? <DealSummary canViewEconomics={deals.can_view_economics} deal={selected} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
-          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace initialCaseId={selected.disposition_case_id} initialData={dispositions} key={selected.disposition_case_id} /> : null}
-          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
+          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
+          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
           {(tab === "disposition" || tab === "finance") && selected.disposition_case_id && !dispositions ? <SubsystemUnavailable label="Disposition details" /> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions?transaction=${selected.transaction_id}`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>

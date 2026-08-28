@@ -1,12 +1,13 @@
 # Stonegate Buyer Network And Disposition Sidekick Roadmap
 
-Last updated: August 26, 2026
+Last updated: August 27, 2026
 
-> **Current status: DS0 and DS1 complete; DS2-DS12 planned.** Stonegate now has the audited,
-> provider-independent Buyer Network foundation described in DS1, alongside its existing
-> deal-specific disposition cases, package generation, buyer ranking, proof-of-funds evidence,
-> engagement and offer records, primary and backup buyer selection, reconciliation, and review-only
-> Disposition Copilot. Later phases remain plans and are not proof that those capabilities are live.
+> **Current status: DS0-DS2 complete; DS3-DS12 planned.** Stonegate now has the audited,
+> provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
+> Desk described in DS2, alongside its existing deal-specific disposition cases, package generation,
+> buyer ranking, proof-of-funds evidence, engagement and offer records, primary and backup buyer
+> selection, reconciliation, and review-only Disposition Copilot. Later phases remain plans and are
+> not proof that those capabilities are live.
 
 ## 1. Purpose And Authority
 
@@ -368,7 +369,7 @@ history, criteria versions, proof, offers, matches, and closed-deal history with
 
 ## DS2 - Disposition Desk
 
-**Status: Planned.**
+**Status: Complete.**
 
 ### Goal
 
@@ -392,6 +393,28 @@ among disconnected deal, buyer, task, and Inbox views.
 - Every card resolves to a canonical record and action.
 - Assigned and manager visibility follows RBAC and team scope.
 - Empty, loading, stale, and provider-unavailable states remain actionable.
+
+### Delivered Scope Decision
+
+The Disposition Desk is a URL-backed mode of the canonical Deals workspace at
+`/os/deals?view=disposition`; it is not a twelfth top-level OS destination. `/os/dispositions`
+remains the setup and compatibility route for opening the first case or resolving an older case
+bookmark.
+
+The desk is a read model over canonical Deal, Disposition Case, Buyer, Buyer Engagement, Inbox,
+Offer, Task, Transaction, and checklist records. It does not create parallel tasks, replies,
+offers, deadlines, or buyer records. **Mine** is the default. Authorized managers may switch to an
+actual Dispositions-team view, while owner-level roles may review the organization view. Every
+queue item links back to the canonical record where the work is completed.
+Large queues retain their full scoped totals and use 100-item, URL-backed pages so work is not
+silently hidden by the read-model response limit.
+
+External buyer discovery remains intentionally nonblocking. The desk reports whether the provider
+is not configured, configured but unverified, available after a completed run, or unavailable after
+a failed run while continuing to surface Stonegate's owned network, deal coverage, POF, offer,
+deposit, and closing work. General buyer follow-up scheduling remains limited to the existing
+deal-specific Buyer Engagement model until DS3 introduces a reusable relationship-level
+next-follow-up field.
 
 ## DS3 - Buyer Profiles And Asset-Aware Buy Boxes
 
@@ -773,7 +796,7 @@ Quality and safety measures:
 | --- | --- | --- |
 | DS0 | Repository Audit And Boundary Decision | Complete |
 | DS1 | Buyer Network Foundation | Complete |
-| DS2 | Disposition Desk | Planned |
+| DS2 | Disposition Desk | Complete |
 | DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Planned |
 | DS4 | Unified Explainable Deal Buyer Pool | Planned |
 | DS5 | Deal Launch And Investor Package Readiness | Planned |
@@ -803,8 +826,9 @@ With DS1 complete, the specialist may transfer high-quality, authorized buyer re
 the Buyer Network using duplicate review, editing, ownership, lifecycle controls, and pagination.
 Ambiguous records should remain in Needs Review rather than being forced into an existing buyer.
 
-DS2-DS7 turn the current provider-independent foundation into the specialist's daily operating
-system and support the current contracted deal. DS8 follows only after InvestorLift supplies a
+DS2 now provides the specialist's daily command center. DS3-DS7 continue turning the current
+provider-independent foundation into the complete relationship, matching, package, outreach,
+offer, and closing system. DS8 follows only after InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may

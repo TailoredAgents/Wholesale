@@ -7,9 +7,11 @@ export const dynamic = "force-dynamic";
 
 type BuyerSearchParams = {
   buyer?: string | string[];
+  create?: string | string[];
   owner?: string | string[];
   page?: string | string[];
   q?: string | string[];
+  returnTo?: string | string[];
   source?: string | string[];
   status?: string | string[];
   tab?: string | string[];
@@ -30,11 +32,14 @@ export default async function BuyersPage({
   searchParams?: Promise<BuyerSearchParams>;
 }) {
   const rawParams = await searchParams;
+  const requestedReturnTo = firstValue(rawParams?.returnTo);
   const params = {
     buyer: firstValue(rawParams?.buyer),
+    create: firstValue(rawParams?.create) === "1",
     owner: firstValue(rawParams?.owner) ?? "",
     page: positivePage(firstValue(rawParams?.page)),
     q: firstValue(rawParams?.q) ?? "",
+    returnTo: requestedReturnTo?.startsWith("/os/") ? requestedReturnTo : undefined,
     source: firstValue(rawParams?.source) ?? "",
     status: firstValue(rawParams?.status) ?? "",
     tab: firstValue(rawParams?.tab),
@@ -66,12 +71,13 @@ export default async function BuyersPage({
         title="Buyers"
       />
       <BuyersWorkspace
-        key={`${params.q}|${params.status}|${params.owner}|${params.source}|${buyerData.page}|${params.buyer ?? ""}`}
+        key={`${params.q}|${params.status}|${params.owner}|${params.source}|${buyerData.page}|${params.buyer ?? ""}|${params.create ? "create" : "browse"}`}
         buyers={buyerData.buyers}
         apiError={buyerData.errorMessage}
         canEdit={Boolean(profile?.permissions.includes("buyers:edit"))}
         contractLeads={contractLeads}
         initialBuyerId={params?.buyer}
+        initialCreate={params.create}
         initialFilters={{
           owner: params.owner,
           q: params.q,
@@ -81,6 +87,7 @@ export default async function BuyersPage({
         page={buyerData.page}
         pageSize={buyerData.pageSize}
         relationshipOwners={buyerData.relationshipOwners}
+        returnTo={params.returnTo}
         selectedBuyer={selectedBuyer}
         sourceOptions={buyerData.sourceOptions}
         initialTab={params?.tab}

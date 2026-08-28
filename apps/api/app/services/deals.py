@@ -361,17 +361,27 @@ def _build_item(
     )
 
 
-def overview(db: Session, principal: Principal) -> DealOverviewRead:
+def overview(
+    db: Session,
+    principal: Principal,
+    *,
+    deal_ids: set[UUID] | None = None,
+) -> DealOverviewRead:
     can_view_economics = bool(
         {PermissionKeys.VIEW_FINANCIALS, PermissionKeys.VIEW_COMPENSATION}
         & principal.permission_keys
     )
-    rows = db.execute(
+    statement = (
         select(Deal, Transaction)
         .join(Transaction, Transaction.deal_id == Deal.id)
         .where(Deal.organization_id == principal.organization_id)
         .order_by(Transaction.closing_date.asc().nullslast(), Deal.created_at.desc())
-    ).all()
+    )
+    if deal_ids is not None:
+        statement = statement.where(
+            Deal.id.in_(deal_ids) if deal_ids else Deal.id.is_(None)
+        )
+    rows = db.execute(statement).all()
     items = [
         _build_item(db, principal, deal, transaction, can_view_economics=can_view_economics)
         for deal, transaction in rows

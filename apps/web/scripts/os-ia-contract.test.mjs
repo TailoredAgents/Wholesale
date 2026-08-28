@@ -264,10 +264,13 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(dealWorkspace, /returnTo=/);
   assert.doesNotMatch(transactionWorkspace, /\bembedded\b/);
   assert.doesNotMatch(dispositionWorkspace, /\bembedded\b/);
-  assert.match(leadRecord, /activeTab === "contract"\s*\? getBuyers\(\)/);
+  assert.match(leadRecord, /activeTab === "contract"\s*\? getBuyers\(/);
   assert.match(leadRecord, /internalReturnPath/);
   assert.match(buyerPage, /initialBuyerId=\{params\?\.buyer\}/);
-  assert.match(buyerWorkspace, /window\.history\.replaceState\(null, "", `\/os\/buyers\?/);
+  assert.match(
+    buyerWorkspace,
+    /window\.history\.replaceState\(null, "", locationFor\(/,
+  );
   assert.match(buyerWorkspace, /styles\.detailOpen/);
   assert.match(leadRecord, /RecordTimeline/);
   assert.match(transactionWorkspace, /RecordTimeline/);

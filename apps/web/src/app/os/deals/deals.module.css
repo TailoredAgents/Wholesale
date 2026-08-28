@@ -1,4 +1,38 @@
 .workspace { min-width: 0; max-width: 100%; display: grid; gap: 14px; }
+.profileWarning {
+  min-height: 52px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e5c266;
+  background: #fff7df;
+  color: #765516;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.profileWarning strong { flex: none; }
+.profileWarning span { color: inherit; }
+.loadingState {
+  min-height: 420px;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.loadingState > p { margin: 0; color: var(--muted); font-size: 11px; }
+.loadingMetrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.loadingMetrics span { min-height: 74px; background: var(--surface); }
+.loadingQueue { display: grid; gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.loadingQueue span {
+  min-height: 68px;
+  background: linear-gradient(90deg, var(--surface) 20%, var(--surface-soft) 45%, var(--surface) 70%);
+  background-size: 220% 100%;
+  animation: deals-loading-pulse 1.4s ease-in-out infinite;
+}
+@keyframes deals-loading-pulse { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
 .metrics > div { min-height: 74px; padding: 13px 14px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }
@@ -95,6 +129,8 @@
   .queueRow .statusCell:nth-of-type(3), .selectedRow .statusCell:nth-of-type(3), .next { display: none; }
 }
 @media (max-width: 760px) {
+  .profileWarning { align-items: flex-start; flex-direction: column; }
+  .loadingMetrics { grid-template-columns: 1fr 1fr; }
   .metrics { grid-template-columns: 1fr 1fr; }
   .indexHeader { align-items: flex-start; }
   .savedViews { padding-bottom: 2px; }
@@ -105,4 +141,7 @@
   .statusStrip { grid-template-columns: 1fr 1fr; }
   .statusStrip .statusCell { border-bottom: 1px solid var(--line-soft); }
   .summaryGrid { grid-template-columns: 1fr; padding: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loadingQueue span { animation: none; }
 }

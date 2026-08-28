@@ -176,12 +176,12 @@ export const targetRoleExperiences = [
   },
   {
     role: "disposition_manager",
-    defaultRoute: "/os/deals?view=ready-for-disposition",
+    defaultRoute: "/os/deals?view=disposition",
     destinations: ["home", "inbox", "tasks", "calendar", "deals", "buyers"],
   },
   {
     role: "disposition_rep",
-    defaultRoute: "/os/deals?view=ready-for-disposition",
+    defaultRoute: "/os/deals?view=disposition",
     destinations: ["home", "inbox", "tasks", "calendar", "deals", "buyers"],
   },
   {
@@ -413,7 +413,11 @@ export const currentRouteInventory = [
     migration: "ia2-compatibility-hub",
     queryParameters: [
       { name: "deal", status: "consumed" },
+      { name: "desk", status: "consumed" },
+      { name: "deskPage", status: "consumed" },
       { name: "display", status: "consumed" },
+      { name: "dispositionTab", status: "consumed" },
+      { name: "scope", status: "consumed" },
       { name: "tab", status: "consumed" },
       { name: "view", status: "consumed" },
     ],
@@ -437,7 +441,7 @@ export const currentRouteInventory = [
     routePattern: "/os/dispositions",
     source: "src/app/os/dispositions/page.tsx",
     targetWorkspace: "deals",
-    targetCanonical: "/os/deals?view=ready-for-disposition",
+    targetCanonical: "/os/deals?view=disposition",
     migration: "setup-and-record-redirect",
     queryParameters: [
       { name: "case", status: "consumed" },
@@ -454,6 +458,13 @@ export const currentRouteInventory = [
     migration: "keep",
     queryParameters: [
       { name: "buyer", status: "consumed" },
+      { name: "create", status: "consumed" },
+      { name: "owner", status: "consumed" },
+      { name: "page", status: "consumed" },
+      { name: "q", status: "consumed" },
+      { name: "returnTo", status: "consumed" },
+      { name: "source", status: "consumed" },
+      { name: "status", status: "consumed" },
       { name: "tab", status: "consumed" },
     ],
     helpSections: ["Buyers"],

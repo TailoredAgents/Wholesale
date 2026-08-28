@@ -2912,6 +2912,97 @@ export type DispositionOverview = {
   cases: DispositionCase[];
 };
 
+export type DispositionDeskScope = "mine" | "team";
+
+export type DispositionDeskCategory =
+  | "today"
+  | "active_deals"
+  | "buyer_follow_ups"
+  | "replies"
+  | "offers"
+  | "deadlines";
+
+export type DispositionDeskSectionKey =
+  | DispositionDeskCategory
+  | "coverage_warnings"
+  | "deal_records";
+
+export type DispositionDeskSectionState = {
+  total: number;
+  returned: number;
+  has_more: boolean;
+  offset: number;
+};
+
+export type DispositionDeskAction = {
+  label: string;
+  href: string;
+};
+
+export type DispositionDeskItem = {
+  key: string;
+  category: DispositionDeskCategory;
+  title: string;
+  context: string;
+  owner_user_id: string | null;
+  owner_name: string;
+  due_at: string | null;
+  reason: string;
+  blocker: string | null;
+  severity: "info" | "warning" | "danger";
+  deal_id: string | null;
+  buyer_id: string | null;
+  conversation_id: string | null;
+  task_id: string | null;
+  offer_id: string | null;
+  disposition_case_id: string | null;
+  primary_action: DispositionDeskAction;
+  secondary_action: DispositionDeskAction | null;
+};
+
+export type DispositionDeskOverview = {
+  requested_scope: DispositionDeskScope;
+  effective_scope: DispositionDeskScope;
+  scope_label: string;
+  scope_member_count: number;
+  can_view_team: boolean;
+  scope_notice: string | null;
+  can_edit_buyers: boolean;
+  metrics: {
+    today: number;
+    active_deals: number;
+    buyer_follow_ups: number;
+    replies: number;
+    offers: number;
+    deadlines: number;
+    weak_coverage: number;
+  };
+  buyer_network: {
+    total: number;
+    active: number;
+    needs_review: number;
+    unassigned: number;
+    missing_proof: number;
+    expiring_proof: number;
+    missing_criteria: number;
+  };
+  today: DispositionDeskItem[];
+  active_deals: DispositionDeskItem[];
+  buyer_follow_ups: DispositionDeskItem[];
+  replies: DispositionDeskItem[];
+  offers: DispositionDeskItem[];
+  deadlines: DispositionDeskItem[];
+  coverage_warnings: DispositionDeskItem[];
+  deal_records: DealQueueItem[];
+  sections: Record<DispositionDeskSectionKey, DispositionDeskSectionState>;
+  source_health: {
+    generated_at: string;
+    canonical_data_status: "current";
+    external_provider_status: "not_configured" | "configured_unverified" | "available" | "unavailable";
+    message: string;
+  };
+};
+
 export type DispositionCopilotRecommendation = {
   id: string;
   disposition_case_id: string;
@@ -6297,6 +6388,44 @@ export async function getDispositionOverview(): Promise<{
     };
   } catch {
     return { dispositions: null, apiConnected: false };
+  }
+}
+
+export async function getDispositionDesk(
+  scope: DispositionDeskScope = "mine",
+  section?: DispositionDeskCategory,
+  offset = 0,
+): Promise<{
+  desk: DispositionDeskOverview | null;
+  apiConnected: boolean;
+  errorMessage: string | null;
+  isStale: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const query = new URLSearchParams({ scope });
+    if (section) query.set("section", section);
+    if (section && offset > 0) query.set("offset", String(offset));
+    const response = await fetch(`${apiBaseUrl}/api/v1/dispositions/desk?${query.toString()}`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    const desk = (await response.json()) as DispositionDeskOverview;
+    const generatedAt = new Date(desk.source_health.generated_at);
+    return {
+      desk,
+      apiConnected: true,
+      errorMessage: null,
+      isStale: Number.isNaN(generatedAt.getTime()) || Date.now() - generatedAt.getTime() > 5 * 60 * 1000,
+    };
+  } catch (error) {
+    return {
+      desk: null,
+      apiConnected: false,
+      errorMessage: error instanceof Error ? error.message : "Disposition desk request failed.",
+      isStale: false,
+    };
   }
 }
 
