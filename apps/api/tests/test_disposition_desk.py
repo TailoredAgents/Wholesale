@@ -33,6 +33,7 @@ from app.services.disposition_desk import read_desk
 from tests.test_dispositions import (
     HEADERS,
     OWNER_EMAIL,
+    approve_disposition_package,
     setup_case_foundation,
     upload_received_proof,
     verify_proof,
@@ -244,10 +245,7 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    approved = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/package/approve",
-        headers=HEADERS,
-    )
+    approved = approve_disposition_package(client, case_id)
     assert approved.status_code == 200, approved.text
 
     now = datetime.now(UTC)
@@ -379,9 +377,7 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
         f"/os/buyers?buyer={buyer_id}&tab=summary"
     )
     relationship_item = next(
-        item
-        for item in payload["buyer_follow_ups"]
-        if item["disposition_case_id"] is None
+        item for item in payload["buyer_follow_ups"] if item["disposition_case_id"] is None
     )
     assert relationship_item["deal_id"] is None
     assert relationship_item["secondary_action"] is None
@@ -419,9 +415,7 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     db_session.commit()
     selected_response = client.get("/api/v1/dispositions/desk?scope=mine", headers=HEADERS)
     assert selected_response.status_code == 200, selected_response.text
-    selected_deadlines = {
-        item["key"]: item for item in selected_response.json()["deadlines"]
-    }
+    selected_deadlines = {item["key"]: item for item in selected_response.json()["deadlines"]}
     assert f"deadline:offer_deposit:{offer_id}" in selected_deadlines
 
     restricted = Principal(
@@ -491,9 +485,7 @@ def test_disposition_desk_prefers_current_proof_over_stale_renewal_evidence(
     payload = response.json()
     assert payload["buyer_network"]["missing_proof"] == 0
     assert payload["buyer_network"]["expiring_proof"] == 0
-    assert f"deadline:buyer_pof:{buyer_id}" not in {
-        item["key"] for item in payload["deadlines"]
-    }
+    assert f"deadline:buyer_pof:{buyer_id}" not in {item["key"] for item in payload["deadlines"]}
 
 
 def test_disposition_desk_reports_raw_totals_before_section_caps(
@@ -654,6 +646,4 @@ def test_disposition_desk_marks_configured_provider_unverified_without_live_chec
     response = TestClient(app).get("/api/v1/dispositions/desk", headers=HEADERS)
 
     assert response.status_code == 200, response.text
-    assert response.json()["source_health"]["external_provider_status"] == (
-        "configured_unverified"
-    )
+    assert response.json()["source_health"]["external_provider_status"] == ("configured_unverified")

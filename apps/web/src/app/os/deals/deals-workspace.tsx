@@ -170,7 +170,7 @@ export function DealsWorkspace({
 
       {selected ? <section className={styles.record}>
         <header className={styles.recordHeader}>
-          <div><span>{labelize(selected.stage_key)}</span><h2>{selected.property_address}</h2><p>{selected.seller_name} · {labelize(selected.property_type ?? "property type not recorded")}</p></div>
+          <div><span>{labelize(selected.stage_key)}</span><h2>{selected.property_address}</h2><p>{selected.seller_name} - {labelize(selected.property_type ?? "property type not recorded")}</p></div>
           <div className={styles.recordLinks}><Link href={`/os/leads/${selected.lead_id}?returnTo=${encodeURIComponent(hrefFor(current, {}))}`}>Seller lead</Link><strong>{money(selected.contract_price_cents)}</strong><span>Contract price</span></div>
         </header>
         <div className={styles.statusStrip}>
@@ -184,8 +184,8 @@ export function DealsWorkspace({
           {tab === "summary" ? <DealSummary canViewEconomics={deals.can_view_economics} deal={selected} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
-          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
-          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
+          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
+          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
           {(tab === "disposition" || tab === "finance") && selected.disposition_case_id && !dispositions ? <SubsystemUnavailable label="Disposition details" /> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions?transaction=${selected.transaction_id}`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>

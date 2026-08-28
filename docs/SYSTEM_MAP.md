@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 26, 2026
+Last verified against the repository: August 27, 2026
 
 ## 1. Document Authority
 
@@ -644,8 +644,16 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Existing cases are worked from the Disposition and Finance sections of the selected Deal.
 - `/os/dispositions` is setup-only when an executed transaction needs its first disposition case.
   A legacy `case` bookmark resolves to the same canonical Deal.
+- The House Package view assembles saved evidence into a launch-readiness checklist, separates the
+  buyer-visible preview from permission-gated private economics, and classifies each claim as a
+  verified fact, seller statement, provider signal, Stonegate analysis, or unknown.
+- House package drafts are immutable versions. Approval freezes the exact public snapshot,
+  evidence manifest, email/SMS summaries, and stored PDF bytes; material source changes make the
+  approval stale and require a rebuilt, reapproved version.
 - Deal packages, matches, engagement, offers, proof, buyer selection, reconciliation, and
-  Disposition Copilot drafts remain server governed.
+  Disposition Copilot drafts remain server governed. Simulated release records exact
+  `prepared_not_sent` recipients and sends no buyer communication. Land package release remains
+  blocked.
 
 **Buyers (`/os/buyers`)**
 
@@ -971,16 +979,27 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 ### 8.10 Buyer And Disposition
 
 1. The disposition case is opened from the contracted transaction.
-2. Staff approve the property package before marketing.
-3. Only **Active** buyers are eligible for future automated matching against markets, property
+2. For a House deal, staff resolve launch-readiness blockers and review the classified source
+   evidence, buyer-visible preview, and authorized private economics.
+3. **Build draft** creates an immutable package version. A separately authorized human records an
+   approval reason and attestation for the exact current version; material evidence changes require
+   a rebuilt and reapproved version.
+4. Approval stores the exact investor PDF and its SHA-256 instead of regenerating it from later
+   mutable facts.
+5. Only **Active** buyers are eligible for future automated matching against markets, property
    criteria, price, capacity, activity, and proof.
-4. The optional DealMachine adapter can provide external buyer candidates only if it is deliberately reactivated and
+6. The optional DealMachine adapter can provide external buyer candidates only if it is deliberately reactivated and
    accepted.
-5. Candidates keep provider/import provenance and enter **Needs Review** before activation;
+7. Candidates keep provider/import provenance and enter **Needs Review** before activation;
    external data does not overwrite trusted buyer records.
-6. Staff record outreach, engagement, offers, deposits, and proof.
-7. Buyer selection is a human approval.
-8. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+8. **Prepare recipient pool** records the exact approved package version, artifact hash, and
+   observed recipient identity/destination as `prepared_not_sent`; it sends no email or SMS.
+9. Staff record separately performed outreach, engagement, offers, deposits, and proof.
+10. Buyer selection is a human approval.
+11. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+
+This workflow is House-only. Land disposition packaging, buyer release, and live outreach remain
+blocked until their separate asset-safe workflows are implemented and accepted.
 
 ### 8.11 Closing, Reconciliation, And Compensation
 
@@ -1352,10 +1371,24 @@ buyer source unless the Owner deliberately reactivates and accepts it later. Inv
 and synchronization are not active in this foundation. No Buyer Network action sends an
 InvestorLift campaign or other live buyer outreach.
 
-### 13.3 Disposition Authority
+### 13.3 House Package Readiness And Disposition Authority
+
+The launch-readiness workspace assembles current Deal, contract, property intelligence,
+underwriting, repair, inspection/photo, file, and title evidence. It exposes blockers, warnings,
+unknowns, freshness, conflicts, and remediation links. Buyer-visible facts and summaries remain
+structurally separate from purchase basis, minimum acceptable economics, desired assignment fee,
+approval authority, and private notes.
+
+Each draft saves its evidence and readiness snapshots, source fingerprint, policy/renderer version,
+and public/private split. An authorized human approves one exact current version with an attestation
+and reason. Approval stores the exact PDF bytes, filename, size, and SHA-256. If a material source
+changes, Stonegate marks the prior approval stale and blocks buyer ranking or recipient preparation
+until a new version is approved.
 
 AI can organize evidence, rank buyers, and draft communication. Humans approve the package,
-campaign release, buyer selection, contract terms, and reconciliation.
+simulated recipient preparation, buyer selection, contract terms, and reconciliation. Simulated
+recipients remain `prepared_not_sent`; no DS5 control sends email or SMS. The package workflow is
+House-only, and Land remains blocked.
 
 ## 14. Finance And Accounting
 
@@ -1688,8 +1721,8 @@ Transaction Copilot records.
 ### Buyers And Dispositions
 
 `Buyer`, criteria, proof documents, discovery runs and candidates, offers, disposition cases,
-matches, campaigns, engagements, Copilot records, reconciliation, payouts, revenue, deductions,
-operating mode, and role credits.
+immutable package versions, matches, simulated campaigns and prepared recipients, engagements,
+Copilot records, reconciliation, payouts, revenue, deductions, operating mode, and role credits.
 
 ### Company Operations
 

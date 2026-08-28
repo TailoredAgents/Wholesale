@@ -41,6 +41,7 @@ export default async function DispositionsPage({
       />
       {dispositionResult.dispositions ? (
         <DispositionSetupWorkspace
+          canViewPrivateEconomics={dispositionResult.dispositions.can_view_private_economics}
           dealIdByTransaction={dealIdByTransaction}
           eligibleTransactions={dispositionResult.dispositions.eligible_transactions}
           initialTransactionId={params.transaction}

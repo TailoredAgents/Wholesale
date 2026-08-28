@@ -52,6 +52,8 @@ class PermissionKeys:
     MANAGE_BUYER_PROOF = "buyers:manage_proof"
     VIEW_DEALS = "deals:view"
     EDIT_DEALS = "deals:edit"
+    VIEW_DISPOSITION_PRIVATE_ECONOMICS = "dispositions:view_private_economics"
+    APPROVE_DISPOSITION_PACKAGES = "dispositions:approve_packages"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
     MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
     MANAGE_OPERATING_MODEL = "operating_model:manage"
@@ -276,6 +278,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition(PermissionKeys.VIEW_DEALS, "View deals", "View deal records."),
     PermissionDefinition(PermissionKeys.EDIT_DEALS, "Edit deals", "Create and update deals."),
     PermissionDefinition(
+        PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS,
+        "View disposition private economics",
+        "View purchase basis, release floors, and internal disposition economics.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
+        "Approve disposition packages",
+        "Attest to and approve immutable buyer-facing disposition packages.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
         "View acquisition operations",
         "View team capacity, calling lists, notifications, and acquisition workflow controls.",
@@ -314,6 +326,7 @@ ACQUISITION_KEYS = (
 DISPOSITION_KEYS = (
     PermissionKeys.VIEW_DEALS,
     PermissionKeys.EDIT_DEALS,
+    PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS,
     PermissionKeys.VIEW_BUYERS,
     PermissionKeys.EDIT_BUYERS,
     PermissionKeys.VIEW_BUYER_PROOF,
@@ -395,7 +408,11 @@ ROLES: tuple[RoleDefinition, ...] = (
     RoleDefinition(
         "disposition_manager",
         "Disposition manager",
-        (*DISPOSITION_KEYS, PermissionKeys.EXPORT_BUYERS),
+        (
+            *DISPOSITION_KEYS,
+            PermissionKeys.EXPORT_BUYERS,
+            PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
+        ),
     ),
     RoleDefinition("disposition_rep", "Disposition representative", DISPOSITION_KEYS),
     RoleDefinition(

@@ -1876,12 +1876,8 @@ class BatchDialerSyncCheckpoint(UuidPrimaryKeyMixin, TimestampMixin, Base):
     next_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scan_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     next_page_cursor: Mapped[str | None] = mapped_column(String(4000), nullable=True)
-    last_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_success_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_campaign_refresh_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -2187,9 +2183,7 @@ class BatchDialerCallFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
         String(40), nullable=False, default="unknown", server_default="unknown"
     )
     final_outcome: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    final_qualification_status: Mapped[str | None] = mapped_column(
-        String(80), nullable=True
-    )
+    final_qualification_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
     mood: Mapped[str | None] = mapped_column(String(80), nullable=True)
     is_voicemail: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
@@ -5828,6 +5822,7 @@ class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     strategy: Mapped[str] = mapped_column(String(40), nullable=False)
     asking_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     minimum_acceptable_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    desired_assignment_fee_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     package_status: Mapped[str] = mapped_column(String(40), nullable=False)
     package_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     package_approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -5841,6 +5836,76 @@ class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     selection_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class DispositionPackageVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_package_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "disposition_case_id",
+            "version_number",
+            name="uq_disposition_package_versions_case_version",
+        ),
+        CheckConstraint(
+            "version_number > 0",
+            name="ck_disposition_package_versions_version_positive",
+        ),
+        CheckConstraint(
+            "lock_version > 0",
+            name="ck_disposition_package_versions_lock_positive",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'approved', 'superseded', 'rejected')",
+            name="ck_disposition_package_versions_status",
+        ),
+        Index(
+            "ix_disposition_package_versions_org_case_created",
+            "organization_id",
+            "disposition_case_id",
+            "created_at",
+        ),
+        Index(
+            "ix_disposition_package_versions_case_status",
+            "disposition_case_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    renderer_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    public_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    private_economics_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_manifest: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    readiness_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
+    sms_summary: Mapped[str] = mapped_column(String(1000), nullable=False)
+    approval_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pdf_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pdf_content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    pdf_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pdf_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
 
 class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -5857,7 +5922,9 @@ class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"))
     buy_box_version_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("buyer_buy_box_versions.id", ondelete="SET NULL"), nullable=True,
+        Uuid,
+        ForeignKey("buyer_buy_box_versions.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     matcher_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -6133,12 +6200,77 @@ class DispositionCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     disposition_case_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE")
     )
+    package_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(40), nullable=False)
     recipient_count: Mapped[int] = mapped_column(Integer, nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositionCampaignRecipient(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_campaign_recipients"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_disposition_campaign_recipients_org_idempotency",
+        ),
+        UniqueConstraint(
+            "disposition_campaign_id",
+            "buyer_id",
+            name="uq_disposition_campaign_recipients_campaign_buyer",
+        ),
+        CheckConstraint(
+            "status = 'prepared_not_sent'",
+            name="ck_disposition_campaign_recipients_prepared_only",
+        ),
+        Index(
+            "ix_disposition_campaign_recipients_campaign",
+            "disposition_campaign_id",
+        ),
+        Index(
+            "ix_disposition_campaign_recipients_package",
+            "package_version_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_campaign_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    package_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    prepared_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="prepared_not_sent")
+    captured_identity: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    captured_destination: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    prepared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):

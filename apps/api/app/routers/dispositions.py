@@ -29,13 +29,22 @@ from app.schemas.dispositions import (
     DispositionCopilotReviewRead,
     DispositionCopilotReviewRequest,
     DispositionOverview,
+    DispositionPackageApprovalRequest,
+    DispositionPackageVersionCreate,
+    DispositionPackageVersionRead,
+    DispositionPackageWorkspaceRead,
     EngagementCreate,
     OfferCreate,
     ProofDocumentRead,
     ProofVerificationRequest,
     ReconciliationDecision,
 )
-from app.services import disposition_buyer_pool, disposition_desk, dispositions
+from app.services import (
+    disposition_buyer_pool,
+    disposition_desk,
+    disposition_packages,
+    dispositions,
+)
 from app.services.disposition_copilot import (
     analyze_disposition,
     get_disposition_copilot_overview,
@@ -49,6 +58,28 @@ buyer_view_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
 buyer_edit_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
 buyer_proof_view_dependency = require_permission(PermissionKeys.VIEW_BUYER_PROOF)
 buyer_proof_manage_dependency = require_permission(PermissionKeys.MANAGE_BUYER_PROOF)
+package_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSITION_PACKAGES)
+
+
+def _require_private_economics(principal: Principal) -> Principal:
+    if PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS not in principal.permission_keys:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(f"Missing permission: {PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS}"),
+        )
+    return principal
+
+
+def private_economics_view_dependency(
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> Principal:
+    return _require_private_economics(principal)
+
+
+def private_economics_edit_dependency(
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> Principal:
+    return _require_private_economics(principal)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -95,10 +126,12 @@ def read_disposition_desk(
 def open_case(
     payload: DispositionCaseCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCaseRead:
     try:
         return dispositions.create_case(db, principal, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise invalid(exc) from exc
 
@@ -112,7 +145,95 @@ def read_case(
     case = dispositions.scoped_case(db, principal, case_id)
     if case is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
-    return dispositions.case_read(db, case)
+    return dispositions.case_read(db, case, principal)
+
+
+@router.get("/cases/{case_id}/package")
+def read_case_package(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> DispositionPackageWorkspaceRead:
+    try:
+        result = disposition_packages.read_workspace(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.get("/cases/{case_id}/package/versions")
+def read_case_package_versions(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> list[DispositionPackageVersionRead]:
+    try:
+        result = disposition_packages.read_versions(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post("/cases/{case_id}/package/versions", status_code=201)
+def create_case_package_version(
+    case_id: UUID,
+    payload: DispositionPackageVersionCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionPackageVersionRead:
+    try:
+        if any(
+            value is not None
+            for value in (
+                payload.asking_price_cents,
+                payload.minimum_acceptable_cents,
+                payload.desired_assignment_fee_cents,
+            )
+        ):
+            dispositions.require_private_economics_write(principal)
+        result = disposition_packages.build_version(db, principal, case_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post("/cases/{case_id}/package/versions/{version_id}/approval")
+def approve_case_package_version(
+    case_id: UUID,
+    version_id: UUID,
+    payload: DispositionPackageApprovalRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(package_approve_dependency)],
+) -> DispositionPackageVersionRead:
+    try:
+        result = disposition_packages.approve_version(
+            db,
+            principal,
+            case_id,
+            version_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Package version not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
 
 
 @router.get("/cases/{case_id}/copilot")
@@ -132,7 +253,7 @@ def create_disposition_copilot_draft(
     case_id: UUID,
     payload: DispositionCopilotAnalyzeRequest,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCopilotAnalyzeRead:
     try:
         result = analyze_disposition(db, principal, case_id, payload)
@@ -148,7 +269,7 @@ def review_disposition_copilot_draft(
     recommendation_id: UUID,
     payload: DispositionCopilotReviewRequest,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCopilotReviewRead:
     try:
         result = review_recommendation(
@@ -167,10 +288,11 @@ def review_disposition_copilot_draft(
 @router.post("/cases/{case_id}/package/approve")
 def approve_case_package(
     case_id: UUID,
+    payload: DispositionPackageApprovalRequest,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(package_approve_dependency)],
 ) -> DispositionCaseRead:
-    return _case_action(dispositions.approve_package, db, principal, case_id)
+    return _case_action(dispositions.approve_package, db, principal, case_id, payload)
 
 
 @router.post("/cases/{case_id}/matches")
@@ -337,7 +459,7 @@ def approve_buyer_selection(
     case_id: UUID,
     payload: BuyerSelection,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCaseRead:
     return _case_action(dispositions.select_buyer, db, principal, case_id, payload)
 
@@ -346,7 +468,7 @@ def approve_buyer_selection(
 def calculate_reconciliation(
     case_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCaseRead:
     return _case_action(dispositions.build_reconciliation, db, principal, case_id)
 
@@ -356,7 +478,7 @@ def decide_case_reconciliation(
     case_id: UUID,
     payload: ReconciliationDecision,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
 ) -> DispositionCaseRead:
     return _case_action(dispositions.decide_reconciliation, db, principal, case_id, payload)
 
@@ -367,14 +489,41 @@ def download_package(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> Response:
-    result = dispositions.package_pdf(db, principal, case_id)
+    try:
+        result = dispositions.package_pdf(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Approved deal package not found.")
     content, file_name = result
     return Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+        },
+    )
+
+
+@router.get("/cases/{case_id}/package/versions/{version_id}/package.pdf")
+def download_exact_package_version(
+    case_id: UUID,
+    version_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> Response:
+    result = disposition_packages.exact_version_pdf(db, principal, case_id, version_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Stored package artifact not found.")
+    content, file_name = result
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+        },
     )
 
 
@@ -382,7 +531,7 @@ def download_package(
 def download_accounting_export(
     case_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(view_dependency)],
+    principal: Annotated[Principal, Depends(private_economics_view_dependency)],
 ) -> Response:
     content = dispositions.accounting_csv(db, principal, case_id)
     if content is None:
@@ -479,6 +628,8 @@ def _case_action(
 ) -> DispositionCaseRead:
     try:
         result = function(db, principal, case_id, *args)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise invalid(exc) from exc
     if result is None:

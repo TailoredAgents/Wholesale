@@ -36,7 +36,9 @@ from app.schemas.dispositions import (
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
 from app.services.dispositions import (
     _proof_is_current_verified,
+    can_view_private_economics,
     require_house_case_workflow,
+    require_private_economics_access,
     scoped_case,
 )
 
@@ -65,6 +67,7 @@ def get_disposition_copilot_overview(
     if case is None:
         return None
     require_house_case_workflow(db, case)
+    may_view_private = can_view_private_economics(principal)
     facts = _disposition_facts(db, principal, case)
     runtime = get_runtime_overview(db, principal)
     statuses = {item.capability_key: item.status for item in runtime.capabilities}
@@ -93,7 +96,9 @@ def get_disposition_copilot_overview(
         verified_buyer_count=facts["verified_buyer_count"],
         offer_count=facts["offer_count"],
         backup_coverage=facts["backup_coverage"],
-        recommendations=[recommendation_read(item) for item in recommendations],
+        recommendations=(
+            [recommendation_read(item) for item in recommendations] if may_view_private else []
+        ),
         metrics=_metrics(db, principal),
     )
 
@@ -104,6 +109,7 @@ def analyze_disposition(
     case_id: UUID,
     payload: DispositionCopilotAnalyzeRequest,
 ) -> DispositionCopilotAnalyzeRead | None:
+    require_private_economics_access(principal)
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
@@ -235,6 +241,7 @@ def review_recommendation(
     recommendation_id: UUID,
     payload: DispositionCopilotReviewRequest,
 ) -> DispositionCopilotReviewRead | None:
+    require_private_economics_access(principal)
     recommendation = db.scalar(
         select(DispositionCopilotRecommendation).where(
             DispositionCopilotRecommendation.organization_id == principal.organization_id,
@@ -381,12 +388,14 @@ def _disposition_facts(
     proof_documents = (
         list(
             db.scalars(
-                select(BuyerProofDocument).where(
+                select(BuyerProofDocument)
+                .where(
                     BuyerProofDocument.organization_id == principal.organization_id,
                     BuyerProofDocument.buyer_id.in_(buyer_ids),
                     BuyerProofDocument.deleted_at.is_(None),
                     BuyerProofDocument.status == "verified",
-                ).order_by(
+                )
+                .order_by(
                     BuyerProofDocument.verified_at.desc(),
                     BuyerProofDocument.created_at.desc(),
                 )
@@ -399,9 +408,8 @@ def _disposition_facts(
     verified_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
     for document in proof_documents:
         reviewed_proof_by_buyer.setdefault(document.buyer_id, document)
-        if (
-            document.buyer_id not in verified_proof_by_buyer
-            and _proof_is_current_verified(document, now=now)
+        if document.buyer_id not in verified_proof_by_buyer and _proof_is_current_verified(
+            document, now=now
         ):
             verified_proof_by_buyer[document.buyer_id] = document
     verified_buyer_ids = set(verified_proof_by_buyer)
@@ -428,6 +436,7 @@ def _disposition_facts(
 
     gaps: list[str] = []
     risks: list[DispositionRiskAlert] = []
+    may_view_private = can_view_private_economics(principal)
     score = 100
     if case.package_status != "approved":
         gaps.append("Approve the fact-checked investor package.")
@@ -446,11 +455,7 @@ def _disposition_facts(
     if matches and not qualified:
         gaps.append("Resolve buyer qualification and proof-of-funds gaps.")
         score -= 20
-    verified = [
-        item
-        for item in qualified
-        if item.buyer_id in verified_buyer_ids
-    ]
+    verified = [item for item in qualified if item.buyer_id in verified_buyer_ids]
     if qualified and not verified:
         gaps.append("Verify current proof of funds for at least one qualified buyer.")
         score -= 15
@@ -462,12 +467,10 @@ def _disposition_facts(
         buyer = buyers.get(match.buyer_id)
         if buyer is None:
             continue
-        reviewed_proof = verified_proof_by_buyer.get(
+        reviewed_proof = verified_proof_by_buyer.get(buyer.id) or reviewed_proof_by_buyer.get(
             buyer.id
-        ) or reviewed_proof_by_buyer.get(buyer.id)
-        if reviewed_proof is not None and not _proof_is_current_verified(
-            reviewed_proof, now=now
-        ):
+        )
+        if reviewed_proof is not None and not _proof_is_current_verified(reviewed_proof, now=now):
             risks.append(
                 DispositionRiskAlert(
                     severity="critical",
@@ -488,7 +491,7 @@ def _disposition_facts(
     for offer in offers:
         buyer_name = buyers.get(offer.buyer_id)
         label = buyer_name.name if buyer_name else "Recorded buyer"
-        if offer.amount_cents < case.minimum_acceptable_cents:
+        if may_view_private and offer.amount_cents < case.minimum_acceptable_cents:
             risks.append(
                 DispositionRiskAlert(
                     severity="critical",

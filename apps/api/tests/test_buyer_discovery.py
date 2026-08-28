@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import Buyer, BuyerDiscoveryCandidate, BuyerDiscoveryRun
 from app.services import buyer_discovery
-from tests.test_dispositions import HEADERS, setup_case_foundation
+from tests.test_dispositions import HEADERS, approve_disposition_package, setup_case_foundation
 
 
 @pytest.fixture(autouse=True)
@@ -230,13 +230,7 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         json={"status": "active"},
     )
     assert activated.status_code == 200
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/package/approve",
-            headers=HEADERS,
-        ).status_code
-        == 200
-    )
+    assert approve_disposition_package(client, case_id).status_code == 200
     matches = client.post(
         f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,

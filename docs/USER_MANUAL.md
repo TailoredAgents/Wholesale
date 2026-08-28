@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 26, 2026
+Last verified against the application: August 27, 2026
 
 ## Purpose
 
@@ -449,8 +449,14 @@ hardware, but they must not share Stonegate or Clerk credentials.
    on one kind of work.
 4. Resolve the displayed blocker through the card's direct action. The action opens the canonical
    Deal, Buyer, Inbox conversation, Task, or disposition control.
-5. Verify proof of funds and buyer criteria before recommending placement.
-6. Present the primary and backup buyer for human approval.
+5. For a House deal, resolve the Package launch-readiness blockers and review the evidence classes,
+   buyer-visible preview, and authorized private economics before building a draft.
+6. Approve one exact current package version before ranking buyers or simulating release.
+7. Verify proof of funds and buyer criteria before recommending placement.
+8. Present the primary and backup buyer for human approval.
+
+The current package and release workflow is House-only. **Prepare recipient pool** records
+`prepared_not_sent` recipients but sends no email or SMS. Do not use it for Land.
 
 ### Finance And Accounting
 
@@ -2229,10 +2235,30 @@ the new case will appear in the same Deal record.
 
 ### Package
 
+The current Package workspace is for contracted **House** deals only:
+
 1. Confirm the frozen compensation plan and disposition operating mode.
-2. Complete approved deal facts and marketing package.
-3. Set the minimum acceptable amount.
-4. Approve the package before buyer release.
+2. Review **Launch readiness**. Resolve every blocker; review warnings, unknowns, freshness,
+   conflicts, and the provided remediation link before continuing.
+3. Review **Classified evidence**. Stonegate separates **Verified fact**, **Seller statement**,
+   **Provider signal**, **Stonegate analysis**, and **Unknown** so an unsupported claim is not
+   presented as fact.
+4. Compare the buyer-visible preview with the permission-gated private economics. Purchase basis,
+   minimum acceptable amount, desired assignment fee, approval authority, and private notes must
+   never be copied into the public preview, summaries, or investor PDF.
+5. Select **Build draft**. If a prior version exists or saved material evidence changed, select
+   **Rebuild draft**. Each draft is a separate immutable version tied to its source fingerprint.
+6. An authorized approver selects **Approve vN**, records why the version is ready, checks the
+   evidence attestation, and selects **Approve exact version**. A stale version cannot be reused;
+   rebuild and reapprove it.
+7. Use **Download approved vN PDF** or the version-history **PDF** action. Stonegate serves the exact
+   PDF saved at approval, not a new document generated from later changes.
+8. **Refresh buyer ranking** and **Prepare recipient pool** require the current evidence to match
+   the approved version.
+
+The simulation binds each prepared recipient to that exact version and stored artifact hash. Its
+status is `prepared_not_sent`: no email or SMS is sent. Live delivery remains future work, and Land
+package readiness and release remain blocked.
 
 ### Buyers
 
@@ -2279,9 +2305,10 @@ send campaigns, select the buyer, or change deal economics.
 For an existing case, open the Copilot from the Deal record's **Disposition** or **Finance**
 section. It uses the same reviewed recommendation record as the specialist compatibility route.
 
-**Approve simulated release** records which approved recipients would receive the package but sends
-no messages. Live campaign delivery remains blocked until the approved provider adapter is
-activated and accepted.
+**Prepare recipient pool** records which approved recipients would receive the exact approved
+package, including the observed identity and destination, as `prepared_not_sent`. It sends no
+messages. Live campaign delivery remains blocked until its governed delivery workflow is built and
+accepted; Land package release also remains blocked.
 
 ### Reconciliation
 

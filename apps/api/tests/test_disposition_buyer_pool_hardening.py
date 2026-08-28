@@ -916,5 +916,5 @@ def test_shortlisted_link_existing_releases_only_the_canonical_buyer(
             )
         ).all()
     }
-    assert recipient_states[canonical_buyer_id] == "approved"
+    assert recipient_states[canonical_buyer_id] == "prepared_not_sent"
     assert recipient_states[other_buyer_id] == "proposed"

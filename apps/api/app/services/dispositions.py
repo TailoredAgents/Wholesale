@@ -1,16 +1,15 @@
 import csv
 from datetime import UTC, datetime
 from hashlib import sha256
-from io import BytesIO, StringIO
+from io import StringIO
 from uuid import UUID, uuid4
 
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.domain.assets import require_house_workflow
+from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AuditEvent,
     Buyer,
@@ -25,9 +24,11 @@ from app.models.foundation import (
     DealPayout,
     DealReconciliation,
     DispositionCampaign,
+    DispositionCampaignRecipient,
     DispositionCase,
     DispositionMatch,
     DispositionOperatingMode,
+    DispositionPackageVersion,
     Lead,
     Property,
     RevenueRecord,
@@ -41,6 +42,7 @@ from app.schemas.dispositions import (
     DispositionCaseRead,
     DispositionMetrics,
     DispositionOverview,
+    DispositionPackageApprovalRequest,
     EligibleTransactionRead,
     EngagementCreate,
     EngagementRead,
@@ -63,6 +65,21 @@ from app.services.lead_lifecycle import (
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
 REVIEWABLE_PROOF_SCAN_STATUSES = {"clean", "not_configured"}
+
+
+def can_view_private_economics(principal: Principal) -> bool:
+    return PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS in principal.permission_keys
+
+
+def require_private_economics_access(principal: Principal) -> None:
+    if not can_view_private_economics(principal):
+        raise PermissionError(
+            f"Missing permission: {PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS}"
+        )
+
+
+def require_private_economics_write(principal: Principal) -> None:
+    require_private_economics_access(principal)
 
 
 def scoped_case(db: Session, principal: Principal, case_id: UUID) -> DispositionCase | None:
@@ -146,6 +163,7 @@ def audit(
 
 
 def overview(db: Session, principal: Principal) -> DispositionOverview:
+    may_view_private = can_view_private_economics(principal)
     cases = db.scalars(
         select(DispositionCase)
         .where(DispositionCase.organization_id == principal.organization_id)
@@ -175,12 +193,17 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
                 id=transaction.id,
                 seller_name=contact.legal_name if contact else "Unknown seller",
                 property_address=address(property_record),
-                purchase_price_cents=transaction.purchase_price_cents,
-                assignment_fee_cents=transaction.assignment_fee_cents,
+                purchase_price_cents=(
+                    transaction.purchase_price_cents if may_view_private else None
+                ),
+                assignment_fee_cents=(
+                    transaction.assignment_fee_cents if may_view_private else None
+                ),
             )
         )
-    reads = [case_read(db, item) for item in cases]
+    reads = [case_read(db, item, principal) for item in cases]
     return DispositionOverview(
+        can_view_private_economics=may_view_private,
         metrics=DispositionMetrics(
             active_cases=sum(item.status not in {"closed", "cancelled"} for item in cases),
             packages_pending=sum(item.package_status != "approved" for item in cases),
@@ -204,6 +227,7 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
 def create_case(
     db: Session, principal: Principal, payload: DispositionCaseCreate
 ) -> DispositionCaseRead:
+    require_private_economics_write(principal)
     transaction = db.scalar(
         select(Transaction).where(
             Transaction.id == payload.transaction_id,
@@ -255,7 +279,6 @@ def create_case(
     )
     if mode is None:
         raise ValueError("Select an active disposition operating mode.")
-    contact = db.get(Contact, transaction.contact_id)
     property_record = db.get(Property, transaction.property_id)
     case = DispositionCase(
         organization_id=principal.organization_id,
@@ -270,16 +293,20 @@ def create_case(
         strategy=payload.strategy,
         asking_price_cents=payload.asking_price_cents,
         minimum_acceptable_cents=payload.minimum_acceptable_cents,
+        desired_assignment_fee_cents=payload.desired_assignment_fee_cents,
         package_status="draft",
         package_snapshot={
-            "seller_name": contact.legal_name if contact else "Unknown",
-            "property_address": address(property_record),
-            "property_type": property_record.property_type if property_record else None,
-            "purchase_price_cents": transaction.purchase_price_cents,
-            "asking_price_cents": payload.asking_price_cents,
-            "minimum_acceptable_cents": payload.minimum_acceptable_cents,
-            "strategy": payload.strategy,
-            "lead_source": lead.source if lead else None,
+            "package_reference": "pending",
+            "property": {
+                "address": address(property_record),
+                "property_type": property_record.property_type if property_record else None,
+            },
+            "opportunity": {"strategy": payload.strategy},
+            "pricing": {"buyer_asking_price_cents": payload.asking_price_cents},
+            "due_diligence": [
+                "Buyer must independently verify property facts, access, title, and "
+                "closing capacity."
+            ],
         },
         package_approved_by_user_id=None,
         package_approved_at=None,
@@ -303,28 +330,36 @@ def create_case(
         "Disposition case opened",
     )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
-def approve_package(db: Session, principal: Principal, case_id: UUID) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"package_prep"})
+def approve_package(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    payload: DispositionPackageApprovalRequest,
+) -> DispositionCaseRead | None:
+    case = scoped_case(db, principal, case_id)
     if case is None:
         return None
-    case.package_status = "approved"
-    case.package_approved_by_user_id = principal.user_id
-    case.package_approved_at = datetime.now(UTC)
-    case.status = "buyer_matching"
-    audit(
-        db,
-        principal,
-        "disposition.package_approve",
-        "disposition_case",
-        case.id,
-        {"package_status": "approved"},
-        "Human review of deal package",
+    latest_draft = db.scalar(
+        select(DispositionPackageVersion)
+        .where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+            DispositionPackageVersion.status == "draft",
+        )
+        .order_by(DispositionPackageVersion.version_number.desc())
     )
-    db.commit()
-    return case_read(db, case)
+    if latest_draft is None:
+        raise ValueError("Create a package draft before approving it.")
+    from app.services.disposition_packages import approve_version
+
+    approved = approve_version(db, principal, case.id, latest_draft.id, payload)
+    if approved is None:
+        return None
+    db.refresh(case)
+    return case_read(db, case, principal)
 
 
 def generate_matches(
@@ -335,6 +370,9 @@ def generate_matches(
         return None
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before matching buyers.")
+    from app.services.disposition_packages import require_current_approved_version
+
+    require_current_approved_version(db, principal, case, action="matching buyers")
     property_record = db.get(Property, case.property_id)
     db.execute(delete(DispositionMatch).where(DispositionMatch.disposition_case_id == case.id))
     scored: list[
@@ -406,12 +444,7 @@ def generate_matches(
         }
         score = sum(components.values())
         qualified = bool(
-            buy_box_version
-            and price_ok
-            and market_ok
-            and type_ok
-            and strategy_ok
-            and pof_ok
+            buy_box_version and price_ok and market_ok and type_ok and strategy_ok and pof_ok
         )
         scored.append(
             (
@@ -473,7 +506,7 @@ def generate_matches(
         commit=False,
     )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def release_campaign(
@@ -484,6 +517,14 @@ def release_campaign(
         return None
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before releasing a campaign.")
+    from app.services.disposition_packages import require_current_approved_version
+
+    package_version = require_current_approved_version(
+        db,
+        principal,
+        case,
+        action="preparing campaign recipients",
+    )
     matches = list(
         db.scalars(
             select(DispositionMatch)
@@ -573,6 +614,10 @@ def release_campaign(
             match.qualification_status = "ineligible"
             match.recipient_status = "excluded"
             continue
+        if not buyer.email and not buyer.phone:
+            match.qualification_status = "ineligible"
+            match.recipient_status = "excluded"
+            continue
         eligible_matches.append(match)
     if not eligible_matches:
         # Persist lifecycle invalidation so the stale match cannot be reused on a retry.
@@ -580,22 +625,94 @@ def release_campaign(
         raise ValueError(
             "No currently active qualified buyers are available for an approved campaign."
         )
+    eligible_buyer_ids = {match.buyer_id for match in eligible_matches}
+    existing_campaigns = list(
+        db.scalars(
+            select(DispositionCampaign)
+            .where(
+                DispositionCampaign.organization_id == principal.organization_id,
+                DispositionCampaign.disposition_case_id == case.id,
+                DispositionCampaign.package_version_id == package_version.id,
+                DispositionCampaign.status == "prepared_not_sent",
+            )
+            .order_by(DispositionCampaign.created_at.desc())
+            .with_for_update()
+        ).all()
+    )
+    for existing_campaign in existing_campaigns:
+        existing_recipients = list(
+            db.scalars(
+                select(DispositionCampaignRecipient).where(
+                    DispositionCampaignRecipient.organization_id == principal.organization_id,
+                    DispositionCampaignRecipient.disposition_campaign_id == existing_campaign.id,
+                    DispositionCampaignRecipient.package_version_id == package_version.id,
+                    DispositionCampaignRecipient.status == "prepared_not_sent",
+                )
+            ).all()
+        )
+        existing_buyer_ids = {
+            recipient.buyer_id
+            for recipient in existing_recipients
+            if recipient.buyer_id is not None
+        }
+        if existing_buyer_ids == eligible_buyer_ids and len(existing_recipients) == len(
+            eligible_matches
+        ):
+            for match in eligible_matches:
+                match.recipient_status = "prepared_not_sent"
+            db.commit()
+            return case_read(db, case, principal)
     for match in eligible_matches:
-        match.recipient_status = "approved"
+        match.recipient_status = "prepared_not_sent"
     campaign = DispositionCampaign(
         organization_id=principal.organization_id,
         disposition_case_id=case.id,
+        package_version_id=package_version.id,
         created_by_user_id=principal.user_id,
-        status="simulated_released",
-        name=f"{case.package_snapshot.get('property_address', 'Deal')} buyer release",
-        channel="simulation",
+        status="prepared_not_sent",
+        name=f"{address(db.get(Property, case.property_id))} buyer release",
+        channel="email_sms_preparation",
         recipient_count=len(eligible_matches),
-        released_at=datetime.now(UTC),
+        released_at=None,
     )
     db.add(campaign)
-    case.status = "marketed"
+    db.flush()
+    prepared_at = datetime.now(UTC)
+    recipient_set_fingerprint = sha256(
+        ":".join(sorted(str(buyer_id) for buyer_id in eligible_buyer_ids)).encode()
+    ).hexdigest()
+    for match in eligible_matches:
+        buyer = buyers[match.buyer_id]
+        destinations = {
+            key: value for key, value in (("email", buyer.email), ("phone", buyer.phone)) if value
+        }
+        idempotency_key = sha256(
+            (
+                f"{principal.organization_id}:{case.id}:{package_version.id}:"
+                f"{recipient_set_fingerprint}:{buyer.id}"
+            ).encode()
+        ).hexdigest()
+        db.add(
+            DispositionCampaignRecipient(
+                organization_id=principal.organization_id,
+                disposition_campaign_id=campaign.id,
+                disposition_case_id=case.id,
+                package_version_id=package_version.id,
+                buyer_id=buyer.id,
+                prepared_by_user_id=principal.user_id,
+                status="prepared_not_sent",
+                captured_identity={
+                    "buyer_name": buyer.name,
+                    "company_name": buyer.company_name,
+                },
+                captured_destination=destinations,
+                idempotency_key=idempotency_key,
+                artifact_sha256=str(package_version.pdf_sha256),
+                prepared_at=prepared_at,
+            )
+        )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def upload_proof(
@@ -928,7 +1045,7 @@ def create_offer(
     db.add(offer)
     case.status = "offers_received"
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def add_engagement(
@@ -964,12 +1081,13 @@ def add_engagement(
         )
     )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def select_buyer(
     db: Session, principal: Principal, case_id: UUID, payload: BuyerSelection
 ) -> DispositionCaseRead | None:
+    require_private_economics_access(principal)
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"offers_received"})
     if case is None:
         return None
@@ -1042,12 +1160,13 @@ def select_buyer(
         payload.reason,
     )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def build_reconciliation(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
+    require_private_economics_access(principal)
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
@@ -1192,12 +1311,13 @@ def build_reconciliation(
         "generated_at": datetime.now(UTC).isoformat(),
     }
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def decide_reconciliation(
     db: Session, principal: Principal, case_id: UUID, payload: ReconciliationDecision
 ) -> DispositionCaseRead | None:
+    require_private_economics_access(principal)
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
@@ -1250,84 +1370,17 @@ def decide_reconciliation(
         payload.notes,
     )
     db.commit()
-    return case_read(db, case)
+    return case_read(db, case, principal)
 
 
 def package_pdf(db: Session, principal: Principal, case_id: UUID) -> tuple[bytes, str] | None:
-    case = scoped_case(db, principal, case_id)
-    if case is None or case.package_status != "approved":
-        return None
-    require_house_case_workflow(db, case)
-    stream = BytesIO()
-    pdf = canvas.Canvas(stream, pagesize=letter)
-    pdf.setTitle("Stonegate Deal Package")
-    green = (0.15, 0.37, 0.26)
-    ink = (0.09, 0.11, 0.12)
-    muted = (0.40, 0.44, 0.45)
-    pdf.setFillColorRGB(*green)
-    pdf.rect(0, 680, letter[0], 112, fill=1, stroke=0)
-    pdf.setFillColorRGB(1, 1, 1)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(48, 752, "STONEGATE HOME BUYERS")
-    pdf.setFont("Helvetica-Bold", 23)
-    pdf.drawString(48, 716, "Investor Deal Package")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(48, 696, f"Approved {case.package_approved_at:%B %d, %Y}")
+    from app.services.disposition_packages import compatibility_pdf
 
-    pdf.setFillColorRGB(*ink)
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(48, 640, str(case.package_snapshot.get("property_address")))
-    pdf.setFillColorRGB(*muted)
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(48, 620, "Confidential opportunity summary for qualified buyers")
-
-    pdf.setStrokeColorRGB(0.87, 0.84, 0.79)
-    pdf.line(48, 590, 564, 590)
-    rows = (
-        ("PROPERTY TYPE", case.package_snapshot.get("property_type") or "Not provided"),
-        ("TRANSACTION", case.strategy.replace("_", " ").title()),
-        ("INVESTOR ASKING PRICE", f"${case.asking_price_cents / 100:,.0f}"),
-        ("APPROVED RELEASE", "Human reviewed and approved"),
-    )
-    y = 555
-    for label, value in rows:
-        pdf.setFillColorRGB(*muted)
-        pdf.setFont("Helvetica-Bold", 8)
-        pdf.drawString(48, y, label)
-        pdf.setFillColorRGB(*ink)
-        pdf.setFont("Helvetica-Bold", 12)
-        pdf.drawString(238, y - 1, str(value))
-        pdf.setStrokeColorRGB(0.93, 0.91, 0.87)
-        pdf.line(48, y - 18, 564, y - 18)
-        y -= 54
-
-    pdf.setFillColorRGB(0.96, 0.97, 0.95)
-    pdf.roundRect(48, 240, 516, 74, 4, fill=1, stroke=0)
-    pdf.setFillColorRGB(*green)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(64, 288, "BUYER DUE DILIGENCE")
-    pdf.setFillColorRGB(*ink)
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(
-        64, 268, "Confirm property facts, access, title, financing, and closing capacity"
-    )
-    pdf.drawString(64, 253, "before relying on this summary or submitting final purchase terms.")
-
-    pdf.setFillColorRGB(*muted)
-    pdf.setFont("Helvetica", 8)
-    pdf.drawString(48, 72, "CONFIDENTIAL - FOR QUALIFIED REAL ESTATE INVESTORS")
-    pdf.drawRightString(564, 72, f"Case {str(case.id)[:8].upper()}")
-    pdf.setFont("Helvetica-Oblique", 7)
-    pdf.drawString(
-        48,
-        52,
-        "Stonegate makes no representation that this summary replaces independent due diligence.",
-    )
-    pdf.save()
-    return stream.getvalue(), f"stonegate-deal-package-{case.id}.pdf"
+    return compatibility_pdf(db, principal, case_id)
 
 
 def accounting_csv(db: Session, principal: Principal, case_id: UUID) -> str | None:
+    require_private_economics_access(principal)
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
@@ -1359,7 +1412,14 @@ def accounting_csv(db: Session, principal: Principal, case_id: UUID) -> str | No
     return output.getvalue()
 
 
-def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
+def case_read(
+    db: Session,
+    case: DispositionCase,
+    principal: Principal | None = None,
+) -> DispositionCaseRead:
+    from app.services.disposition_packages import sanitize_public_snapshot
+
+    may_view_private = bool(principal and can_view_private_economics(principal))
     contact = db.scalar(
         select(Contact).join(Lead, Lead.contact_id == Contact.id).where(Lead.id == case.lead_id)
     )
@@ -1384,9 +1444,8 @@ def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
         .order_by(BuyerProofDocument.created_at.desc())
     ).all():
         latest_proof_by_buyer.setdefault(proof.buyer_id, proof)
-        if (
-            proof.buyer_id not in current_verified_proof_by_buyer
-            and _proof_is_current_verified(proof, now=proof_checked_at)
+        if proof.buyer_id not in current_verified_proof_by_buyer and _proof_is_current_verified(
+            proof, now=proof_checked_at
         ):
             current_verified_proof_by_buyer[proof.buyer_id] = proof
     matches = db.scalars(
@@ -1417,9 +1476,12 @@ def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
         status=case.status,
         strategy=case.strategy,
         asking_price_cents=case.asking_price_cents,
-        minimum_acceptable_cents=case.minimum_acceptable_cents,
+        minimum_acceptable_cents=(case.minimum_acceptable_cents if may_view_private else None),
+        desired_assignment_fee_cents=(
+            case.desired_assignment_fee_cents if may_view_private else None
+        ),
         package_status=case.package_status,
-        package_snapshot=case.package_snapshot,
+        package_snapshot=sanitize_public_snapshot(case.package_snapshot),
         compensation_plan_label=f"{plan.name} v{plan.version_number}" if plan else "Unavailable",
         operating_mode_label=mode.name if mode else "Unavailable",
         selected_buyer_id=case.selected_buyer_id,
@@ -1470,7 +1532,11 @@ def case_read(db: Session, case: DispositionCase) -> DispositionCaseRead:
             )
             for item in engagements
         ],
-        reconciliation=reconciliation_read(db, reconciliation) if reconciliation else None,
+        reconciliation=(
+            reconciliation_read(db, reconciliation)
+            if reconciliation is not None and may_view_private
+            else None
+        ),
         created_at=case.created_at,
     )
 
@@ -1566,16 +1632,29 @@ def aware(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+def _criteria_integer(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _structured_price_match(criteria: dict[str, object] | None, asking_price_cents: int) -> bool:
     if criteria is None:
         return False
-    minimum = criteria.get("min_price_cents")
-    maximum = criteria.get("max_price_cents")
+    minimum = _criteria_integer(criteria.get("min_price_cents"))
+    maximum = _criteria_integer(criteria.get("max_price_cents"))
     if minimum is None and maximum is None:
         return False
     return bool(
-        (minimum is None or asking_price_cents >= int(minimum))
-        and (maximum is None or asking_price_cents <= int(maximum))
+        (minimum is None or asking_price_cents >= minimum)
+        and (maximum is None or asking_price_cents <= maximum)
     )
 
 

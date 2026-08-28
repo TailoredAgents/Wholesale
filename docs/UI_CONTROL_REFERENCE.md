@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 26, 2026
+Last verified against the application: August 27, 2026
 
 ## Purpose
 
@@ -1352,7 +1352,7 @@ disposition, buyer, task, document, and reconciliation records through one emplo
 | Closing | Embeds checklist, dates, title, funding, and closing controls | Uses existing deal edit permission |
 | Documents | Embeds the transaction file room and evidence controls | Document access remains role controlled |
 | Parties | Embeds closing-party records | Uses transaction edit permission |
-| Disposition | Embeds Package, Buyers, Offers, and Reconciliation for an existing case | A new case is opened from the compatibility setup route |
+| Disposition | Embeds Package, Buyers, Offers, and Reconciliation for an existing House case | A new case is opened from the compatibility setup route; Land package and release controls remain blocked |
 | Finance | Opens the disposition reconciliation view in deal context | Economics are redacted from the aggregate unless authorized |
 | Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
 | Transaction / Disposition Copilot | Opens the active domain assistant in a drawer | Draft and review only; does not hide or replace source evidence |
@@ -1495,14 +1495,19 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Case row | Opens a disposition case | Requires disposition access |
-| **Open disposition case** | Creates the marketing and buyer-offer workspace from a transaction | Requires a qualifying transaction |
-| Package details | Defines property summary, access, terms, closing, and marketing facts | Must be supported by transaction/underwriting evidence |
-| Photo/document selection | Chooses seller-safe media for the buyer package | Private or restricted evidence cannot be released |
-| **Generate package PDF** | Produces the current investor marketing package | Requires sufficient package data |
-| **Request package approval** | Sends the release package for review | Required before governed release |
-| **Approve package** | Authorizes the current version for marketing | Authorized approver only |
-| Release status | Shows draft, pending, approved, simulated released, or withdrawn | Read-only |
-| **Approve simulated release** | Records the qualified recipient pool and a `simulated_released` campaign | Sends no email or SMS; a manual procedure or future live adapter is required to contact buyers |
+| **Open disposition case** | Creates the marketing and buyer-offer workspace from a transaction | Requires a qualifying executed House transaction; Land remains blocked |
+| Launch readiness | Shows ready, warning, blocked, and stale status plus source freshness, conflicts, unknowns, and remediation links | Every blocker must be resolved before approval |
+| Classified evidence | Groups claims as Verified fact, Seller statement, Provider signal, Stonegate analysis, or Unknown | Classification and provenance are read-only package evidence |
+| Investor-visible preview | Shows the facts and pricing that may appear in buyer summaries and the PDF | Must not contain private floors, seller notes, or unsupported claims |
+| Private economics | Shows purchase basis, buyer asking price, minimum acceptable amount, desired assignment fee, and approval authority | Visible only with the private-economics permission; never recipient-visible |
+| Deterministic buyer summaries | Previews email and SMS wording from the same saved public facts | Preview only; no message is sent |
+| **Build draft** / **Rebuild draft** | Creates a new immutable package version from the current saved evidence and source fingerprint | Requires deal edit access; private overrides require private-economics access |
+| **Approve vN** | Opens approval for the exact latest draft | Requires package-approval permission, no blockers, and a current source fingerprint |
+| Approval reason and attestation | Records what the approver reviewed and confirms no private or unverified claim is presented as fact | Both are required before **Approve exact version** |
+| **Download approved vN PDF** / version **PDF** | Downloads the exact PDF bytes stored when that version was approved | Available only for an approved stored artifact; later source changes do not rewrite it |
+| Version history | Shows immutable version number, status, evidence currency, fingerprint, approver, reason, and artifact | A material source change marks the prior approval non-current and requires rebuild/reapproval |
+| **Refresh buyer ranking** | Scores the buyer pool against the current approved package | Disabled when approval is missing or stale |
+| **Prepare recipient pool** | Records qualified recipients against the exact package version and artifact hash as `prepared_not_sent` | Sends no email or SMS; Land and live delivery remain blocked |
 
 ### Buyer Matching
 

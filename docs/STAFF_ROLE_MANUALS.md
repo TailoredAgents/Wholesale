@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last verified: August 26, 2026
+Last verified: August 27, 2026
 
 ## How To Use This Guide
 
@@ -159,18 +159,23 @@ transaction work.
 Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for Disposition**, then
 the selected Deal's Disposition section for package, buyer, and offer work.
 
-- Prepare approved deal packages and match only appropriate buyers.
+- For House deals, resolve the package launch-readiness checklist, review evidence classifications,
+  and match only appropriate buyers against a current approved package version.
 - Search the Buyer Network before adding an investor, resolve duplicate warnings, and assign a
   relationship owner.
 - Review identity, contact path, criteria, permission evidence, source, and last-verified date
   before changing a buyer from **Needs Review** to **Active**.
 - Track inquiries, showings, offers, proof of funds, deposits, primary buyer, and backup buyer.
 - Keep restricted economics inside authorized roles and approved audiences.
+- Keep the buyer-visible preview separate from purchase basis, minimum acceptable economics,
+  desired assignment fee, approval authority, seller notes, and other private information.
 - Record opt-outs and buyer qualification changes without erasing the prior criteria or permission
   history.
 - Use **Paused**, **Do Not Contact**, or **Archived** when appropriate; only **Active** buyers can
   participate in future automated matching.
 - Do not select a buyer or release a package by bypassing approval gates.
+- Treat **Prepare recipient pool** as an audited `prepared_not_sent` record only. It sends no
+  email or SMS. Land package readiness and release remain blocked.
 - Do not treat a provider/imported buyer as verified or assume that adding a buyer sends outreach.
 
 ## Finance And Accounting
@@ -507,13 +512,25 @@ current human disposition work according to the active compensation policy.
 
 ### When A Deal Enters Dispositions
 
-1. Open or select the disposition case.
-2. Verify the contract and closing deadline.
-3. Build the seller-safe buyer package.
-4. Select only approved photos and facts.
-5. Generate and review the package PDF.
-6. Request package approval.
-7. Simulate release before contacting buyers.
+1. Open or select the contracted House disposition case. Do not use this workflow for Land.
+2. Verify the executed contract, closing deadline, transaction, title/file, property intelligence,
+   underwriting, repair, inspection, and approved photo evidence.
+3. Review **Launch readiness**. Resolve every blocker and investigate warnings, unknowns, stale
+   sources, and conflicts through the displayed remediation links.
+4. Review **Classified evidence** and make sure verified facts, seller statements, provider signals,
+   Stonegate analysis, and unknowns are labeled truthfully.
+5. Compare the investor-visible preview and summaries with the permission-gated private economics.
+   Never place a floor, private note, or unsupported statement in buyer-visible content.
+6. Select **Build draft** or **Rebuild draft**. A rebuild creates a new immutable version; it does
+   not alter a prior version.
+7. An authorized approver records a reason, completes the attestation, and selects **Approve exact
+   version**. If material evidence changes, rebuild and reapprove before ranking or release.
+8. Download and review the stored approved-version PDF. The file is the exact artifact frozen at
+   approval.
+9. Select **Prepare recipient pool** only after buyer qualification. Confirm that the prepared
+   recipients and exact version were recorded as `prepared_not_sent`.
+10. Contact buyers separately through an approved company channel. The simulation sends nothing;
+    live automated outreach and Land release are not available.
 
 ### Buyer Work
 

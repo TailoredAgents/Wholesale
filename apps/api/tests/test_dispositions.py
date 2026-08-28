@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import principal_for_user
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
@@ -18,15 +20,20 @@ from app.models.foundation import (
     CompensationPlanRole,
     CompensationPlanVersion,
     DealDeduction,
+    DealReconciliation,
     DispositionBuyerPoolCandidate,
     DispositionBuyerPoolEntry,
     DispositionBuyerPoolRun,
     DispositionCampaign,
+    DispositionCampaignRecipient,
+    DispositionCase,
     DispositionCopilotRecommendation,
     DispositionCopilotReview,
     DispositionMatch,
     DispositionOperatingMode,
+    DispositionPackageVersion,
     Lead,
+    Property,
     RevenueRecord,
     Role,
     RoleAssignment,
@@ -34,6 +41,13 @@ from app.models.foundation import (
     Transaction,
     User,
 )
+from app.schemas.dispositions import (
+    BuyerSelection,
+    DispositionCaseCreate,
+    DispositionCopilotAnalyzeRequest,
+    ReconciliationDecision,
+)
+from app.services import disposition_copilot, dispositions
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -49,9 +63,7 @@ def put_verified_buy_box(
     if asset_class == "house":
         criteria: dict[str, Any] = {
             "asset_class": "house",
-            "geographies": [
-                {"jurisdiction": "city", "value": "Atlanta", "state": "GA"}
-            ],
+            "geographies": [{"jurisdiction": "city", "value": "Atlanta", "state": "GA"}],
             "strategies": ["wholesale_assignment"],
             "min_price_cents": 10000000,
             "max_price_cents": 30000000,
@@ -61,9 +73,7 @@ def put_verified_buy_box(
     else:
         criteria = {
             "asset_class": "land",
-            "geographies": [
-                {"jurisdiction": "city", "value": "Atlanta", "state": "GA"}
-            ],
+            "geographies": [{"jurisdiction": "city", "value": "Atlanta", "state": "GA"}],
             "strategies": ["land_hold"],
             "min_price_cents": 1000000,
             "max_price_cents": 30000000,
@@ -102,9 +112,7 @@ def upload_received_proof(
             "content_type": "application/pdf",
             "institution_name": "Example Bank",
             "verified_amount_cents": amount_cents,
-            "expires_at": (
-                expires_at or datetime.now(UTC) + timedelta(days=90)
-            ).isoformat(),
+            "expires_at": (expires_at or datetime.now(UTC) + timedelta(days=90)).isoformat(),
         },
         content=b"%PDF proof of funds awaiting human verification",
     )
@@ -130,9 +138,7 @@ def verify_proof(
             "verification_source": "manual_document_review",
             "institution_name": "Example Bank",
             "verified_amount_cents": amount_cents,
-            "expires_at": (
-                expires_at or datetime.now(UTC) + timedelta(days=90)
-            ).isoformat(),
+            "expires_at": (expires_at or datetime.now(UTC) + timedelta(days=90)).isoformat(),
             "notes": "Amount, institution, and expiration were reviewed by a human.",
         },
     )
@@ -289,12 +295,912 @@ def create_approved_disposition_case(client: TestClient, transaction_id: str) ->
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    approved = client.post(
+    approved = approve_disposition_package(client, case_id)
+    assert approved.status_code == 200, approved.text
+    return case_id
+
+
+def approve_disposition_package(client: TestClient, case_id: str):
+    draft = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert draft.status_code == 201, draft.text
+    return client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{draft.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": draft.json()["lock_version"],
+            "attestation": True,
+            "reason": "Reviewed saved evidence for test approval.",
+        },
+    )
+
+
+def add_user_with_role(
+    db: Session,
+    *,
+    email: str,
+    display_name: str,
+    role_key: str,
+) -> User:
+    owner = db.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    role = db.scalar(
+        select(Role).where(
+            Role.organization_id == owner.organization_id,
+            Role.key == role_key,
+        )
+    )
+    assert role is not None
+    user = User(
+        organization_id=owner.organization_id,
+        email=email,
+        display_name=display_name,
+        external_auth_id=None,
+        is_active=True,
+        calling_enabled=False,
+    )
+    db.add(user)
+    db.flush()
+    db.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=user.id,
+            role_id=role.id,
+        )
+    )
+    db.commit()
+    return user
+
+
+def test_disposition_package_is_recursively_public_safe_and_manager_approved(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19283746,
+            "minimum_acceptable_cents": 18273645,
+            "desired_assignment_fee_cents": 4283746,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    draft = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert draft.status_code == 201, draft.text
+    assert draft.headers["cache-control"] == "private, no-store"
+    assert draft.json()["readiness"]["status"] == "warnings"
+    assert draft.json()["readiness"]["blocked_count"] == 0
+
+    floor_secret = "PRIVATE-FLOOR-18273645"
+    basis_secret = "PRIVATE-BASIS-15000000"
+    fee_secret = "PRIVATE-FEE-4283746"
+    seller_secret = "PRIVATE-SELLER-MOTIVATION"
+    approval_secret = "PRIVATE-APPROVAL-REASON"
+    version = db_session.get(DispositionPackageVersion, UUID(draft.json()["id"]))
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert version is not None and case is not None
+    crafted = dict(version.public_snapshot)
+    crafted["seller_identity"] = seller_secret
+    crafted["property"] = {
+        **crafted["property"],
+        "seller_name": seller_secret,
+        "mortgage_balance": basis_secret,
+    }
+    crafted["pricing"] = {
+        **crafted["pricing"],
+        "minimum_acceptable_cents": floor_secret,
+        "purchase_price_cents": basis_secret,
+        "desired_assignment_fee_cents": fee_secret,
+    }
+    crafted["valuation"] = {
+        "arv_low_cents": 21000000,
+        "recommended_offer_cents": basis_secret,
+        "internal_notes": seller_secret,
+    }
+    crafted["repairs"] = {"total_cents": 1000000, "internal_floor": floor_secret}
+    crafted["inspection"] = {"photo_count": 2, "seller_motivation": seller_secret}
+    crafted["title"] = {"title_cleared": False, "mortgage_balance": basis_secret}
+    crafted["evidence_summary"] = {
+        "verified_fact_count": 1,
+        "seller_private_fact": fee_secret,
+    }
+    version.public_snapshot = crafted
+    case.package_snapshot = crafted
+    db_session.commit()
+
+    rep = add_user_with_role(
+        db_session,
+        email="package-rep@example.com",
+        display_name="Package Rep",
+        role_key="disposition_rep",
+    )
+    viewer = add_user_with_role(
+        db_session,
+        email="package-viewer@example.com",
+        display_name="Package Viewer",
+        role_key="read_only_partner",
+    )
+    viewer_headers = {"X-Dev-User-Email": viewer.email}
+    rep_headers = {"X-Dev-User-Email": rep.email}
+
+    viewer_case = client.get(f"/api/v1/dispositions/cases/{case_id}", headers=viewer_headers)
+    assert viewer_case.status_code == 200, viewer_case.text
+    assert viewer_case.json()["minimum_acceptable_cents"] is None
+    assert viewer_case.json()["desired_assignment_fee_cents"] is None
+    viewer_versions = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=viewer_headers,
+    )
+    assert viewer_versions.status_code == 200, viewer_versions.text
+    assert viewer_versions.headers["cache-control"] == "private, no-store"
+    assert viewer_versions.json()[0]["private_economics_snapshot"] is None
+    public_response = viewer_case.text + viewer_versions.text
+    for forbidden in (floor_secret, basis_secret, fee_secret, seller_secret):
+        assert forbidden not in public_response
+    nested_public = viewer_versions.json()[0]["public_snapshot"]
+    forbidden_keys = {
+        "seller_identity",
+        "seller_name",
+        "seller_motivation",
+        "mortgage_balance",
+        "minimum_acceptable_cents",
+        "purchase_price_cents",
+        "desired_assignment_fee_cents",
+        "recommended_offer_cents",
+        "internal_notes",
+        "internal_floor",
+        "seller_private_fact",
+    }
+
+    def assert_forbidden_keys_absent(value: object) -> None:
+        if isinstance(value, dict):
+            assert not forbidden_keys.intersection(value)
+            for nested_value in value.values():
+                assert_forbidden_keys_absent(nested_value)
+        elif isinstance(value, list):
+            for nested_value in value:
+                assert_forbidden_keys_absent(nested_value)
+
+    assert_forbidden_keys_absent(nested_public)
+    assert all(
+        secret not in json.dumps(nested_public)
+        for secret in (floor_secret, basis_secret, fee_secret, seller_secret)
+    )
+
+    rep_workspace = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=rep_headers)
+    assert rep_workspace.status_code == 200, rep_workspace.text
+    assert rep_workspace.json()["can_view_internal_economics"] is True
+    assert rep_workspace.json()["can_approve"] is False
+    assert rep_workspace.json()["private_economics"]["minimum_acceptable_cents"] == 18273645
+    forbidden_approval = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/approval",
+        headers=rep_headers,
+        json={
+            "expected_version": 1,
+            "attestation": True,
+            "reason": "Representative attempted an unauthorized approval.",
+        },
+    )
+    assert forbidden_approval.status_code == 403
+    bodyless_alias = client.post(
         f"/api/v1/dispositions/cases/{case_id}/package/approve",
         headers=HEADERS,
     )
+    assert bodyless_alias.status_code == 422
+
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 1,
+            "attestation": True,
+            "reason": approval_secret,
+        },
+    )
     assert approved.status_code == 200, approved.text
-    return case_id
+    assert approved.json()["status"] == "approved"
+    restricted_history = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=viewer_headers,
+    )
+    assert restricted_history.json()[0]["approval_reason"] is None
+    assert approval_secret not in restricted_history.text
+    exact_pdf = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/package.pdf",
+        headers=viewer_headers,
+    )
+    assert exact_pdf.status_code == 200, exact_pdf.text
+    assert exact_pdf.headers["cache-control"] == "private, no-store"
+    for forbidden in (floor_secret, basis_secret, fee_secret, seller_secret):
+        assert forbidden.encode() not in exact_pdf.content
+
+
+def test_private_economics_permission_guards_writes_and_redacts_reads(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.assignment_fee_cents = 4000000
+    db_session.commit()
+
+    assistant = add_user_with_role(
+        db_session,
+        email="economics-restricted@example.com",
+        display_name="Economics Restricted",
+        role_key="operations_assistant",
+    )
+    assistant_headers = {"X-Dev-User-Email": assistant.email}
+    assistant_principal = principal_for_user(db_session, assistant)
+
+    restricted_overview = client.get("/api/v1/dispositions", headers=assistant_headers)
+    assert restricted_overview.status_code == 200, restricted_overview.text
+    restricted_payload = restricted_overview.json()
+    assert restricted_payload["can_view_private_economics"] is False
+    restricted_eligible = next(
+        item for item in restricted_payload["eligible_transactions"] if item["id"] == transaction_id
+    )
+    assert restricted_eligible["purchase_price_cents"] is None
+    assert restricted_eligible["assignment_fee_cents"] is None
+
+    owner_overview = client.get("/api/v1/dispositions", headers=HEADERS)
+    assert owner_overview.status_code == 200, owner_overview.text
+    assert owner_overview.json()["can_view_private_economics"] is True
+    owner_eligible = next(
+        item
+        for item in owner_overview.json()["eligible_transactions"]
+        if item["id"] == transaction_id
+    )
+    assert owner_eligible["purchase_price_cents"] == 15000000
+    assert owner_eligible["assignment_fee_cents"] == 4000000
+
+    create_payload = {
+        "transaction_id": transaction_id,
+        "strategy": "assignment",
+        "asking_price_cents": 19000000,
+        "minimum_acceptable_cents": 18000000,
+        "desired_assignment_fee_cents": 4000000,
+        "operating_mode_key": "human_led",
+    }
+    unauthorized_create = client.post(
+        "/api/v1/dispositions/cases",
+        headers=assistant_headers,
+        json=create_payload,
+    )
+    assert unauthorized_create.status_code == 403, unauthorized_create.text
+    assert "dispositions:view_private_economics" in unauthorized_create.json()["detail"]
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        dispositions.create_case(
+            db_session,
+            assistant_principal,
+            DispositionCaseCreate.model_validate(create_payload),
+        )
+
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json=create_payload,
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    case = db_session.get(DispositionCase, UUID(case_id))
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert case is not None and owner is not None
+    db_session.add(
+        DealReconciliation(
+            organization_id=case.organization_id,
+            transaction_id=case.transaction_id,
+            disposition_case_id=case.id,
+            compensation_plan_version_id=case.compensation_plan_version_id,
+            disposition_operating_mode_id=case.disposition_operating_mode_id,
+            created_by_user_id=owner.id,
+            approved_by_user_id=None,
+            status="draft",
+            gross_revenue_cents=4000000,
+            acquisition_reserve_cents=250000,
+            deal_deductions_cents=100000,
+            adjusted_deal_margin_cents=3650000,
+            total_compensation_cents=1000000,
+            company_profit_cents=2650000,
+            company_margin_basis_points=7260,
+            target_margin_basis_points=3000,
+            snapshot={"private": "economics"},
+            approved_at=None,
+            notes="Private reconciliation note.",
+        )
+    )
+    db_session.commit()
+
+    restricted_case = client.get(
+        f"/api/v1/dispositions/cases/{case_id}",
+        headers=assistant_headers,
+    )
+    assert restricted_case.status_code == 200, restricted_case.text
+    assert restricted_case.json()["minimum_acceptable_cents"] is None
+    assert restricted_case.json()["desired_assignment_fee_cents"] is None
+    assert restricted_case.json()["reconciliation"] is None
+    restricted_case_overview = client.get("/api/v1/dispositions", headers=assistant_headers)
+    assert restricted_case_overview.status_code == 200, restricted_case_overview.text
+    overview_case = next(
+        item for item in restricted_case_overview.json()["cases"] if item["id"] == case_id
+    )
+    assert overview_case["minimum_acceptable_cents"] is None
+    assert overview_case["desired_assignment_fee_cents"] is None
+    assert overview_case["reconciliation"] is None
+
+    denied_override = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=assistant_headers,
+        json={"expected_latest_version": 0, "minimum_acceptable_cents": 17500000},
+    )
+    assert denied_override.status_code == 403, denied_override.text
+    assert "dispositions:view_private_economics" in denied_override.json()["detail"]
+    allowed_default = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=assistant_headers,
+        json={"expected_latest_version": 0},
+    )
+    assert allowed_default.status_code == 201, allowed_default.text
+    assert allowed_default.json()["private_economics_snapshot"] is None
+
+    denied_actions = (
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/buyer-selection",
+            headers=assistant_headers,
+            json={
+                "primary_offer_id": "00000000-0000-0000-0000-000000000001",
+                "reason": "Restricted user must not probe the internal floor.",
+            },
+        ),
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/reconciliation",
+            headers=assistant_headers,
+        ),
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/reconciliation/decision",
+            headers=assistant_headers,
+            json={"decision": "approved", "notes": "Restricted decision attempt."},
+        ),
+        client.get(
+            f"/api/v1/dispositions/cases/{case_id}/accounting.csv",
+            headers=assistant_headers,
+        ),
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=assistant_headers,
+            json={"idempotency_key": "restricted-floor-oracle"},
+        ),
+    )
+    for response in denied_actions:
+        assert response.status_code == 403, response.text
+        assert "dispositions:view_private_economics" in response.json()["detail"]
+
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        dispositions.select_buyer(
+            db_session,
+            assistant_principal,
+            UUID(case_id),
+            BuyerSelection(
+                primary_offer_id=UUID("00000000-0000-0000-0000-000000000001"),
+                reason="Restricted service call.",
+            ),
+        )
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        dispositions.build_reconciliation(db_session, assistant_principal, UUID(case_id))
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        dispositions.decide_reconciliation(
+            db_session,
+            assistant_principal,
+            UUID(case_id),
+            ReconciliationDecision(
+                decision="approved",
+                notes="Restricted service decision.",
+            ),
+        )
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        dispositions.accounting_csv(db_session, assistant_principal, UUID(case_id))
+    with pytest.raises(PermissionError, match="dispositions:view_private_economics"):
+        disposition_copilot.analyze_disposition(
+            db_session,
+            assistant_principal,
+            UUID(case_id),
+            DispositionCopilotAnalyzeRequest(idempotency_key="restricted-service-call"),
+        )
+
+    below_floor = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offers",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "amount_cents": 17000000,
+            "financing_type": "cash",
+        },
+    )
+    assert below_floor.status_code == 200, below_floor.text
+    db_session.add(
+        DispositionCopilotRecommendation(
+            organization_id=case.organization_id,
+            disposition_case_id=case.id,
+            transaction_id=case.transaction_id,
+            lead_id=case.lead_id,
+            generated_for_user_id=owner.id,
+            ai_run_log_id=None,
+            idempotency_key="private-floor-recommendation",
+            status="draft",
+            output_payload={
+                "status_summary": "Review the buyer offer against the internal floor.",
+                "package_gaps": [],
+                "package_highlights": [],
+                "recommended_buyers": [],
+                "offer_comparison": [],
+                "buyer_outreach_subject": "Buyer offer review",
+                "buyer_outreach_body": "Review the current buyer offer.",
+                "recommended_internal_actions": ["Review the internal floor."],
+                "relationship_update_proposals": [],
+                "risk_alerts": ["The offer is below the internal floor."],
+                "uncertainties": [],
+                "evidence": [],
+                "confidence": 80,
+            },
+            evidence_snapshot={"private_economics": {"minimum": 18000000}},
+            confidence_score=80,
+            generated_at=datetime.now(UTC),
+            reviewed_at=None,
+        )
+    )
+    db_session.commit()
+    owner_copilot = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=HEADERS,
+    )
+    assert owner_copilot.status_code == 200, owner_copilot.text
+    assert owner_copilot.json()["recommendations"]
+    assert any(
+        "internal floor" in risk["reason"].lower() for risk in owner_copilot.json()["risk_alerts"]
+    )
+    restricted_copilot = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=assistant_headers,
+    )
+    assert restricted_copilot.status_code == 200, restricted_copilot.text
+    assert restricted_copilot.json()["recommendations"] == []
+    assert all(
+        "internal floor" not in risk["reason"].lower()
+        for risk in restricted_copilot.json()["risk_alerts"]
+    )
+
+
+def test_disposition_package_staleness_is_precise_and_history_is_immutable(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    workspace = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert workspace.status_code == 200, workspace.text
+    approved = workspace.json()["approved_version"]
+    assert approved is not None
+    version_id = approved["id"]
+    original_fingerprint = workspace.json()["current_source_fingerprint"]
+    original_pdf = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version_id}/package.pdf",
+        headers=HEADERS,
+    )
+    assert original_pdf.status_code == 200
+
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.notes = "An unrelated internal coordination note changed."
+    db_session.commit()
+    unchanged = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["current_source_fingerprint"] == original_fingerprint
+    assert unchanged.json()["approved_package_is_current"] is True
+    assert unchanged.json()["current_readiness"]["status"] != "stale"
+
+    transaction.purchase_price_cents += 1
+    db_session.commit()
+    stale = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["approved_package_is_current"] is False
+    assert stale.json()["current_readiness"]["status"] == "stale"
+    assert any(
+        check["key"] == "approved_package_freshness"
+        for check in stale.json()["current_readiness"]["checks"]
+    )
+    blocked_match = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
+    assert blocked_match.status_code == 422
+    assert "stale" in blocked_match.json()["detail"].lower()
+    stale_alias = client.get(f"/api/v1/dispositions/cases/{case_id}/package.pdf", headers=HEADERS)
+    assert stale_alias.status_code == 422
+    exact_historical = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version_id}/package.pdf",
+        headers=HEADERS,
+    )
+    assert exact_historical.status_code == 200
+    assert exact_historical.content == original_pdf.content
+
+
+def test_disposition_package_version_lock_readiness_and_tenant_scope(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    property_record = db_session.scalar(
+        select(Property)
+        .join(DispositionCase, DispositionCase.property_id == Property.id)
+        .where(DispositionCase.id == UUID(case_id))
+    )
+    assert property_record is not None
+    property_record.street_address = ""
+    db_session.commit()
+    draft = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert draft.status_code == 201, draft.text
+    assert draft.json()["readiness"]["status"] == "blocked"
+    assert draft.json()["readiness"]["blocked_count"] >= 1
+    assert "property address" in " ".join(draft.json()["readiness"]["blockers"]).lower()
+    stale_create = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert stale_create.status_code == 422
+    stale_approval = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{draft.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 99,
+            "attestation": True,
+            "reason": "Stale approval state must be rejected.",
+        },
+    )
+    assert stale_approval.status_code == 422
+
+    other = bootstrap_foundation(
+        db_session,
+        organization_name="Other Disposition Organization",
+        admin_email="other-disposition-owner@example.com",
+        admin_name="Other Disposition Owner",
+    )
+    other_headers = {"X-Dev-User-Email": other.admin_user.email}
+    assert (
+        client.get(
+            f"/api/v1/dispositions/cases/{case_id}/package", headers=other_headers
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/v1/dispositions/cases/{case_id}/package/versions", headers=other_headers
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/package/versions/{draft.json()['id']}/approval",
+            headers=other_headers,
+            json={
+                "expected_version": 1,
+                "attestation": True,
+                "reason": "Cross-tenant approval must not reveal package existence.",
+            },
+        ).status_code
+        == 404
+    )
+
+
+def test_assignment_package_floor_cannot_undercut_contract_basis(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+
+    rejected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={
+            "expected_latest_version": 0,
+            "minimum_acceptable_cents": 14999999,
+        },
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert "contract purchase price" in rejected.json()["detail"].lower()
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    db_session.refresh(case)
+    assert case.minimum_acceptable_cents == 18000000
+    assert (
+        db_session.scalar(
+            select(func.count(DispositionPackageVersion.id)).where(
+                DispositionPackageVersion.disposition_case_id == UUID(case_id)
+            )
+        )
+        == 0
+    )
+
+    # Readiness is also fail-closed if legacy or administrative data is already unsafe.
+    case.minimum_acceptable_cents = 14999999
+    db_session.commit()
+    workspace = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["current_readiness"]["status"] == "blocked"
+    assert (
+        "contract purchase price"
+        in " ".join(workspace.json()["current_readiness"]["blockers"]).lower()
+    )
+    economics = next(
+        check
+        for check in workspace.json()["current_readiness"]["checks"]
+        if check["key"] == "economics"
+    )
+    assert economics["status"] == "blocked"
+    assert economics["remediation"] == {
+        "label": "Review package economics",
+        "href": (f"/os/deals?deal={case.deal_id}&tab=disposition&dispositionTab=package"),
+    }
+
+
+def test_only_latest_package_version_can_be_current_or_approved(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+
+    first = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert first.status_code == 201, first.text
+    second = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 1},
+    )
+    assert second.status_code == 201, second.text
+    versions = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+    )
+    assert versions.status_code == 200, versions.text
+    assert [(item["version_number"], item["status"]) for item in versions.json()] == [
+        (2, "draft"),
+        (1, "superseded"),
+    ]
+    assert versions.json()[0]["is_current"] is True
+    assert versions.json()[1]["is_current"] is False
+
+    old_approval = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{first.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 2,
+            "attestation": True,
+            "reason": "An older package must never become the release package.",
+        },
+    )
+    assert old_approval.status_code == 422, old_approval.text
+    assert "latest package version" in old_approval.json()["detail"].lower()
+
+    approved_second = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{second.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 1,
+            "attestation": True,
+            "reason": "The latest evidence-backed version was reviewed.",
+        },
+    )
+    assert approved_second.status_code == 200, approved_second.text
+    current = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert current.status_code == 200, current.text
+    assert current.json()["approved_package_is_current"] is True
+
+    # Rebuilding intentionally invalidates the prior approval, even when the source
+    # fingerprint is identical, because the newer draft is now the operative version.
+    third = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 2},
+    )
+    assert third.status_code == 201, third.text
+    rebuilt = client.get(f"/api/v1/dispositions/cases/{case_id}/package", headers=HEADERS)
+    assert rebuilt.status_code == 200, rebuilt.text
+    assert rebuilt.json()["latest_version"]["id"] == third.json()["id"]
+    assert rebuilt.json()["latest_version"]["is_current"] is True
+    assert rebuilt.json()["approved_version"]["id"] == second.json()["id"]
+    assert rebuilt.json()["approved_version"]["is_current"] is False
+    assert rebuilt.json()["approved_package_is_current"] is False
+    assert rebuilt.json()["current_readiness"]["status"] == "stale"
+    freshness = next(
+        check
+        for check in rebuilt.json()["current_readiness"]["checks"]
+        if check["key"] == "approved_package_freshness"
+    )
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    assert freshness["remediation"] == {
+        "label": "Build a current package",
+        "href": (f"/os/deals?deal={case.deal_id}&tab=disposition&dispositionTab=package"),
+    }
+    assert (
+        client.get(f"/api/v1/dispositions/cases/{case_id}/package.pdf", headers=HEADERS)
+        .json()["detail"]
+        .startswith("An approved immutable disposition package is required")
+    )
+
+    approved_third = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{third.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 1,
+            "attestation": True,
+            "reason": "The rebuilt latest version was reviewed.",
+        },
+    )
+    assert approved_third.status_code == 200, approved_third.text
+    versions = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+    ).json()
+    assert [(item["version_number"], item["status"]) for item in versions] == [
+        (3, "approved"),
+        (2, "superseded"),
+        (1, "superseded"),
+    ]
+
+    fourth = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 3},
+    )
+    assert fourth.status_code == 201, fourth.text
+    outdated = db_session.get(DispositionPackageVersion, UUID(fourth.json()["id"]))
+    assert outdated is not None
+    outdated.renderer_version = "retired_renderer"
+    db_session.commit()
+    outdated_approval = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{fourth.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": 1,
+            "attestation": True,
+            "reason": "An outdated renderer must fail closed.",
+        },
+    )
+    assert outdated_approval.status_code == 422, outdated_approval.text
+    assert "policy or renderer changed" in outdated_approval.json()["detail"].lower()
+    outdated_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package",
+        headers=HEADERS,
+    )
+    assert outdated_workspace.status_code == 200, outdated_workspace.text
+    assert outdated_workspace.json()["latest_version"]["is_current"] is False
+    assert outdated_workspace.json()["approved_package_is_current"] is False
+
+
+def test_legacy_marketed_case_can_rebuild_and_reenter_buyer_matching(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    case.status = "marketed"
+    case.package_status = "approved"
+    db_session.commit()
+
+    draft = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert draft.status_code == 201, draft.text
+    db_session.refresh(case)
+    assert case.status == "buyer_matching"
+    assert case.package_status == "draft"
+
+    # Approval independently repairs the legacy marketed state as well, which
+    # covers cases imported or administratively restored between both actions.
+    case.status = "marketed"
+    db_session.commit()
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{draft.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": draft.json()["lock_version"],
+            "attestation": True,
+            "reason": "Legacy marketed case was reviewed under the current package policy.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    db_session.refresh(case)
+    assert case.status == "buyer_matching"
+    assert case.package_status == "approved"
+
+    matching = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matching.status_code == 200, matching.text
+    assert matching.json()["status"] == "buyer_matching"
 
 
 def test_disposition_buyer_selection_and_reconciliation(
@@ -318,12 +1224,7 @@ def test_disposition_buyer_selection_and_reconciliation(
     case_id = created.json()["id"]
     assert created.json()["compensation_plan_label"] == "Stonegate Standard v1"
 
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/package/approve", headers=HEADERS
-        ).status_code
-        == 200
-    )
+    assert approve_disposition_package(client, case_id).status_code == 200
     unmatched = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
     assert unmatched.status_code == 200
     assert unmatched.json()["matches"][0]["qualification_status"] == "review_required"
@@ -356,9 +1257,7 @@ def test_disposition_buyer_selection_and_reconciliation(
 
     verified_proof = verify_proof(client, proof["id"])
     assert verified_proof["verified_amount_cents"] == 40000000
-    legacy_only = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS
-    )
+    legacy_only = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
     assert legacy_only.status_code == 200, legacy_only.text
     assert legacy_only.json()["matches"][0]["qualification_status"] == "review_required"
     legacy_match = db_session.scalar(
@@ -373,9 +1272,7 @@ def test_disposition_buyer_selection_and_reconciliation(
 
     # A verified Land buy box remains isolated from a House disposition case.
     put_verified_buy_box(client, buyer_id, asset_class="land")
-    land_only = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS
-    )
+    land_only = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
     assert land_only.status_code == 200, land_only.text
     assert land_only.json()["matches"][0]["qualification_status"] == "review_required"
 
@@ -394,12 +1291,70 @@ def test_disposition_buyer_selection_and_reconciliation(
     assert str(stored_match.buy_box_version_id) == house_box["id"]
     assert stored_match.matcher_version == "house_buy_box_v1"
     assert stored_match.criteria_snapshot["criteria"]["asset_class"] == "house"
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/campaigns/release", headers=HEADERS
-        ).status_code
-        == 200
+    release = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release", headers=HEADERS
     )
+    assert release.status_code == 200, release.text
+    assert release.json()["status"] == "buyer_matching"
+    stored_case = db_session.get(DispositionCase, UUID(case_id))
+    assert stored_case is not None
+    assert stored_case.status == "buyer_matching"
+    prepared_campaign = db_session.scalar(
+        select(DispositionCampaign).where(DispositionCampaign.disposition_case_id == UUID(case_id))
+    )
+    assert prepared_campaign is not None
+    assert prepared_campaign.status == "prepared_not_sent"
+    assert prepared_campaign.released_at is None
+    assert prepared_campaign.package_version_id is not None
+    prepared_recipient = db_session.scalar(
+        select(DispositionCampaignRecipient).where(
+            DispositionCampaignRecipient.disposition_campaign_id == prepared_campaign.id
+        )
+    )
+    assert prepared_recipient is not None
+    assert prepared_recipient.status == "prepared_not_sent"
+    assert prepared_recipient.package_version_id == prepared_campaign.package_version_id
+    prepared_version = db_session.get(
+        DispositionPackageVersion, prepared_campaign.package_version_id
+    )
+    assert prepared_version is not None
+    assert prepared_recipient.artifact_sha256 == prepared_version.pdf_sha256
+    assert prepared_recipient.captured_destination == {"email": "reliable-atlanta@example.com"}
+    assert set(prepared_recipient.captured_identity) == {"buyer_name", "company_name"}
+    prepared_record_text = json.dumps(
+        {
+            "identity": prepared_recipient.captured_identity,
+            "destination": prepared_recipient.captured_destination,
+        }
+    )
+    for private_value in ("Disposition Seller", "15000000", "18000000", "4000000"):
+        assert private_value not in prepared_record_text
+
+    campaign_id = prepared_campaign.id
+    recipient_id = prepared_recipient.id
+    repeated_release = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert repeated_release.status_code == 200, repeated_release.text
+    assert (
+        db_session.scalar(
+            select(func.count(DispositionCampaign.id)).where(
+                DispositionCampaign.disposition_case_id == UUID(case_id)
+            )
+        )
+        == 1
+    )
+    assert (
+        db_session.scalar(
+            select(func.count(DispositionCampaignRecipient.id)).where(
+                DispositionCampaignRecipient.disposition_case_id == UUID(case_id)
+            )
+        )
+        == 1
+    )
+    assert db_session.get(DispositionCampaign, campaign_id) is not None
+    assert db_session.get(DispositionCampaignRecipient, recipient_id) is not None
 
     offer = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offers",
@@ -604,10 +1559,7 @@ def test_proof_renewal_keeps_current_verified_document_attached_to_match(
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    approved = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/package/approve",
-        headers=HEADERS,
-    )
+    approved = approve_disposition_package(client, case_id)
     assert approved.status_code == 200, approved.text
     put_verified_buy_box(client, buyer_id)
 
@@ -669,13 +1621,7 @@ def test_disposition_copilot_prefers_current_proof_over_stale_renewal_evidence(
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/package/approve",
-            headers=HEADERS,
-        ).status_code
-        == 200
-    )
+    assert approve_disposition_package(client, case_id).status_code == 200
     put_verified_buy_box(client, buyer_id)
     now = datetime.now(UTC)
     current = upload_received_proof(
@@ -723,10 +1669,7 @@ def test_disposition_copilot_prefers_current_proof_over_stale_renewal_evidence(
     assert overview.status_code == 200, overview.text
     payload = overview.json()
     assert payload["verified_buyer_count"] == 1
-    assert all(
-        risk["reason"] != "Proof of funds is expired."
-        for risk in payload["risk_alerts"]
-    )
+    assert all(risk["reason"] != "Proof of funds is expired." for risk in payload["risk_alerts"])
 
 
 def test_campaign_release_rechecks_expired_proof_after_match(
@@ -746,10 +1689,7 @@ def test_campaign_release_rechecks_expired_proof_after_match(
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    approved = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/package/approve",
-        headers=HEADERS,
-    )
+    approved = approve_disposition_package(client, case_id)
     assert approved.status_code == 200, approved.text
     put_verified_buy_box(client, buyer_id)
     proof = upload_received_proof(client, buyer_id)
@@ -896,13 +1836,7 @@ def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
     )
     assert created.status_code == 201, created.text
     case_id = created.json()["id"]
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/package/approve",
-            headers=HEADERS,
-        ).status_code
-        == 200
-    )
+    assert approve_disposition_package(client, case_id).status_code == 200
     put_verified_buy_box(client, buyer_id)
     proof = upload_received_proof(client, buyer_id)
     verify_proof(client, proof["id"])
@@ -971,13 +1905,7 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         },
     ).json()
     case_id = case["id"]
-    assert (
-        client.post(
-            f"/api/v1/dispositions/cases/{case_id}/package/approve",
-            headers=HEADERS,
-        ).status_code
-        == 200
-    )
+    assert approve_disposition_package(client, case_id).status_code == 200
     put_verified_buy_box(client, buyer_id)
     proof = upload_received_proof(client, buyer_id)
     verify_proof(client, proof["id"])
@@ -1358,10 +2286,7 @@ def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidat
     assert post_conversion_run.status_code == 200, post_conversion_run.text
     assert post_conversion_run.json()["run"]["version_number"] == 3
     assert post_conversion_run.json()["total"] == 2
-    assert all(
-        item["source_type"] != "external"
-        for item in post_conversion_run.json()["entries"]
-    )
+    assert all(item["source_type"] != "external" for item in post_conversion_run.json()["entries"])
     approved_after_rerun = next(
         item
         for item in post_conversion_run.json()["entries"]
@@ -1385,9 +2310,7 @@ def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidat
     )
     assert released.status_code == 200, released.text
     campaign = db_session.scalar(
-        select(DispositionCampaign).where(
-            DispositionCampaign.disposition_case_id == UUID(case_id)
-        )
+        select(DispositionCampaign).where(DispositionCampaign.disposition_case_id == UUID(case_id))
     )
     assert campaign is not None
     assert campaign.recipient_count == 1

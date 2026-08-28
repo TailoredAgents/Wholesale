@@ -15,11 +15,18 @@ function cents(value: FormDataEntryValue | null) {
   return Math.round(Number(String(value ?? "").replace(/[$,]/g, "")) * 100);
 }
 
+function optionalCents(value: FormDataEntryValue | null) {
+  const normalized = String(value ?? "").replace(/[$,]/g, "").trim();
+  return normalized ? Math.round(Number(normalized) * 100) : null;
+}
+
 export function DispositionSetupWorkspace({
+  canViewPrivateEconomics,
   dealIdByTransaction,
   eligibleTransactions,
   initialTransactionId,
 }: {
+  canViewPrivateEconomics: boolean;
   dealIdByTransaction: Record<string, string>;
   eligibleTransactions: EligibleTransaction[];
   initialTransactionId?: string;
@@ -61,6 +68,7 @@ export function DispositionSetupWorkspace({
           strategy: values.get("strategy"),
           asking_price_cents: cents(values.get("asking_price")),
           minimum_acceptable_cents: cents(values.get("minimum_price")),
+          desired_assignment_fee_cents: optionalCents(values.get("desired_assignment_fee")),
           operating_mode_key: "human_led",
           notes: values.get("notes") || null,
         }),
@@ -83,6 +91,18 @@ export function DispositionSetupWorkspace({
     }
   }
 
+  if (!canViewPrivateEconomics) {
+    return (
+      <section className={styles.setupEmpty}>
+        <strong>Private deal economics are restricted.</strong>
+        <p>A disposition manager or owner must set the investor asking price, approved minimum, and assignment-fee target before buyer placement begins.</p>
+        <Link href="/os/deals">
+          Return to Deals <ArrowRight aria-hidden="true" size={15} />
+        </Link>
+      </section>
+    );
+  }
+
   if (!eligibleTransactions.length) {
     return (
       <section className={styles.setupEmpty}>
@@ -99,10 +119,11 @@ export function DispositionSetupWorkspace({
     <section className={styles.setupLayout}>
       <form className={`${styles.openForm} ${styles.setupForm}`} onSubmit={submit}>
         <div className={styles.formTitle}><Plus aria-hidden="true" size={15} /><strong>Contracted property</strong></div>
-        <label><span>Transaction</span><select defaultValue={selectedTransactionId} name="transaction_id" required>{eligibleTransactions.map((item) => <option key={item.id} value={item.id}>{item.property_address} · {item.seller_name}</option>)}</select></label>
+        <label><span>Transaction</span><select defaultValue={selectedTransactionId} name="transaction_id" required>{eligibleTransactions.map((item) => <option key={item.id} value={item.id}>{item.property_address} - {item.seller_name}</option>)}</select></label>
         <label><span>Disposition strategy</span><select name="strategy"><option value="assignment">Assignment</option><option value="double_close">Double close</option><option value="novation">Novation</option></select></label>
         <label><span>Investor asking price</span><input name="asking_price" inputMode="decimal" required /></label>
         <label><span>Approved minimum</span><input name="minimum_price" inputMode="decimal" required /></label>
+        <label><span>Desired assignment fee (optional)</span><input name="desired_assignment_fee" inputMode="decimal" /><small>Internal target only. It is never included in an investor package.</small></label>
         <label><span>Internal notes</span><textarea name="notes" rows={3} /></label>
         <button disabled={busy} type="submit">{busy ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <Plus aria-hidden="true" size={15} />}Open disposition case</button>
         {message ? <p className={styles.notice} role="alert">{message}</p> : null}

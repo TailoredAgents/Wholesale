@@ -2,16 +2,18 @@
 
 Last updated: August 27, 2026
 
-> **Current status: DS0-DS4 complete; DS5-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS5 complete; DS6-DS12 planned.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
 > DS4 adds the unified, explainable House deal buyer pool, staged external evidence, explicit
 > external-to-network review, versioned score history, and shortlist-aware House release controls.
-> Existing deal-specific disposition cases, package generation, engagement and offer records,
-> primary and backup buyer selection, reconciliation, and review-only Disposition Copilot remain in
-> place. Land release, live outreach, and later phases remain plans and are not proof that those
-> capabilities are live.
+> DS5 adds the House-only, evidence-classified launch-readiness workspace; immutable package
+> versions; approval-gated, stored investor PDFs; private-economics separation; material-change
+> invalidation; and exact package-version linkage for simulated recipients. Existing deal-specific
+> engagement and offer records, primary and backup buyer selection, reconciliation, and review-only
+> Disposition Copilot remain in place. DS5 sends no email or SMS. Land package release, live
+> outreach, and later phases remain plans and are not proof that those capabilities are live.
 
 ## 1. Purpose And Authority
 
@@ -532,23 +534,45 @@ future InvestorLift adapter and its verified provider contract remain DS8 work.
 
 ## DS5 - Deal Launch And Investor Package Readiness
 
-**Status: Planned.**
+**Status: Complete as of August 27, 2026 for the current House disposition workflow.**
 
 ### Goal
 
 Prepare an accurate, persuasive, reusable package for the current contracted deal and every future
 deal.
 
-### Work
+### Delivered
 
-- Reuse Deal, contract, property intelligence, valuation, repair, photo, file, and title evidence.
-- Add a launch-readiness checklist with source freshness and conflict visibility.
-- Separate verified facts, seller statements, provider signals, Stonegate analysis, and unknowns.
-- Store approved asking price, minimum acceptable economics, desired assignment fee, and approval
-  authority without exposing private floors to buyers.
-- Produce channel-ready summaries and the existing investor PDF from one approved package version.
-- Invalidate or require reapproval when material deal facts change.
-- Record who approved the package and which version each recipient received.
+- Reuses the House deal, executed-contract, property-intelligence, underwriting, repair, inspection,
+  photo, file, and title evidence already stored in Stonegate.
+- Provides an actionable launch-readiness checklist that identifies blockers, warnings, unknowns,
+  source freshness, material conflicts, and the workspace where a staff member can remediate each
+  issue.
+- Records a field-level evidence manifest that distinguishes verified facts, seller statements,
+  provider signals, Stonegate analysis, and unknowns instead of presenting every input as fact.
+- Keeps buyer-visible package data separate from purchase basis, minimum acceptable economics,
+  desired assignment fee, approval authority, and other private operating information. Private
+  economics require a dedicated permission and are not copied into recipient-visible summaries or
+  PDFs.
+- Creates append-only package versions with policy and renderer versions, a canonical source
+  fingerprint, evidence and readiness snapshots, and channel-ready email and SMS summaries.
+- Requires a separately authorized human approver to attest to a specific current draft and record
+  an approval reason. A changed material source fingerprint makes the approved package stale and
+  requires a new version and approval before matching or recipient preparation can continue.
+- Renders the investor PDF once at approval, stores the exact bytes, filename, size, and SHA-256,
+  and serves that saved artifact rather than rebuilding it from mutable live records.
+- Binds every simulated campaign and prepared recipient audit row to the exact approved package
+  version and artifact hash while preserving the buyer identity and destination observed at
+  preparation time.
+
+### Current Boundary
+
+- DS5 is available only for the current House disposition workflow. Land package readiness and Land
+  release require a separate asset-safe implementation.
+- Campaign release in DS5 is preparation and audit simulation only. Recipient rows remain
+  `prepared_not_sent`; DS5 sends no email or SMS and does not claim delivery or reply handling.
+- Governed live delivery, suppression, provider reconciliation, replies, retries, and pause/cancel
+  behavior remain DS6 work.
 
 ### Exit Criteria
 
@@ -854,7 +878,7 @@ Quality and safety measures:
 | DS2 | Disposition Desk | Complete |
 | DS3 | Buyer Profiles And Asset-Aware Buy Boxes | Complete |
 | DS4 | Unified Explainable Deal Buyer Pool | Complete for current House disposition workflow |
-| DS5 | Deal Launch And Investor Package Readiness | Planned |
+| DS5 | Deal Launch And Investor Package Readiness | Complete for current House disposition workflow |
 | DS6 | Governed Live Outreach And Reply Loop | Planned |
 | DS7 | Offer Room And Closing Protection | Planned |
 | DS8 | InvestorLift Provider Adapter | Planned; provider verification required |
@@ -882,11 +906,11 @@ the Buyer Network using duplicate review, editing, ownership, lifecycle controls
 Ambiguous records should remain in Needs Review rather than being forced into an existing buyer.
 
 DS2 provides the specialist's daily command center, DS3 provides the canonical buyer profile,
-separate versioned House and Land buy boxes and proof review, and DS4 provides the unified,
-versioned, explainable House deal buyer pool. DS5-DS7 continue turning that provider-independent
-foundation into the package, live outreach, offer, and closing system. Land matching and release
-must receive their own asset-safe implementation before being described as live. DS8 follows only
-after InvestorLift supplies a
+separate versioned House and Land buy boxes and proof review, DS4 provides the unified, versioned,
+explainable House deal buyer pool, and DS5 provides the evidence-backed, approval-gated House
+package and simulated recipient audit trail. DS6 and DS7 remain the live-outreach, offer, and
+closing-protection work. Land matching and release must receive their own asset-safe implementation
+before being described as live. DS8 follows only after InvestorLift supplies a
 verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may

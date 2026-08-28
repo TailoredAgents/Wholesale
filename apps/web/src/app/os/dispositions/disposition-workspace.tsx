@@ -6,7 +6,6 @@ import {
   CircleDollarSign,
   Download,
   LoaderCircle,
-  Megaphone,
   UsersRound,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -20,6 +19,7 @@ import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import { DispositionBuyerPool } from "./disposition-buyer-pool";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
+import { DispositionPackageReadiness } from "./disposition-package-readiness";
 import styles from "./dispositions.module.css";
 
 type Tab = "package" | "buyers" | "offers" | "reconciliation";
@@ -41,12 +41,14 @@ function cents(value: FormDataEntryValue | null) {
 export function DispositionWorkspace({
   canEditBuyers,
   canEditDeals,
+  dealId,
   initialCaseId,
   initialData,
   initialTab = "package",
 }: {
   canEditBuyers: boolean;
   canEditDeals: boolean;
+  dealId: string;
   initialCaseId?: string;
   initialData: DispositionOverview;
   initialTab?: Tab;
@@ -308,12 +310,18 @@ export function DispositionWorkspace({
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch(`${apiBase}${path}`, { headers: await headers(false) });
+      const response = await fetch(`${apiBase}${path}`, {
+        cache: "no-store",
+        headers: await headers(false),
+      });
       if (!response.ok) throw new Error("Export is not ready.");
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = fileName;
+      const contentDisposition = response.headers.get("Content-Disposition") ?? "";
+      const encodedName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const quotedName = contentDisposition.match(/filename="([^"]+)"/i)?.[1];
+      link.download = encodedName ? decodeURIComponent(encodedName) : quotedName ?? fileName;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -364,20 +372,24 @@ export function DispositionWorkspace({
               ) : null}
               <nav className={styles.tabs}>{(["package", "buyers", "offers", "reconciliation"] as Tab[]).map((item) => <button className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : labelize(item)}</button>)}</nav>
 
-              {tab === "package" ? <div className={styles.sectionGrid}>
-                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Controlled release</span><h4>Investor package</h4></div><strong>{labelize(selected.package_status)}</strong></div><dl className={styles.facts}><div><dt>Property</dt><dd>{selected.property_address}</dd></div><div><dt>Type</dt><dd>{selected.property_type ?? "Not recorded"}</dd></div><div><dt>Asking price</dt><dd>{money(selected.asking_price_cents)}</dd></div><div><dt>Minimum acceptable</dt><dd>{money(selected.minimum_acceptable_cents)}</dd></div><div><dt>Operating model</dt><dd>{selected.operating_mode_label}</dd></div><div><dt>Compensation</dt><dd>{selected.compensation_plan_label}</dd></div></dl></section>
-                <section className={styles.actionPanel}><div className={styles.sectionTitle}><div><span>Human approvals</span><h4>Release controls</h4></div></div>
-                  <button disabled={busy || !canEditDeals || selected.package_status === "approved"} onClick={() => action(() => post(`/api/v1/dispositions/cases/${selected.id}/package/approve`), "Investor package approved.")} type="button"><Check size={15} />Approve package</button>
-                  <button disabled={busy || !canEditDeals || selected.package_status !== "approved"} onClick={() => action(() => post(`/api/v1/dispositions/cases/${selected.id}/matches`), "Buyer pool scored against this deal." )} type="button"><UsersRound size={15} />Refresh buyer ranking</button>
-                  <button disabled={busy || !canEditDeals || !selected.matches.some((item) => item.qualification_status === "qualified")} onClick={() => action(() => post(`/api/v1/dispositions/cases/${selected.id}/campaigns/release`), "Approved campaign simulated. No messages were sent." )} type="button"><Megaphone size={15} />Approve simulated release</button>
-                  <button disabled={busy || selected.package_status !== "approved"} onClick={() => download(`/api/v1/dispositions/cases/${selected.id}/package.pdf`, "stonegate-investor-package.pdf")} type="button"><Download size={15} />Investor PDF</button>
-                  <p>No buyer communication is sent in Phase 9. The release records the approved recipient pool for a future email/SMS adapter.</p>
-                </section>
-              </div> : null}
+              {tab === "package" ? (
+                <DispositionPackageReadiness
+                  canEditDeals={canEditDeals}
+                  caseId={selected.id}
+                  dealId={dealId}
+                  download={download}
+                  key={selected.id}
+                  leadId={selected.lead_id}
+                  onCaseChanged={() => reload(selected.id)}
+                  onMessage={setMessage}
+                  qualifiedBuyerCount={selected.matches.filter((item) => item.qualification_status === "qualified").length}
+                  request={request}
+                />
+              ) : null}
 
               {tab === "buyers" ? (
                 <DispositionBuyerPool
-                  activityPanel={<form className={styles.form} onSubmit={engagement}><div className={styles.sectionTitle}><div><span>Buyer activity</span><h4>Log inquiry, showing, or follow-up</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><label><span>Activity</span><select name="engagement_type"><option value="inquiry">Inquiry</option><option value="showing">Showing</option><option value="follow_up">Follow-up</option><option value="deposit">Deposit</option></select></label><label><span>Follow-up date and time</span><input name="scheduled_at" type="datetime-local" /><small>Used when the activity is a follow-up.</small></label><label><span>Notes</span><textarea name="notes" required rows={4} /></label><button disabled={busy || !canEditDeals || !selected.matches.length} type="submit">Log buyer activity</button><div className={styles.activityList}>{selected.engagements.slice(0, 5).map((item) => <p key={item.id}><strong>{item.buyer_name}</strong><span>{labelize(item.engagement_type)} · {item.scheduled_at ? "Scheduled " + new Date(item.scheduled_at).toLocaleString() + " · " : ""}{item.notes}</span></p>)}</div></form>}
+                  activityPanel={<form className={styles.form} onSubmit={engagement}><div className={styles.sectionTitle}><div><span>Buyer activity</span><h4>Log inquiry, showing, or follow-up</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><label><span>Activity</span><select name="engagement_type"><option value="inquiry">Inquiry</option><option value="showing">Showing</option><option value="follow_up">Follow-up</option><option value="deposit">Deposit</option></select></label><label><span>Follow-up date and time</span><input name="scheduled_at" type="datetime-local" /><small>Used when the activity is a follow-up.</small></label><label><span>Notes</span><textarea name="notes" required rows={4} /></label><button disabled={busy || !canEditDeals || !selected.matches.length} type="submit">Log buyer activity</button><div className={styles.activityList}>{selected.engagements.slice(0, 5).map((item) => <p key={item.id}><strong>{item.buyer_name}</strong><span>{labelize(item.engagement_type)} - {item.scheduled_at ? "Scheduled " + new Date(item.scheduled_at).toLocaleString() + " - " : ""}{item.notes}</span></p>)}</div></form>}
                   canEditBuyers={canEditBuyers}
                   canEditDeals={canEditDeals}
                   caseId={selected.id}
@@ -393,13 +405,13 @@ export function DispositionWorkspace({
               ) : null}
 
               {tab === "offers" ? <div className={styles.sectionGrid}>
-                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Offer control</span><h4>Buyer offers</h4></div><strong>{selected.offers.length}</strong></div><div className={styles.offerList}>{selected.offers.map((item) => <article key={item.id}><div><strong>{item.buyer_name}</strong><span>{labelize(item.status)}</span></div><b>{money(item.amount_cents)}</b><small>{money(item.earnest_money_cents)} deposit · {labelize(item.financing_type)}</small></article>)}{!selected.offers.length ? <p className={styles.emptyRow}>No buyer offers recorded.</p> : null}</div></section>
+                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Offer control</span><h4>Buyer offers</h4></div><strong>{selected.offers.length}</strong></div><div className={styles.offerList}>{selected.offers.map((item) => <article key={item.id}><div><strong>{item.buyer_name}</strong><span>{labelize(item.status)}</span></div><b>{money(item.amount_cents)}</b><small>{money(item.earnest_money_cents)} deposit - {labelize(item.financing_type)}</small></article>)}{!selected.offers.length ? <p className={styles.emptyRow}>No buyer offers recorded.</p> : null}</div></section>
                 <div className={styles.rightStack}><form className={styles.form} onSubmit={offer}><div className={styles.sectionTitle}><div><span>Document evidence</span><h4>Record offer</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><div className={styles.twoFields}><label><span>Offer</span><input name="amount" inputMode="decimal" required /></label><label><span>Earnest money</span><input name="earnest_money" defaultValue="5000" inputMode="decimal" required /></label></div><label><span>Financing</span><select name="financing_type"><option value="cash">Cash</option><option value="hard_money">Hard money</option><option value="private_money">Private money</option></select></label><label><span>Notes</span><textarea name="notes" rows={3} /></label><button disabled={busy || !canEditDeals || !selected.matches.length} type="submit">Record offer</button></form>
-                  <form className={styles.form} onSubmit={selectBuyer}><div className={styles.sectionTitle}><div><span>Human decision</span><h4>Approve buyer</h4></div></div><label><span>Primary offer</span><select name="primary_offer_id" required>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} · {money(item.amount_cents)}</option>)}</select></label><label><span>Backup offer</span><select name="backup_offer_id"><option value="">No backup</option>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} · {money(item.amount_cents)}</option>)}</select></label><label><span>Selection reason</span><textarea name="reason" required rows={3} placeholder="Price, verified funds, reliability, and closing capacity" /></label><button disabled={busy || !canEditDeals || !selected.offers.length} type="submit"><Check size={15} />Approve selection</button></form></div>
+                  <form className={styles.form} onSubmit={selectBuyer}><div className={styles.sectionTitle}><div><span>Human decision</span><h4>Approve buyer</h4></div></div><label><span>Primary offer</span><select name="primary_offer_id" required>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} - {money(item.amount_cents)}</option>)}</select></label><label><span>Backup offer</span><select name="backup_offer_id"><option value="">No backup</option>{selected.offers.map((item) => <option key={item.id} value={item.id}>{item.buyer_name} - {money(item.amount_cents)}</option>)}</select></label><label><span>Selection reason</span><textarea name="reason" required rows={3} placeholder="Price, verified funds, reliability, and closing capacity" /></label><button disabled={busy || !canEditDeals || !selected.offers.length} type="submit"><Check size={15} />Approve selection</button></form></div>
               </div> : null}
 
               {tab === "reconciliation" ? <div className={styles.sectionGrid}>
-                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing statement</span><h4>Deal reconciliation</h4></div><strong>{selected.reconciliation ? labelize(selected.reconciliation.status) : "Not calculated"}</strong></div>{selected.reconciliation ? <><dl className={styles.facts}><div><dt>Collected deal revenue</dt><dd>{money(selected.reconciliation.gross_revenue_cents)}</dd></div><div><dt>Acquisition reserve</dt><dd>-{money(selected.reconciliation.acquisition_reserve_cents)}</dd></div><div><dt>Deal-specific costs</dt><dd>-{money(selected.reconciliation.deal_deductions_cents)}</dd></div><div><dt>Adjusted deal margin</dt><dd>{money(selected.reconciliation.adjusted_deal_margin_cents)}</dd></div><div><dt>Commission payouts</dt><dd>{money(selected.reconciliation.total_compensation_cents)}</dd></div><div><dt>Company profit</dt><dd>{money(selected.reconciliation.company_profit_cents)}</dd></div><div><dt>Company share</dt><dd>{(selected.reconciliation.company_margin_basis_points / 100).toFixed(1)}% / {(selected.reconciliation.target_margin_basis_points / 100).toFixed(0)}% target</dd></div></dl><div className={styles.payouts}>{selected.reconciliation.payouts.map((item) => <div key={item.id}><span>{labelize(item.role_key)} · {item.user_name ?? "Unassigned"}</span><strong>{money(item.amount_cents)}</strong></div>)}</div></> : <p className={styles.emptyRow}>Fund the transaction and record collected revenue in Finance before calculating.</p>}</section>
+                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing statement</span><h4>Deal reconciliation</h4></div><strong>{selected.reconciliation ? labelize(selected.reconciliation.status) : "Not calculated"}</strong></div>{selected.reconciliation ? <><dl className={styles.facts}><div><dt>Collected deal revenue</dt><dd>{money(selected.reconciliation.gross_revenue_cents)}</dd></div><div><dt>Acquisition reserve</dt><dd>-{money(selected.reconciliation.acquisition_reserve_cents)}</dd></div><div><dt>Deal-specific costs</dt><dd>-{money(selected.reconciliation.deal_deductions_cents)}</dd></div><div><dt>Adjusted deal margin</dt><dd>{money(selected.reconciliation.adjusted_deal_margin_cents)}</dd></div><div><dt>Commission payouts</dt><dd>{money(selected.reconciliation.total_compensation_cents)}</dd></div><div><dt>Company profit</dt><dd>{money(selected.reconciliation.company_profit_cents)}</dd></div><div><dt>Company share</dt><dd>{(selected.reconciliation.company_margin_basis_points / 100).toFixed(1)}% / {(selected.reconciliation.target_margin_basis_points / 100).toFixed(0)}% target</dd></div></dl><div className={styles.payouts}>{selected.reconciliation.payouts.map((item) => <div key={item.id}><span>{labelize(item.role_key)} - {item.user_name ?? "Unassigned"}</span><strong>{money(item.amount_cents)}</strong></div>)}</div></> : <p className={styles.emptyRow}>Fund the transaction and record collected revenue in Finance before calculating.</p>}</section>
                 <section className={styles.actionPanel}><div className={styles.sectionTitle}><div><span>Owner control</span><h4>Close the books</h4></div></div><button disabled={busy || !canEditDeals || !selected.selected_buyer_id} onClick={() => action(() => post(`/api/v1/dispositions/cases/${selected.id}/reconciliation`), "Closing statement calculated from collected revenue and the frozen plan." )} type="button"><CircleDollarSign size={15} />Calculate statement</button><button disabled={busy || !canEditDeals || selected.reconciliation?.status !== "draft"} onClick={() => action(() => request(`/api/v1/dispositions/cases/${selected.id}/reconciliation/decision`, { method: "POST", body: JSON.stringify({ decision: "approved", notes: "Owner reviewed closing statement and payout allocation.", approve_below_target: false }) }), "Closing statement and commission payouts approved." )} type="button"><Check size={15} />Approve payouts</button><button disabled={busy || selected.reconciliation?.status !== "approved"} onClick={() => download(`/api/v1/dispositions/cases/${selected.id}/accounting.csv`, "stonegate-accounting-export.csv")} type="button"><Download size={15} />Accounting CSV</button><p>Approval is blocked when commission credit is unassigned or company profit falls below the active plan target.</p></section>
               </div> : null}
             </>

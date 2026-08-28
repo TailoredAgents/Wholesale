@@ -3106,7 +3106,8 @@ export type DispositionCase = {
   status: string;
   strategy: string;
   asking_price_cents: number;
-  minimum_acceptable_cents: number;
+  minimum_acceptable_cents: number | null;
+  desired_assignment_fee_cents: number | null;
   package_status: string;
   package_snapshot: Record<string, unknown>;
   compensation_plan_label: string;
@@ -3131,9 +3132,113 @@ export type DispositionCase = {
 };
 
 export type DispositionOverview = {
+  can_view_private_economics: boolean;
   metrics: { active_cases: number; packages_pending: number; buyer_selected: number; reconciliation_pending: number; below_margin_target: number };
-  eligible_transactions: Array<{ id: string; seller_name: string; property_address: string; purchase_price_cents: number; assignment_fee_cents: number | null }>;
+  eligible_transactions: Array<{ id: string; seller_name: string; property_address: string; purchase_price_cents: number | null; assignment_fee_cents: number | null }>;
   cases: DispositionCase[];
+};
+
+export type DispositionPackageEvidenceClassification =
+  | "verified_fact"
+  | "seller_statement"
+  | "provider_signal"
+  | "stonegate_analysis"
+  | "unknown";
+
+export type DispositionPackageEvidence = {
+  key: string;
+  label: string;
+  classification: DispositionPackageEvidenceClassification;
+  value: unknown;
+  provenance: Record<string, unknown>;
+  captured_at: string | null;
+  expires_at: string | null;
+  freshness: "current" | "stale" | "unknown";
+};
+
+export type DispositionPackageReadinessCheck = {
+  key: string;
+  label: string;
+  status: "ready" | "warning" | "blocked";
+  detail: string;
+  source_label: string | null;
+  captured_at: string | null;
+  remediation: { label: string; href: string } | null;
+};
+
+export type DispositionPackageReadiness = {
+  status: "ready" | "warnings" | "blocked" | "stale";
+  blockers: string[];
+  warnings: string[];
+  unknowns: string[];
+  checks: DispositionPackageReadinessCheck[];
+  ready_count: number;
+  warning_count: number;
+  blocked_count: number;
+  unknown_count: number;
+};
+
+export type DispositionPackagePublicSnapshot = Record<string, unknown> & {
+  property_address?: string;
+  property_type?: string | null;
+  asking_price_cents?: number | null;
+  headline?: string;
+  description?: string;
+  highlights?: string[];
+  unknowns?: string[];
+  disclaimer?: string;
+};
+
+export type DispositionPackageInternalEconomics = Record<string, unknown> & {
+  contract_purchase_price_cents?: number | null;
+  buyer_asking_price_cents?: number | null;
+  minimum_acceptable_cents?: number | null;
+  desired_assignment_fee_cents?: number | null;
+  gross_spread_at_ask_cents?: number | null;
+  approval_authority?: string | null;
+};
+
+export type DispositionPackageVersion = {
+  id: string;
+  disposition_case_id: string;
+  version_number: number;
+  lock_version: number;
+  status: "draft" | "approved" | "superseded" | "rejected";
+  policy_version: string;
+  renderer_version: string;
+  public_snapshot: DispositionPackagePublicSnapshot;
+  private_economics_snapshot: DispositionPackageInternalEconomics | null;
+  evidence_manifest: DispositionPackageEvidence[];
+  readiness: DispositionPackageReadiness;
+  source_fingerprint: string;
+  email_summary: string;
+  sms_summary: string;
+  pdf_file_name: string | null;
+  pdf_size: number | null;
+  pdf_sha256: string | null;
+  created_by_user_id: string;
+  approved_by_user_id: string | null;
+  approval_reason: string | null;
+  approved_at: string | null;
+  created_at: string;
+  is_current: boolean;
+};
+
+export type DispositionPackageWorkspace = {
+  case_id: string;
+  can_approve: boolean;
+  can_view_internal_economics: boolean;
+  current_source_fingerprint: string;
+  current_readiness: DispositionPackageReadiness;
+  public_preview: DispositionPackagePublicSnapshot;
+  private_economics: DispositionPackageInternalEconomics | null;
+  evidence_manifest: DispositionPackageEvidence[];
+  email_summary: string;
+  sms_summary: string;
+  latest_version: DispositionPackageVersion | null;
+  approved_version: DispositionPackageVersion | null;
+  approved_package_is_current: boolean;
+  versions: DispositionPackageVersion[];
 };
 
 export type DispositionDeskScope = "mine" | "team";
