@@ -1,6 +1,6 @@
 """Add immutable disposition package versions and prepared recipients.
 
-Revision ID: 0116_disposition_package_versions
+Revision ID: 0116_disposition_package
 Revises: 0115_disposition_buyer_pool
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0116_disposition_package_versions"
+revision: str = "0116_disposition_package"
 down_revision: str | None = "0115_disposition_buyer_pool"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

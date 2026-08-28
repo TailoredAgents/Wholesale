@@ -1,7 +1,7 @@
 """Add governed disposition outreach revisions, deliveries, and reply links.
 
-Revision ID: 0117_disposition_outreach_foundation
-Revises: 0116_disposition_package_versions
+Revision ID: 0117_disposition_outreach
+Revises: 0116_disposition_package
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0117_disposition_outreach_foundation"
-down_revision: str | None = "0116_disposition_package_versions"
+revision: str = "0117_disposition_outreach"
+down_revision: str | None = "0116_disposition_package"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

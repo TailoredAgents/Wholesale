@@ -100,8 +100,8 @@ def model_index_signature(table: sa.Table) -> set[tuple[object, ...]]:
 def test_disposition_outreach_migration_matches_canonical_models() -> None:
     recorder = MigrationRecorder()
     namespace = migration_namespace(recorder)
-    assert namespace["revision"] == "0117_disposition_outreach_foundation"
-    assert namespace["down_revision"] == "0116_disposition_package_versions"
+    assert namespace["revision"] == "0117_disposition_outreach"
+    assert namespace["down_revision"] == "0116_disposition_package"
     namespace["upgrade"]()
 
     models = {
