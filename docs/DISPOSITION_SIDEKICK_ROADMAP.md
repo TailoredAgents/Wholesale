@@ -2,7 +2,8 @@
 
 Last updated: August 28, 2026
 
-> **Current status: DS0-DS7 complete; DS8-DS12 planned.** Stonegate now has the audited,
+> **Current status: DS0-DS7 complete; the DS8 provider-neutral/manual foundation is complete;
+> live InvestorLift transport and DS9-DS12 remain pending.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -18,7 +19,10 @@ Last updated: August 28, 2026
 > Disposition Copilot remain in place. DS7 adds the governed House Offer Room, immutable offer and
 > negotiation history, manager-approved primary and backup coverage, canonical closing checkpoints,
 > deduplicated deadline escalation, controlled replacement, and evidence-based buyer outcomes.
-> InvestorLift, Land outreach, and DS8-DS12 remain plans. DS6
+> DS8 now adds an exact approved-package handoff, deterministic public-only payloads, manual
+> InvestorLift link and activity reconciliation, staged human review, export, and history-preserving
+> disconnect controls. No direct InvestorLift API is claimed or enabled because its transport
+> contract remains unverified. Land outreach and DS9-DS12 remain plans. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
@@ -152,9 +156,10 @@ sections below supersede the starting gaps that those phases resolved.
 
 ### 6.3 Provider Gaps
 
-- No InvestorLift adapter exists in the repository.
+- A provider-neutral interface and manual-only InvestorLift adapter now exist. No verified or
+  enabled InvestorLift REST, GraphQL, webhook, or polling transport exists.
 - The existing external discovery surface is legacy DealMachine scaffolding and is not the target
-  provider architecture.
+  provider transport architecture.
 - A complete public InvestorLift REST API contract, authentication model, rate limits, webhook
   catalog, sandbox, and God Mode or Artemis data endpoints have not been verified.
 - Provider-specific objects must not leak into Stonegate's canonical Buyer and Deal models.
@@ -295,7 +300,7 @@ Public InvestorLift documentation currently verifies buyer-search, engagement, m
 campaign, offer, analytics, import/export, and Zapier capabilities. It does not establish a complete
 public direct API contract for the Stonegate use case.
 
-Before DS8 implementation, Stonegate must obtain written confirmation of:
+Before implementing or enabling live DS8 transport, Stonegate must obtain written confirmation of:
 
 1. API documentation, authentication, and sandbox access.
 2. Subscription level and additional fees required for API access.
@@ -308,6 +313,8 @@ Before DS8 implementation, Stonegate must obtain written confirmation of:
 8. Data ownership and full-export rights if Stonegate cancels.
 
 Useful provider references:
+
+- [Stonegate InvestorLift provider verification record](INVESTORLIFT_PROVIDER_VERIFICATION.md)
 
 - [InvestorLift God Mode FAQ](https://intercom.help/investorlift/en/articles/15138862-god-mode-faq)
 - [InvestorLift Artemis Mode](https://intercom.help/investorlift/en/articles/15164832-find-hot-leads-with-artemis-mode)
@@ -531,8 +538,8 @@ must not be reused as a substitute for those missing Land controls.
 
 DS4 itself did not activate live email or SMS outreach. DS6 subsequently added the governed owned
 Buyer Network delivery and reply loop for the current House workflow. DealMachine results remain
-staged provider evidence; the future InvestorLift adapter and its verified provider contract remain
-DS8 work.
+staged provider evidence. DS8 subsequently added the provider-neutral/manual InvestorLift handoff;
+verified live InvestorLift transport remains pending.
 
 ### Exit Criteria
 
@@ -642,8 +649,9 @@ existing communication providers.
 
 - DS6 applies only to the current **House** disposition workflow and buyers already approved into
   Stonegate's owned Buyer Network. Land package release and Land outreach remain disabled.
-- InvestorLift synchronization and outreach remain disabled. DS6 does not call InvestorLift or
-  convert provider candidates into permanent buyers.
+- Live InvestorLift synchronization and automated outreach remain disabled. DS6 does not call
+  InvestorLift or convert provider candidates into permanent buyers; DS8's separate manual handoff
+  does not change this DS6 boundary.
 - The 25-delivery hard cap is not configurable upward through this workspace. A manager must still
   approve the exact revision and explicitly release or resume it.
 - **Prepare recipient pool** remains a non-sending DS5 action; communication starts only from the
@@ -717,7 +725,8 @@ closing.
 
 - The Offer Room is House-only. It does not enable Land packaging, Land buyer matching, or Land
   outreach.
-- InvestorLift remains unconnected. Offer Room decisions use Stonegate-owned buyer and deal data.
+- InvestorLift live transport remains unconnected. The DS8 manual handoff records provider evidence
+  for review, while Offer Room decisions continue to use governed Stonegate buyer and deal data.
 - A promoted backup can leave the deal without another approved backup; the visible coverage warning
   tells staff to qualify and approve new backup coverage.
 - Repository verification is not the DS12 supervised production-acceptance test.
@@ -731,33 +740,58 @@ closing.
 
 ## DS8 - InvestorLift Provider Adapter
 
-**Status: Planned; blocked from implementation until provider contract verification.**
+**Status: Provider-neutral/manual foundation complete as of August 28, 2026. Live InvestorLift
+transport remains blocked pending provider verification.**
 
 ### Goal
 
 Use InvestorLift for reach, transaction intelligence, marketplace activity, and engagement signals
 while Stonegate keeps ownership of the workflow and relationships.
 
-### Work
+### Delivered Manual Foundation
 
-- Obtain and review the provider materials listed in Section 9.
-- Implement a provider interface before provider-specific transport logic.
-- Store provider account, property, candidate, campaign, inquiry, and offer IDs as source links.
-- Support bounded, replay-safe publish or guided-manual handoff based on verified capabilities.
-- Stage God Mode or other buyer discoveries per deal when contractually and technically available.
-- Reconcile Artemis or other engagement signals only when their semantics are documented.
-- Reconcile inquiries, address requests, offers, accepted offers, and listing status.
-- Record sync freshness, cost, counts, anomalies, errors, and provider request IDs.
-- Provide manual refresh, retry, disconnect, and export controls.
-- Preserve full Stonegate operation when the provider is unavailable or cancelled.
+- Implements a provider-neutral boundary and an InvestorLift adapter that explicitly reports
+  `manual` mode, no credential requirement, an unverified API contract, and disabled live transport.
+- Requires the current human-approved House disposition package before a handoff revision can be
+  prepared. A newer revision supersedes every prior draft or approved revision; only the latest
+  exact revision may be approved, downloaded, or linked.
+- Builds deterministic, checksummed public-only payloads from the approved package sanitizer.
+  Seller contact data, contract basis, internal floor, desired assignment fee, and other private
+  Stonegate economics are rejected or removed from the provider bundle.
+- Provides the guided manual workflow: prepare, approve the exact release, download its bundle,
+  publish in InvestorLift manually, and record the resulting provider property ID and HTTPS URL.
+- Stores provider account, listing, immutable revision, source-link, staged evidence, and operation
+  history with organization isolation, optimistic locking, audit evidence, and replay-safe manual
+  link and external-event identifiers.
+- Stages manually observed inquiries, engagement, and offers for explicit review. These records
+  cannot create or activate a Buyer, select a buyer, accept an offer, release outreach, or change a
+  deal stage.
+- Provides manual refresh, JSON/CSV export, and history-preserving disconnect controls. A
+  disconnected listing cannot be silently reactivated, while Stonegate's owned Buyer Network and
+  full provider history remain available.
+- Adds role-scoped API and responsive Disposition workspace controls plus migration, API, RBAC,
+  tenant-isolation, idempotency, state-machine, private-data, export, and frontend contract tests.
+
+### Live Transport Remaining
+
+- Obtain and review the written provider materials listed in Section 9 and
+  `INVESTORLIFT_PROVIDER_VERIFICATION.md`.
+- Verify the subscribed account, authentication, sandbox, endpoints, rate and usage limits,
+  idempotency, retry rules, event semantics, costs, buyer rights, export, and cancellation terms.
+- Add provider-specific publish, update, webhook, or polling transport only for capabilities proven
+  by that contract; do not guess God Mode, Artemis, inquiry, offer, or accepted-offer endpoints.
+- Run bounded sandbox and supervised production acceptance before enabling any live transport.
 
 ### Exit Criteria
 
-- Integration behavior is based on written provider documentation, not guessed endpoints.
-- Provider retries are idempotent and observable.
-- External IDs and provenance survive conversion to a canonical Buyer.
-- Provider downtime does not block owned-list disposition work.
-- Stonegate can export its permanent buyer and deal history independently.
+- The manual foundation calls no guessed provider endpoint and truthfully identifies the remaining
+  verification blockers.
+- Manual retries are idempotent and observable; stale revisions cannot be released.
+- External IDs, exact public payload hashes, source evidence, reviews, and provenance are durable.
+- Provider evidence remains staged and cannot silently affect the canonical Buyer Network.
+- Provider downtime or cancellation does not block owned-list disposition work or erase history.
+- Stonegate can export its provider evidence and permanent owned buyer/deal history independently.
+- Live transport is not complete until the written contract and bounded acceptance gates pass.
 
 ## DS9 - Governed Disposition Copilot
 
@@ -971,7 +1005,7 @@ Quality and safety measures:
 | DS5 | Deal Launch And Investor Package Readiness | Complete for current House disposition workflow |
 | DS6 | Governed Live Outreach And Reply Loop | Complete for owned Buyer Network recipients in the current House disposition workflow; production acceptance pending DS12 |
 | DS7 | Offer Room And Closing Protection | Complete for current House disposition workflow |
-| DS8 | InvestorLift Provider Adapter | Planned; provider verification required |
+| DS8 | InvestorLift Provider Adapter | Provider-neutral/manual foundation complete; live transport blocked pending provider verification |
 | DS9 | Governed Disposition Copilot | Planned; foundation exists |
 | DS10 | Management Intelligence And Learning | Planned |
 | DS11 | Optional CSV Buyer Migration | Planned after manual acceptance |
@@ -999,11 +1033,12 @@ DS2 provides the specialist's daily command center, DS3 provides the canonical b
 separate versioned House and Land buy boxes and proof review, DS4 provides the unified, versioned,
 explainable House deal buyer pool, DS5 provides the evidence-backed, approval-gated House package
   and prepared-recipient audit trail, DS6 provides the governed owned-buyer email/SMS and reply
-  loop, and DS7 provides the human-controlled Offer Room and closing-protection workflow. Land
-  matching and release must receive their own asset-safe implementation before being described as
-  live. DS8 follows only after
-InvestorLift supplies a
-verified integration contract. DS9 and DS10 make the sidekick measurable rather than speculative.
+  loop, and DS7 provides the human-controlled Offer Room and closing-protection workflow. The DS8
+  provider-neutral/manual foundation now supports an exact public-only InvestorLift handoff and
+  reviewable provider evidence without claiming live sync. Land matching and release must receive
+  their own asset-safe implementation before being described as live. A live DS8 adapter follows
+  only after InvestorLift supplies a verified integration contract and the bounded acceptance gate
+  passes. DS9 and DS10 make the sidekick measurable rather than speculative.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may
 be used as supervised evidence throughout the build.

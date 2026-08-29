@@ -39,7 +39,8 @@ The complete internal workflow is implemented:
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
 - Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
 - Buyers, House disposition packages, governed owned-buyer email/SMS outreach and reply review,
-  buyer offers, selection, reconciliation, and accounting export.
+  the manual-only InvestorLift approved-package handoff and staged evidence review, buyer offers,
+  selection, reconciliation, and accounting export.
 - The internal double-entry accounting ledger, vendor bills, bank reconciliation, statements, CPA
   export, marketing measurement, operating policy, AI Copilots, and AI governance.
 - Resend email sending, receiving, aliases, mailbox routing, attachments, notifications, and
@@ -2228,10 +2229,12 @@ criteria, permission, Inbox, offer, or deal history. Use **Restore buyer** when 
 return to review, then verify the displayed lifecycle status before making the buyer Active.
 
 Imported and provider-created buyers display their available provenance. Treat that data as a lead
-for review, not as verified buyer criteria or permission. InvestorLift synchronization and outreach
-are not active. Maintaining a buyer, changing status, or preparing a recipient does not send
-anything; only a separately approved and released House **Outreach** revision can contact selected
-buyers through Stonegate's Resend or Twilio configuration.
+for review, not as verified buyer criteria or permission. InvestorLift live synchronization and
+outreach are not active. The separate House **InvestorLift** view supports only an approved manual
+property handoff and reviewable provider evidence; it does not create or activate a buyer.
+Maintaining a buyer, changing status, or preparing a recipient does not send anything; only a
+separately approved and released House **Outreach** revision can contact selected buyers through
+Stonegate's Resend or Twilio configuration.
 
 ### Disposition Case
 
@@ -2241,6 +2244,7 @@ For an existing case, the embedded tabs are:
 - **Package**
 - **Buyers**
 - **Outreach**
+- **InvestorLift**
 - **Offer Room**
 - **Reconciliation**
 
@@ -2339,9 +2343,48 @@ created the reviewed owned-buyer pool:
    interest.
 
 This workflow reaches only owned Buyer Network records in the current House disposition case.
-InvestorLift and Land outreach remain disabled. Repository implementation does not establish real
-Resend/Twilio acceptance; the owner must complete a controlled, capped production test before broad
-use.
+InvestorLift live transport and Land outreach remain disabled. Repository implementation does not
+establish real Resend/Twilio acceptance; the owner must complete a controlled, capped production
+test before broad use.
+
+### InvestorLift Manual Handoff
+
+Use the **InvestorLift** view only for a contracted **House** disposition case. This is a guided
+manual handoff; it does not connect to InvestorLift's servers and does not require an InvestorLift
+credential in Stonegate.
+
+1. Finish and approve the current House **Package** first. Resolve any stale-package warning before
+   preparing the provider handoff.
+2. Select **Prepare current package**. Stonegate freezes a deterministic public-only revision from
+   the approved package. Preparing does not publish or send anything.
+3. Review the exact payload. A user with the provider release-approval permission records a reason,
+   checks the attestation, and selects **Approve exact handoff**. Seller contact information,
+   contract basis, minimum acceptable amount, desired assignment fee, and private notes must not
+   appear.
+4. Select **Download** on the latest approved revision. Log in to InvestorLift separately and use
+   that exact bundle to publish the property manually.
+5. Return to Stonegate and enter the InvestorLift property ID, the full HTTPS property URL, the
+   observed status, and an optional factual note. Select **Record manual publication**. An older link
+   shown after a new revision is reference history only; record the newly approved publication
+   before continuing.
+6. When staff observe an inquiry, engagement signal, or offer in InvestorLift, use **Stage provider
+   evidence**. Enter its provider event ID when available, event time with its time-zone offset,
+   factual buyer/contact information, message, and offer amount when the event is an offer.
+7. Review each staged item and use **Save review** to mark it reviewed or dismissed. This evidence
+   never creates or activates a Buyer, selects a buyer, accepts an offer, sends a response, or moves
+   the deal. Perform any authorized buyer creation, communication, offer entry, or selection through
+   its normal Stonegate workflow.
+8. Use **Record manual status check** to save a later status staff actually observed. It does not
+   refresh InvestorLift automatically.
+9. Use **JSON** or **CSV** when Stonegate needs a portable copy of the public handoff and provider
+   history. Use **Disconnect manual handoff** with an attestation and factual reason if service is
+   cancelled or the handoff should stop. Disconnect preserves the entire Stonegate history and does
+   not affect owned Buyer Network work.
+
+If InvestorLift is unavailable, continue matching and contacting Stonegate-owned buyers normally.
+Do not enter an API key, token, password, or webhook secret in the handoff forms, notes, screenshots,
+or exports. Live transport remains blocked until the verification record in
+`INVESTORLIFT_PROVIDER_VERIFICATION.md` is completed and approved.
 
 ### Offer Room
 
@@ -2388,7 +2431,8 @@ The Offer Room is available for a contracted **House** disposition case. Open th
 
 The Offer Room preserves viable unselected offers for replacement review. After a backup is
 promoted, qualify and approve new backup coverage if none remains. Land Offer Room, Land outreach,
-and InvestorLift synchronization are not active.
+and InvestorLift live synchronization are not active; manually staged InvestorLift evidence never
+changes Offer Room selection.
 
 ### Disposition Copilot
 
@@ -2957,9 +3001,10 @@ off until market authorization, access, retention, and deletion settings are app
 - Review the current criteria version, market, property type, price capacity, funding, proof, and
   other case requirements. Do not loosen verified criteria merely to create a match.
 - Clear Buyer Network filters or move to another result page before assuming the record is absent.
-- InvestorLift synchronization and outreach are disabled. A saved or matched buyer is not proof that
-  any campaign ran; check the House **Outreach** revision and delivery states for Stonegate-owned
-  recipient activity.
+- InvestorLift live synchronization and outreach are disabled. A saved or matched buyer is not
+  proof that any campaign ran; check the House **Outreach** revision and delivery states for
+  Stonegate-owned recipient activity. The separate manual **InvestorLift** handoff only records a
+  property release and staged provider evidence.
 
 ### RealEstateAPI Property Intelligence Is Unavailable
 

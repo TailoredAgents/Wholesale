@@ -6238,6 +6238,345 @@ class DispositionPackageVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     pdf_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
 
+class DispositionProviderAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider_key",
+            name="uq_disposition_provider_accounts_org_provider",
+        ),
+        CheckConstraint(
+            "connection_mode = 'manual'",
+            name="ck_disposition_provider_accounts_manual_mode",
+        ),
+        CheckConstraint(
+            "status = 'manual_ready'",
+            name="ck_disposition_provider_accounts_status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_label: Mapped[str] = mapped_column(String(120), nullable=False)
+    connection_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="manual", server_default="manual"
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="manual_ready", server_default="manual_ready"
+    )
+    capability_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DispositionProviderListing(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_listings"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "provider_account_id",
+            name="uq_disposition_provider_listings_case_account",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'release_approved', 'manual_published', 'disconnected')",
+            name="ck_disposition_provider_listings_status",
+        ),
+        CheckConstraint(
+            "lock_version >= 1",
+            name="ck_disposition_provider_listings_lock_version",
+        ),
+        CheckConstraint(
+            "provider_status IS NULL OR provider_status IN "
+            "('draft', 'active', 'paused', 'under_contract', 'sold', 'archived', 'unknown')",
+            name="ck_disposition_provider_listings_provider_status",
+        ),
+        Index(
+            "ix_disposition_provider_listings_case_status",
+            "organization_id",
+            "disposition_case_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    provider_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_accounts.id", ondelete="RESTRICT"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("properties.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", server_default="draft"
+    )
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    package_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    external_property_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    public_payload_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    package_source_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    manual_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_refreshed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    disconnected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    disconnected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    disconnect_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class DispositionProviderListingRevision(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_listing_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id",
+            "revision_number",
+            name="uq_disposition_provider_revisions_listing_number",
+        ),
+        CheckConstraint(
+            "revision_number >= 1",
+            name="ck_disposition_provider_revisions_number",
+        ),
+        CheckConstraint(
+            "lock_version >= 1",
+            name="ck_disposition_provider_revisions_lock_version",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'approved', 'superseded')",
+            name="ck_disposition_provider_revisions_status",
+        ),
+        Index(
+            "ix_disposition_provider_revisions_case_status",
+            "organization_id",
+            "disposition_case_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    package_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    public_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    public_payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DispositionProviderSourceLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_source_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_disposition_provider_source_links_idempotency",
+        ),
+        CheckConstraint(
+            "provider_status IN "
+            "('draft', 'active', 'paused', 'under_contract', 'sold', 'archived', 'unknown')",
+            name="ck_disposition_provider_source_links_status",
+        ),
+        Index(
+            "ix_disposition_provider_source_links_listing_observed",
+            "listing_id",
+            "observed_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    listing_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_provider_listing_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    external_property_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    external_url: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class DispositionProviderEvidence(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_disposition_provider_evidence_idempotency",
+        ),
+        CheckConstraint(
+            "event_type IN ('inquiry', 'offer', 'engagement')",
+            name="ck_disposition_provider_evidence_event_type",
+        ),
+        CheckConstraint(
+            "review_status IN ('staged', 'reviewed', 'dismissed')",
+            name="ck_disposition_provider_evidence_review_status",
+        ),
+        CheckConstraint(
+            "lock_version >= 1",
+            name="ck_disposition_provider_evidence_lock_version",
+        ),
+        CheckConstraint(
+            "offer_amount_cents IS NULL OR offer_amount_cents > 0",
+            name="ck_disposition_provider_evidence_offer_amount",
+        ),
+        Index(
+            "ix_disposition_provider_evidence_case_review",
+            "organization_id",
+            "disposition_case_id",
+            "review_status",
+            "occurred_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_listings.id", ondelete="CASCADE"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    source_link_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_source_links.id", ondelete="SET NULL"), nullable=True
+    )
+    recorded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="staged", server_default="staged"
+    )
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    buyer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    buyer_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    buyer_phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    offer_amount_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    public_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    evidence_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DispositionProviderSyncRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_provider_sync_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "mode = 'manual'",
+            name="ck_disposition_provider_sync_runs_mode",
+        ),
+        CheckConstraint(
+            "status IN ('completed', 'failed')",
+            name="ck_disposition_provider_sync_runs_status",
+        ),
+        Index(
+            "ix_disposition_provider_sync_runs_case_started",
+            "organization_id",
+            "disposition_case_id",
+            "started_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    provider_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_accounts.id", ondelete="RESTRICT"), nullable=False
+    )
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_provider_listings.id", ondelete="SET NULL"), nullable=True
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="manual", server_default="manual"
+    )
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_summary: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "disposition_matches"
     __table_args__ = (

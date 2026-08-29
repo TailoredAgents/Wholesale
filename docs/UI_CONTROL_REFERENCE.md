@@ -1482,14 +1482,15 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 
 The Buyer Network does not include a merge control. Use the existing record when a duplicate match
 represents the same investor; use **Create separate** only for a truly distinct record and document
-why. InvestorLift synchronization and outreach remain disabled, so no control in this section sends
-an InvestorLift campaign. Buyer profile maintenance also does not trigger Stonegate's separate
-governed House Outreach workflow.
+why. Live InvestorLift synchronization and automated outreach remain disabled, so no Buyer Network
+control sends an InvestorLift campaign. Buyer profile maintenance also does not trigger Stonegate's
+governed House Outreach workflow. The separate **InvestorLift** disposition view supports only the
+manual approved-package handoff and reviewable evidence workflow described below.
 
 ## Dispositions
 
 The Dispositions workspace opens a case for a contracted property and uses **Package**,
-**Buyers**, **Outreach**, **Offer Room**, and **Reconciliation** views.
+**Buyers**, **Outreach**, **InvestorLift**, **Offer Room**, and **Reconciliation** views.
 
 ### Case And Package
 
@@ -1556,6 +1557,31 @@ Delivery and reply status updates are asynchronous. Stonegate may show prepared,
 claimed, provider-accepted, sent, delivered, failed, delivery-unknown, suppressed, opted-out,
 replied, or cancelled outcomes. No Outreach control accepts an offer, selects a buyer, changes deal
 economics, sends through InvestorLift, or enables Land outreach.
+
+### InvestorLift Manual Handoff
+
+The **InvestorLift** view is available for a House disposition case. It is a guided manual handoff,
+not a live integration: no control calls InvestorLift, publishes a campaign, imports a buyer, or
+claims that God Mode or Artemis data is synchronized.
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Manual-only / No live sync | States the verified provider boundary and remaining contract blockers | Informational; no credential is required for this manual foundation |
+| Five-step handoff guide | Shows Prepare, Approve exact handoff, Download, Publish manually, and Record and review | Progress is based on Stonegate records, not a provider API response |
+| **Prepare current package** | Creates an immutable public-only provider revision and checksum from the current approved House package | Requires deal-edit plus disposition-management access and a current approved package; a new revision supersedes every earlier draft or approved provider release |
+| **Reload Stonegate state** | Reloads only Stonegate's saved package, revision, link, event, and operation state | Does not query InvestorLift |
+| **Review** / **Approve exact handoff** | Opens the exact payload and records a separate release approval, attestation, and reason | Requires disposition outreach-approval access; only the latest draft can be approved |
+| Revision **Download** | Downloads the exact approved JSON bundle | Only the latest approved revision is downloadable; private Stonegate economics and seller contact data are excluded |
+| **Record manual publication** | Saves the property ID, HTTPS InvestorLift URL, status, and note after staff publish the bundle outside Stonegate | Requires the latest approved revision and the current listing lock version; exact retries are idempotent |
+| **Stage provider evidence** | Saves an inquiry, engagement, or offer as checksummed review-required evidence | Available only after the current revision's manual publication is recorded; an offer requires an amount |
+| **Save review** | Marks staged evidence reviewed or dismissed with an optional note | Never creates or activates a Buyer, selects a buyer, accepts an offer, sends a response, or changes the deal |
+| **Record manual status check** | Saves the provider status and optional staff-observed ID, URL, or note | Manual observation only; no provider request is made |
+| **Export history** / **JSON** / **CSV** | Downloads the preserved public revision, link, event, review, and operation history | Requires deal-view access; exports exclude private Stonegate economics |
+| **Disconnect manual handoff** | Stops additional handoff activity while preserving all Stonegate history | Requires deal-edit plus disposition-management access, attestation, and reason; a disconnected listing cannot be silently reactivated |
+
+An older InvestorLift link may remain visible after a newer revision is prepared, but it is reference
+history only. Staff must publish and record the current approved revision before adding new provider
+activity or status observations.
 
 ### Offer Room
 

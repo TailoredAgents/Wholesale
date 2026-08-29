@@ -143,7 +143,8 @@ FastAPI routers are grouped by business capability:
 - `approvals`: centralized human decision queue
 - `transactions`: contract packages, e-signature, documents, parties, checklists, and closing
 - `buyers`: buyer CRM and provider-backed discovery
-- `dispositions`: packages, matching, campaigns, offers, selection, and reconciliation
+- `dispositions`: packages, matching, campaigns, governed outreach, offers, selection,
+  reconciliation, and the House-only manual provider handoff
 - `finance`: ledger, banking, vendors, reports, compensation, tax, and Finance Copilot
 - `marketing`: performance, offline conversion delivery, and Marketing Copilot
 - `operating-model`: seats, counterparties, role acceptance, compensation, and market launches
@@ -658,6 +659,13 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - The House **Offer Room** compares normalized offer terms and execution evidence side by side. It
   keeps immutable offer revisions, negotiation events, selection versions, replacements, and buyer
   outcomes; a score or AI recommendation cannot select a buyer.
+- The House **InvestorLift** view is a manual-only provider handoff. It freezes a deterministic,
+  public-only revision from the current approved package, requires separate exact-release approval,
+  exports the approved JSON bundle, and records the manually published property ID and HTTPS URL.
+  No InvestorLift API call, campaign, buyer import, or live synchronization occurs.
+- Provider inquiries, engagement, and offers entered there remain staged evidence until a human
+  reviews them. They cannot create or activate a Buyer, select a buyer, accept an offer, send
+  outreach, or move the deal. Export and disconnect preserve Stonegate's complete provider history.
 - Only a user with the dedicated buyer-selection approval permission can approve the primary and
   different-buyer backups or activate a replacement. Unselected viable offers remain available.
 - Offer Room closing checkpoints reuse the transaction's closing date and relevant checklist dates,
@@ -1039,8 +1047,13 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
     and buyer deposit or documented waiver are present.
 18. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
 
-This workflow is House-only. Governed outreach is limited to recipients already in Stonegate's
-owned Buyer Network. Land disposition packaging, buyer release, and outreach remain blocked until
+This workflow is House-only. Governed email/SMS outreach is limited to recipients already in
+Stonegate's owned Buyer Network. The separate InvestorLift view supports a House-only manual
+handoff of the current approved public package: staff prepare and approve an exact public-only
+revision, download it, publish it manually, record the external property ID and HTTPS URL, and stage
+observed inquiries, engagement, or offers for human review. It has no live provider transport,
+credential collection, webhook, polling, automated outreach, buyer creation, offer acceptance, or
+buyer selection. Land disposition packaging, buyer release, and outreach remain blocked until
 their separate asset-safe workflows are implemented and accepted.
 
 ### 8.11 Closing, Reconciliation, And Compensation
@@ -1409,10 +1422,12 @@ when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the work
 7. Links imported records to the existing buyer CRM without sending outreach.
 
 The adapter is not required for Stonegate's current launch and should not be treated as an active
-buyer source unless the Owner deliberately reactivates and accepts it later. InvestorLift outreach
-and synchronization are not active. Creating, editing, activating, or matching a Buyer Network
-record never sends an InvestorLift campaign. The separate governed House Outreach workflow can
-contact selected owned-network buyers through Stonegate's approved Resend or Twilio configuration.
+buyer source unless the Owner deliberately reactivates and accepts it later. InvestorLift live
+transport, buyer discovery, and synchronization are not active. The separate DS8 manual House
+handoff can export an approved public listing bundle and record staff-observed provider evidence;
+it never sends an InvestorLift campaign. Creating, editing, activating, or matching a Buyer Network
+record also never sends one. The governed House Outreach workflow can contact selected
+owned-network buyers through Stonegate's approved Resend or Twilio configuration.
 
 ### 13.3 House Package Readiness And Disposition Authority
 
@@ -1457,7 +1472,33 @@ not automatically accept an offer, select a buyer, change economics, or infer in
 reply. The repository implementation exists, but real Resend/Twilio delivery and reply acceptance is
 still an external production test requirement.
 
-### 13.5 House Offer Room And Closing Protection
+### 13.5 InvestorLift Manual Provider Handoff
+
+The House disposition **InvestorLift** view is a provider-neutral, manual-only workflow. It requires
+the current approved Stonegate package and builds a deterministic public payload through the same
+package sanitizer. Seller contact data, contract basis, internal floor, desired assignment fee,
+private notes, and approval authority are not included. Each revision stores its exact payload,
+SHA-256, package fingerprint, status, approver, and reason.
+
+Preparing a newer revision supersedes every prior draft or approved provider release. Only the
+latest exact revision can be approved, downloaded, or linked to an InvestorLift property. Staff
+publish the downloaded bundle outside Stonegate, then record the external property ID, HTTPS URL,
+observed status, and note. Exact retry requests are idempotent and do not create duplicate source
+links or operation runs.
+
+Manually entered inquiry, engagement, and offer signals are immutable, checksummed, staged evidence.
+A human can mark each reviewed or dismissed, but the evidence is never eligible to select a buyer
+and cannot create a canonical Buyer, accept an offer, release outreach, or change deal state. Manual
+status checks record what staff observed; they do not query InvestorLift.
+
+JSON and CSV exports preserve the public revision, source links, staged evidence, reviews, and
+operation history without private Stonegate economics. Disconnect stops additional manual activity
+and prevents silent reactivation while retaining all history and leaving owned Buyer Network work
+available. Live InvestorLift REST, GraphQL, webhook, polling, God Mode, and Artemis transport remain
+disabled until the written contract and acceptance gate in
+`docs/INVESTORLIFT_PROVIDER_VERIFICATION.md` pass.
+
+### 13.6 House Offer Room And Closing Protection
 
 The House Offer Room stores the full executable offer rather than only a price. Amount, earnest
 money, deposit date, due-diligence period, contingencies, proposed close, funding method and
@@ -1486,8 +1527,8 @@ or duplicate credit. Buyer performance is reduced only for an
 outcome explicitly attributed to the buyer; seller, title, property, Stonegate, and external causes
 remain visible without changing buyer reliability.
 
-This implementation is private, tenant-scoped, and House-only. It does not enable InvestorLift or
-Land disposition.
+This implementation is private, tenant-scoped, and House-only. It does not enable live InvestorLift
+transport or Land disposition.
 
 ## 14. Finance And Accounting
 
@@ -1752,7 +1793,7 @@ telemarketing, recording, or real-estate advice.
 | Twilio | SMS, Voice, recordings, Call Intelligence, and approved House buyer SMS outreach | Implemented with transcript backoff, exhaustion visibility, audited manual retry, DS6 sender/permission/suppression preflight, delivery reconciliation, and uncertain-submission duplicate protection | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS, buyer-outreach SMS, and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
-| InvestorLift | Future buyer-list enrichment or disposition outreach | Not implemented | Disabled; Buyer Network changes do not send or synchronize data |
+| InvestorLift | Manual approved-package handoff and reviewable provider evidence; future buyer-list enrichment or live transport | Provider-neutral/manual DS8 foundation implemented with public-only immutable revisions, exact approval, bundle export, manual source links/events/status, history export, and disconnect; no network client | Live API contract unverified and transport disabled; Buyer Network changes do not send or synchronize data |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |
@@ -1821,8 +1862,9 @@ Transaction Copilot records.
 
 `Buyer`, criteria, proof documents, discovery runs and candidates, offers, disposition cases,
 immutable package versions, matches, prepared campaigns and recipients, supervised outreach
-revisions and deliveries, reply links, engagements, Copilot records, reconciliation, payouts,
-revenue, deductions, operating mode, and role credits.
+revisions and deliveries, reply links, engagements, provider accounts/listings/revisions/source
+links/staged evidence/manual operation runs, Copilot records, reconciliation, payouts, revenue,
+deductions, operating mode, and role credits.
 
 ### Company Operations
 
@@ -1898,6 +1940,7 @@ acceptance and evidence:
 - ad-provider credential setup and offline conversion acceptance
 - role acceptance with actual staff accounts
 - supervised Copilot pilots using redacted Stonegate cases
+- written InvestorLift API/ownership terms and bounded acceptance before any live provider transport
 - PropStream production export acceptance using Stonegate's implemented source membership,
   ranked-contact, refresh-safe, and deterministic cohort workflow
 - real-VA acceptance of BatchDialer calling, sole direct API synchronization, idempotent Stonegate

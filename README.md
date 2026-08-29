@@ -61,6 +61,10 @@ Start with:
 - `docs/SETUP_REFERENCE.md`: consolidated local, Render, domain, credential, webhook, and provider
   setup reference without secret values.
 - `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
+- `docs/DISPOSITION_SIDEKICK_ROADMAP.md`: Buyer Network, House disposition, Offer Room, DS8
+  manual InvestorLift handoff, and remaining disposition phases.
+- `docs/INVESTORLIFT_PROVIDER_VERIFICATION.md`: official public provider evidence, unresolved live
+  transport contract, support questions, and activation gate; it contains no credentials.
 - `docs/CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`: approved private-OS navigation, workspace,
   record-layout, compatibility, and role-acceptance upgrade plan; IA1 provides the executable
   contract, IA2 provides the live 11-destination shell, and IA3 provides the permission-filtered

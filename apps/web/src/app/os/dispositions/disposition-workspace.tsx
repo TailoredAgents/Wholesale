@@ -21,10 +21,11 @@ import { DispositionBuyerPool } from "./disposition-buyer-pool";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
 import { DispositionOfferRoom } from "./disposition-offer-room";
 import { DispositionPackageReadiness } from "./disposition-package-readiness";
+import { DispositionProviderWorkspace } from "./disposition-provider-workspace";
 import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
 
-type Tab = "package" | "buyers" | "outreach" | "offers" | "reconciliation";
+type Tab = "package" | "buyers" | "outreach" | "offers" | "provider" | "reconciliation";
 
 function money(cents: number | null) {
   return cents == null
@@ -341,7 +342,7 @@ export function DispositionWorkspace({
                   />
                 </CopilotLauncher>
               ) : null}
-              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "offers" ? "Offer Room" : labelize(item)}</button>)}</nav>
+              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "provider", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "offers" ? "Offer Room" : item === "provider" ? "InvestorLift" : labelize(item)}</button>)}</nav>
 
               {tab === "package" ? (
                 <DispositionPackageReadiness
@@ -396,6 +397,19 @@ export function DispositionWorkspace({
                   caseId={selected.id}
                   key={selected.id}
                   onCaseChanged={() => reload(selected.id)}
+                  onMessage={setMessage}
+                  request={request}
+                />
+              ) : null}
+
+              {tab === "provider" ? (
+                <DispositionProviderWorkspace
+                  canApprove={canApproveOutreach}
+                  canEditDeals={canEditDeals}
+                  canManage={canManageOutreach}
+                  caseId={selected.id}
+                  download={download}
+                  key={selected.id}
                   onMessage={setMessage}
                   request={request}
                 />

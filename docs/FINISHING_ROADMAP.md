@@ -48,7 +48,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
 | F4 Documents and e-signature | Storage, offer-authority snapshots, execution evidence, and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM plus governed House owned-buyer Resend/Twilio outreach and Buyer Inbox reply review implemented; optional DealMachine adapter, InvestorLift, and Land outreach disabled | Controlled capped production delivery/reply acceptance and buyer placement |
+| F5 Buyers and dispositions | Buyer CRM, governed House owned-buyer Resend/Twilio outreach, Buyer Inbox reply review, Offer Room protection, and the DS8 manual-only InvestorLift exact-package handoff and evidence workspace are implemented; live InvestorLift transport, optional DealMachine, and Land outreach remain disabled | Controlled owned-buyer delivery/reply and buyer-placement acceptance; operator acceptance of the manual InvestorLift handoff; written provider-contract verification before any live transport |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
@@ -65,7 +65,11 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
 - `DISPOSITION_SIDEKICK_ROADMAP.md` owns the Buyer Network, House package, governed owned-buyer
-  outreach, later offer/closing protection, and future InvestorLift/Land boundaries.
+  outreach, Offer Room and closing protection, the completed DS8 manual-only InvestorLift
+  foundation, and the future verified transport and Land boundaries.
+- `INVESTORLIFT_PROVIDER_VERIFICATION.md` records official public capability evidence, the missing
+  direct-transport contract, exact support questions, and the activation gate. It is not proof that
+  a live connection exists.
 - `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` owns the approved production-dialer architecture,
   native-dialer dormancy, constrained official API contract, sole direct synchronization, manual
   Stonegate appointment boundary, health, reconciliation, and production acceptance.
@@ -297,6 +301,10 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - Disposition Copilot in supervised draft-only mode
 - non-sending prepared-recipient campaign evidence plus a separate immutable, exact-message House
   outreach revision, approval, delivery, and reply-review loop for selected owned-network buyers
+- DS8 provider-neutral/manual InvestorLift foundation: immutable public-only listing revisions tied
+  to the current approved package, exact release approval and bundle download, manual property-link
+  and status reconciliation, replay-safe staged inquiry/engagement/offer evidence, JSON/CSV export,
+  and history-preserving disconnect
 
 ### Current Provider Decision
 
@@ -304,11 +312,13 @@ DealMachine is not part of the current launch plan. Its adapter remains disabled
 presented to staff as a working buyer source. It can be evaluated later only through a deliberate
 Owner decision and a new quality, billing, contact-permission, and production acceptance test.
 
-The DS5 **Prepare recipient pool** action remains non-sending `prepared_not_sent` evidence. DS6 now
-implements a separate House Outreach workflow that can send an approved immutable revision through
-Resend or Twilio after dynamic preflight. It is limited to 25 recipient-channel deliveries and
-buyers already in Stonegate's owned Buyer Network. InvestorLift and Land outreach remain disabled.
-Repository completion does not establish production-provider acceptance.
+The DS5 **Prepare recipient pool** action remains non-sending `prepared_not_sent` evidence. DS6
+implements the separate House Outreach workflow through approved Resend or Twilio delivery to no
+more than 25 owned-network recipient-channel paths per revision. DS8 separately implements a
+House-only manual InvestorLift package handoff and evidence-reconciliation workspace. It does not
+call InvestorLift, collect provider credentials, synchronize buyers, or automate outreach. Live
+InvestorLift transport and all Land outreach remain disabled. Repository completion does not
+establish production-provider acceptance.
 
 ### Remaining Actions
 
@@ -318,12 +328,17 @@ Repository completion does not establish production-provider acceptance.
 3. Run one owner-approved, capped House revision with controlled recipients. Verify exact package,
    recipients, channels, messages, suppression/permission exclusions, provider state, Buyer Inbox
    reply review, pause/cancel behavior, and no duplicate delivery before broader use.
-4. Confirm **Prepare recipient pool** itself sends no email or SMS and cannot be mistaken for an
+4. Run one controlled manual InvestorLift handoff. Verify the exact current approved package,
+   public-only bundle, external property ID/HTTPS URL recording, staged evidence review, export, and
+   history-preserving disconnect behavior.
+5. Obtain the written direct-provider contract and pass every gate in
+   `INVESTORLIFT_PROVIDER_VERIFICATION.md` before implementing or enabling live transport.
+6. Confirm **Prepare recipient pool** itself sends no email or SMS and cannot be mistaken for an
    approved Outreach release.
-5. Record engagement, offers, deposits, primary buyer, backup buyer, and verified proof.
-6. Complete one controlled contract-to-buyer-to-reconciliation run before the first live
+7. Record engagement, offers, deposits, primary buyer, backup buyer, and verified proof.
+8. Complete one controlled contract-to-buyer-to-reconciliation run before the first live
    assignment.
-7. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
+9. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
    quality, credit/cost, duplicate, DNC, and selective-import acceptance phase first.
 
 ### Exit Criteria

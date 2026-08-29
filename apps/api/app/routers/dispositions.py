@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -33,6 +33,16 @@ from app.schemas.disposition_outreach import (
     DispositionOutreachRevisionRead,
     DispositionOutreachWorkspaceRead,
 )
+from app.schemas.disposition_provider import (
+    ProviderDisconnectRequest,
+    ProviderListingRevisionApproval,
+    ProviderListingRevisionCreate,
+    ProviderManualEventCreate,
+    ProviderManualEventReview,
+    ProviderManualLinkCreate,
+    ProviderManualRefresh,
+    ProviderWorkspaceRead,
+)
 from app.schemas.dispositions import (
     BuyerPoolConversionRequest,
     BuyerPoolDecisionUpdate,
@@ -64,6 +74,7 @@ from app.services import (
     disposition_offer_room,
     disposition_outreach,
     disposition_packages,
+    disposition_provider,
     dispositions,
 )
 from app.services.disposition_copilot import (
@@ -719,6 +730,234 @@ def approve_case_package_version(
         raise HTTPException(status_code=404, detail="Package version not found.")
     response.headers["Cache-Control"] = "private, no-store"
     return result
+
+
+@router.get("/cases/{case_id}/provider")
+def read_case_provider_workspace(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.read_workspace(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/provider/listing-revisions",
+    status_code=201,
+    dependencies=[Depends(edit_dependency)],
+)
+def create_case_provider_listing_revision(
+    case_id: UUID,
+    payload: ProviderListingRevisionCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.create_listing_revision(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post("/cases/{case_id}/provider/listing-revisions/{revision_id}/approve")
+def approve_case_provider_listing_revision(
+    case_id: UUID,
+    revision_id: UUID,
+    payload: ProviderListingRevisionApproval,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_approve_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.approve_listing_revision(
+            db,
+            principal,
+            case_id,
+            revision_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Provider listing revision not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.get("/cases/{case_id}/provider/listing-revisions/{revision_id}/bundle")
+def download_case_provider_listing_bundle(
+    case_id: UUID,
+    revision_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> Response:
+    try:
+        result = disposition_provider.listing_bundle(db, principal, case_id, revision_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Provider listing revision not found.")
+    content, file_name = result
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+        },
+    )
+
+
+@router.post(
+    "/cases/{case_id}/provider/manual-link",
+    status_code=201,
+    dependencies=[Depends(edit_dependency)],
+)
+def record_case_provider_manual_link(
+    case_id: UUID,
+    payload: ProviderManualLinkCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.record_manual_link(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/provider/manual-events",
+    status_code=201,
+    dependencies=[Depends(edit_dependency)],
+)
+def record_case_provider_manual_event(
+    case_id: UUID,
+    payload: ProviderManualEventCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.record_manual_event(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.patch(
+    "/cases/{case_id}/provider/manual-events/{event_id}",
+    dependencies=[Depends(edit_dependency)],
+)
+def review_case_provider_manual_event(
+    case_id: UUID,
+    event_id: UUID,
+    payload: ProviderManualEventReview,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.review_manual_event(
+            db,
+            principal,
+            case_id,
+            event_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Provider evidence not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/provider/manual-refresh",
+    dependencies=[Depends(edit_dependency)],
+)
+def refresh_case_provider_manual_status(
+    case_id: UUID,
+    payload: ProviderManualRefresh,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.manual_refresh(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/provider/disconnect",
+    dependencies=[Depends(edit_dependency)],
+)
+def disconnect_case_provider_listing(
+    case_id: UUID,
+    payload: ProviderDisconnectRequest,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(outreach_manage_dependency)],
+) -> ProviderWorkspaceRead:
+    try:
+        result = disposition_provider.disconnect(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.get("/cases/{case_id}/provider/export")
+def download_case_provider_export(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+    export_format: Annotated[Literal["json", "csv"], Query(alias="format")] = "json",
+) -> Response:
+    result = disposition_provider.export_case(
+        db,
+        principal,
+        case_id,
+        export_format=export_format,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    content, file_name, media_type = result
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+        },
+    )
 
 
 @router.get("/cases/{case_id}/copilot")

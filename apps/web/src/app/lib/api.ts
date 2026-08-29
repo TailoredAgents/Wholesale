@@ -3400,6 +3400,161 @@ export type DispositionPackageWorkspace = {
   versions: DispositionPackageVersion[];
 };
 
+export type DispositionProviderPermission = {
+  can_prepare: boolean;
+  can_approve: boolean;
+  can_record_manual: boolean;
+  can_disconnect: boolean;
+  can_export: boolean;
+};
+
+export type DispositionProviderVerificationGate = {
+  provider_key: "investorlift";
+  mode: "manual";
+  api_contract_verified: boolean;
+  live_transport_enabled: boolean;
+  credential_required: boolean;
+  house_only: boolean;
+  blockers: string[];
+  supported_manual_capabilities: string[];
+  unverified_capabilities: string[];
+};
+
+export type DispositionProviderAccount = {
+  id: string;
+  provider_key: "investorlift";
+  provider_label: string;
+  mode: "manual";
+  status: "manual_ready";
+  capability_snapshot: Record<string, unknown>;
+  connected_at: string;
+};
+
+export type DispositionProviderApprovedPackage = {
+  package_version_id: string;
+  version_number: number;
+  source_fingerprint: string;
+  approved_at: string;
+  is_current: boolean;
+};
+
+export type DispositionProviderManualStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "under_contract"
+  | "sold"
+  | "archived"
+  | "unknown";
+
+export type DispositionProviderListing = {
+  id: string;
+  provider_account_id: string;
+  disposition_case_id: string;
+  status: "draft" | "release_approved" | "manual_published" | "disconnected";
+  lock_version: number;
+  package_version_id: string | null;
+  latest_revision_id: string | null;
+  approved_revision_id: string | null;
+  external_property_id: string | null;
+  external_url: string | null;
+  provider_status: DispositionProviderManualStatus | null;
+  public_payload_sha256: string | null;
+  package_source_fingerprint: string | null;
+  manual_published_at: string | null;
+  last_refreshed_at: string | null;
+  disconnected_at: string | null;
+  disconnect_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DispositionProviderListingRevision = {
+  id: string;
+  listing_id: string;
+  package_version_id: string;
+  revision_number: number;
+  lock_version: number;
+  status: "draft" | "approved" | "superseded";
+  public_payload: Record<string, unknown>;
+  public_payload_sha256: string;
+  package_source_fingerprint: string;
+  created_by_user_id: string;
+  approved_by_user_id: string | null;
+  approval_reason: string | null;
+  approved_at: string | null;
+  created_at: string;
+  is_current: boolean;
+};
+
+export type DispositionProviderSourceLink = {
+  id: string;
+  listing_id: string;
+  listing_revision_id: string;
+  external_property_id: string;
+  external_url: string;
+  provider_status: DispositionProviderManualStatus;
+  source_snapshot_sha256: string;
+  observed_at: string;
+  note: string | null;
+  created_by_user_id: string;
+  created_at: string;
+};
+
+export type DispositionProviderEvidence = {
+  id: string;
+  listing_id: string;
+  event_type: "inquiry" | "offer" | "engagement";
+  external_event_id: string | null;
+  review_status: "staged" | "reviewed" | "dismissed";
+  lock_version: number;
+  occurred_at: string;
+  buyer_name: string | null;
+  buyer_email: string | null;
+  buyer_phone: string | null;
+  offer_amount_cents: number | null;
+  message: string | null;
+  metadata: Record<string, unknown>;
+  evidence_sha256: string;
+  review_note: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  selection_eligible: false;
+};
+
+export type DispositionProviderSyncRun = {
+  id: string;
+  listing_id: string | null;
+  operation: string;
+  status: "completed" | "failed";
+  mode: "manual";
+  request_sha256: string;
+  result_summary: Record<string, unknown>;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string;
+};
+
+export type DispositionProviderWorkspace = {
+  case_id: string;
+  provider_key: "investorlift";
+  provider_label: string;
+  house_only: boolean;
+  eligible: boolean;
+  eligibility_blockers: string[];
+  permissions: DispositionProviderPermission;
+  verification_gate: DispositionProviderVerificationGate;
+  account: DispositionProviderAccount | null;
+  approved_package: DispositionProviderApprovedPackage | null;
+  listing: DispositionProviderListing | null;
+  revisions: DispositionProviderListingRevision[];
+  source_links: DispositionProviderSourceLink[];
+  staged_events: DispositionProviderEvidence[];
+  recent_runs: DispositionProviderSyncRun[];
+  warnings: string[];
+};
+
 export type DispositionOutreachChannel = "email" | "sms";
 
 export type DispositionOutreachRevisionStatus =

@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 23, 2026
+Last verified against the repository: August 28, 2026
 
 ## Purpose
 
@@ -31,9 +31,14 @@ When sources disagree, use this order:
    native-dialer dormancy plan.
 8. **`BATCHDIALER_API_CONTRACT.md`** records the official provider evidence, unresolved behavior,
    and conservative constraints governing the owner-approved direct implementation.
-9. **Domain references** define approved operating policy and specialist methods.
-10. **User manuals** explain how staff should perform current workflows.
-11. **Git history** preserves completed phase plans and prior decisions for forensic review only.
+9. **`DISPOSITION_SIDEKICK_ROADMAP.md`** describes the Buyer Network, House disposition workflow,
+   completed DS8 manual-only provider foundation, and remaining live-transport and Land phases.
+10. **`INVESTORLIFT_PROVIDER_VERIFICATION.md`** records official public provider evidence,
+    unresolved direct-transport requirements, exact support questions, and the no-credentials,
+    no-live-sync boundary.
+11. **Domain references** define approved operating policy and specialist methods.
+12. **User manuals** explain how staff should perform current workflows.
+13. **Git history** preserves completed phase plans and prior decisions for forensic review only.
 
 Never use an old commit, completed phase document, or provider application draft to override the
 current code or canonical documentation.
@@ -50,6 +55,8 @@ current code or canonical documentation.
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` | Current production-dialer decision, sole direct BatchDialer API integration, urgent manual Stonegate appointment task, production acceptance, and native-dialer dormancy | Owner, prospecting managers, and developers |
 | `BATCHDIALER_API_CONTRACT.md` | Official BatchDialer API surface, controlled evidence, unresolved assumptions, and constrained direct-version rules | Owner and developers |
+| `DISPOSITION_SIDEKICK_ROADMAP.md` | DS0-DS8 disposition architecture and implementation status, including the manual-only InvestorLift boundary and planned DS9-DS12 work | Owner, disposition managers, and developers |
+| `INVESTORLIFT_PROVIDER_VERIFICATION.md` | Official InvestorLift capability evidence, direct-transport gaps, support questions, and activation gate; not proof of a live connection | Owner and developers |
 | `VA_DIALER_ROADMAP.md` | Historical D0-D10 native Stonegate dialer architecture, implementation evidence, and inactive D11/D12 concepts; not an activation plan | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
