@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.models.foundation import (
     Buyer,
     BuyerDiscoveryCandidate,
     BuyerDiscoveryRun,
+    BuyerOffer,
     BuyerProofDocument,
     CompensationPlanRole,
     CompensationPlanVersion,
@@ -44,6 +46,7 @@ from app.models.foundation import (
 from app.schemas.dispositions import (
     BuyerSelection,
     DispositionCaseCreate,
+    DispositionCoordinationOutput,
     DispositionCopilotAnalyzeRequest,
     ReconciliationDecision,
 )
@@ -2037,6 +2040,321 @@ def test_campaign_release_rechecks_buyer_lifecycle_after_matching(
     assert campaign_count == 0
 
 
+@pytest.mark.parametrize(
+    "authority_field",
+    [
+        "can_send_outreach",
+        "can_select_buyer",
+        "can_bind_stonegate",
+        "can_update_buyer",
+    ],
+)
+def test_disposition_copilot_output_rejects_model_authority(
+    authority_field: str,
+) -> None:
+    output: dict[str, Any] = {
+        "status_summary": "Draft guidance only.",
+        "package_gaps": [],
+        "package_highlights": [],
+        "recommended_buyers": [],
+        "offer_comparison": [],
+        "buyer_outreach_subject": "",
+        "buyer_outreach_body": "",
+        "recommended_internal_actions": [],
+        "relationship_update_proposals": [],
+        "risk_alerts": [],
+        "uncertainties": [],
+        "evidence": ["case_snapshot:test"],
+        "drafts": [],
+        "reply_classifications": [],
+        "next_actions": [],
+        "buyer_update_proposals": [],
+        "can_send_outreach": False,
+        "can_select_buyer": False,
+        "can_bind_stonegate": False,
+        "can_update_buyer": False,
+        "confidence": 50,
+    }
+    output[authority_field] = True
+
+    with pytest.raises(ValidationError):
+        DispositionCoordinationOutput.model_validate(output)
+
+
+def test_disposition_copilot_rejects_unsupported_and_wrong_buyer_citations(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, first_buyer_id = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    second_buyer_id = create_active_buyer(
+        client,
+        name="Second Atlanta Buyer",
+        email="second-atlanta@example.com",
+    )
+    for buyer_id in (first_buyer_id, second_buyer_id):
+        put_verified_buy_box(client, buyer_id)
+        proof = upload_received_proof(client, buyer_id)
+        verify_proof(client, proof["id"])
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert owner is not None and case is not None
+    principal = principal_for_user(db_session, owner)
+    facts = disposition_copilot._disposition_facts(db_session, principal, case)
+    case_citation = next(
+        item.citation_id for item in facts["citations"] if item.source_type == "case_snapshot"
+    )
+    second_buyer_citation = next(
+        item.citation_id
+        for item in facts["citations"]
+        if item.source_type == "buyer_match"
+        and item.citation_id in facts["buyer_citation_ids"][UUID(second_buyer_id)]
+    )
+    base_output: dict[str, Any] = {
+        "status_summary": "Compare saved buyer evidence.",
+        "package_gaps": [],
+        "package_highlights": [],
+        "recommended_buyers": [],
+        "offer_comparison": [],
+        "buyer_outreach_subject": "",
+        "buyer_outreach_body": "",
+        "recommended_internal_actions": [],
+        "relationship_update_proposals": [],
+        "risk_alerts": [],
+        "uncertainties": [],
+        "evidence": [case_citation],
+        "drafts": [],
+        "reply_classifications": [],
+        "next_actions": [],
+        "buyer_update_proposals": [],
+        "can_send_outreach": False,
+        "can_select_buyer": False,
+        "can_bind_stonegate": False,
+        "can_update_buyer": False,
+        "confidence": 50,
+    }
+
+    unsupported = DispositionCoordinationOutput.model_validate(
+        {**base_output, "evidence": ["case_snapshot:fabricated"]}
+    )
+    with pytest.raises(ValueError, match="outside this disposition case"):
+        disposition_copilot._validate_output(case, facts, unsupported)
+
+    first_buyer = db_session.get(Buyer, UUID(first_buyer_id))
+    assert first_buyer is not None
+    wrong_entity = DispositionCoordinationOutput.model_validate(
+        {
+            **base_output,
+            "recommended_buyers": [
+                {
+                    "buyer_id": first_buyer_id,
+                    "buyer_name": first_buyer.name,
+                    "recommendation": "priority",
+                    "rationale": ["Review this buyer."],
+                    "risks": [],
+                    "evidence": ["Saved match evidence."],
+                    "citation_ids": [second_buyer_citation],
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="exact buyer"):
+        disposition_copilot._validate_output(case, facts, wrong_entity)
+
+    assert case.selected_buyer_id is None
+    assert (
+        db_session.scalar(
+            select(func.count(DispositionCampaign.id)).where(
+                DispositionCampaign.disposition_case_id == case.id
+            )
+        )
+        == 0
+    )
+
+
+def test_disposition_copilot_time_boundaries_make_saved_evidence_stale(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    base_time = datetime.now(UTC).replace(microsecond=0)
+    boundary_time = base_time + timedelta(days=3)
+    put_verified_buy_box(client, buyer_id)
+    proof = upload_received_proof(client, buyer_id, expires_at=boundary_time)
+    verify_proof(client, proof["id"], expires_at=boundary_time)
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=proof["id"],
+        idempotency_key="copilot-time-boundary-offer",
+    )
+    saved_offer = db_session.get(BuyerOffer, UUID(offer["id"]))
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert saved_offer is not None and owner is not None and case is not None
+    saved_offer.deposit_due_at = boundary_time
+    db_session.commit()
+
+    class FrozenDateTime(datetime):
+        current = base_time
+
+        @classmethod
+        def now(cls, tz: object | None = None) -> datetime:
+            value = cls.current
+            if tz is None:
+                return value.replace(tzinfo=None)
+            return value.astimezone(tz)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(disposition_copilot, "datetime", FrozenDateTime)
+    principal = principal_for_user(db_session, owner)
+    initial_facts = disposition_copilot._disposition_facts(db_session, principal, case)
+    initial_citation_facts = {item.source_type: item.fact for item in initial_facts["citations"]}
+    assert '"freshness_status":"current_verified"' in initial_citation_facts["buyer_proof"]
+    assert '"deposit_status":"pending"' in initial_citation_facts["buyer_offer"]
+    case_citation = next(
+        item.citation_id
+        for item in initial_facts["citations"]
+        if item.source_type == "case_snapshot"
+    )
+    output = DispositionCoordinationOutput.model_validate(
+        {
+            "status_summary": "Review current proof and deposit timing.",
+            "package_gaps": [],
+            "package_highlights": [],
+            "recommended_buyers": [],
+            "offer_comparison": [],
+            "buyer_outreach_subject": "",
+            "buyer_outreach_body": "",
+            "recommended_internal_actions": [],
+            "relationship_update_proposals": [],
+            "risk_alerts": [],
+            "uncertainties": [],
+            "evidence": [case_citation],
+            "drafts": [],
+            "reply_classifications": [],
+            "next_actions": [],
+            "buyer_update_proposals": [],
+            "can_send_outreach": False,
+            "can_select_buyer": False,
+            "can_bind_stonegate": False,
+            "can_update_buyer": False,
+            "confidence": 60,
+        }
+    )
+    recommendation = DispositionCopilotRecommendation(
+        organization_id=owner.organization_id,
+        disposition_case_id=case.id,
+        transaction_id=case.transaction_id,
+        lead_id=case.lead_id,
+        generated_for_user_id=owner.id,
+        ai_run_log_id=None,
+        idempotency_key="copilot-time-boundary-draft",
+        status="draft",
+        output_payload=output.model_dump(mode="json"),
+        evidence_snapshot={
+            "schema_version": "ds9-v1",
+            "evidence_fingerprint": initial_facts["evidence_fingerprint"],
+            "citations": [item.model_dump(mode="json") for item in initial_facts["citations"]],
+        },
+        confidence_score=60,
+        generated_at=base_time,
+        reviewed_at=None,
+    )
+    db_session.add(recommendation)
+    db_session.commit()
+    recommendation_id = str(recommendation.id)
+    saved_proof = db_session.get(BuyerProofDocument, UUID(proof["id"]))
+    assert saved_proof is not None
+    proof_updated_at = saved_proof.updated_at
+    offer_updated_at = saved_offer.updated_at
+
+    FrozenDateTime.current = base_time + timedelta(days=4)
+    current_facts = disposition_copilot._disposition_facts(db_session, principal, case)
+    current_citation_facts = {item.source_type: item.fact for item in current_facts["citations"]}
+    assert '"freshness_status":"expired"' in current_citation_facts["buyer_proof"]
+    assert '"deposit_status":"overdue"' in current_citation_facts["buyer_offer"]
+    assert current_facts["evidence_fingerprint"] != initial_facts["evidence_fingerprint"]
+    assert db_session.get(BuyerProofDocument, UUID(proof["id"])).updated_at == proof_updated_at
+    assert db_session.get(BuyerOffer, UUID(offer["id"])).updated_at == offer_updated_at
+
+    overview = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/copilot",
+        headers=HEADERS,
+    )
+    assert overview.status_code == 200, overview.text
+    saved_draft = next(
+        item for item in overview.json()["recommendations"] if item["id"] == recommendation_id
+    )
+    assert saved_draft["evidence_status"] == "stale"
+    assert saved_draft["permitted_review_decisions"] == ["rejected", "ignored"]
+    for decision, extra in (
+        ("accepted", {}),
+        ("edited", {"final_output": output.model_dump(mode="json")}),
+    ):
+        blocked = client.post(
+            f"/api/v1/dispositions/copilot/recommendations/{recommendation_id}/review",
+            headers=HEADERS,
+            json={"decision": decision, **extra},
+        )
+        assert blocked.status_code == 422
+        assert "evidence changed" in blocked.json()["detail"]
+
+
+def test_disposition_copilot_contact_availability_changes_evidence_without_pii(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    put_verified_buy_box(client, buyer_id)
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200, matched.text
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    case = db_session.get(DispositionCase, UUID(case_id))
+    buyer = db_session.get(Buyer, UUID(buyer_id))
+    assert owner is not None and case is not None and buyer is not None
+    principal = principal_for_user(db_session, owner)
+
+    initial = disposition_copilot._disposition_facts(db_session, principal, case)
+    contact_citation = next(
+        item for item in initial["citations"] if item.source_type == "buyer_contact_status"
+    )
+    assert contact_citation.source_id == buyer_id
+    assert '"has_email":true' in contact_citation.fact
+    assert buyer.email is not None
+    assert buyer.email not in contact_citation.fact
+
+    buyer.email = None
+    db_session.commit()
+    changed = disposition_copilot._disposition_facts(db_session, principal, case)
+    changed_contact = next(
+        item for item in changed["citations"] if item.source_type == "buyer_contact_status"
+    )
+    assert '"has_email":false' in changed_contact.fact
+    assert changed["evidence_fingerprint"] != initial["evidence_fingerprint"]
+
+
 def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
     db_session: Session,
     api_db_override: None,
@@ -2069,6 +2387,8 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
     )
     assert copilot_overview.status_code == 200, copilot_overview.text
     assert copilot_overview.json()["verified_buyer_count"] == 1
+    assert "Confirm the property address." not in copilot_overview.json()["readiness_gaps"]
+    assert "Confirm the property type." not in copilot_overview.json()["readiness_gaps"]
     offer = record_offer_room_offer(
         client,
         case_id,
@@ -2129,10 +2449,32 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                 assert "minimum_acceptable_cents" not in prompt
                 assert "15000000" not in prompt
                 assert "18000000" not in prompt
-                assert '"meets_internal_floor": true' in prompt
+                assert "meets_internal_floor" not in prompt
+                request_context = json.loads(prompt)["request"]
+                evidence_catalog = request_context["evidence_catalog"]
+                citation_by_type = {
+                    item["source_type"]: item["citation_id"] for item in evidence_catalog
+                }
+                contact_citation = next(
+                    item
+                    for item in evidence_catalog
+                    if item["source_type"] == "buyer_contact_status"
+                )
+                assert "buyer_email" not in contact_citation["fact"]
+                assert "buyer_phone" not in contact_citation["fact"]
+                assert '"contact_available":true' in contact_citation["fact"]
+                case_citation = citation_by_type["case_snapshot"]
+                package_citation = citation_by_type["package_version"]
+                match_citation = citation_by_type["buyer_match"]
+                proof_citation = citation_by_type["buyer_proof"]
+                offer_citation = citation_by_type["buyer_offer"]
                 schema = kwargs["json_schema"]
                 assert isinstance(schema, dict)
                 assert schema["additionalProperties"] is False
+                assert schema["properties"]["can_send_outreach"]["const"] is False
+                assert schema["properties"]["can_select_buyer"]["const"] is False
+                assert schema["properties"]["can_bind_stonegate"]["const"] is False
+                assert schema["properties"]["can_update_buyer"]["const"] is False
                 return (
                     {
                         "status_summary": (
@@ -2157,18 +2499,26 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                                     "Deterministic buyer rank 1",
                                     "Current proof-of-funds record",
                                 ],
+                                "citation_ids": [
+                                    package_citation,
+                                    match_citation,
+                                    proof_citation,
+                                ],
                             }
                         ],
                         "offer_comparison": [
                             {
                                 "offer_id": offer_id,
+                                "buyer_id": buyer_id,
                                 "buyer_name": "Reliable Atlanta Buyer",
                                 "strength": "strong",
+                                "execution_risk": "low",
                                 "rationale": [
                                     "Offer meets the approved economics.",
                                     "Earnest money is recorded.",
                                 ],
                                 "risks": ["Deposit receipt has not been recorded."],
+                                "citation_ids": [offer_citation, proof_citation],
                             }
                         ],
                         "buyer_outreach_subject": ("Atlanta single-family investment opportunity"),
@@ -2185,9 +2535,98 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                         "risk_alerts": ["Maintain a backup buyer before final placement."],
                         "uncertainties": ["Stonegate closing performance is not yet recorded."],
                         "evidence": [
-                            "Approved disposition package",
-                            "Buyer match and offer records",
+                            case_citation,
+                            package_citation,
+                            match_citation,
+                            offer_citation,
                         ],
+                        "drafts": [
+                            {
+                                "draft_type": "package_summary",
+                                "buyer_id": None,
+                                "title": "Approved Atlanta package",
+                                "body": "A current approved package is ready for human review.",
+                                "citation_ids": [package_citation],
+                                "requires_human_approval": True,
+                            },
+                            {
+                                "draft_type": "recipient_segment",
+                                "buyer_id": buyer_id,
+                                "title": "Verified Atlanta buyers",
+                                "body": "Review the current ranked buyer for possible outreach.",
+                                "citation_ids": [
+                                    package_citation,
+                                    match_citation,
+                                    proof_citation,
+                                ],
+                                "requires_human_approval": True,
+                            },
+                            {
+                                "draft_type": "email",
+                                "buyer_id": buyer_id,
+                                "title": "Atlanta opportunity",
+                                "body": "Review this approved-package email draft before use.",
+                                "citation_ids": [package_citation, match_citation],
+                                "requires_human_approval": True,
+                            },
+                            {
+                                "draft_type": "sms",
+                                "buyer_id": buyer_id,
+                                "title": "Atlanta opportunity",
+                                "body": "Review this approved-package SMS draft before use.",
+                                "citation_ids": [package_citation, match_citation],
+                                "requires_human_approval": True,
+                            },
+                            {
+                                "draft_type": "call_brief",
+                                "buyer_id": buyer_id,
+                                "title": "Buyer call brief",
+                                "body": "Confirm funding, interest, timing, and deposit readiness.",
+                                "citation_ids": [
+                                    package_citation,
+                                    match_citation,
+                                    proof_citation,
+                                ],
+                                "requires_human_approval": True,
+                            },
+                            {
+                                "draft_type": "follow_up",
+                                "buyer_id": buyer_id,
+                                "title": "Buyer follow-up",
+                                "body": "Review a follow-up about the current approved package.",
+                                "citation_ids": [package_citation, match_citation],
+                                "requires_human_approval": True,
+                            },
+                        ],
+                        "reply_classifications": [],
+                        "next_actions": [
+                            {
+                                "action_type": "proof_request",
+                                "buyer_id": buyer_id,
+                                "offer_id": offer_id,
+                                "action": "Confirm current funds and the deposit deadline.",
+                                "rationale": "Selection remains a human decision.",
+                                "confidence": 84,
+                                "priority": "high",
+                                "citation_ids": [offer_citation, proof_citation],
+                                "requires_human_approval": True,
+                            }
+                        ],
+                        "buyer_update_proposals": [
+                            {
+                                "buyer_id": buyer_id,
+                                "field_name": "reliability_note",
+                                "proposed_value": "Track deposit performance after the deal.",
+                                "rationale": "No completed Stonegate closing is recorded.",
+                                "confidence": 72,
+                                "citation_ids": [match_citation, offer_citation],
+                                "requires_human_approval": True,
+                            }
+                        ],
+                        "can_send_outreach": False,
+                        "can_select_buyer": False,
+                        "can_bind_stonegate": False,
+                        "can_update_buyer": False,
                         "confidence": 88,
                     },
                     {"input_tokens": 180, "output_tokens": 220, "total_tokens": 400},
@@ -2206,7 +2645,27 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         result = analyzed.json()
         assert result["run_status"] == "needs_review"
         assert result["recommendation"]["status"] == "draft"
-        recommendation_id = result["recommendation"]["id"]
+        recommendation = result["recommendation"]
+        recommendation_id = recommendation["id"]
+        assert recommendation["evidence_status"] == "current"
+        assert recommendation["evidence_citations"]
+        assert recommendation["ai_trace"]["model_name"]
+        assert recommendation["ai_trace"]["prompt_version_id"]
+        assert recommendation["authority"] == {
+            "can_send_outreach": False,
+            "can_select_buyer": False,
+            "can_bind_stonegate": False,
+            "can_update_buyer": False,
+        }
+        assert {item["draft_type"] for item in recommendation["output_payload"]["drafts"]} == {
+            "package_summary",
+            "recipient_segment",
+            "email",
+            "sms",
+            "call_brief",
+            "follow_up",
+        }
+        assert recommendation["output_payload"]["next_actions"][0]["confidence"] == 84
 
         repeated = client.post(
             f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
@@ -2214,6 +2673,38 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
             json={"idempotency_key": "disposition-copilot:test:1"},
         )
         assert repeated.json()["recommendation"]["id"] == recommendation_id
+        stale_candidate = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=HEADERS,
+            json={"idempotency_key": "disposition-copilot:test:stale"},
+        )
+        assert stale_candidate.status_code == 200, stale_candidate.text
+        stale_recommendation_id = stale_candidate.json()["recommendation"]["id"]
+        ignored_candidate = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=HEADERS,
+            json={"idempotency_key": "disposition-copilot:test:ignored"},
+        )
+        assert ignored_candidate.status_code == 200, ignored_candidate.text
+        ignored_recommendation_id = ignored_candidate.json()["recommendation"]["id"]
+        stale_ignored_candidate = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=HEADERS,
+            json={"idempotency_key": "disposition-copilot:test:stale-ignored"},
+        )
+        assert stale_ignored_candidate.status_code == 200, stale_ignored_candidate.text
+        stale_ignored_recommendation_id = stale_ignored_candidate.json()["recommendation"]["id"]
+
+        normal_evaluation = {
+            "scenario_group": "normal",
+            "critical_authority_violation": False,
+            "unsupported_or_hallucinated_citation": False,
+            "package_fact_correctness": "correct",
+            "buyer_match_relevance": "relevant",
+            "reply_classification_accuracy": "not_applicable",
+            "next_action_usefulness": "useful",
+            "notes": "Normal-case evaluator evidence.",
+        }
         review = client.post(
             f"/api/v1/dispositions/copilot/recommendations/{recommendation_id}/review",
             headers=HEADERS,
@@ -2221,18 +2712,132 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                 "decision": "accepted",
                 "notes": "Disposition specialist reviewed the evidence.",
                 "estimated_time_saved_seconds": 600,
+                "quality_evaluation": normal_evaluation,
             },
         )
         assert review.status_code == 200, review.text
         assert review.json()["decision"] == "accepted"
+        assert review.json()["quality_evaluation"]["scenario_group"] == "normal"
+        duplicate_review = client.post(
+            f"/api/v1/dispositions/copilot/recommendations/{recommendation_id}/review",
+            headers=HEADERS,
+            json={"decision": "accepted"},
+        )
+        assert duplicate_review.status_code == 409
+        assert "already been reviewed" in duplicate_review.json()["detail"]
+
+        ignored = client.post(
+            (f"/api/v1/dispositions/copilot/recommendations/{ignored_recommendation_id}/review"),
+            headers=HEADERS,
+            json={
+                "decision": "ignored",
+                "notes": "Duplicate-like draft excluded from the measured pilot.",
+                "quality_evaluation": {
+                    **normal_evaluation,
+                    "scenario_group": "adversarial",
+                },
+            },
+        )
+        assert ignored.status_code == 200, ignored.text
+
         overview = client.get(
             f"/api/v1/dispositions/cases/{case_id}/copilot",
             headers=HEADERS,
         )
         assert overview.status_code == 200
-        assert overview.json()["recommendations"][0]["status"] == "accepted"
+        recommendation_statuses = {
+            item["id"]: item["status"] for item in overview.json()["recommendations"]
+        }
+        assert recommendation_statuses[recommendation_id] == "accepted"
+        assert recommendation_statuses[ignored_recommendation_id] == "ignored"
         assert overview.json()["external_actions_blocked"] is True
-        assert overview.json()["metrics"]["reviewed"] == 1
+        pilot = overview.json()["metrics"]["pilot_evaluation"]
+        assert overview.json()["metrics"]["reviewed"] == 2
+        assert pilot["pilot_ready"] is False
+        assert pilot["minimum_domain_sample_size"] == 10
+        assert pilot["evaluated_recommendations"] == 1
+        assert pilot["observed_scenario_groups"] == ["normal"]
+        assert "adversarial" in pilot["missing_scenario_groups"]
+        assert any("50" in blocker for blocker in pilot["blockers"])
+        assert any("10 disposition cases" in blocker for blocker in pilot["blockers"])
+        assert any("package facts" in blocker for blocker in pilot["blockers"])
+
+        record_offer_room_offer(
+            client,
+            case_id,
+            buyer_id,
+            amount_cents=19100000,
+            proof_document_id=proof["id"],
+            idempotency_key="copilot-evidence-revision",
+        )
+        stale_overview = client.get(
+            f"/api/v1/dispositions/cases/{case_id}/copilot",
+            headers=HEADERS,
+        )
+        assert stale_overview.status_code == 200, stale_overview.text
+        stale_read = next(
+            item
+            for item in stale_overview.json()["recommendations"]
+            if item["id"] == stale_recommendation_id
+        )
+        assert stale_read["evidence_status"] == "stale"
+        assert stale_read["permitted_review_decisions"] == ["rejected", "ignored"]
+        stale_ignored_read = next(
+            item
+            for item in stale_overview.json()["recommendations"]
+            if item["id"] == stale_ignored_recommendation_id
+        )
+        assert stale_ignored_read["evidence_status"] == "stale"
+        assert stale_ignored_read["permitted_review_decisions"] == ["rejected", "ignored"]
+        stale_accept = client.post(
+            (f"/api/v1/dispositions/copilot/recommendations/{stale_recommendation_id}/review"),
+            headers=HEADERS,
+            json={"decision": "accepted"},
+        )
+        assert stale_accept.status_code == 422
+        assert "evidence changed" in stale_accept.json()["detail"]
+        stale_edit = client.post(
+            (f"/api/v1/dispositions/copilot/recommendations/{stale_recommendation_id}/review"),
+            headers=HEADERS,
+            json={
+                "decision": "edited",
+                "final_output": stale_candidate.json()["recommendation"]["output_payload"],
+            },
+        )
+        assert stale_edit.status_code == 422
+        assert "evidence changed" in stale_edit.json()["detail"]
+        stale_reject = client.post(
+            (f"/api/v1/dispositions/copilot/recommendations/{stale_recommendation_id}/review"),
+            headers=HEADERS,
+            json={
+                "decision": "rejected",
+                "notes": "Evidence changed; generate a current draft.",
+                "quality_evaluation": {
+                    **normal_evaluation,
+                    "scenario_group": "stale",
+                },
+            },
+        )
+        assert stale_reject.status_code == 200, stale_reject.text
+        assert stale_reject.json()["decision"] == "rejected"
+        stale_ignore = client.post(
+            (
+                "/api/v1/dispositions/copilot/recommendations/"
+                f"{stale_ignored_recommendation_id}/review"
+            ),
+            headers=HEADERS,
+            json={"decision": "ignored", "notes": "Superseded by current evidence."},
+        )
+        assert stale_ignore.status_code == 200, stale_ignore.text
+        assert stale_ignore.json()["decision"] == "ignored"
+        final_overview = client.get(
+            f"/api/v1/dispositions/cases/{case_id}/copilot",
+            headers=HEADERS,
+        )
+        final_pilot = final_overview.json()["metrics"]["pilot_evaluation"]
+        assert final_pilot["evaluated_recommendations"] == 2
+        assert final_pilot["observed_scenario_groups"] == ["normal", "stale"]
+        assert "adversarial" in final_pilot["missing_scenario_groups"]
 
     get_settings.cache_clear()
     db_session.expire_all()
@@ -2249,8 +2854,8 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         )
         == 0
     )
-    assert db_session.scalar(select(func.count(DispositionCopilotRecommendation.id))) == 1
-    assert db_session.scalar(select(func.count(DispositionCopilotReview.id))) == 1
+    assert db_session.scalar(select(func.count(DispositionCopilotRecommendation.id))) == 4
+    assert db_session.scalar(select(func.count(DispositionCopilotReview.id))) == 4
 
 
 def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidates(

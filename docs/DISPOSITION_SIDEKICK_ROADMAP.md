@@ -1,9 +1,9 @@
 # Stonegate Buyer Network And Disposition Sidekick Roadmap
 
-Last updated: August 28, 2026
+Last updated: August 29, 2026
 
-> **Current status: DS0-DS7 complete; the DS8 provider-neutral/manual foundation is complete;
-> live InvestorLift transport and DS9-DS12 remain pending.** Stonegate now has the audited,
+> **Current status: DS0-DS8 complete; the DS9 repository implementation is complete but its
+> measured pilot is NOT MET; live InvestorLift transport and DS10-DS12 remain pending.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -21,8 +21,11 @@ Last updated: August 28, 2026
 > deduplicated deadline escalation, controlled replacement, and evidence-based buyer outcomes.
 > DS8 now adds an exact approved-package handoff, deterministic public-only payloads, manual
 > InvestorLift link and activity reconciliation, staged human review, export, and history-preserving
-> disconnect controls. No direct InvestorLift API is claimed or enabled because its transport
-> contract remains unverified. Land outreach and DS9-DS12 remain plans. DS6
+> disconnect controls. DS9 adds a citation-gated, House-only, draft-only daily Copilot with four-way
+> human review, immutable trace evidence, and explicit evaluation gates. Its production pilot has
+> not met the required 50 decisive reviews across 10 cases. No direct InvestorLift API is claimed or
+> enabled because its transport contract remains unverified. Land outreach and DS10-DS12 remain
+> plans. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
@@ -795,7 +798,7 @@ while Stonegate keeps ownership of the workflow and relationships.
 
 ## DS9 - Governed Disposition Copilot
 
-**Status: Planned; foundation exists.**
+**Status: Repository implementation complete; measured pilot NOT MET.**
 
 ### Goal
 
@@ -804,23 +807,42 @@ binding authority.
 
 ### Work
 
-- Prepare fact-checked package summaries and identify missing evidence.
-- Explain buyer-match strengths, conflicts, and disqualifiers.
-- Draft recipient segments, email, SMS, call briefs, and follow-ups.
-- Classify replies, inquiries, passes, and offer intent with confidence and evidence references.
-- Recommend the next call, proof request, showing, counter, deadline action, or backup activation.
-- Summarize offer differences and execution risks without selecting the final buyer.
-- Propose buyer preference and reliability updates for human review.
-- Record model, prompt, evidence, output, corrections, cost, and reviewer decision.
-- Evaluate hallucination, package correction, match relevance, reply classification, and next-action
-  usefulness before expanding authority.
+- Prepare structured, fact-checked package-summary drafts and identify missing evidence.
+- Explain buyer-match strengths, conflicts, and disqualifiers from the current saved buyer pool.
+- Draft recipient segments, email, SMS, call briefs, and follow-ups without creating or releasing an
+  outreach revision.
+- Classify replies, inquiries, passes, offer intent, offers, opt-outs, wrong-person replies, and
+  uncertain replies with confidence and saved evidence citations.
+- Recommend the next call, proof request, showing, counter, deadline action, backup review, or other
+  bounded next step.
+- Summarize saved offer differences and execution risks without selecting the final buyer.
+- Propose buyer preference and reliability changes for human review without mutating Buyer records.
+- Record the evidence fingerprint and structured citations plus model, prompt, token use, cost,
+  latency, output, correction, reviewer, quality evaluation, and timestamps.
+- Support one immutable **Accept**, **Correct**, **Reject**, or **Ignore** decision per
+  recommendation. A duplicate review is rejected as a conflict. Accepting or correcting stale
+  evidence is blocked; reject and ignore remain available to close the historical draft honestly.
+- Keep every authority flag false and every external action blocked regardless of organization-wide
+  AI policy.
+- Evaluate authority, citation integrity, package correctness, match relevance, reply
+  classification, next-action usefulness, review outcomes, trace coverage, latency, and cost before
+  any future capability decision.
 
 ### Exit Criteria
 
-- Every recommendation cites saved Stonegate or approved provider evidence.
-- The specialist can accept, correct, reject, or ignore a recommendation.
-- No AI path can release outreach or bind Stonegate independently.
-- Evaluation and pilot thresholds are defined and met.
+- Every material recommendation cites saved Stonegate or approved provider evidence through a
+  durable source identifier.
+- The specialist can accept, correct, reject, or ignore a recommendation without applying it to an
+  operational record.
+- Organization, House-only, private-economics, role, idempotency, and stale-evidence boundaries are
+  enforced.
+- No generation or review path can mutate a Buyer, package, campaign, provider handoff, message,
+  offer, selection, contract, transaction, or financial record.
+- Repository contract and regression suites pass.
+- The measured-pilot gates in `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` pass. This cumulative
+  criterion is **not met** until at least 50 decisive reviews across 10 cases, at least 10
+  applicable evaluations for each scored quality domain, and every quality, citation, authority,
+  traceability, and scenario-coverage threshold pass.
 
 ## DS10 - Management Intelligence And Learning
 
@@ -1006,7 +1028,7 @@ Quality and safety measures:
 | DS6 | Governed Live Outreach And Reply Loop | Complete for owned Buyer Network recipients in the current House disposition workflow; production acceptance pending DS12 |
 | DS7 | Offer Room And Closing Protection | Complete for current House disposition workflow |
 | DS8 | InvestorLift Provider Adapter | Provider-neutral/manual foundation complete; live transport blocked pending provider verification |
-| DS9 | Governed Disposition Copilot | Planned; foundation exists |
+| DS9 | Governed Disposition Copilot | Repository implementation complete; measured pilot NOT MET pending 50 decisive reviews across 10 cases and every quality/safety gate |
 | DS10 | Management Intelligence And Learning | Planned |
 | DS11 | Optional CSV Buyer Migration | Planned after manual acceptance |
 | DS12 | Supervised Production Pilot And Acceptance | Planned |
@@ -1038,7 +1060,8 @@ explainable House deal buyer pool, DS5 provides the evidence-backed, approval-ga
   reviewable provider evidence without claiming live sync. Land matching and release must receive
   their own asset-safe implementation before being described as live. A live DS8 adapter follows
   only after InvestorLift supplies a verified integration contract and the bounded acceptance gate
-  passes. DS9 and DS10 make the sidekick measurable rather than speculative.
+  passes. DS9 now makes the Copilot technically measurable and keeps the production pilot explicitly
+  **NOT MET**; DS10 will turn reviewed operating outcomes into broader management learning.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may
 be used as supervised evidence throughout the build.

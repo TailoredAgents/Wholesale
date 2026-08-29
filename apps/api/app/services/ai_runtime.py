@@ -524,6 +524,11 @@ DISPOSITION_BUYER_RECOMMENDATION_SCHEMA = {
         "rationale": STRING_ARRAY_SCHEMA,
         "risks": STRING_ARRAY_SCHEMA,
         "evidence": STRING_ARRAY_SCHEMA,
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
     },
     "required": [
         "buyer_id",
@@ -532,6 +537,7 @@ DISPOSITION_BUYER_RECOMMENDATION_SCHEMA = {
         "rationale",
         "risks",
         "evidence",
+        "citation_ids",
     ],
 }
 DISPOSITION_OFFER_COMPARISON_SCHEMA = {
@@ -539,15 +545,192 @@ DISPOSITION_OFFER_COMPARISON_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "offer_id": {"type": "string"},
+        "buyer_id": {"type": ["string", "null"]},
         "buyer_name": {"type": "string"},
         "strength": {
             "type": "string",
             "enum": ["strong", "acceptable", "weak", "ineligible"],
         },
+        "execution_risk": {
+            "type": "string",
+            "enum": ["low", "moderate", "high", "unknown"],
+        },
         "rationale": STRING_ARRAY_SCHEMA,
         "risks": STRING_ARRAY_SCHEMA,
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
     },
-    "required": ["offer_id", "buyer_name", "strength", "rationale", "risks"],
+    "required": [
+        "offer_id",
+        "buyer_id",
+        "buyer_name",
+        "strength",
+        "execution_risk",
+        "rationale",
+        "risks",
+        "citation_ids",
+    ],
+}
+DISPOSITION_DRAFT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "draft_type": {
+            "type": "string",
+            "enum": [
+                "package_summary",
+                "recipient_segment",
+                "email",
+                "sms",
+                "call_brief",
+                "follow_up",
+            ],
+        },
+        "buyer_id": {"type": ["string", "null"]},
+        "title": {"type": "string"},
+        "body": {"type": "string"},
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
+        "requires_human_approval": {"type": "boolean", "const": True},
+    },
+    "required": [
+        "draft_type",
+        "buyer_id",
+        "title",
+        "body",
+        "citation_ids",
+        "requires_human_approval",
+    ],
+}
+DISPOSITION_REPLY_CLASSIFICATION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "source_type": {
+            "type": "string",
+            "enum": ["outreach_reply", "provider_evidence"],
+        },
+        "source_id": {"type": "string"},
+        "classification": {
+            "type": "string",
+            "enum": [
+                "interested",
+                "inquiry",
+                "pass",
+                "offer_intent",
+                "offer",
+                "opt_out",
+                "wrong_person",
+                "needs_review",
+            ],
+        },
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string"},
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
+        "requires_human_review": {"type": "boolean", "const": True},
+    },
+    "required": [
+        "source_type",
+        "source_id",
+        "classification",
+        "confidence",
+        "rationale",
+        "citation_ids",
+        "requires_human_review",
+    ],
+}
+DISPOSITION_NEXT_ACTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "action_type": {
+            "type": "string",
+            "enum": [
+                "call",
+                "proof_request",
+                "showing",
+                "counter",
+                "deadline_action",
+                "backup_activation",
+                "follow_up",
+                "package_correction",
+                "reply_review",
+            ],
+        },
+        "buyer_id": {"type": ["string", "null"]},
+        "offer_id": {"type": ["string", "null"]},
+        "action": {"type": "string"},
+        "rationale": {"type": "string"},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+        "priority": {
+            "type": "string",
+            "enum": ["low", "normal", "high", "urgent"],
+        },
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
+        "requires_human_approval": {"type": "boolean", "const": True},
+    },
+    "required": [
+        "action_type",
+        "buyer_id",
+        "offer_id",
+        "action",
+        "rationale",
+        "confidence",
+        "priority",
+        "citation_ids",
+        "requires_human_approval",
+    ],
+}
+DISPOSITION_BUYER_UPDATE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "buyer_id": {"type": "string"},
+        "field_name": {
+            "type": "string",
+            "enum": [
+                "relationship_status",
+                "tier",
+                "temperature",
+                "preferred_markets",
+                "preferred_property_types",
+                "proof_of_funds_status",
+                "reliability_note",
+            ],
+        },
+        "proposed_value": {"type": "string"},
+        "rationale": {"type": "string"},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+        },
+        "requires_human_approval": {"type": "boolean", "const": True},
+    },
+    "required": [
+        "buyer_id",
+        "field_name",
+        "proposed_value",
+        "rationale",
+        "confidence",
+        "citation_ids",
+        "requires_human_approval",
+    ],
 }
 DISPOSITION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -571,6 +754,20 @@ DISPOSITION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
         "risk_alerts": STRING_ARRAY_SCHEMA,
         "uncertainties": STRING_ARRAY_SCHEMA,
         "evidence": STRING_ARRAY_SCHEMA,
+        "drafts": {"type": "array", "items": DISPOSITION_DRAFT_SCHEMA},
+        "reply_classifications": {
+            "type": "array",
+            "items": DISPOSITION_REPLY_CLASSIFICATION_SCHEMA,
+        },
+        "next_actions": {"type": "array", "items": DISPOSITION_NEXT_ACTION_SCHEMA},
+        "buyer_update_proposals": {
+            "type": "array",
+            "items": DISPOSITION_BUYER_UPDATE_SCHEMA,
+        },
+        "can_send_outreach": {"type": "boolean", "const": False},
+        "can_select_buyer": {"type": "boolean", "const": False},
+        "can_bind_stonegate": {"type": "boolean", "const": False},
+        "can_update_buyer": {"type": "boolean", "const": False},
         "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
     },
     "required": [
@@ -586,6 +783,14 @@ DISPOSITION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
         "risk_alerts",
         "uncertainties",
         "evidence",
+        "drafts",
+        "reply_classifications",
+        "next_actions",
+        "buyer_update_proposals",
+        "can_send_outreach",
+        "can_select_buyer",
+        "can_bind_stonegate",
+        "can_update_buyer",
         "confidence",
     ],
 }
@@ -1212,7 +1417,13 @@ def execute_runtime(
         status = "needs_review"
         budget_status = "within_budget"
     record_runtime_success(runtime)
-    output_summary = _redacted_json(parsed)
+    # DS9 consumes its structured output again during governed review. Truncating that
+    # document makes valid JSON impossible to validate and breaks the audit trail. Preserve
+    # the established compact-summary behavior for every other capability.
+    output_summary = _redacted_json(
+        parsed,
+        max_chars=None if capability.capability_key == "disposition.match" else 4000,
+    )
     run = _new_runtime_run(
         principal,
         payload,
@@ -1722,6 +1933,9 @@ def _disposition_context(
         ).all()
     )
 
+    package_property = case.package_snapshot.get("property")
+    if not isinstance(package_property, dict):
+        package_property = {}
     context = {
         "case": {
             "id": str(case.id),
@@ -1729,8 +1943,10 @@ def _disposition_context(
             "strategy": case.strategy,
             "asking_price_cents": case.asking_price_cents,
             "package_status": case.package_status,
-            "property_address": case.package_snapshot.get("property_address"),
-            "property_type": case.package_snapshot.get("property_type"),
+            "property_address": package_property.get("address")
+            or case.package_snapshot.get("property_address"),
+            "property_type": package_property.get("property_type")
+            or case.package_snapshot.get("property_type"),
         },
         "buyer_matches": [
             {
@@ -1787,7 +2003,6 @@ def _disposition_context(
                 if item.buyer_id in buyers
                 else "Recorded buyer",
                 "amount_cents": item.amount_cents,
-                "meets_internal_floor": (item.amount_cents >= case.minimum_acceptable_cents),
                 "earnest_money_cents": item.earnest_money_cents,
                 "financing_type": item.financing_type,
                 "status": item.status,
@@ -2687,7 +2902,7 @@ def _new_runtime_run(
         status=status,
         model_name=model_name,
         input_summary=input_summary[:4000],
-        output_summary=output_summary[:4000] if output_summary else None,
+        output_summary=output_summary,
         latency_ms=latency_ms,
         started_at=now,
         completed_at=now,
@@ -2737,8 +2952,9 @@ def _safety_identifier(principal: Principal) -> str:
     ]
 
 
-def _redacted_json(value: Any) -> str:
-    return json.dumps(_redact(value), sort_keys=True, default=str)[:4000]
+def _redacted_json(value: Any, *, max_chars: int | None = 4000) -> str:
+    serialized = json.dumps(_redact(value), sort_keys=True, default=str)
+    return serialized if max_chars is None else serialized[:max_chars]
 
 
 def _redact(value: Any, key: str = "") -> Any:

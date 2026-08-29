@@ -3744,6 +3744,35 @@ export type DispositionDeskOverview = {
   };
 };
 
+export type DispositionCopilotCitation = {
+  citation_id: string;
+  source_type: "case_snapshot" | "package_version" | "buyer_pool_entry" |
+    "buyer_match" | "buyer_contact_status" | "buyer_proof" | "buyer_offer" |
+    "offer_revision" | "buyer_engagement" | "outreach_reply" |
+    "provider_evidence";
+  source_id: string;
+  label: string;
+  fact: string;
+  status: string;
+  observed_at: string | null;
+};
+
+export type DispositionCopilotQualityEvaluation = {
+  scenario_group: "normal" | "incomplete" | "conflicting" | "policy_blocked" |
+    "stale" | "adversarial";
+  critical_authority_violation: boolean;
+  unsupported_or_hallucinated_citation: boolean;
+  package_fact_correctness: "correct" | "partially_correct" | "incorrect" |
+    "not_applicable";
+  buyer_match_relevance: "relevant" | "partially_relevant" | "not_relevant" |
+    "not_applicable";
+  reply_classification_accuracy: "correct" | "partially_correct" | "incorrect" |
+    "not_applicable";
+  next_action_usefulness: "useful" | "correctable" | "not_useful" |
+    "not_applicable";
+  notes: string | null;
+};
+
 export type DispositionCopilotRecommendation = {
   id: string;
   disposition_case_id: string;
@@ -3762,13 +3791,17 @@ export type DispositionCopilotRecommendation = {
       rationale: string[];
       risks: string[];
       evidence: string[];
+      citation_ids: string[];
     }>;
     offer_comparison: Array<{
       offer_id: string;
+      buyer_id: string | null;
       buyer_name: string;
       strength: "strong" | "acceptable" | "weak" | "ineligible";
       rationale: string[];
       risks: string[];
+      execution_risk: "low" | "moderate" | "high" | "unknown";
+      citation_ids: string[];
     }>;
     buyer_outreach_subject: string;
     buyer_outreach_body: string;
@@ -3777,7 +3810,76 @@ export type DispositionCopilotRecommendation = {
     risk_alerts: string[];
     uncertainties: string[];
     evidence: string[];
+    drafts: Array<{
+      draft_type: "package_summary" | "recipient_segment" | "email" | "sms" |
+        "call_brief" | "follow_up";
+      buyer_id: string | null;
+      title: string;
+      body: string;
+      citation_ids: string[];
+      requires_human_approval: true;
+    }>;
+    reply_classifications: Array<{
+      source_type: "outreach_reply" | "provider_evidence";
+      source_id: string;
+      classification: "interested" | "inquiry" | "pass" | "offer_intent" |
+        "offer" | "opt_out" | "wrong_person" | "needs_review";
+      confidence: number;
+      rationale: string;
+      citation_ids: string[];
+      requires_human_review: true;
+    }>;
+    next_actions: Array<{
+      action_type: "call" | "proof_request" | "showing" | "counter" |
+        "deadline_action" | "backup_activation" | "follow_up" |
+        "package_correction" | "reply_review";
+      buyer_id: string | null;
+      offer_id: string | null;
+      action: string;
+      rationale: string;
+      priority: "low" | "normal" | "high" | "urgent";
+      confidence: number;
+      citation_ids: string[];
+      requires_human_approval: true;
+    }>;
+    buyer_update_proposals: Array<{
+      buyer_id: string;
+      field_name: "relationship_status" | "tier" | "temperature" |
+        "preferred_markets" | "preferred_property_types" |
+        "proof_of_funds_status" | "reliability_note";
+      proposed_value: string;
+      rationale: string;
+      confidence: number;
+      citation_ids: string[];
+      requires_human_approval: true;
+    }>;
+    can_send_outreach: false;
+    can_select_buyer: false;
+    can_bind_stonegate: false;
+    can_update_buyer: false;
     confidence: number;
+  };
+  evidence_fingerprint: string;
+  evidence_citations: DispositionCopilotCitation[];
+  evidence_status: "current" | "stale" | "unknown";
+  stale_reason: string | null;
+  permitted_review_decisions: Array<"accepted" | "edited" | "rejected" | "ignored">;
+  ai_trace: {
+    model_name: string;
+    prompt_version_id: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    total_tokens: number | null;
+    cost_microusd: number | null;
+    latency_ms: number | null;
+    started_at: string;
+    completed_at: string | null;
+  } | null;
+  authority: {
+    can_send_outreach: false;
+    can_select_buyer: false;
+    can_bind_stonegate: false;
+    can_update_buyer: false;
   };
   confidence_score: number | null;
   generated_at: string;
@@ -3806,9 +3908,50 @@ export type DispositionCopilotOverview = {
   metrics: {
     generated: number;
     reviewed: number;
+    accepted: number;
+    corrected: number;
+    rejected: number;
+    ignored: number;
     accepted_or_corrected_rate_basis_points: number;
     correction_rate_basis_points: number;
+    rejection_rate_basis_points: number;
+    ignore_rate_basis_points: number;
     estimated_time_saved_minutes: number;
+    average_latency_ms: number | null;
+    p95_latency_ms: number | null;
+    average_input_tokens: number | null;
+    average_output_tokens: number | null;
+    average_cost_microusd: number | null;
+    total_cost_microusd: number;
+    pilot_evaluation: {
+      minimum_evaluated_recommendations: number;
+      minimum_distinct_cases: number;
+      minimum_domain_sample_size: number;
+      evaluated_recommendations: number;
+      distinct_cases: number;
+      critical_authority_violations: number;
+      unsupported_or_hallucinated_citations: number;
+      package_fact_correctness_basis_points: number;
+      package_fact_sample_size: number;
+      buyer_match_relevance_basis_points: number;
+      buyer_match_sample_size: number;
+      reply_classification_accuracy_basis_points: number;
+      reply_classification_sample_size: number;
+      next_action_useful_or_correctable_basis_points: number;
+      next_action_sample_size: number;
+      accept_or_correct_basis_points: number;
+      trace_attribution_basis_points: number;
+      pilot_ready: boolean;
+      observed_scenario_groups: Array<
+        "normal" | "incomplete" | "conflicting" | "policy_blocked" | "stale" |
+        "adversarial"
+      >;
+      missing_scenario_groups: Array<
+        "normal" | "incomplete" | "conflicting" | "policy_blocked" | "stale" |
+        "adversarial"
+      >;
+      blockers: string[];
+    };
   };
 };
 

@@ -7397,6 +7397,9 @@ class DispositionCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
     estimated_time_saved_seconds: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    quality_evaluation: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -9321,7 +9324,7 @@ class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
     input_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
-    output_summary: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    output_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)

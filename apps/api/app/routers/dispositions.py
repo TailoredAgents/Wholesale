@@ -78,6 +78,7 @@ from app.services import (
     dispositions,
 )
 from app.services.disposition_copilot import (
+    DispositionCopilotReviewConflict,
     analyze_disposition,
     get_disposition_copilot_overview,
     review_recommendation,
@@ -1002,6 +1003,11 @@ def review_disposition_copilot_draft(
             recommendation_id,
             payload,
         )
+    except DispositionCopilotReviewConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise invalid(exc) from exc
     if result is None:

@@ -12,6 +12,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type {
   DispositionCopilotOverview,
+  DispositionCopilotQualityEvaluation,
   DispositionCopilotRecommendation,
   DispositionOverview,
 } from "../../lib/api";
@@ -222,8 +223,13 @@ export function DispositionWorkspace({
 
   async function reviewCopilot(
     recommendation: DispositionCopilotRecommendation,
-    decision: "accepted" | "edited" | "rejected",
+    decision: "accepted" | "edited" | "rejected" | "ignored",
     finalOutput?: DispositionCopilotRecommendation["output_payload"],
+    feedback?: {
+      notes: string | null;
+      estimatedTimeSavedSeconds: number;
+      qualityEvaluation: DispositionCopilotQualityEvaluation;
+    },
   ) {
     await action(
       () =>
@@ -234,8 +240,9 @@ export function DispositionWorkspace({
             body: JSON.stringify({
               decision,
               final_output: finalOutput ?? null,
-              notes: "Disposition specialist reviewed the governed draft.",
-              estimated_time_saved_seconds: 600,
+              notes: feedback?.notes ?? null,
+              estimated_time_saved_seconds: feedback?.estimatedTimeSavedSeconds ?? 0,
+              quality_evaluation: feedback?.qualityEvaluation ?? null,
             }),
           },
         ),

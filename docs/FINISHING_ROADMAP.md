@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 28, 2026
+Last updated: August 29, 2026
 
 ## Purpose
 
@@ -298,7 +298,9 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - deterministic buyer ranking
 - optional disabled DealMachine adapter retained only for deliberate future reactivation
 - duplicate protection and audit history
-- Disposition Copilot in supervised draft-only mode
+- DS9 citation-gated, House-only Disposition Copilot in supervised draft-only mode, with structured
+  package, match, outreach, reply, next-action, offer-risk, and Buyer-update proposals; immutable
+  accept/correct/reject/ignore review; trace and quality evidence; and no operational mutation
 - non-sending prepared-recipient campaign evidence plus a separate immutable, exact-message House
   outreach revision, approval, delivery, and reply-review loop for selected owned-network buyers
 - DS8 provider-neutral/manual InvestorLift foundation: immutable public-only listing revisions tied
@@ -340,6 +342,12 @@ establish production-provider acceptance.
    assignment.
 9. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
    quality, credit/cost, duplicate, DNC, and selective-import acceptance phase first.
+10. Run the cumulative measured DS9 draft-only pilot. Collect at least 50 decisive reviews across
+    10 House cases, at least 10 applicable evaluations per scored quality domain, and all required
+    normal, incomplete, conflicting, blocked, stale, and adversarial groups. Ignored drafts do not
+    count toward the pilot samples.
+    Keep the pilot **NOT MET** unless every threshold in
+    `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` passes.
 
 ### Exit Criteria
 
@@ -349,6 +357,8 @@ establish production-provider acceptance.
 - Proof and buyer-selection approval cannot be bypassed.
 - Reconciliation produces the expected revenue, deductions, compensation, and margin.
 - Staff can tell the difference between prepared-recipient evidence and an actual Outreach delivery.
+- The DS9 pilot has zero authority violations and unsupported citations, complete trace attribution,
+  and passes every quality and sample gate before any capability expansion is considered.
 
 ## F6. Accounting And Marketing Acceptance
 

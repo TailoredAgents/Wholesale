@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 28, 2026
+Last verified against the application: August 29, 2026
 
 ## Purpose
 
@@ -2436,12 +2436,54 @@ changes Offer Room selection.
 
 ### Disposition Copilot
 
-Generate draft package guidance, buyer ranking explanation, outreach copy, and offer comparison.
-Review restricted economics carefully. Accept, correct, or reject the draft. The Copilot does not
-send campaigns, select the buyer, or change deal economics.
+For an existing contracted **House** case, open the Copilot from the Deal record's **Disposition**
+or **Finance** section. Generating a draft requires deal-edit and private-economics access. A user
+who can view the Deal but not restricted economics sees only the redacted readiness state and does
+not receive the recommendation payload.
 
-For an existing case, open the Copilot from the Deal record's **Disposition** or **Finance**
-section. It uses the same reviewed recommendation record as the specialist compatibility route.
+The Copilot can prepare:
+
+- a cited package summary and missing-evidence list;
+- cited buyer-match strengths, conflicts, and disqualifiers;
+- recipient-segment, email, SMS, call-brief, and follow-up drafts;
+- cited reply classifications with confidence;
+- cited next-action proposals;
+- cited offer and execution-risk comparisons; and
+- proposed Buyer preference or reliability updates for review.
+
+Open a saved citation before relying on a claim. A citation identifies a saved Stonegate or
+approved-provider source, not a new fact found by the model. Reviewed provider evidence shown to
+the Copilot is public/redacted and must not expose a Buyer's phone number or email. If a material item has no citation,
+appears to cite another case, or conflicts with current evidence, reject the draft and correct the
+source record before generating again.
+
+Review the recommendation once:
+
+1. Select **Accept** only when the cited draft is useful as written.
+2. Select **Correct** to save a replacement structured draft. The corrected draft must pass the same
+   citation and authority checks.
+3. Select **Reject** when the output is wrong, unsupported, unsafe, or not useful.
+4. Select **Ignore** when no decision is useful. Ignored drafts remain in history and do not count
+   toward the measured quality sample.
+5. When requested, record the package, match, reply-classification, and next-action quality fields
+   truthfully. These reviews determine whether the pilot is working.
+
+A second review is rejected as a conflict so it cannot replace or silently replay the original
+decision. Operational totals use a recent reporting window, while the measured pilot uses retained
+cumulative review evidence. Every scored quality domain needs at least 10 applicable decisive
+evaluations; ignored drafts count in history but not in pilot samples.
+
+Accepting or correcting is blocked after relevant case evidence changes. Reject or ignore the stale
+draft, review the changed source evidence, then generate a current recommendation. A review never
+applies a proposed Buyer update, sends draft outreach, selects a buyer, accepts an offer, changes
+economics, releases a contract, or marks a deal funded. Perform any approved operational action
+separately through its existing governed control.
+
+The Copilot is **Draft only** and its measured pilot is **NOT MET** until at least 50 decisive human
+reviews across 10 House cases, at least 10 applicable evaluations in each scored quality domain, and
+every quality, citation, authority, traceability, and coverage gate in
+`DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` passes. An organization-wide AI setting cannot change
+this boundary.
 
 **Prepare recipient pool** records which approved recipients may receive the exact approved package,
 including the observed identity and destination, as `prepared_not_sent`. It sends no messages.

@@ -1,6 +1,6 @@
 # AI Agent System
 
-Last updated: August 3, 2026
+Last updated: August 29, 2026
 
 Stonegate uses one governed, event-driven AI system with specialized capabilities. It does not use
 fourteen independent chatbots with separate memory or authority.
@@ -244,6 +244,25 @@ apply signatures, or declare a closing funded.
 AI may score buyer fit, assemble a fact-checked package, personalize drafts from approved facts,
 track responses, and recommend follow-up. It cannot choose the winning buyer, misrepresent the
 property, release a contract, or change economics.
+
+The DS9 Disposition Copilot implements that assistance for current House cases as structured,
+citation-gated drafts. It can prepare package summaries and gaps, explain matches, draft recipient
+segments and channel copy, classify replies, propose next actions, compare offer execution risk,
+and propose Buyer preference or reliability updates. Every material item must cite saved Stonegate
+or approved-provider evidence, and every proposed external or canonical-record action remains
+human-required.
+
+One reviewer records **Accept**, **Correct**, **Reject**, or **Ignore**. Accept and Correct are
+blocked when the evidence fingerprint is stale; none of the four decisions applies the output.
+Generation and review cannot change buyers, packages, outreach, provider handoffs, messages,
+offers, selections, contracts, transactions, or finance. This permanent draft-only boundary is
+independent of broader external-action policy.
+
+Repository completion is not pilot completion. The cumulative measured DS9 pilot is **NOT MET**
+until 50 decisive reviews across 10 cases, at least 10 applicable evaluations in each scored quality
+domain, and every authority, citation, package-correctness, match, classification, next-action,
+accept-or-correct, traceability, and scenario-coverage threshold in
+`DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` passes. Ignored drafts do not count toward those samples.
 
 ### Finance, Marketing, And Management
 

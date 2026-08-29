@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 28, 2026
+Last verified against the application: August 29, 2026
 
 ## Purpose
 
@@ -1527,6 +1527,38 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | **Verify POF** | Uploads the evidence and records the supplied verification facts | Authorized staff only; controlled launch acceptance must verify the operating review procedure |
 | Buyer activity | Logs contact, interest, showing, pass reason, and follow-up | Requires selected buyer |
 | **Log activity** | Saves the buyer touchpoint | Does not send communication unless explicitly using a channel action |
+
+### Disposition Copilot
+
+Open **Disposition Copilot** from the current Deal's **Disposition** or **Finance** context. The
+drawer is House-only and draft-only. Viewing readiness requires deal visibility; generation and
+review require deal editing plus private-economics access.
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| **Draft only** / external actions blocked | States the invariant authority boundary | Always true for DS9, regardless of broader AI policy |
+| Pilot status | Shows cumulative sample coverage and quality/safety gates | Remains **NOT MET** until 50 decisive reviews across 10 cases, 10 applicable evaluations in each scored quality domain, and every gate passes; ignored drafts are excluded |
+| Readiness and evidence gaps | Shows deterministic case blockers before generation | Read-only; resolve the source record rather than editing a model claim |
+| **Generate recommendation** | Creates one structured, evidence-fingerprinted recommendation | Current House case, installed/enabled capability, deal edit, and private-economics access required |
+| Recommendation selector | Opens a preserved historical draft | Historical drafts remain visible; stale evidence cannot be accepted or corrected |
+| Saved citations | Identifies source type, source record, fact, status, and observation time for each material item | Every item requires scoped evidence; all drafts cite the current case/package, Buyer-scoped items cite that Buyer, and provider evidence is public/redacted |
+| Package summary and gaps | Presents cited public-package guidance and missing evidence | Draft only; does not rebuild or approve a package |
+| Buyer-match explanation | Shows cited strengths, conflicts, and disqualifiers for the current pool | Does not add, edit, suppress, qualify, or select a Buyer |
+| Recipient, email, SMS, call-brief, and follow-up drafts | Prepares cited copy for human review | Does not create an Outreach revision, queue a provider operation, or send a message |
+| Reply classification | Shows a cited label and confidence for interested, inquiry, pass, offer intent, offer, opt-out, wrong-person, or needs-review evidence | Does not change Buyer interest, suppression, offer, or communication state |
+| Next-action proposal | Suggests a cited call, proof request, showing, counter, deadline, backup review, or bounded next step | Human-required; does not create or complete the operational action |
+| Offer comparison | Explains cited execution risk across saved offers | Never selects or replaces a buyer, accepts an offer, or changes economics |
+| Buyer-update proposal | Shows a cited preference or reliability change for review | Never mutates the Buyer record |
+| Model and evidence trace | Shows evidence fingerprint, model, prompt, tokens, cost, latency, and timestamps | Read-only audit evidence |
+| Quality evaluation | Records hallucination, package correction, match relevance, reply accuracy, next-action usefulness, and reviewer notes | Complete truthfully; evaluation never applies the draft |
+| **Accept** | Records that the cited draft is useful as written | One review only; blocked when evidence is stale; a duplicate review returns a conflict; applies nothing |
+| **Correct** | Saves a replacement structured output under the same citation and authority rules | One review only; blocked when stale or invalid; applies nothing |
+| **Reject** | Records that the draft is wrong, unsupported, unsafe, or not useful | Available for stale drafts; preserves the original output |
+| **Ignore** | Closes a draft without a quality judgment | Available for stale drafts; tracked separately and excluded from the measured quality sample |
+
+No Copilot control sends, publishes, releases, applies, selects, accepts an offer, updates a Buyer,
+changes economics, releases a contract, or marks funding. Perform an authorized action separately
+through the package, Outreach, InvestorLift, Offer Room, Transaction, or Finance workflow.
 
 ### Governed Outreach
 

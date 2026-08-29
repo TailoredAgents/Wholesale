@@ -101,7 +101,7 @@ test("stale, unavailable, and truncated data remain explicit without disabling c
 });
 
 test("desk actions preserve deal subsection context and can open buyer creation safely", () => {
-  assert.match(dealsWorkspace, /type DispositionTab = "package" \| "buyers" \| "outreach" \| "offers" \| "reconciliation"/);
+  assert.match(dealsWorkspace, /type DispositionTab = "package" \| "buyers" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
   assert.match(dealsWorkspace, /initialTab=\{dispositionTab\}/);
   assert.match(dealsWorkspace, /key=\{`\$\{selected\.disposition_case_id\}-\$\{dispositionTab\}`\}/);
   assert.match(desk, /\/os\/buyers\?create=1&returnTo=/);

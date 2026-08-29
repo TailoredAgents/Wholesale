@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 28, 2026
+Last verified against the repository: August 29, 2026
 
 ## 1. Document Authority
 
@@ -1045,7 +1045,10 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 17. Funding records the selected buyer's completed close exactly once in the same transaction. For
     an assignment, funding is blocked until the current selection, executed assignment evidence,
     and buyer deposit or documented waiver are present.
-18. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+18. The House-only Disposition Copilot can prepare citation-gated package, buyer-match, draft
+    outreach, reply-classification, next-action, offer-risk, and Buyer-update proposals in
+    review-only mode. Accept, correct, reject, and ignore decisions preserve immutable evaluation
+    evidence but never apply a proposal or release an external action.
 
 This workflow is House-only. Governed email/SMS outreach is limited to recipients already in
 Stonegate's owned Buyer Network. The separate InvestorLift view supports a House-only manual
@@ -1661,7 +1664,7 @@ Employees generally interact with copilots, not a collection of separate chat ro
 | Lead Manager | Leads > Lead Queue | Priority, seller brief, missing facts, reply and task proposals |
 | Acquisitions | Calendar Appointment | Meeting preparation, evidence gaps, negotiation support |
 | Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
-| Disposition | Dispositions | Package gaps, buyer ranking, outreach and offer review |
+| Disposition | Deal > Disposition / Finance | Cited package, buyer-match, outreach, reply, next-action, offer-risk, and Buyer-update drafts; DS9 pilot NOT MET |
 | Finance | Finance | Classification, journal, match, variance, and close guidance |
 | Tax | Finance | Evidence and classification questions for professional review |
 | Marketing | Marketing | Funnel, spend, attribution, and campaign recommendations |
@@ -1700,6 +1703,27 @@ Consequential actions remain with authorized humans, including:
 
 Future autonomy is capability-specific. One reversible action may be promoted only after its own
 evaluation, supervised pilot, monitoring, budget, canary, and rollback requirements pass.
+
+### 16.5 DS9 Disposition Copilot Boundary
+
+DS9 is a House-only, private-economics-gated, draft-only capability. Its structured recommendation
+records retain the current evidence fingerprint, durable citations, model and prompt identity,
+tokens, cost, latency, output, reviewer decision, correction, and quality evaluation. Every
+material draft, match, classification, next action, offer comparison, and Buyer-update proposal
+must reference saved Stonegate or approved-provider evidence.
+
+The reviewer may accept, correct, reject, or ignore one recommendation exactly once; a duplicate
+review is rejected as a conflict. Accepting or correcting stale evidence is blocked, including when
+proof or deposit status becomes stale solely because time passes. A review never mutates a Buyer, package, outreach campaign,
+provider handoff, communication, offer, buyer selection, contract, transaction, or financial
+record. DS9's external-action authority remains false even if a broader AI policy permits external
+actions for another capability.
+
+Repository implementation is separate from production proof. The cumulative DS9 pilot remains
+**NOT MET** until at least 50 decisive reviews across 10 cases, at least 10 applicable evaluations
+in every scored quality domain, and all authority, citation, quality, traceability, and
+scenario-coverage gates in `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` pass. Ignored drafts are
+reported but excluded from the measured sample.
 
 ## 17. Background Processing And Reliability
 

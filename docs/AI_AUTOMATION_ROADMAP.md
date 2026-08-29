@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: August 3, 2026
+Last updated: August 29, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -408,8 +408,8 @@ Exit criteria:
 
 ## Phase AI8: Disposition Copilot And Buyer Intelligence
 
-Status: **Provider-independent foundation complete in code. Provider adapters, production replay,
-and a measured pilot remain.**
+Status: **DS9 governed, citation-gated repository implementation complete in code. The measured
+pilot is NOT MET; live InvestorLift transport and any future autonomy remain separate.**
 
 Goal: Help the Disposition specialist place approved contracts quickly and accurately.
 
@@ -423,6 +423,20 @@ Build:
 - Side-by-side offer and buyer-risk comparison.
 - Buyer preference and relationship update proposals.
 - Human-led versus AI-assisted disposition performance reporting.
+
+Current DS9 review contract:
+
+- Every material recommendation cites a saved Stonegate or approved-provider source.
+- Model, prompt, evidence fingerprint, output, token use, cost, latency, correction, reviewer, and
+  quality evaluation remain durable.
+- One reviewer may accept, correct, reject, or ignore; a second review is rejected as a conflict and
+  no decision applies the output.
+- The capability remains House-only, private-economics-gated, and unable to send, mutate a Buyer,
+  choose a buyer, accept an offer, change economics, release a contract, or mark funding.
+- The cumulative minimum pilot is 50 decisive reviews across 10 cases, at least 10 applicable
+  evaluations in each scored quality domain, and every gate in
+  `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md`; ignored drafts do not count and that production
+  evidence does not yet exist.
 
 The human Disposition specialist:
 
@@ -444,6 +458,8 @@ Exit criteria:
 - No unverified property claim reaches a buyer.
 - Final buyer selection and deal economics always require human approval.
 - AI-assisted compensation mode remains locked until measured and explicitly activated.
+- The DS9 pilot sample, authority, citation, quality, traceability, and domain-coverage gates pass.
+  This criterion is currently **not met**.
 
 ## Phase AI9: Finance, Marketing, And Executive Copilots
 

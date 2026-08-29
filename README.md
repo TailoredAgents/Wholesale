@@ -62,7 +62,9 @@ Start with:
   setup reference without secret values.
 - `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
 - `docs/DISPOSITION_SIDEKICK_ROADMAP.md`: Buyer Network, House disposition, Offer Room, DS8
-  manual InvestorLift handoff, and remaining disposition phases.
+  manual InvestorLift handoff, DS9 draft-only Copilot, and remaining disposition phases.
+- `docs/DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md`: DS9 evidence contract, review meanings,
+  permanent authority boundary, regression coverage, and measured-pilot gates.
 - `docs/INVESTORLIFT_PROVIDER_VERIFICATION.md`: official public provider evidence, unresolved live
   transport contract, support questions, and activation gate; it contains no credentials.
 - `docs/CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`: approved private-OS navigation, workspace,
