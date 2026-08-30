@@ -187,10 +187,30 @@
 .discoveryPanel > header h4 { margin: 0; font-size: 15px; }
 .discoveryPanel > header p { margin: 0; color: var(--muted); font-size: 10px; }
 .discoveryPanel > header small { color: var(--muted); font-size: 9px; font-weight: 700; }
+.discoverySummary { min-width: 330px; margin: 0; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line-soft); background: var(--surface-soft); }
+.discoverySummary > div { min-width: 0; padding: 7px 9px; display: grid; gap: 2px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.discoverySummary > div:nth-child(2n) { border-right: 0; }
+.discoverySummary > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.discoverySummary dt { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.discoverySummary dd { margin: 0; color: var(--text); font-size: 10px; font-weight: 800; }
+.discoveryTierGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line-soft); }
+.discoveryTier { min-width: 0; display: grid; grid-template-rows: auto auto 1fr auto; border-right: 1px solid var(--line-soft); background: var(--surface); }
+.discoveryTier:last-child { border-right: 0; }
+.discoveryTier[data-locked="true"] { background: var(--surface-soft); }
+.discoveryTier[data-completed="true"] { box-shadow: inset 0 3px 0 var(--brand); }
+.discoveryTier > header { padding: 12px 14px; display: grid; align-content: start; gap: 4px; border-bottom: 1px solid var(--line-soft); }
+.discoveryTier > header span { font-size: 8px; }
+.discoveryTier > header strong { font-size: 12px; }
+.discoveryTier > header small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.discoveryTierStatus { padding: 10px 14px; display: grid; align-content: start; gap: 3px; }
+.discoveryTierStatus strong { color: var(--brand-strong); font-size: 10px; }
+.discoveryTierStatus span, .discoveryTierStatus small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .discoveryActions { display: flex; gap: 8px; }
 .discoveryActions button { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
 .discoveryActions button:first-child { border-color: var(--brand); background: var(--brand); color: #fff; }
 .discoveryActions button:disabled { opacity: .45; cursor: not-allowed; }
+.discoveryTier > .discoveryActions { padding: 10px 14px 12px; align-self: end; flex-wrap: wrap; border-top: 1px solid var(--line-soft); }
+.discoveryTier > .discoveryActions button { flex: 1 1 150px; }
 .discoveryEstimate { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); background: var(--brand-soft); color: var(--brand-strong); font-size: 10px; line-height: 1.5; }
 .candidateList { display: grid; }
 .candidate, .importedCandidate { min-height: 62px; padding: 9px 14px; display: grid; grid-template-columns: 18px 26px minmax(180px, 1.4fr) minmax(180px, 1fr) minmax(150px, .9fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
@@ -328,6 +348,9 @@
   .metrics > div { border-bottom: 1px solid var(--line-soft); }
   .body { grid-template-columns: 260px minmax(0, 1fr); }
   .sectionGrid { grid-template-columns: 1fr; }
+  .discoveryTierGrid { grid-template-columns: 1fr; }
+  .discoveryTier { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .discoveryTier:last-child { border-bottom: 0; }
   .poolToolbar { grid-template-columns: 1fr 1fr; }
   .poolSearch { grid-column: 1 / -1; }
   .copilotReadiness { grid-template-columns: 1fr 1fr; }
@@ -351,7 +374,9 @@
   .discoveryPanel { margin: 12px 12px 0; }
   .poolPanel { margin: 12px 12px 0; }
   .discoveryPanel > header { align-items: flex-start; flex-direction: column; }
+  .discoverySummary { width: 100%; min-width: 0; }
   .discoveryActions { width: 100%; flex-wrap: wrap; }
+  .discoveryActions button { min-height: 44px; }
   .poolHeader { align-items: flex-start; flex-direction: column; }
   .poolHeader > div:last-child { justify-items: start; text-align: left; }
   .poolToolbar { grid-template-columns: 1fr; }

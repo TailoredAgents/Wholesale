@@ -1589,6 +1589,7 @@ def _strategy_match(criteria: dict[str, object] | None, strategy: str) -> bool:
 def _discovery_provenance(candidate: BuyerDiscoveryCandidate) -> dict[str, Any]:
     return {
         "candidate_id": str(candidate.id),
+        "discovery_run_id": str(candidate.discovery_run_id),
         "provider": candidate.provider,
         "external_key": candidate.external_key,
         "market": candidate.market,

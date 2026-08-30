@@ -21,6 +21,8 @@ import type {
   BuyerDataProvider,
   BuyerDiscoveryEstimate,
   BuyerDiscoveryRun,
+  BuyerDiscoverySearchTier,
+  BuyerDiscoverySummary,
   DispositionBuyerPoolEntry,
   DispositionBuyerPoolPage,
   DispositionBuyerPoolSource,
@@ -33,6 +35,49 @@ import styles from "./dispositions.module.css";
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
 type ConversionAction = "create_new" | "link_existing" | "reject";
 type EditorAction = "pass" | "shortlist" | "clear" | ConversionAction;
+
+const DISCOVERY_TIERS: Array<{
+  value: BuyerDiscoverySearchTier;
+  label: string;
+  actionLabel: string;
+  targetCandidates: number;
+  creditCap: number;
+}> = [
+  {
+    value: "best_fit",
+    label: "Best-Fit 10",
+    actionLabel: "Search up to 10 best-fit buyers",
+    targetCandidates: 10,
+    creditCap: 30,
+  },
+  {
+    value: "expanded",
+    label: "Expand Nearby 20",
+    actionLabel: "Search up to 20 nearby buyers",
+    targetCandidates: 20,
+    creditCap: 60,
+  },
+  {
+    value: "regional",
+    label: "Search Regional Investors 40",
+    actionLabel: "Search up to 40 regional buyers",
+    targetCandidates: 40,
+    creditCap: 120,
+  },
+];
+
+function formatUsd(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function discoveryCost(credits: number, rate = 0.0075) {
+  return formatUsd(credits * rate);
+}
 
 const SOURCES: Array<{ value: DispositionBuyerPoolSource; label: string }> = [
   { value: "all", label: "All sources" },
@@ -113,9 +158,14 @@ export function DispositionBuyerPool({
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState(false);
+  const [activeDiscoveryRequest, setActiveDiscoveryRequest] = useState<{
+    action: "preview" | "run";
+    tier: BuyerDiscoverySearchTier;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<BuyerDataProvider | null>(null);
-  const [estimate, setEstimate] = useState<BuyerDiscoveryEstimate | null>(null);
+  const [discoverySummary, setDiscoverySummary] = useState<BuyerDiscoverySummary | null>(null);
+  const [estimates, setEstimates] = useState<Partial<Record<BuyerDiscoverySearchTier, BuyerDiscoveryEstimate>>>({});
   const [editor, setEditor] = useState<{
     action: EditorAction;
     candidateId: string;
@@ -126,7 +176,7 @@ export function DispositionBuyerPool({
     const query = currentSearchParams.toString();
     return `${pathname}${query ? `?${query}` : ""}`;
   }, [currentSearchParams, pathname]);
-  const busy = parentBusy || loading || actionBusy;
+  const busy = parentBusy || loading || actionBusy || activeDiscoveryRequest !== null;
 
   function poolPath(targetPage = page) {
     const query = new URLSearchParams({
@@ -150,6 +200,14 @@ export function DispositionBuyerPool({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadDiscoverySummary() {
+    const result = await request<BuyerDiscoverySummary>(
+      `/api/v1/buyers/discovery-summary?case_id=${encodeURIComponent(caseId)}`,
+    );
+    setDiscoverySummary(result);
+    return result;
   }
 
   useEffect(() => {
@@ -185,6 +243,15 @@ export function DispositionBuyerPool({
       .catch(() => {
         if (active) setProvider(null);
       });
+    void request<BuyerDiscoverySummary>(
+      `/api/v1/buyers/discovery-summary?case_id=${encodeURIComponent(caseId)}`,
+    )
+      .then((result) => {
+        if (active) setDiscoverySummary(result);
+      })
+      .catch(() => {
+        if (active) setDiscoverySummary(null);
+      });
     return () => {
       active = false;
     };
@@ -192,61 +259,111 @@ export function DispositionBuyerPool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
 
-  async function previewExternalBuyerCost() {
+  async function previewExternalBuyerCost(searchTier: BuyerDiscoverySearchTier) {
     if (!canEditBuyers || !canEditDeals || !packageApproved) return;
-    setActionBusy(true);
-    setEstimate(null);
+    const tier = DISCOVERY_TIERS.find((item) => item.value === searchTier);
+    if (!tier || !discoverySummary?.unlocked_tiers.includes(searchTier)) return;
+    setActiveDiscoveryRequest({ action: "preview", tier: searchTier });
+    setEstimates((current) => {
+      const next = { ...current };
+      delete next[searchTier];
+      return next;
+    });
     onMessage(null);
     try {
       const result = await request<BuyerDiscoveryEstimate>(
         "/api/v1/buyers/discovery-runs/estimate",
         {
           method: "POST",
-          body: JSON.stringify({ disposition_case_id: caseId, max_candidates: 25 }),
+          body: JSON.stringify({
+            disposition_case_id: caseId,
+            search_tier: searchTier,
+            max_candidates: tier.targetCandidates,
+          }),
         },
       );
-      setEstimate(result);
+      setEstimates((current) => ({ ...current, [searchTier]: result }));
       onMessage(result.message);
     } catch (previewError) {
       onMessage(previewError instanceof Error ? previewError.message : "Credit preview failed.");
     } finally {
-      setActionBusy(false);
+      setActiveDiscoveryRequest(null);
     }
   }
 
-  async function discoverExternalBuyers() {
-    if (!canEditBuyers || !canEditDeals || !packageApproved || !estimate?.enough_credits) return;
-    setActionBusy(true);
+  async function discoverExternalBuyers(searchTier: BuyerDiscoverySearchTier) {
+    const tier = DISCOVERY_TIERS.find((item) => item.value === searchTier);
+    const estimate = estimates[searchTier];
+    if (
+      !tier ||
+      !canEditBuyers ||
+      !canEditDeals ||
+      !packageApproved ||
+      !discoverySummary?.unlocked_tiers.includes(searchTier) ||
+      !estimate?.enough_credits ||
+      estimate.search_tier !== searchTier
+    ) return;
+    setActiveDiscoveryRequest({ action: "run", tier: searchTier });
     onMessage(null);
+    let discoveryRun: BuyerDiscoveryRun;
     try {
-      const discoveryRun = await request<BuyerDiscoveryRun>(
+      discoveryRun = await request<BuyerDiscoveryRun>(
         "/api/v1/buyers/discovery-runs",
         {
           method: "POST",
           body: JSON.stringify({
             disposition_case_id: caseId,
+            search_tier: searchTier,
             confirmed_estimated_credits: estimate.estimated_credits,
-            max_candidates: 25,
+            confirmed_request_fingerprint: estimate.request_fingerprint,
+            max_candidates: tier.targetCandidates,
           }),
         },
       );
+    } catch (discoveryError) {
+      onMessage(discoveryError instanceof Error ? discoveryError.message : "Buyer discovery failed.");
+      setActiveDiscoveryRequest(null);
+      return;
+    }
+
+    try {
       await request<DispositionBuyerPoolPage>(
         `/api/v1/dispositions/cases/${caseId}/buyer-pool/runs`,
         { method: "POST", body: "{}" },
       );
-      const result = await request<DispositionBuyerPoolPage>(
-        `/api/v1/dispositions/cases/${caseId}/buyer-pool?page=1&page_size=50&source=external&stage=all`,
-      );
+      const [result, nextSummary] = await Promise.all([
+        request<DispositionBuyerPoolPage>(
+          `/api/v1/dispositions/cases/${caseId}/buyer-pool?page=1&page_size=50&source=external&stage=all`,
+        ),
+        loadDiscoverySummary().catch(() => null),
+      ]);
       setPool(result);
-      setEstimate(null);
+      if (nextSummary) setDiscoverySummary(nextSummary);
+      setEstimates((current) => {
+        const next = { ...current };
+        delete next[searchTier];
+        return next;
+      });
       setSource("external");
       setStage("all");
       setPage(1);
-      onMessage(`${discoveryRun.result_count} external candidates were staged and ranked inside this deal's buyer pool. No outreach was sent.`);
-    } catch (discoveryError) {
-      onMessage(discoveryError instanceof Error ? discoveryError.message : "Buyer discovery failed.");
+      onMessage(
+        discoveryRun.reused
+          ? `${discoveryRun.result_count} saved ${tier.label} results were reused. No provider credits were spent and no outreach was sent.`
+          : `${discoveryRun.result_count} net-new ${tier.label} candidates were staged for human review. No outreach was sent.`,
+      );
+    } catch {
+      await loadDiscoverySummary().catch(() => null);
+      setEstimates((current) => {
+        const next = { ...current };
+        delete next[searchTier];
+        return next;
+      });
+      onMessage(
+        `${discoveryRun.result_count} ${tier.label} results were saved, but the buyer-pool refresh did not finish. Do not run the search again; refresh this page to load the saved results. No outreach was sent.`,
+      );
     } finally {
-      setActionBusy(false);
+      setActiveDiscoveryRequest(null);
     }
   }
 
@@ -346,6 +463,12 @@ export function DispositionBuyerPool({
 
   const firstVisible = pool?.total ? (pool.page - 1) * pool.page_size + 1 : 0;
   const lastVisible = pool ? Math.min(pool.total, (pool.page - 1) * pool.page_size + pool.entries.length) : 0;
+  const ownedNetworkCount = pool?.run?.source_counts.internal ?? 0;
+  const completedDiscoveryResults = discoverySummary?.tier_statuses.reduce(
+    (total, tierStatus) => total + (tierStatus.completed ? tierStatus.latest_run?.result_count ?? 0 : 0),
+    0,
+  ) ?? 0;
+  const discoveryCreditRate = discoverySummary?.approximate_cost_per_credit_usd ?? 0.0075;
 
   return (
     <div className={styles.buyerTab}>
@@ -353,34 +476,127 @@ export function DispositionBuyerPool({
         <header>
           <div>
             <span><DatabaseZap size={14} />External buyer intelligence</span>
-            <h4>Provider candidate search</h4>
-            <p>{provider?.message ?? "Checking buyer-data connection."}</p>
+            <h4>Use Stonegate buyers first, then expand deliberately</h4>
+            <p>
+              The free owned network is ranked before any DealMachine search. Alex decides whether
+              another tier is worth the cost; Stonegate never contacts discovered buyers automatically.
+            </p>
             {provider?.connected ? (
               <small>
                 {provider.plan_name ?? "DealMachine"} plan · {provider.credits_remaining?.toLocaleString() ?? "Unknown"} credits available
                 {provider.billing_cycle_end ? ` · resets ${new Date(provider.billing_cycle_end).toLocaleDateString()}` : ""}
               </small>
             ) : null}
+            {!provider?.connected || !provider.live_search_enabled ? (
+              <small role="status">{provider?.message ?? "Checking buyer-data connection."}</small>
+            ) : null}
           </div>
-          <div className={styles.discoveryActions}>
-            <button disabled={busy || !canEditBuyers || !canEditDeals || !packageApproved || !provider?.live_search_enabled} onClick={previewExternalBuyerCost} type="button">
-              <SearchCheck size={15} />Preview search cost
-            </button>
-            <button disabled={busy || !canEditBuyers || !canEditDeals || !packageApproved || !estimate?.enough_credits} onClick={discoverExternalBuyers} type="button">
-              <DatabaseZap size={15} />{estimate ? `Run search (up to ${estimate.estimated_credits} credits)` : "Run buyer search"}
-            </button>
-          </div>
+          <dl className={styles.discoverySummary}>
+            <div><dt>Owned network</dt><dd>{ownedNetworkCount.toLocaleString()} ranked free</dd></div>
+            <div><dt>Provider results</dt><dd>{completedDiscoveryResults.toLocaleString()} saved</dd></div>
+            <div>
+              <dt>Deal credits</dt>
+              <dd>{discoverySummary ? `${discoverySummary.cumulative_case_credits} / ${discoverySummary.cumulative_case_credit_cap}` : "Checking"}</dd>
+            </div>
+            <div>
+              <dt>Monthly credits</dt>
+              <dd>{discoverySummary ? `${discoverySummary.monthly_credits} / ${discoverySummary.monthly_credit_cap}` : "Checking"}</dd>
+            </div>
+          </dl>
         </header>
-        {estimate ? (
-          <p className={styles.discoveryEstimate}>
-            {estimate.total_matching_properties.toLocaleString()} matching recent purchases · samples up to {estimate.provider_result_limit} properties · estimates {estimate.estimated_property_credits} property and {estimate.estimated_people_credits} owner credits. Running the search requires the explicit confirmation button above.
-          </p>
-        ) : null}
+        <div className={styles.discoveryTierGrid}>
+          {DISCOVERY_TIERS.map((tier, index) => {
+            const status = discoverySummary?.tier_statuses.find((item) => item.search_tier === tier.value);
+            const tierEstimate = estimates[tier.value];
+            const latestRun = status?.latest_run;
+            const unlocked = status?.unlocked ?? false;
+            const completed = status?.completed ?? false;
+            const reconciliationRequired = Boolean(
+              latestRun
+              && !completed
+              && (
+                latestRun.status === "running"
+                || (latestRun.status === "failed" && latestRun.actual_credits == null)
+              ),
+            );
+            const available = unlocked && !reconciliationRequired;
+            const previousResults = discoverySummary?.tier_statuses
+              .slice(0, index)
+              .reduce((total, item) => total + (item.completed ? item.latest_run?.result_count ?? 0 : 0), 0) ?? 0;
+            const targetCandidates = status?.target_candidates ?? tier.targetCandidates;
+            const creditCap = status?.estimated_credit_cap ?? tier.creditCap;
+            const maximumCost = status?.maximum_estimated_cost_usd ?? creditCap * discoveryCreditRate;
+            const activeAction = activeDiscoveryRequest?.tier === tier.value
+              ? activeDiscoveryRequest.action
+              : null;
+
+            return (
+              <article className={styles.discoveryTier} data-completed={completed || undefined} data-locked={!available || undefined} key={tier.value}>
+                <header>
+                  <span>Tier {index + 1}</span>
+                  <strong>{tier.label}</strong>
+                  <small>
+                    Up to {targetCandidates} additional net-new buyers · {creditCap}-credit cap · approximately {formatUsd(maximumCost)} maximum
+                  </small>
+                </header>
+                <div className={styles.discoveryTierStatus}>
+                  <strong>
+                    {completed
+                      ? (latestRun?.reused ? "Saved results reused" : "Completed")
+                      : reconciliationRequired
+                        ? "Credit reconciliation required"
+                        : unlocked
+                          ? "Available"
+                          : "Locked"}
+                  </strong>
+                  <span>
+                    {completed
+                      ? `${latestRun?.result_count ?? 0} results in this tier · ${previousResults + (latestRun?.result_count ?? 0)} cumulative`
+                      : reconciliationRequired
+                        ? latestRun?.error_message ?? "A prior paid request is still being reconciled. Stonegate will not spend again until it is resolved."
+                        : unlocked
+                        ? `${previousResults} prior results saved · preview costs $0.00`
+                        : `Complete or reuse Tier ${index} before this search unlocks.`}
+                  </span>
+                  {latestRun ? (
+                    <small>
+                      {latestRun.actual_credits == null
+                        ? "Actual credits pending reconciliation"
+                        : `${latestRun.actual_credits} actual credits · ${latestRun.actual_cost_usd == null ? discoveryCost(latestRun.actual_credits, discoveryCreditRate) : formatUsd(latestRun.actual_cost_usd)}`}
+                    </small>
+                  ) : null}
+                </div>
+                {tierEstimate ? (
+                  <p className={styles.discoveryEstimate}>
+                    {tierEstimate.reused ? "Current saved results can be reused without another paid request. " : ""}
+                    {tierEstimate.total_matching_properties.toLocaleString()} matching purchases · up to {tierEstimate.provider_result_limit} properties sampled · {tierEstimate.estimated_property_credits} property + {tierEstimate.estimated_people_credits} owner credits · {tierEstimate.estimated_credits} total ({formatUsd(tierEstimate.estimated_cost_usd)} approximate).
+                  </p>
+                ) : null}
+                <div className={styles.discoveryActions}>
+                  <button
+                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !packageApproved || !provider?.live_search_enabled}
+                    onClick={() => void previewExternalBuyerCost(tier.value)}
+                    type="button"
+                  >
+                    <SearchCheck size={15} />{activeAction === "preview" ? "Checking cost…" : "Preview search estimate"}
+                  </button>
+                  <button
+                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !packageApproved || !tierEstimate?.enough_credits}
+                    onClick={() => void discoverExternalBuyers(tier.value)}
+                    type="button"
+                  >
+                    <DatabaseZap size={15} />{activeAction === "run" ? "Running…" : tierEstimate?.reused ? "Reuse saved results" : tier.actionLabel}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
         {!packageApproved ? <p className={styles.discoveryEstimate}>Approve the investor package before spending provider credits on a deal-specific buyer search.</p> : null}
         <footer>
-          <span>External results stay staged</span>
-          <span>Human approval required</span>
-          <span>No outreach sent</span>
+          <span>External results remain staged</span>
+          <span>Human review and approval required</span>
+          <span>No automatic calls, texts, or emails</span>
         </footer>
       </section>
 

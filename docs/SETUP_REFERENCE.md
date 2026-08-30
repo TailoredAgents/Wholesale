@@ -39,7 +39,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | SMS | Twilio | Seller-inquiry A2P approved; website and Facebook staff alerts are implemented; repeat internal new-lead alert acceptance after the worker credential correction |
 | Voice | Twilio | Implemented and processing calls; complete routing, recording, recovery, retention, and deletion acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
-| Buyer data | DealMachine | Optional and disabled; safe to remove after subscription cancellation |
+| Buyer data | DealMachine | Governed House buyer discovery enabled in the production API manifest; controlled real-deal acceptance remains |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
 | Error monitoring | Sentry | Optional/deferred |
 | Ad conversion delivery | Google and Meta | Meta Pixel and Conversions API active; Google pending |
@@ -1178,21 +1178,38 @@ upload test passes.
 
 Variables:
 
-- `BUYER_DATA_PROVIDER=dealmachine` when activated
+- `BUYER_DATA_PROVIDER=dealmachine` on the API service
 - `DEALMACHINE_API_KEY`
-- `DEALMACHINE_BASE_URL`
-- request timeout
-- maximum discovery results
+- `DEALMACHINE_BASE_URL=https://api.v2.dealmachine.com/v1`
+- `DEALMACHINE_REQUEST_TIMEOUT_SECONDS=30`
+- `BUYER_DISCOVERY_MAX_RESULTS=40`
 
-This legacy integration is optional and should remain `BUYER_DATA_PROVIDER=disabled` after the
-subscription is cancelled. If Stonegate deliberately reactivates it, create the API key from the
-DealMachine developer settings, store it only in Render, set the provider to `dealmachine`, and
-redeploy. The Buyer
-workspace readiness check must show the expected paid plan and available credits. Every search
-first uses DealMachine's zero-credit estimate mode and requires explicit confirmation of the
-current maximum credit use. Acceptance must compare estimated and actual credits and test provider
-result quality, multi-select field mapping, DNC-safe contact suggestion, scoring, candidate review,
-import, duplicates, and cost before recurring dependence.
+The production Blueprint enables DealMachine only for governed, deal-specific House buyer
+discovery on the API service. The worker does not need `BUYER_DATA_PROVIDER`. Keep
+`UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` on both services; buyer discovery does not reactivate
+DealMachine comp evidence.
+
+The Buyer workspace readiness check must show the expected paid plan and available credits before
+Alex spends a credit. Stonegate ranks the owned Buyer Network first. Paid discovery then uses three
+sequential, net-new tiers: up to 10 candidates with a 30-credit ceiling, up to 20 additional
+candidates with a 60-credit ceiling, and up to 40 additional candidates with a 120-credit ceiling.
+The server also enforces a 250-credit per-deal cap, a 2,000-credit monthly organization cap, current
+approved-package authority, current provider-estimate confirmation, binding tier ceilings,
+recent-result reuse, and duplicate-request protection. The displayed dollar equivalent uses
+Stonegate's current planning rate of $0.0075 per
+credit ($150 per 20,000 credits); DealMachine's provider ledger remains authoritative.
+
+Every tier begins with DealMachine's zero-credit estimate mode. The operator reviews the exact
+scope, estimated credits, dollar equivalent, deal usage, and monthly usage before confirming the
+paid request. That confirmation is bound to the exact preview fingerprint and requires both buyer
+and deal editing authority. The tier ceiling remains the binding maximum because live owner-contact credits can
+exceed the provider preview. An interrupted or incompletely reported paid attempt is durably saved
+and blocks another paid search for that deal pending reconciliation. Results remain staged: they
+cannot become active buyers, gain call or SMS permission,
+or receive outreach without a separate human decision. DS12 acceptance must compare estimated and
+actual credits and test provider result quality, field mapping, DNC-safe contact suggestion,
+scoring, candidate review, duplicate handling, and cost on a controlled real deal before routine
+dependence.
 
 ## BatchDialer Direct API Integration
 

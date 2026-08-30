@@ -4,7 +4,9 @@ Last updated: August 29, 2026
 
 > **Current status: DS0-DS8 complete; the DS9 repository implementation is complete but its
 > measured pilot is NOT MET; the DS10 derived House management dashboard is implemented; live
-> InvestorLift transport, expanded DS10 attribution/cost controls, and DS11-DS12 remain pending.** Stonegate now has the audited,
+> InvestorLift transport and expanded DS10 attribution/cost controls remain pending; DS11's
+> governed repository implementation and production API configuration are complete, while DS12
+> controlled real-deal acceptance remains pending.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -27,8 +29,11 @@ Last updated: August 29, 2026
 > not met the required 50 decisive reviews across 10 cases. No direct InvestorLift API is claimed or
 > enabled because its transport contract remains unverified. DS10 adds a read-only management view
 > derived from canonical House disposition evidence while explicitly leaving campaign-cost,
-> correction-capable attribution, and causal performance claims pending. Land outreach and
-> DS11-DS12 remain plans. DS6
+> correction-capable attribution, and causal performance claims pending. DS11 now supplies bounded,
+> cost-governed DealMachine buyer discovery; bulk CSV buyer migration is not planned because Alex
+> will maintain Stonegate-owned relationships one at a time. DS12 remains the final supervised
+> launch and operator-acceptance gate. Land outreach and live InvestorLift transport remain future
+> work. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
@@ -164,8 +169,10 @@ sections below supersede the starting gaps that those phases resolved.
 
 - A provider-neutral interface and manual-only InvestorLift adapter now exist. No verified or
   enabled InvestorLift REST, GraphQL, webhook, or polling transport exists.
-- The existing external discovery surface is legacy DealMachine scaffolding and is not the target
-  provider transport architecture.
+- DealMachine's deal-specific House buyer discovery now has sequential search tiers, durable credit
+  budgets, result-reuse controls, and a production API configuration. Controlled real-deal
+  usefulness and credit reconciliation remain DS12 acceptance work. Buyer discovery is independent
+  from the disabled DealMachine underwriting-comp role.
 - A complete public InvestorLift REST API contract, authentication model, rate limits, webhook
   catalog, sandbox, and God Mode or Artemis data endpoints have not been verified.
 - Provider-specific objects must not leak into Stonegate's canonical Buyer and Deal models.
@@ -295,7 +302,7 @@ extended rather than replaced.
 | Buyer offer | Structured economics, dates, terms, proof, and status |
 | Buyer selection | Human-approved primary and backup coverage |
 | Provider sync run | Bounded request, result, cost, errors, and replay state |
-| Buyer import batch | Future CSV mapping, row outcome, idempotency, and rollback scope |
+| Provider discovery budget | Per-search, per-deal, and monthly credit authority and reconciliation |
 
 Provider payloads are stored as source evidence where necessary, but provider schemas must not
 become the only representation of Stonegate business data.
@@ -895,42 +902,111 @@ merely increasing messages or nominal offers.
 - **Not met:** attributable campaign cost, cost-per-outcome reporting, Land intelligence, and
   production-validated causal comparisons.
 
-## DS11 - Optional CSV Buyer Migration
+## DS11 - Cost-Governed DealMachine Buyer Discovery
 
-**Status: Planned after manual Buyer Network acceptance.**
+**Status: Repository implementation and production API configuration complete as of August 29,
+2026. Controlled real-deal provider and operator acceptance remains DS12 work.**
 
 ### Goal
 
-Support larger future migrations without weakening the reviewed one-by-one workflow.
+Help Alex find likely cash buyers for one contracted House at a time without replacing his owned
+relationships, creating an unnecessary bulk-import workflow, or allowing provider credits to be
+spent silently.
 
-### Work
+### Operating Decision
 
-- Publish a downloadable Stonegate template.
-- Accept approved CSV files with explicit encoding and size limits.
-- Map source columns to Stonegate fields.
-- Preview normalized data, validation errors, duplicates, and missing requirements.
-- Require explicit commit after review.
-- Store import batch, row key, source, creator, timestamps, and row outcomes.
-- Make retries idempotent.
-- Support safe rollback by deactivating batch-created records while preserving audit evidence and
-  subsequent legitimate activity.
-- Gate exports and sensitive bulk actions behind dedicated permissions.
+- Alex adds and maintains Stonegate-owned buyers one at a time as he transfers authorized
+  relationships or meets a new investor. No CSV buyer migration is planned.
+- Stonegate ranks the owned Buyer Network first without a paid provider request.
+- DealMachine is a deal-specific reach and purchase-evidence source only when owned-network
+  coverage is thin or Alex deliberately wants additional candidates.
+- InvestorLift remains the intended later broad-reach provider after its live API contract,
+  credentials, rights, costs, and transport behavior are verified.
+- DealMachine buyer discovery does not reactivate or depend on DealMachine underwriting comps.
+
+### Implemented Search And Credit Policy
+
+1. Every tier begins with a free cost preview of the exact request that would be submitted.
+2. Tier 1 may add up to 10 net-new, deduplicated candidates and has a 30-credit ceiling.
+3. Tier 2 unlocks only after Tier 1 completes; Alex should review Tier 1 before choosing to add up
+   to 20 additional net-new candidates under a 60-credit ceiling.
+4. Tier 3 unlocks only after Tier 2 completes; Alex should review both narrower tiers before
+   choosing to add up to 40 additional net-new candidates under a 120-credit ceiling.
+5. The three normal tiers therefore remain below the hard 250-credit lifetime limit for one deal.
+6. Disposition discovery may use no more than 2,000 credits in one UTC calendar month across the
+   organization.
+7. DealMachine's preview remains visible and must be confirmed, but the tier ceiling is the
+   binding authorization because the live property-and-owner response can cost more than the
+   property-only preview. The account, deal, and monthly budgets must each cover the full tier
+   ceiling before Stonegate makes the paid request.
+8. Identical current results are cached and reused. Reopening or refreshing the screen, retrying a
+   response, or double-clicking cannot create a second paid request for the same approved package.
+9. A materially expanded search requires the next sequential tier; staff cannot jump directly to
+   the broadest search.
+10. Stonegate commits the tier reservation before calling DealMachine. A running request or failed
+    request with unknown final credits blocks every later paid search for that deal until the spend
+    is reconciled; it never expires into an automatic retry.
+
+### Delivered Work
+
+- Adds a clear owned-network coverage state before offering paid discovery.
+- Makes the 10, 20, and 40 net-new tiers explicit in the Deal Buyer Pool rather than silently using
+  one broad default search.
+- Enforces the 30, 60, and 120 per-tier ceilings, the 250-credit per-deal limit, and the 2,000-credit
+  monthly limit on the server, not only in the interface.
+- Shows the zero-credit preview, property-credit estimate, people-credit estimate, total estimate,
+  dollar equivalent, prior spend on the deal, and remaining monthly allowance before confirmation.
+- Re-estimates the exact request at execution and requires both buyer-edit and deal-edit authority,
+  the provider's current estimate, and the exact request fingerprint returned by preview. If the
+  package, property, price, scope, or preview changes, a new preview is required. The 30, 60, or 120
+  credit tier ceiling—not the lower preview—is the hard spend authorization and budget reservation.
+- Records actual versus estimated credits, provider balance, request fingerprint, result version,
+  actor, timing, and errors for every paid attempt.
+- Accepts a live charge above the property-only preview when it remains inside the explicitly shown
+  tier ceiling; it still fails closed if the final charge exceeds that ceiling or lacks complete
+  credit telemetry.
+- Reuses current saved candidates and source evidence before permitting another paid request, and
+  makes concurrent or replayed requests idempotent.
+- Persists the spend reservation before crossing the paid-provider boundary. An interrupted or
+  incompletely reported request blocks another paid search for that deal pending reconciliation,
+  while the owned Buyer Network remains usable.
+- Deduplicates each tier against earlier DealMachine results and Stonegate's owned Buyer Network so
+  the tier count represents net-new candidates rather than repeated records.
+- Keeps results staged inside the deal. Alex must shortlist, pass, link to an existing buyer, or
+  create a **Needs Review** buyer explicitly.
+- Preserves provider identity, purchase evidence, freshness, contact-quality warnings, and DNC
+  signals. A discovered phone or email does not establish outreach permission, proof of funds, or
+  a verified buy box.
+- Keeps every search and review action House-only until a separate Land disposition design and
+  acceptance phase exists.
+- Records the source, credit, candidate, import, offer, and outcome evidence needed for DS12 to
+  measure useful-candidate yield, duplicate rate, credits per Alex-approved candidate, and whether
+  paid discovery produced an offer, backup, or completed assignment.
+- Keeps a provider kill switch. Provider failure or exhausted credits must never block manual work
+  with the owned Buyer Network.
 
 ### Exit Criteria
 
-- Re-uploading the same file does not create duplicate buyers.
-- Accepted, updated, skipped, duplicate, and rejected rows are explainable.
-- Imported records start in the correct review state.
-- An authorized manager can audit and safely reverse a bad batch.
+- Free preview is verified not to consume credits, and every paid request remains within the exact
+  confirmed tier, deal, and monthly limits.
+- Sequential tiers, duplicate clicks, retries, and concurrent requests cannot produce duplicate
+  spend, candidates, or Buyer records.
+- Every used credit reconciles to a saved request and actual provider response.
+- No provider candidate becomes an active buyer, receives outreach, gains permission, or gains
+  proof or buy-box authority without human review.
+- Alex can complete owned-network review, preview, search, shortlist/pass, and link/create decisions
+  without developer assistance.
+- At least three bounded real-deal searches are reviewed for candidate usefulness and credit cost
+  before the limits are expanded or DealMachine becomes routine.
 
-## DS12 - Supervised Production Pilot And Acceptance
+## DS12 - Final Launch And Operator Acceptance
 
 **Status: Planned.**
 
 ### Goal
 
-Use Stonegate's current contracted deal as the supervised real-world acceptance case while keeping
-external communication and binding decisions human-controlled.
+Use a real Stonegate contracted property with Alex as the supervised end-to-end launch and operator
+acceptance case while keeping external communication and binding decisions human-controlled.
 
 ### Work
 
@@ -940,6 +1016,8 @@ external communication and binding decisions human-controlled.
 - Add a controlled initial set of the specialist's highest-quality authorized buyers.
 - Verify package facts, internal floors, recipient visibility, and approval history.
 - Compare matches against the specialist's judgment and record corrections.
+- Exercise the DS11 owned-network-first decision and, if additional reach is justified, one bounded
+  DealMachine tier with its preview, credit reconciliation, and staged-candidate review.
 - Run the first live outreach with an explicit recipient cap and owner approval.
 - Reconcile replies, inquiries, offers, proof, primary and backup coverage, deposit, and closing.
 - Review provider cost, delivery, operational friction, and data quality.
@@ -949,7 +1027,7 @@ external communication and binding decisions human-controlled.
 ### Exit Criteria
 
 - The full workflow is completed without duplicate buyers, messages, offers, or work items.
-- The disposition specialist can operate the workflow without developer assistance.
+- Alex can operate the complete workflow without developer assistance.
 - Stonegate retains complete buyer, outreach, offer, decision, and outcome history.
 - Production monitoring and rollback controls are verified.
 - Owner approval records the workflow as accepted for normal use.
@@ -1052,8 +1130,8 @@ Quality and safety measures:
 | DS8 | InvestorLift Provider Adapter | Provider-neutral/manual foundation complete; live transport blocked pending provider verification |
 | DS9 | Governed Disposition Copilot | Repository implementation complete; measured pilot NOT MET pending 50 decisive reviews across 10 cases and every quality/safety gate |
 | DS10 | Management Intelligence And Learning | Derived canonical House dashboard implemented; production reconciliation and expanded attribution/cost/correction controls pending |
-| DS11 | Optional CSV Buyer Migration | Planned after manual acceptance |
-| DS12 | Supervised Production Pilot And Acceptance | Planned |
+| DS11 | Cost-Governed DealMachine Buyer Discovery | Repository implementation and production API configuration complete; controlled real-deal acceptance pending DS12 |
+| DS12 | Final Launch And Operator Acceptance | Planned with Alex and a real contracted property |
 
 ## 15. Documentation Maintenance
 
@@ -1086,6 +1164,10 @@ explainable House deal buyer pool, DS5 provides the evidence-backed, approval-ga
   **NOT MET**. DS10 now provides a bounded, read-only House management view of retained operating
   outcomes. It does not yet provide a disposition campaign-cost ledger, frozen correction-capable
   attribution, Land intelligence, or causal performance claims.
-DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
-manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may
-be used as supervised evidence throughout the build.
+DS11 deliberately preserves Alex's one-at-a-time owned Buyer Network and adds only bounded,
+deal-specific DealMachine discovery after free owned-network matching. Its sequential 10/20/40
+net-new tiers, 30/60/120 credit ceilings, 250-credit per-deal cap, 2,000-credit monthly cap,
+zero-credit preview, recent-result reuse, staged human review, and duplicate-request protection are
+implemented and configured on the production API. InvestorLift live transport remains later
+provider work after its contract is verified. DS12 is the formal end-to-end launch and
+operator-acceptance gate with Alex and a real contracted property.

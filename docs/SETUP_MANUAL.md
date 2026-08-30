@@ -93,7 +93,7 @@ provider account. For example:
 | `TWILIO_ACCOUNT_SID` | Twilio Account Info |
 | `TWILIO_AUTH_TOKEN` | Twilio Account Info; it is not the Account SID |
 | `ESIGN_API_KEY` | SignWell API settings |
-| `DEALMACHINE_API_KEY` | Optional legacy DealMachine buyer discovery only |
+| `DEALMACHINE_API_KEY` | Paid deal-specific House buyer discovery; separate from underwriting comps |
 
 Do not put quotation marks around a value unless the documented value itself requires them.
 Do not add spaces before or after a key.
@@ -561,10 +561,12 @@ the API and worker, and review the operating policy before calling into other st
 9. Open **Settings > Integrations** and confirm **Call recording and AI notes** is configured before
    launch.
 
-## RealEstateAPI Property Intelligence And Optional DealMachine Buyers
+## RealEstateAPI Property Intelligence And DealMachine Buyer Discovery
 
-RealEstateAPI now supplies the reusable property profile and secondary comp evidence. DealMachine
-is disabled and is optional only for legacy buyer discovery if that subscription is retained.
+RealEstateAPI supplies the reusable property profile and secondary comp evidence. DealMachine has
+a separate bounded role: cost-governed, deal-specific buyer discovery for House dispositions.
+Enabling DealMachine buyer discovery does not enable DealMachine underwriting comps, and Stonegate
+continues to use its owned Buyer Network first.
 
 For RealEstateAPI activation:
 
@@ -573,7 +575,9 @@ For RealEstateAPI activation:
 2. Set `REALESTATEAPI_BASE_URL=https://api.realestateapi.com` and
    `REALESTATEAPI_REQUEST_TIMEOUT_SECONDS=30` on both services.
 3. Set `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate` on both services.
-4. Set `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` and `BUYER_DATA_PROVIDER=disabled`.
+4. Keep `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` on both services. The production API's
+   separate `BUYER_DATA_PROVIDER=dealmachine` setting does not affect RealEstateAPI research or
+   underwriting comps.
 5. Redeploy API and worker, then use **Refresh research** on a known Georgia property.
 6. Confirm Sources shows RentCast and RealEstateAPI, duplicate transfers appear once, and the
    Stonegate ARV is based on screened comp math rather than either provider estimate.
@@ -584,29 +588,43 @@ For RealEstateAPI activation:
 9. Repeat **Update Stonegate valuation** without refreshing and confirm no new RealEstateAPI call is
    made. Only explicit evidence refreshes may spend another provider credit.
 
-If DealMachine is retained solely for buyer discovery, use the legacy controlled workflow below.
-Otherwise remove its key after disabling both DealMachine modes.
+DealMachine buyer discovery and DealMachine underwriting comps are independent. Stonegate's
+production use is governed House buyer discovery only; keep
+`UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` when `BUYER_DATA_PROVIDER=dealmachine` is active.
 
-When ready:
+For production activation and DS12 acceptance:
 
 1. Sign in to the paid Stonegate DealMachine account as the account owner.
 2. Open the developer/API settings and create an API key.
 3. Add it to `DEALMACHINE_API_KEY` in the Render API service. Never paste it into chat,
    documentation, source code, or browser settings.
-4. Set `BUYER_DATA_PROVIDER=dealmachine`.
-5. Keep `DEALMACHINE_BASE_URL=https://api.v2.dealmachine.com/v1` and redeploy.
+4. Confirm the Render API service has `BUYER_DATA_PROVIDER=dealmachine`. The communications worker
+   does not need this buyer-provider setting.
+5. Keep `DEALMACHINE_BASE_URL=https://api.v2.dealmachine.com/v1`, keep
+   `BUYER_DISCOVERY_MAX_RESULTS=40`, and redeploy the API.
 6. Open a test disposition case and the Buyers section.
 7. Confirm Stonegate shows the expected paid plan, billing-cycle reset, and available credits.
-8. Select **Preview search cost**. This validates the same request without consuming credits.
-9. Review the match count and maximum property/contact credit estimate, then select **Run buyer
-   search** only when the amount is acceptable.
-10. Compare the actual credit summary with the estimate.
-11. Review candidates before importing them.
-12. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
+8. Select **Preview search estimate**. This validates the same request without consuming credits.
+9. Review the net-new tier, match count, property/contact credit estimate, dollar equivalent,
+   credits already used on the deal, and remaining monthly allowance. The DS11 production policy
+   is sequential 10/20/40 net-new tiers capped at 30/60/120 credits, 250 credits per deal, and 2,000
+   disposition credits per UTC calendar month.
+10. Select the tier's **Search up to...** action only after the current provider estimate and the
+    binding tier ceiling are acceptable. The
+    server unlocks each broader tier only after the prior tier completes; review those results
+    before choosing to spend on a broader search.
+11. Compare the actual credit summary with the estimate and confirm cached results are reused rather
+    than purchased again.
+12. Review staged candidates before linking one or creating a **Needs Review** Buyer record.
+13. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
     cost.
+14. Confirm an interrupted or incompletely reported request shows **Credit reconciliation
+    required** and cannot be purchased again until its provider usage is reconciled.
 
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
-silently import or contact every result.
+silently import or contact every result. A discovered contact method does not establish call or SMS
+permission, proof of funds, or a verified buy box. InvestorLift remains the later broad-reach option
+after its live API contract and account rights are verified.
 
 ## BatchDialer For VA Cold Calling
 

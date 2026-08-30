@@ -48,7 +48,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
 | F4 Documents and e-signature | Storage, offer-authority snapshots, execution evidence, and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM, governed House owned-buyer Resend/Twilio outreach, Buyer Inbox reply review, Offer Room protection, and the DS8 manual-only InvestorLift exact-package handoff and evidence workspace are implemented; live InvestorLift transport, optional DealMachine, and Land outreach remain disabled | Controlled owned-buyer delivery/reply and buyer-placement acceptance; operator acceptance of the manual InvestorLift handoff; written provider-contract verification before any live transport |
+| F5 Buyers and dispositions | Buyer CRM, governed House owned-buyer Resend/Twilio outreach, Buyer Inbox reply review, Offer Room protection, DS8 manual-only InvestorLift handoff, and DS11 cost-governed DealMachine House buyer discovery are implemented; live InvestorLift transport and Land outreach remain disabled | Controlled buyer-placement acceptance; DS11 real-deal credit/result acceptance; operator acceptance of the manual InvestorLift handoff; written provider-contract verification before any InvestorLift live transport |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
@@ -296,7 +296,10 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - buyer CRM, criteria, proof, capacity, engagement, and offers
 - disposition cases, package approval, matching, campaigns, selection, and reconciliation
 - deterministic buyer ranking
-- optional disabled DealMachine adapter retained only for deliberate future reactivation
+- DS11 DealMachine House buyer discovery with owned-network-first guidance, sequential 10/20/40
+  net-new tiers, 30/60/120 tier ceilings, 250 credits per deal, 2,000 credits per UTC calendar
+  month, current provider-estimate confirmation, result reuse, staged human review, and no
+  automatic outreach
 - duplicate protection and audit history
 - DS9 citation-gated, House-only Disposition Copilot in supervised draft-only mode, with structured
   package, match, outreach, reply, next-action, offer-risk, and Buyer-update proposals; immutable
@@ -313,9 +316,12 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 
 ### Current Provider Decision
 
-DealMachine is not part of the current launch plan. Its adapter remains disabled and must not be
-presented to staff as a working buyer source. It can be evaluated later only through a deliberate
-Owner decision and a new quality, billing, contact-permission, and production acceptance test.
+The production API is configured for DealMachine as a bounded House buyer-discovery supplement.
+Stonegate ranks its owned Buyer Network first, spends only through an explicit cost preview and
+sequential tier, and keeps every provider result staged until a person shortlists, passes, links,
+rejects, or approves it into the Buyer Network as **Needs Review**. DealMachine underwriting comps
+remain disabled. DS12 must still validate actual credits and result quality on controlled real
+deals before DealMachine becomes routine.
 
 The DS5 **Prepare recipient pool** action remains non-sending `prepared_not_sent` evidence. DS6
 implements the separate House Outreach workflow through approved Resend or Twilio delivery to no
@@ -343,8 +349,9 @@ establish production-provider acceptance.
 7. Record engagement, offers, deposits, primary buyer, backup buyer, and verified proof.
 8. Complete one controlled contract-to-buyer-to-reconciliation run before the first live
    assignment.
-9. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
-   quality, credit/cost, duplicate, DNC, and selective-import acceptance phase first.
+9. Run the DS11 controlled DealMachine acceptance on a real House deal: verify the zero-credit
+   preview, sequential tier lock, estimated-versus-actual credits, saved-result reuse, duplicate and
+   DNC-safe handling, staged candidate decisions, and no automatic outreach before routine use.
 10. Run the cumulative measured DS9 draft-only pilot. Collect at least 50 decisive reviews across
     10 House cases, at least 10 applicable evaluations per scored quality domain, and all required
     normal, incomplete, conflicting, blocked, stale, and adversarial groups. Ignored drafts do not

@@ -2944,6 +2944,8 @@ export type BuyerDataProvider = {
   credits_total: number | null;
 };
 
+export type BuyerDiscoverySearchTier = "best_fit" | "expanded" | "regional";
+
 export type BuyerDiscoveryEstimate = {
   disposition_case_id: string;
   requested_candidates: number;
@@ -2955,6 +2957,17 @@ export type BuyerDiscoveryEstimate = {
   credits_remaining: number;
   enough_credits: boolean;
   message: string;
+  request_fingerprint: string;
+  search_tier: BuyerDiscoverySearchTier;
+  target_candidates: number;
+  estimated_credit_cap: number;
+  estimated_cost_usd: number;
+  cumulative_case_credits: number;
+  cumulative_case_credit_cap: number;
+  monthly_credits: number;
+  monthly_credit_cap: number;
+  reused: boolean;
+  reused_run_id: string | null;
 };
 
 export type BuyerDiscoveryCandidate = {
@@ -2992,6 +3005,43 @@ export type BuyerDiscoveryRun = {
   completed_at: string | null;
   candidates: BuyerDiscoveryCandidate[];
   created_at: string;
+  search_tier: BuyerDiscoverySearchTier;
+  target_candidates: number;
+  estimated_credit_cap: number;
+  estimated_credits: number;
+  actual_credits: number | null;
+  estimated_cost_usd: number;
+  actual_cost_usd: number | null;
+  cumulative_case_credits: number;
+  cumulative_case_credit_cap: number;
+  monthly_credits: number;
+  monthly_credit_cap: number;
+  reused: boolean;
+  reused_run_id: string | null;
+};
+
+export type BuyerDiscoveryTierStatus = {
+  search_tier: BuyerDiscoverySearchTier;
+  target_candidates: number;
+  estimated_credit_cap: number;
+  maximum_estimated_cost_usd: number;
+  completed: boolean;
+  unlocked: boolean;
+  latest_run: BuyerDiscoveryRun | null;
+};
+
+export type BuyerDiscoverySummary = {
+  disposition_case_id: string;
+  provider: string;
+  completed_tiers: BuyerDiscoverySearchTier[];
+  unlocked_tiers: BuyerDiscoverySearchTier[];
+  next_tier: BuyerDiscoverySearchTier | null;
+  cumulative_case_credits: number;
+  cumulative_case_credit_cap: number;
+  monthly_credits: number;
+  monthly_credit_cap: number;
+  approximate_cost_per_credit_usd: number;
+  tier_statuses: BuyerDiscoveryTierStatus[];
 };
 
 export type DispositionBuyerPoolSource = "all" | "mine" | "network" | "external";
@@ -3014,8 +3064,11 @@ export type DispositionBuyerPoolStage =
 export type DispositionBuyerPoolRun = {
   id: string;
   version_number: number;
+  asset_class: string;
   matcher_version: string;
   score_policy_version: string;
+  status: string;
+  source_counts: Record<string, number>;
   generated_at: string;
 };
 

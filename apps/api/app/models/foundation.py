@@ -5516,6 +5516,21 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class BuyerDiscoveryRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_discovery_runs"
+    __table_args__ = (
+        Index(
+            "ix_buyer_discovery_runs_org_case_tier_created",
+            "organization_id",
+            "disposition_case_id",
+            "search_tier",
+            "created_at",
+        ),
+        Index(
+            "ix_buyer_discovery_runs_org_fingerprint_created",
+            "organization_id",
+            "request_fingerprint",
+            "created_at",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -5526,6 +5541,12 @@ class BuyerDiscoveryRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    search_tier: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_candidate_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_credit_cap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actual_credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
     search_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     provider_request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     result_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

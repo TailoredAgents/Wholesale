@@ -588,13 +588,22 @@ class BuyerDataProviderRead(BaseModel):
     credits_total: int | None = None
 
 
+BuyerDiscoverySearchTier = Literal["best_fit", "expanded", "regional"]
+
+
 class BuyerDiscoveryEstimateCreate(BaseModel):
     disposition_case_id: UUID
-    max_candidates: int = Field(default=25, ge=5, le=100)
+    max_candidates: int = Field(default=10, ge=5, le=100)
+    search_tier: BuyerDiscoverySearchTier | None = None
 
 
 class BuyerDiscoveryCreate(BuyerDiscoveryEstimateCreate):
     confirmed_estimated_credits: int = Field(ge=0)
+    confirmed_request_fingerprint: str = Field(
+        min_length=64,
+        max_length=64,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
 
 class BuyerDiscoveryEstimateRead(BaseModel):
@@ -608,6 +617,17 @@ class BuyerDiscoveryEstimateRead(BaseModel):
     credits_remaining: int
     enough_credits: bool
     message: str
+    request_fingerprint: str
+    search_tier: BuyerDiscoverySearchTier = "expanded"
+    target_candidates: int = 20
+    estimated_credit_cap: int = 60
+    estimated_cost_usd: float = 0
+    cumulative_case_credits: int = 0
+    cumulative_case_credit_cap: int = 250
+    monthly_credits: int = 0
+    monthly_credit_cap: int = 2000
+    reused: bool = False
+    reused_run_id: UUID | None = None
 
 
 class BuyerDiscoveryCandidateRead(BaseModel):
@@ -645,6 +665,43 @@ class BuyerDiscoveryRunRead(BaseModel):
     completed_at: datetime | None
     candidates: list[BuyerDiscoveryCandidateRead]
     created_at: datetime
+    search_tier: BuyerDiscoverySearchTier = "expanded"
+    target_candidates: int = 20
+    estimated_credit_cap: int = 60
+    estimated_credits: int = 0
+    actual_credits: int | None = None
+    estimated_cost_usd: float = 0
+    actual_cost_usd: float | None = None
+    cumulative_case_credits: int = 0
+    cumulative_case_credit_cap: int = 250
+    monthly_credits: int = 0
+    monthly_credit_cap: int = 2000
+    reused: bool = False
+    reused_run_id: UUID | None = None
+
+
+class BuyerDiscoveryTierStatusRead(BaseModel):
+    search_tier: BuyerDiscoverySearchTier
+    target_candidates: int
+    estimated_credit_cap: int
+    maximum_estimated_cost_usd: float
+    completed: bool
+    unlocked: bool
+    latest_run: BuyerDiscoveryRunRead | None = None
+
+
+class BuyerDiscoverySummaryRead(BaseModel):
+    disposition_case_id: UUID
+    provider: str
+    completed_tiers: list[BuyerDiscoverySearchTier]
+    unlocked_tiers: list[BuyerDiscoverySearchTier]
+    next_tier: BuyerDiscoverySearchTier | None
+    cumulative_case_credits: int
+    cumulative_case_credit_cap: int = 250
+    monthly_credits: int
+    monthly_credit_cap: int = 2000
+    approximate_cost_per_credit_usd: float = 0.0075
+    tier_statuses: list[BuyerDiscoveryTierStatusRead]
 
 
 class BuyerDiscoveryImport(BaseModel):

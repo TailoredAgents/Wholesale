@@ -249,7 +249,7 @@ services:
       - key: REALESTATEAPI_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: BUYER_DATA_PROVIDER
-        value: disabled
+        value: dealmachine
       - key: DEALMACHINE_API_KEY
         sync: false
       - key: DEALMACHINE_BASE_URL
@@ -265,7 +265,7 @@ services:
       - key: UNDERWRITING_AI_COMP_ANALYST_MODE
         value: draft
       - key: BUYER_DISCOVERY_MAX_RESULTS
-        value: 100
+        value: 40
       - key: MARKETING_CONVERSION_MODE
         value: live
       - key: MARKETING_CONVERSION_WINDOW_DAYS

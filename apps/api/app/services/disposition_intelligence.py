@@ -58,7 +58,7 @@ from app.schemas.disposition_intelligence import (
 MINIMUM_COMPARISON_SAMPLE = 10
 TERMINAL_TRANSACTION_STATUSES = {"funded", "closed", "complete", "completed"}
 COLLECTED_REVENUE_STATUSES = {"collected", "received", "paid"}
-EXTERNAL_SOURCE_KEYS = {"investorlift", "provider", "external", "api"}
+EXTERNAL_SOURCE_KEYS = {"investorlift", "dealmachine", "provider", "external", "api"}
 
 
 def _aware(value: datetime | None) -> datetime | None:

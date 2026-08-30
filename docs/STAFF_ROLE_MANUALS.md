@@ -582,10 +582,11 @@ reply acceptance must still pass a controlled, capped production test before bro
     permission, offer, or deal history to clean up a list.
 
 Provider or file imports must retain their provenance and remain **Needs Review** until a person
-checks the record. The legacy DealMachine adapter is disabled, and InvestorLift synchronization and
-outreach remain disabled. Staff must not assume that saving, activating, matching, or preparing a
-buyer sends a message; only the separately approved and released House **Outreach** revision can do
-so through Stonegate's existing communication providers.
+checks the record. Governed DealMachine House discovery may add staged candidates to a deal, but it
+does not automatically create buyers, grant contact permission, or send outreach. InvestorLift
+synchronization and outreach remain disabled. Staff must not assume that saving, activating,
+matching, preparing, or discovering a buyer sends a message; only the separately approved and
+released House **Outreach** revision can do so through Stonegate's existing communication providers.
 
 ### Offers
 

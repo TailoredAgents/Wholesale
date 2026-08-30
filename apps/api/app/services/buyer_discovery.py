@@ -1,8 +1,11 @@
 import hashlib
+import json
 import re
 from collections import defaultdict
-from datetime import UTC, date, datetime
-from typing import Any
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,7 +24,9 @@ from app.models.foundation import (
     BuyerDiscoveryRun,
     DispositionCase,
     Lead,
+    Organization,
     Property,
+    PropertyIntelligenceSnapshot,
 )
 from app.schemas.buyers import (
     BuyerDataProviderRead,
@@ -31,6 +36,9 @@ from app.schemas.buyers import (
     BuyerDiscoveryEstimateRead,
     BuyerDiscoveryImport,
     BuyerDiscoveryRunRead,
+    BuyerDiscoverySearchTier,
+    BuyerDiscoverySummaryRead,
+    BuyerDiscoveryTierStatusRead,
 )
 from app.services.buyers import (
     normalize_company,
@@ -39,7 +47,65 @@ from app.services.buyers import (
     normalize_source_key,
     normalize_text,
 )
+from app.services.disposition_packages import require_current_approved_version
 from app.services.inbox import ensure_buyer_conversation
+
+
+@dataclass(frozen=True)
+class DiscoveryTierPolicy:
+    target_candidates: int
+    estimated_credit_cap: int
+    price_floor_ratio: float
+    price_ceiling_ratio: float
+    radius_miles: float | None
+
+
+@dataclass(frozen=True)
+class DiscoveryContext:
+    case: DispositionCase
+    property_record: Property
+    search_tier: BuyerDiscoverySearchTier
+    policy: DiscoveryTierPolicy
+    package_version_id: UUID
+    package_source_fingerprint: str
+    requested_candidates: int
+    provider_request: dict[str, Any]
+    scope_description: str
+    request_fingerprint: str = ""
+
+
+TIER_ORDER: tuple[BuyerDiscoverySearchTier, ...] = (
+    "best_fit",
+    "expanded",
+    "regional",
+)
+TIER_POLICIES: dict[BuyerDiscoverySearchTier, DiscoveryTierPolicy] = {
+    "best_fit": DiscoveryTierPolicy(
+        target_candidates=10,
+        estimated_credit_cap=30,
+        price_floor_ratio=0.65,
+        price_ceiling_ratio=1.35,
+        radius_miles=None,
+    ),
+    "expanded": DiscoveryTierPolicy(
+        target_candidates=20,
+        estimated_credit_cap=60,
+        price_floor_ratio=0.45,
+        price_ceiling_ratio=1.75,
+        radius_miles=15,
+    ),
+    "regional": DiscoveryTierPolicy(
+        target_candidates=40,
+        estimated_credit_cap=120,
+        price_floor_ratio=0.25,
+        price_ceiling_ratio=2.5,
+        radius_miles=50,
+    ),
+}
+CASE_CREDIT_CAP = 250
+MONTHLY_CREDIT_CAP = 2_000
+CREDIT_COST_USD = Decimal("0.0075")
+REUSE_WINDOW = timedelta(days=7)
 
 ENTITY_TERMS = {
     "llc",
@@ -119,11 +185,15 @@ def provider_readiness(
     credits = _dictionary(usage.get("credits"))
     remaining = _integer(credits.get("total_available"))
     paid = plan.get("is_paid") if isinstance(plan.get("is_paid"), bool) else None
-    enabled = bool(paid is not False and remaining is not None and remaining > 0)
+    enabled = bool(paid is True and remaining is not None and remaining > 0)
     if enabled:
         message = "DealMachine is connected and ready for cost-previewed buyer discovery."
     elif paid is False:
         message = "DealMachine is connected, but the account does not have a paid API plan."
+    elif paid is not True:
+        message = (
+            "DealMachine is connected, but the API did not confirm a paid plan."
+        )
     else:
         message = "DealMachine is connected, but the account has no available data credits."
     return status.model_copy(
@@ -153,19 +223,43 @@ def estimate_buyer_discovery(
     status = provider_status(settings)
     if not status.configured:
         raise ValueError(status.message)
-    case, property_record, provider_request = _discovery_context(db, principal, payload, settings)
     provider_client = client or DealMachineClient(settings)
     try:
-        _add_property_type_filter(
-            provider_request,
-            property_record=property_record,
-            filters=provider_client.list_property_filters(),
+        context = _prepared_discovery_context(
+            db,
+            principal,
+            payload,
+            settings,
+            property_filters=provider_client.list_property_filters(),
         )
+        _require_unlocked_tier(db, principal, context.case.id, context.search_tier)
+        case_credits, monthly_credits = _budget_usage(
+            db,
+            principal,
+            case_id=context.case.id,
+        )
+        reusable = _reusable_run(db, principal, context)
+        if reusable is not None:
+            return _reused_estimate_read(
+                context,
+                reusable,
+                case_credits=case_credits,
+                monthly_credits=monthly_credits,
+            )
+        pending = _pending_credit_reconciliation_run(db, principal, context.case.id)
+        if pending is not None:
+            raise ValueError(_pending_reconciliation_message(pending))
         usage = provider_client.get_usage()
-        estimate = provider_client.estimate_property_search(provider_request)
+        estimate = provider_client.estimate_property_search(context.provider_request)
     except DealMachineError as exc:
         raise ValueError(str(exc)) from exc
-    return _estimate_read(case.id, payload, provider_request, estimate, usage)
+    return _estimate_read(
+        context,
+        estimate,
+        usage,
+        case_credits=case_credits,
+        monthly_credits=monthly_credits,
+    )
 
 
 def latest_discovery_run(
@@ -185,6 +279,86 @@ def latest_discovery_run(
     return run_to_read(db, principal, run) if run else None
 
 
+def discovery_summary(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+) -> BuyerDiscoverySummaryRead:
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == case_id,
+            DispositionCase.organization_id == principal.organization_id,
+        )
+    )
+    if case is None:
+        raise ValueError("Disposition case not found.")
+    require_house_discovery_workflow(db, case)
+    runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun)
+            .where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.disposition_case_id == case.id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+            )
+            .order_by(BuyerDiscoveryRun.created_at.desc())
+        ).all()
+    )
+    latest_by_tier: dict[BuyerDiscoverySearchTier, BuyerDiscoveryRun] = {}
+    completed: list[BuyerDiscoverySearchTier] = []
+    for run in runs:
+        # Historical rows predate governed tiers. Inferred display labels remain
+        # useful on an individual legacy run, but cannot unlock paid widening.
+        if run.search_tier not in TIER_POLICIES:
+            continue
+        tier = cast(BuyerDiscoverySearchTier, run.search_tier)
+        latest_by_tier.setdefault(tier, run)
+        if run.status == "completed" and tier not in completed:
+            completed.append(tier)
+    completed_set = set(completed)
+    completed_tiers = [tier for tier in TIER_ORDER if tier in completed_set]
+    unlocked_tiers = _unlocked_tiers(completed_set)
+    next_tier = next(
+        (tier for tier in unlocked_tiers if tier not in completed_set),
+        None,
+    )
+    case_credits, monthly_credits = _budget_usage(
+        db,
+        principal,
+        case_id=case.id,
+    )
+    return BuyerDiscoverySummaryRead(
+        disposition_case_id=case.id,
+        provider="dealmachine",
+        completed_tiers=completed_tiers,
+        unlocked_tiers=unlocked_tiers,
+        next_tier=next_tier,
+        cumulative_case_credits=case_credits,
+        cumulative_case_credit_cap=CASE_CREDIT_CAP,
+        monthly_credits=monthly_credits,
+        monthly_credit_cap=MONTHLY_CREDIT_CAP,
+        approximate_cost_per_credit_usd=float(CREDIT_COST_USD),
+        tier_statuses=[
+            BuyerDiscoveryTierStatusRead(
+                search_tier=tier,
+                target_candidates=TIER_POLICIES[tier].target_candidates,
+                estimated_credit_cap=TIER_POLICIES[tier].estimated_credit_cap,
+                maximum_estimated_cost_usd=_credit_cost(
+                    TIER_POLICIES[tier].estimated_credit_cap
+                ),
+                completed=tier in completed_set,
+                unlocked=tier in unlocked_tiers,
+                latest_run=(
+                    run_to_read(db, principal, latest_by_tier[tier])
+                    if tier in latest_by_tier
+                    else None
+                ),
+            )
+            for tier in TIER_ORDER
+        ],
+    )
+
+
 def discover_buyers(
     db: Session,
     principal: Principal,
@@ -197,25 +371,72 @@ def discover_buyers(
     status = provider_status(settings)
     if not status.configured:
         raise ValueError(status.message)
-    case, property_record, provider_request = _discovery_context(db, principal, payload, settings)
-    postal_code = property_record.postal_code.strip()[:5]
     provider_client = client or DealMachineClient(settings)
     try:
-        _add_property_type_filter(
-            provider_request,
-            property_record=property_record,
-            filters=provider_client.list_property_filters(),
+        property_filters = provider_client.list_property_filters()
+    except DealMachineError as exc:
+        raise ValueError(str(exc)) from exc
+
+    # The organization lock protects the shared monthly budget and the case lock is
+    # the creation-time idempotency fence. Both remain held until the running spend
+    # reservation is committed immediately before the paid provider request.
+    db.scalar(
+        select(Organization)
+        .where(Organization.id == principal.organization_id)
+        .with_for_update()
+    )
+    locked_case = db.scalar(
+        select(DispositionCase)
+        .where(
+            DispositionCase.id == payload.disposition_case_id,
+            DispositionCase.organization_id == principal.organization_id,
         )
+        .with_for_update()
+    )
+    if locked_case is None:
+        raise ValueError("Disposition case not found.")
+    context = _prepared_discovery_context(
+        db,
+        principal,
+        payload,
+        settings,
+        property_filters=property_filters,
+        locked_case=locked_case,
+    )
+    _require_unlocked_tier(db, principal, context.case.id, context.search_tier)
+    if payload.confirmed_request_fingerprint != context.request_fingerprint:
+        raise ValueError(
+            "The buyer-search request changed after its preview. Preview the search again "
+            "before running it."
+        )
+    reusable = _reusable_run(db, principal, context)
+    if reusable is not None:
+        result = run_to_read(db, principal, reusable)
+        return result.model_copy(
+            update={
+                "reused": True,
+                "reused_run_id": reusable.id,
+            }
+        )
+    pending = _pending_credit_reconciliation_run(db, principal, context.case.id)
+    if pending is not None:
+        raise ValueError(_pending_reconciliation_message(pending))
+    case_credits, monthly_credits = _budget_usage(
+        db,
+        principal,
+        case_id=context.case.id,
+    )
+    try:
         usage = provider_client.get_usage()
-        estimate = provider_client.estimate_property_search(provider_request)
+        estimate = provider_client.estimate_property_search(context.provider_request)
     except DealMachineError as exc:
         raise ValueError(str(exc)) from exc
     estimate_read = _estimate_read(
-        case.id,
-        payload,
-        provider_request,
+        context,
         estimate,
         usage,
+        case_credits=case_credits,
+        monthly_credits=monthly_credits,
     )
     if not estimate_read.enough_credits:
         raise ValueError(estimate_read.message)
@@ -226,42 +447,148 @@ def discover_buyers(
         )
     run = BuyerDiscoveryRun(
         organization_id=principal.organization_id,
-        disposition_case_id=case.id,
+        disposition_case_id=context.case.id,
         requested_by_user_id=principal.user_id,
         provider="dealmachine",
         status="running",
+        search_tier=context.search_tier,
+        request_fingerprint=context.request_fingerprint,
+        target_candidate_count=context.policy.target_candidates,
+        estimated_credit_cap=context.policy.estimated_credit_cap,
+        estimated_credits=estimate_read.estimated_credits,
+        actual_credits=None,
         search_snapshot={
-            "property_address": _address(property_record),
-            "postal_code": postal_code,
-            "property_type": property_record.property_type,
-            "asking_price_cents": case.asking_price_cents,
+            "property_address": _address(context.property_record),
+            "postal_code": context.property_record.postal_code.strip()[:5],
+            "property_type": context.property_record.property_type,
+            "asking_price_cents": context.case.asking_price_cents,
             "max_candidates": payload.max_candidates,
+            "search_tier": context.search_tier,
+            "target_candidates": context.policy.target_candidates,
+            "scope": context.scope_description,
+            "approved_package_version_id": str(context.package_version_id),
+            "approved_package_source_fingerprint": context.package_source_fingerprint,
         },
-        provider_request=provider_request,
+        provider_request=context.provider_request,
         result_count=0,
         imported_count=0,
-        credit_summary=None,
+        credit_summary={
+            "estimated": _estimate_credit_snapshot(estimate),
+            "estimated_cost_usd": _credit_cost(estimate_read.estimated_credits),
+            "authorized_credit_cap": context.policy.estimated_credit_cap,
+            "authorized_cost_cap_usd": _credit_cost(
+                context.policy.estimated_credit_cap
+            ),
+        },
         error_message=None,
         completed_at=None,
     )
     db.add(run)
     db.flush()
+    # Persist the spend reservation before crossing the paid-provider boundary. If
+    # the worker or API process exits after DealMachine accepts the request, a retry
+    # will see this exact running fingerprint and will not spend the credits again.
+    db.commit()
+    db.refresh(run)
     try:
-        response = provider_client.search_properties(provider_request)
-        candidates = _candidate_groups(
-            response.get("data", []),
-            case=case,
-            property_record=property_record,
-            max_candidates=payload.max_candidates,
-        )
+        response = provider_client.search_properties(context.provider_request)
     except DealMachineError as exc:
-        run.status = "failed"
-        run.error_message = str(exc)
-        run.completed_at = datetime.now(UTC)
+        _fail_discovery_run(
+            db,
+            principal,
+            run,
+            error_message=str(exc),
+            action="buyer.discovery_provider_failed",
+            actual_credit_summary=None,
+        )
         db.commit()
         raise ValueError(str(exc)) from exc
 
+    actual_summary = _actual_credit_summary(response)
+    if actual_summary is None:
+        message = (
+            "DealMachine did not return complete actual credit telemetry. "
+            "No buyer candidates were admitted because the spend cannot be reconciled."
+        )
+        _fail_discovery_run(
+            db,
+            principal,
+            run,
+            error_message=message,
+            action="buyer.discovery_credit_telemetry_failed",
+            actual_credit_summary=_credit_summary(response),
+        )
+        db.commit()
+        raise ValueError(message)
+
+    actual_credits = actual_summary["used"]
+    run.actual_credits = actual_credits
+    post_case_credits = case_credits + actual_credits
+    post_monthly_credits = monthly_credits + actual_credits
+    boundary_error = _actual_credit_boundary_error(
+        context,
+        actual_credits=actual_credits,
+        case_credits=post_case_credits,
+        monthly_credits=post_monthly_credits,
+    )
+    if boundary_error:
+        _fail_discovery_run(
+            db,
+            principal,
+            run,
+            error_message=boundary_error,
+            action="buyer.discovery_credit_boundary_failed",
+            actual_credit_summary=actual_summary,
+        )
+        db.commit()
+        raise ValueError(boundary_error)
+
+    try:
+        grouped_candidates = _candidate_groups(
+            response.get("data", []),
+            case=context.case,
+            property_record=context.property_record,
+            max_candidates=len(response.get("data", [])),
+            scope_description=context.scope_description,
+        )
+        candidates = _net_new_candidates(
+            db,
+            principal,
+            context.case.id,
+            grouped_candidates,
+            limit=context.policy.target_candidates,
+        )
+    except (TypeError, ValueError) as exc:
+        message = "DealMachine buyer evidence could not be normalized safely."
+        _fail_discovery_run(
+            db,
+            principal,
+            run,
+            error_message=message,
+            action="buyer.discovery_response_failed",
+            actual_credit_summary=actual_summary,
+        )
+        db.commit()
+        raise ValueError(message) from exc
+
     for item in candidates:
+        evidence_snapshot = {
+            **item["evidence_snapshot"],
+            "source_attribution": {
+                "provider": "dealmachine",
+                "discovery_run_id": str(run.id),
+                "search_tier": context.search_tier,
+                "request_fingerprint": context.request_fingerprint,
+                "estimated_credits": estimate_read.estimated_credits,
+                "authorized_credit_cap": context.policy.estimated_credit_cap,
+                "actual_credits": actual_credits,
+                "estimated_cost_usd": _credit_cost(estimate_read.estimated_credits),
+                "authorized_cost_cap_usd": _credit_cost(
+                    context.policy.estimated_credit_cap
+                ),
+                "actual_cost_usd": _credit_cost(actual_credits),
+            },
+        }
         db.add(
             BuyerDiscoveryCandidate(
                 organization_id=principal.organization_id,
@@ -274,7 +601,7 @@ def discover_buyers(
                 email=item["email"],
                 phone=item["phone"],
                 market=item["market"],
-                state=property_record.state.upper(),
+                state=context.property_record.state.upper(),
                 property_types=item["property_types"],
                 observed_purchase_count=item["observed_purchase_count"],
                 no_mortgage_count=item["no_mortgage_count"],
@@ -283,7 +610,7 @@ def discover_buyers(
                 max_purchase_price_cents=item["max_purchase_price_cents"],
                 score_basis_points=item["score_basis_points"],
                 score_components=item["score_components"],
-                evidence_snapshot=item["evidence_snapshot"],
+                evidence_snapshot=evidence_snapshot,
                 provider_snapshot=item["provider_snapshot"],
                 status="review",
                 imported_at=None,
@@ -291,7 +618,15 @@ def discover_buyers(
         )
     run.status = "completed"
     run.result_count = len(candidates)
-    run.credit_summary = _credit_summary(response)
+    run.credit_summary = {
+        **actual_summary,
+        "estimated": _estimate_credit_snapshot(estimate),
+        "estimated_cost_usd": _credit_cost(estimate_read.estimated_credits),
+        "authorized_credit_cap": context.policy.estimated_credit_cap,
+        "authorized_cost_cap_usd": _credit_cost(context.policy.estimated_credit_cap),
+        "actual_cost_usd": _credit_cost(actual_credits),
+        "provider_balance_before": _usage_credit_snapshot(usage),
+    }
     run.completed_at = datetime.now(UTC)
     db.add(
         AuditEvent(
@@ -304,8 +639,20 @@ def discover_buyers(
             previous_value=None,
             new_value={
                 "provider": "dealmachine",
-                "disposition_case_id": str(case.id),
+                "disposition_case_id": str(context.case.id),
+                "search_tier": context.search_tier,
+                "target_candidates": context.policy.target_candidates,
                 "candidate_count": len(candidates),
+                "estimated_credits": estimate_read.estimated_credits,
+                "authorized_credit_cap": context.policy.estimated_credit_cap,
+                "actual_credits": actual_credits,
+                "estimated_cost_usd": _credit_cost(estimate_read.estimated_credits),
+                "authorized_cost_cap_usd": _credit_cost(
+                    context.policy.estimated_credit_cap
+                ),
+                "actual_cost_usd": _credit_cost(actual_credits),
+                "cumulative_case_credits": post_case_credits,
+                "monthly_credits": post_monthly_credits,
                 "buyers_imported": 0,
                 "external_messages_sent": 0,
             },
@@ -610,6 +957,15 @@ def run_to_read(
             )
         ).all()
     )
+    tier = _run_search_tier(run)
+    policy = TIER_POLICIES[tier]
+    case_credits, monthly_credits = _budget_usage(
+        db,
+        principal,
+        case_id=run.disposition_case_id,
+    )
+    actual_credits = _actual_run_credits(run)
+    estimated_credits = int(run.estimated_credits or 0)
     return BuyerDiscoveryRunRead(
         id=run.id,
         disposition_case_id=run.disposition_case_id,
@@ -646,7 +1002,55 @@ def run_to_read(
             for item in candidates
         ],
         created_at=run.created_at,
+        search_tier=tier,
+        target_candidates=int(run.target_candidate_count or policy.target_candidates),
+        estimated_credit_cap=int(run.estimated_credit_cap or policy.estimated_credit_cap),
+        estimated_credits=estimated_credits,
+        actual_credits=actual_credits,
+        estimated_cost_usd=_credit_cost(estimated_credits),
+        actual_cost_usd=(
+            _credit_cost(actual_credits) if actual_credits is not None else None
+        ),
+        cumulative_case_credits=case_credits,
+        cumulative_case_credit_cap=CASE_CREDIT_CAP,
+        monthly_credits=monthly_credits,
+        monthly_credit_cap=MONTHLY_CREDIT_CAP,
+        reused=False,
+        reused_run_id=None,
     )
+
+
+def _prepared_discovery_context(
+    db: Session,
+    principal: Principal,
+    payload: BuyerDiscoveryEstimateCreate,
+    settings: Settings,
+    *,
+    property_filters: list[object],
+    locked_case: DispositionCase | None = None,
+) -> DiscoveryContext:
+    context = _discovery_context(
+        db,
+        principal,
+        payload,
+        settings,
+        locked_case=locked_case,
+    )
+    _add_property_type_filter(
+        context.provider_request,
+        property_record=context.property_record,
+        filters=property_filters,
+    )
+    fingerprint = _canonical_hash(
+        {
+            "provider": "dealmachine",
+            "disposition_case_id": str(context.case.id),
+            "search_tier": context.search_tier,
+            "provider_request": context.provider_request,
+            "approved_package_source_fingerprint": context.package_source_fingerprint,
+        }
+    )
+    return replace(context, request_fingerprint=fingerprint)
 
 
 def _discovery_context(
@@ -654,8 +1058,10 @@ def _discovery_context(
     principal: Principal,
     payload: BuyerDiscoveryEstimateCreate,
     settings: Settings,
-) -> tuple[DispositionCase, Property, dict[str, Any]]:
-    case = db.scalar(
+    *,
+    locked_case: DispositionCase | None = None,
+) -> DiscoveryContext:
+    case = locked_case or db.scalar(
         select(DispositionCase).where(
             DispositionCase.id == payload.disposition_case_id,
             DispositionCase.organization_id == principal.organization_id,
@@ -664,6 +1070,12 @@ def _discovery_context(
     if case is None:
         raise ValueError("Disposition case not found.")
     require_house_discovery_workflow(db, case)
+    package = require_current_approved_version(
+        db,
+        principal,
+        case,
+        action="spending DealMachine buyer-discovery credits",
+    )
     property_record = db.scalar(
         select(Property).where(
             Property.id == case.property_id,
@@ -675,7 +1087,27 @@ def _discovery_context(
     postal_code = (property_record.postal_code or "").strip()[:5]
     if not re.fullmatch(r"\d{5}", postal_code):
         raise ValueError("A five-digit property ZIP code is required for buyer discovery.")
-    return case, property_record, _provider_request(case, property_record, payload, settings)
+    tier = _payload_search_tier(payload)
+    policy = TIER_POLICIES[tier]
+    provider_request, scope_description = _provider_request(
+        db,
+        case,
+        property_record,
+        tier,
+        policy,
+        settings,
+    )
+    return DiscoveryContext(
+        case=case,
+        property_record=property_record,
+        search_tier=tier,
+        policy=policy,
+        package_version_id=package.id,
+        package_source_fingerprint=package.source_fingerprint,
+        requested_candidates=payload.max_candidates,
+        provider_request=provider_request,
+        scope_description=scope_description,
+    )
 
 
 def require_house_discovery_workflow(db: Session, case: DispositionCase) -> None:
@@ -686,11 +1118,12 @@ def require_house_discovery_workflow(db: Session, case: DispositionCase) -> None
 
 
 def _estimate_read(
-    case_id: UUID,
-    payload: BuyerDiscoveryEstimateCreate,
-    provider_request: dict[str, Any],
+    context: DiscoveryContext,
     estimate: dict[str, Any],
     usage: dict[str, Any],
+    *,
+    case_credits: int,
+    monthly_credits: int,
 ) -> BuyerDiscoveryEstimateRead:
     estimated = _dictionary(estimate.get("estimated_credits"))
     breakdown = _dictionary(estimated.get("breakdown"))
@@ -698,26 +1131,71 @@ def _estimate_read(
     totals = _dictionary(estimate.get("totals"))
     credits = _dictionary(usage.get("credits"))
     plan = _dictionary(usage.get("plan"))
-    estimated_credits = _integer(estimated.get("this_page")) or 0
-    credits_remaining = _integer(credits.get("total_available")) or 0
+    estimated_credit_value = _integer(estimated.get("this_page"))
+    credits_remaining_value = _integer(credits.get("total_available"))
+    estimated_credits = max(estimated_credit_value or 0, 0)
+    credits_remaining = max(credits_remaining_value or 0, 0)
     paid = plan.get("is_paid")
-    enough_credits = paid is not False and credits_remaining >= estimated_credits
-    if paid is False:
-        message = "The connected DealMachine account does not have a paid API plan."
-    elif enough_credits:
-        message = (
-            f"This search can use up to {estimated_credits} DealMachine credits; "
-            f"{credits_remaining} are currently available."
+    blockers: list[str] = []
+    if paid is not True:
+        blockers.append(
+            "DealMachine did not confirm that the connected account has a paid API plan."
         )
-    else:
-        message = (
-            f"This search can use up to {estimated_credits} DealMachine credits, but only "
-            f"{credits_remaining} are currently available. Reduce the search or add credits."
+    if estimated_credit_value is None or estimated_credit_value < 0:
+        blockers.append(
+            "DealMachine did not return a valid estimated credit cost for this search."
         )
+    if credits_remaining_value is None or credits_remaining_value < 0:
+        blockers.append(
+            "DealMachine did not return a valid available-credit balance for this account."
+        )
+    if (
+        estimated_credit_value is not None
+        and estimated_credit_value >= 0
+        and estimated_credits > context.policy.estimated_credit_cap
+    ):
+        blockers.append(
+            f"The estimate exceeds the {context.policy.estimated_credit_cap}-credit "
+            f"{context.search_tier.replace('_', ' ')} tier limit."
+        )
+    if case_credits + context.policy.estimated_credit_cap > CASE_CREDIT_CAP:
+        blockers.append(
+            f"The tier's {context.policy.estimated_credit_cap}-credit authorization would "
+            f"exceed the {CASE_CREDIT_CAP}-credit lifetime limit for this deal."
+        )
+    if monthly_credits + context.policy.estimated_credit_cap > MONTHLY_CREDIT_CAP:
+        blockers.append(
+            f"The tier's {context.policy.estimated_credit_cap}-credit authorization would "
+            f"exceed the {MONTHLY_CREDIT_CAP}-credit monthly disposition limit."
+        )
+    if (
+        estimated_credit_value is not None
+        and estimated_credit_value >= 0
+        and credits_remaining_value is not None
+        and credits_remaining_value >= 0
+        and credits_remaining < context.policy.estimated_credit_cap
+    ):
+        blockers.append(
+            f"Only {credits_remaining} DealMachine credits are available for an "
+            f"authorized maximum of {context.policy.estimated_credit_cap} credits."
+        )
+    enough_credits = not blockers
+    message = (
+        " ".join(blockers)
+        if blockers
+        else (
+            f"DealMachine previews {estimated_credits} credits "
+            f"(${_credit_cost(estimated_credits):.4f}) for the "
+            f"{context.search_tier.replace('_', ' ')} search. The binding authorization "
+            f"is capped at {context.policy.estimated_credit_cap} credits "
+            f"(${_credit_cost(context.policy.estimated_credit_cap):.4f}) because live "
+            "owner enrichment can cost more than the preview."
+        )
+    )
     return BuyerDiscoveryEstimateRead(
-        disposition_case_id=case_id,
-        requested_candidates=payload.max_candidates,
-        provider_result_limit=_integer(provider_request.get("per_page")) or 0,
+        disposition_case_id=context.case.id,
+        requested_candidates=context.requested_candidates,
+        provider_result_limit=_integer(context.provider_request.get("per_page")) or 0,
         total_matching_properties=(
             _integer(pagination.get("total_results")) or _integer(totals.get("properties")) or 0
         ),
@@ -727,15 +1205,28 @@ def _estimate_read(
         credits_remaining=credits_remaining,
         enough_credits=enough_credits,
         message=message,
+        request_fingerprint=context.request_fingerprint,
+        search_tier=context.search_tier,
+        target_candidates=context.policy.target_candidates,
+        estimated_credit_cap=context.policy.estimated_credit_cap,
+        estimated_cost_usd=_credit_cost(estimated_credits),
+        cumulative_case_credits=case_credits,
+        cumulative_case_credit_cap=CASE_CREDIT_CAP,
+        monthly_credits=monthly_credits,
+        monthly_credit_cap=MONTHLY_CREDIT_CAP,
+        reused=False,
+        reused_run_id=None,
     )
 
 
 def _provider_request(
+    db: Session,
     case: DispositionCase,
     property_record: Property,
-    payload: BuyerDiscoveryEstimateCreate,
+    tier: BuyerDiscoverySearchTier,
+    policy: DiscoveryTierPolicy,
     settings: Settings,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str]:
     target_dollars = max(round(case.asking_price_cents / 100), 1)
     filters: list[dict[str, Any]] = [
         {"filter_id": "is_recently_sold", "value": True},
@@ -744,12 +1235,44 @@ def _provider_request(
             "operator": "range",
             "value": {
                 "min": max(round(target_dollars * 0.5), 1),
-                "max": round(target_dollars * 1.75),
+                "max": round(target_dollars * policy.price_ceiling_ratio),
             },
         },
     ]
+    filters[1]["value"] = {
+        "min": max(round(target_dollars * policy.price_floor_ratio), 1),
+        "max": round(target_dollars * policy.price_ceiling_ratio),
+    }
+    latitude, longitude = _subject_coordinates(db, property_record)
+    postal_code = property_record.postal_code.strip()[:5]
+    locations: list[dict[str, object]]
+    if tier == "best_fit":
+        locations = [{"type": "zip_code", "code": postal_code}]
+        scope_description = f"Subject ZIP {postal_code} with the closest price band"
+    elif policy.radius_miles is not None and latitude is not None and longitude is not None:
+        locations = [
+            {
+                "type": "radius",
+                "latitude": latitude,
+                "longitude": longitude,
+                "radius_miles": policy.radius_miles,
+            }
+        ]
+        scope_description = (
+            f"{policy.radius_miles:g}-mile radius around the saved subject coordinates"
+        )
+    elif tier == "expanded":
+        # No new geocoder or paid property lookup is triggered merely to run discovery.
+        # A wider price band in the exact ZIP is the bounded fallback.
+        locations = [{"type": "zip_code", "code": postal_code}]
+        scope_description = (
+            f"Subject ZIP {postal_code} with a wider price band; saved coordinates unavailable"
+        )
+    else:
+        locations = [{"type": "state", "code": property_record.state.strip().upper()}]
+        scope_description = "Statewide price-and-property-type fallback; coordinates unavailable"
     return {
-        "locations": [{"type": "zip_code", "code": property_record.postal_code.strip()[:5]}],
+        "locations": locations,
         "anchor": "properties",
         "contact_audience": "owners",
         "filters": filters,
@@ -764,10 +1287,412 @@ def _provider_request(
         "page": 1,
         "per_page": min(
             settings.buyer_discovery_max_results,
-            max(payload.max_candidates * 4, payload.max_candidates),
+            policy.target_candidates,
         ),
         "sort": [{"field_id": "last_sale_date", "direction": "desc"}],
+    }, scope_description
+
+
+def _payload_search_tier(
+    payload: BuyerDiscoveryEstimateCreate,
+) -> BuyerDiscoverySearchTier:
+    if payload.search_tier is not None:
+        return payload.search_tier
+    # Existing clients predate named tiers and submit only the legacy candidate count.
+    # Keep those calls valid, but route them through the least expensive governed tier
+    # instead of letting an omitted field bypass sequential widening.
+    return "best_fit"
+
+
+def _run_search_tier(run: BuyerDiscoveryRun) -> BuyerDiscoverySearchTier:
+    if run.search_tier in TIER_POLICIES:
+        return run.search_tier
+    snapshot = run.search_snapshot if isinstance(run.search_snapshot, dict) else {}
+    snapshot_tier = snapshot.get("search_tier")
+    if snapshot_tier in TIER_POLICIES:
+        return cast(BuyerDiscoverySearchTier, snapshot_tier)
+    legacy_max = _integer(snapshot.get("max_candidates")) or 25
+    if legacy_max <= 10:
+        return "best_fit"
+    if legacy_max <= 25:
+        return "expanded"
+    return "regional"
+
+
+def _completed_tiers(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+) -> set[BuyerDiscoverySearchTier]:
+    runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun).where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.disposition_case_id == case_id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+                BuyerDiscoveryRun.status == "completed",
+            )
+        ).all()
+    )
+    return {
+        cast(BuyerDiscoverySearchTier, run.search_tier)
+        for run in runs
+        if run.search_tier in TIER_POLICIES
     }
+
+
+def _unlocked_tiers(
+    completed: set[BuyerDiscoverySearchTier],
+) -> list[BuyerDiscoverySearchTier]:
+    unlocked: list[BuyerDiscoverySearchTier] = ["best_fit"]
+    if "best_fit" in completed:
+        unlocked.append("expanded")
+    if {"best_fit", "expanded"}.issubset(completed):
+        unlocked.append("regional")
+    return unlocked
+
+
+def _require_unlocked_tier(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    tier: BuyerDiscoverySearchTier,
+) -> None:
+    completed = _completed_tiers(db, principal, case_id)
+    if tier in _unlocked_tiers(completed):
+        return
+    prerequisites = TIER_ORDER[: TIER_ORDER.index(tier)]
+    missing = [item for item in prerequisites if item not in completed]
+    missing_label = " and ".join(item.replace("_", " ") for item in missing)
+    raise ValueError(
+        f"Complete the {missing_label} DealMachine tier before "
+        f"starting the {tier.replace('_', ' ')} tier."
+    )
+
+
+def _reusable_run(
+    db: Session,
+    principal: Principal,
+    context: DiscoveryContext,
+) -> BuyerDiscoveryRun | None:
+    runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun)
+            .where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.disposition_case_id == context.case.id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+                BuyerDiscoveryRun.request_fingerprint == context.request_fingerprint,
+                BuyerDiscoveryRun.search_tier == context.search_tier,
+                BuyerDiscoveryRun.status == "completed",
+                BuyerDiscoveryRun.created_at >= datetime.now(UTC) - REUSE_WINDOW,
+            )
+            .order_by(BuyerDiscoveryRun.created_at.desc())
+        ).all()
+    )
+    return runs[0] if runs else None
+
+
+def _pending_credit_reconciliation_run(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+) -> BuyerDiscoveryRun | None:
+    runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun)
+            .where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.disposition_case_id == case_id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+                BuyerDiscoveryRun.status.in_(["running", "failed"]),
+            )
+            .order_by(BuyerDiscoveryRun.created_at.desc())
+        ).all()
+    )
+    for run in runs:
+        if run.status == "running" or _actual_run_credits(run) is None:
+            return run
+    return None
+
+
+def _pending_reconciliation_message(run: BuyerDiscoveryRun) -> str:
+    return (
+        f"A prior DealMachine request ({run.id}) is pending credit reconciliation. "
+        "Stonegate will not run another paid buyer search for this deal until that "
+        "attempt is reconciled."
+    )
+
+
+def _reused_estimate_read(
+    context: DiscoveryContext,
+    run: BuyerDiscoveryRun,
+    *,
+    case_credits: int,
+    monthly_credits: int,
+) -> BuyerDiscoveryEstimateRead:
+    credit_summary = run.credit_summary if isinstance(run.credit_summary, dict) else {}
+    balance = _dictionary(credit_summary.get("provider_balance_before"))
+    return BuyerDiscoveryEstimateRead(
+        disposition_case_id=context.case.id,
+        requested_candidates=context.requested_candidates,
+        provider_result_limit=_integer(context.provider_request.get("per_page")) or 0,
+        total_matching_properties=run.result_count,
+        estimated_credits=0,
+        estimated_property_credits=0,
+        estimated_people_credits=0,
+        credits_remaining=_integer(balance.get("total_available")) or 0,
+        enough_credits=True,
+        message=(
+            "Stonegate will reuse the current saved DealMachine result for this exact "
+            "deal, package, and tier. No new credits will be spent."
+        ),
+        request_fingerprint=context.request_fingerprint,
+        search_tier=context.search_tier,
+        target_candidates=context.policy.target_candidates,
+        estimated_credit_cap=context.policy.estimated_credit_cap,
+        estimated_cost_usd=0,
+        cumulative_case_credits=case_credits,
+        cumulative_case_credit_cap=CASE_CREDIT_CAP,
+        monthly_credits=monthly_credits,
+        monthly_credit_cap=MONTHLY_CREDIT_CAP,
+        reused=True,
+        reused_run_id=run.id,
+    )
+
+
+def _budget_usage(
+    db: Session,
+    principal: Principal,
+    *,
+    case_id: UUID,
+) -> tuple[int, int]:
+    month_start = datetime.now(UTC).replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    case_runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun).where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.disposition_case_id == case_id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+            )
+        ).all()
+    )
+    monthly_runs = list(
+        db.scalars(
+            select(BuyerDiscoveryRun).where(
+                BuyerDiscoveryRun.organization_id == principal.organization_id,
+                BuyerDiscoveryRun.provider == "dealmachine",
+                BuyerDiscoveryRun.created_at >= month_start,
+            )
+        ).all()
+    )
+    return (
+        sum(_run_credit_usage(run) for run in case_runs),
+        sum(_run_credit_usage(run) for run in monthly_runs),
+    )
+
+
+def _run_credit_usage(run: BuyerDiscoveryRun) -> int:
+    actual = _actual_run_credits(run)
+    if actual is not None:
+        return actual
+    # Running attempts and failed attempts without complete provider telemetry reserve
+    # the full authorized tier ceiling until reconciled.
+    if run.status in {"running", "failed"}:
+        return int(run.estimated_credit_cap or run.estimated_credits or 0)
+    return 0
+
+
+def _actual_run_credits(run: BuyerDiscoveryRun) -> int | None:
+    if run.actual_credits is not None:
+        return max(int(run.actual_credits), 0)
+    summary = run.credit_summary if isinstance(run.credit_summary, dict) else {}
+    used = _integer(summary.get("used"))
+    return max(used, 0) if used is not None else None
+
+
+def _actual_credit_summary(response: dict[str, Any]) -> dict[str, int] | None:
+    summary = _credit_summary(response)
+    if summary is None:
+        return None
+    used = _integer(summary.get("used"))
+    properties = _integer(summary.get("properties"))
+    people = _integer(summary.get("people"))
+    deduplicated = _integer(summary.get("deduplicated"))
+    if used is None or properties is None or people is None:
+        return None
+    if min(used, properties, people) < 0:
+        return None
+    return {
+        "used": used,
+        "properties": properties,
+        "people": people,
+        "deduplicated": max(deduplicated or 0, 0),
+    }
+
+
+def _actual_credit_boundary_error(
+    context: DiscoveryContext,
+    *,
+    actual_credits: int,
+    case_credits: int,
+    monthly_credits: int,
+) -> str | None:
+    if actual_credits > context.policy.estimated_credit_cap:
+        return (
+            f"DealMachine reported {actual_credits} actual credits, exceeding the "
+            f"{context.policy.estimated_credit_cap}-credit tier boundary."
+        )
+    if case_credits > CASE_CREDIT_CAP:
+        return f"The DealMachine response exceeded the {CASE_CREDIT_CAP}-credit deal boundary."
+    if monthly_credits > MONTHLY_CREDIT_CAP:
+        return (
+            f"The DealMachine response exceeded the {MONTHLY_CREDIT_CAP}-credit monthly boundary."
+        )
+    return None
+
+
+def _fail_discovery_run(
+    db: Session,
+    principal: Principal,
+    run: BuyerDiscoveryRun,
+    *,
+    error_message: str,
+    action: str,
+    actual_credit_summary: dict[str, Any] | None,
+) -> None:
+    previous_summary = run.credit_summary if isinstance(run.credit_summary, dict) else {}
+    run.status = "failed"
+    run.error_message = error_message
+    run.completed_at = datetime.now(UTC)
+    if actual_credit_summary is not None:
+        run.credit_summary = {
+            **previous_summary,
+            **actual_credit_summary,
+            "actual_cost_usd": (
+                _credit_cost(run.actual_credits) if run.actual_credits is not None else None
+            ),
+        }
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action=action,
+            entity_type="buyer_discovery_run",
+            entity_id=run.id,
+            previous_value=None,
+            new_value={
+                "provider": "dealmachine",
+                "search_tier": run.search_tier,
+                "request_fingerprint": run.request_fingerprint,
+                "estimated_credits": run.estimated_credits,
+                "actual_credits": run.actual_credits,
+                "error": error_message,
+                "buyers_imported": 0,
+                "external_messages_sent": 0,
+            },
+            reason="Governed DealMachine buyer discovery was stopped",
+        )
+    )
+
+
+def _estimate_credit_snapshot(estimate: dict[str, Any]) -> dict[str, Any]:
+    estimated = _dictionary(estimate.get("estimated_credits"))
+    return {
+        "this_page": _integer(estimated.get("this_page")) or 0,
+        "total_all_pages": _integer(estimated.get("total_all_pages")) or 0,
+        "breakdown": _dictionary(estimated.get("breakdown")),
+    }
+
+
+def _usage_credit_snapshot(usage: dict[str, Any]) -> dict[str, Any]:
+    credits = _dictionary(usage.get("credits"))
+    return {
+        "total_available": _integer(credits.get("total_available")),
+        "used": _integer(credits.get("used")),
+        "total_cap": _integer(credits.get("total_cap")),
+    }
+
+
+def _credit_cost(credits: int) -> float:
+    return float(
+        (Decimal(max(credits, 0)) * CREDIT_COST_USD).quantize(
+            Decimal("0.0001"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+
+def _subject_coordinates(
+    db: Session,
+    property_record: Property,
+) -> tuple[float | None, float | None]:
+    metadata = (
+        property_record.address_validation_metadata
+        if isinstance(property_record.address_validation_metadata, dict)
+        else {}
+    )
+    facts = _dictionary(metadata.get("facts"))
+    latitude = _number(facts.get("latitude"))
+    longitude = _number(facts.get("longitude"))
+    if latitude is not None and longitude is not None:
+        return _valid_coordinates(latitude, longitude)
+    snapshot = db.scalar(
+        select(PropertyIntelligenceSnapshot)
+        .where(
+            PropertyIntelligenceSnapshot.organization_id == property_record.organization_id,
+            PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.is_current.is_(True),
+        )
+        .order_by(
+            PropertyIntelligenceSnapshot.version_number.desc(),
+            PropertyIntelligenceSnapshot.created_at.desc(),
+        )
+    )
+    snapshot_facts = snapshot.facts if snapshot and isinstance(snapshot.facts, dict) else {}
+    return _valid_coordinates(
+        _number(_fact_payload_value(snapshot_facts.get("latitude"))),
+        _number(_fact_payload_value(snapshot_facts.get("longitude"))),
+    )
+
+
+def _fact_payload_value(value: object) -> object:
+    if isinstance(value, dict):
+        return value.get("value")
+    return value
+
+
+def _valid_coordinates(
+    latitude: float | None,
+    longitude: float | None,
+) -> tuple[float | None, float | None]:
+    if (
+        latitude is None
+        or longitude is None
+        or not -90 <= latitude <= 90
+        or not -180 <= longitude <= 180
+    ):
+        return None, None
+    return round(latitude, 6), round(longitude, 6)
+
+
+def _canonical_hash(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _add_property_type_filter(
@@ -816,6 +1741,7 @@ def _candidate_groups(
     case: DispositionCase,
     property_record: Property,
     max_candidates: int,
+    scope_description: str = "Subject ZIP",
 ) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     display_names: dict[str, str] = {}
@@ -918,7 +1844,8 @@ def _candidate_groups(
                 "score_components": components,
                 "evidence_snapshot": {
                     "basis": (
-                        "Recent recorded purchases sampled by DealMachine in the subject ZIP. "
+                        f"Recent recorded purchases sampled by DealMachine using: "
+                        f"{scope_description}. "
                         "No-mortgage records are a lead signal, not proof of a cash purchase."
                     ),
                     "observed_property_ids": [
@@ -942,6 +1869,70 @@ def _candidate_groups(
         reverse=True,
     )
     return result[:max_candidates]
+
+
+def _net_new_candidates(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    candidates: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    prior_external_keys = set(
+        db.scalars(
+            select(BuyerDiscoveryCandidate.external_key)
+            .join(
+                BuyerDiscoveryRun,
+                BuyerDiscoveryRun.id == BuyerDiscoveryCandidate.discovery_run_id,
+            )
+            .where(
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
+                BuyerDiscoveryCandidate.provider == "dealmachine",
+                BuyerDiscoveryRun.disposition_case_id == case_id,
+            )
+        ).all()
+    )
+    buyers = list(
+        db.scalars(
+            select(Buyer).where(Buyer.organization_id == principal.organization_id)
+        ).all()
+    )
+    known_provider_keys = {
+        buyer.source_external_key
+        for buyer in buyers
+        if buyer.source_key == "dealmachine" and buyer.source_external_key
+    }
+    known_emails = {buyer.normalized_email for buyer in buyers if buyer.normalized_email}
+    known_phones = {buyer.normalized_phone for buyer in buyers if buyer.normalized_phone}
+    known_names = {
+        normalized
+        for buyer in buyers
+        for raw_name in (buyer.name, buyer.company_name)
+        if raw_name and (normalized := _normalized_name(raw_name))
+    }
+    accepted: list[dict[str, Any]] = []
+    for candidate in candidates:
+        external_key = _string(candidate.get("external_key"))
+        if external_key in prior_external_keys or external_key in known_provider_keys:
+            continue
+        normalized_email = normalize_email(_string(candidate.get("email")))
+        normalized_phone = normalize_phone(_string(candidate.get("phone")))
+        candidate_names = {
+            normalized
+            for raw_name in (candidate.get("name"), candidate.get("company_name"))
+            if isinstance(raw_name, str) and (normalized := _normalized_name(raw_name))
+        }
+        if normalized_email and normalized_email in known_emails:
+            continue
+        if normalized_phone and normalized_phone in known_phones:
+            continue
+        if candidate_names & known_names:
+            continue
+        accepted.append(candidate)
+        if len(accepted) >= limit:
+            break
+    return accepted
 
 
 def _credit_summary(response: dict[str, Any]) -> dict[str, Any] | None:
@@ -1057,6 +2048,19 @@ def _integer(value: object) -> int | None:
     if isinstance(value, str):
         try:
             return int(float(value))
+        except ValueError:
+            return None
+    return None
+
+
+def _number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
         except ValueError:
             return None
     return None

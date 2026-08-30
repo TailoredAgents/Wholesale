@@ -68,7 +68,7 @@ must use Stonegate Home Buyers.
 | RealEstateAPI property intelligence | Implemented and active; controlled property research passed |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
 | SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
-| DealMachine buyer discovery | Legacy optional adapter; disabled and removable after subscription cancellation |
+| DealMachine buyer discovery | Governed deal-specific House workflow implemented and enabled in the production API manifest; DS12 controlled real-deal acceptance remains. DealMachine underwriting comps remain separately disabled |
 | Internal accounting | Implemented; CPA acceptance and first real close remain |
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
 | BatchDialer outbound calling | Selected production calling system for VAs; official direct API is the sole Stonegate integration, with implementation complete and controlled production acceptance pending |
@@ -1008,8 +1008,10 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
    mutable facts.
 5. Only **Active** buyers are eligible for future automated matching against markets, property
    criteria, price, capacity, activity, and proof.
-6. The optional DealMachine adapter can provide external buyer candidates only if it is deliberately reactivated and
-   accepted.
+6. The governed DealMachine workflow can stage external House buyer candidates after the owned
+   network is ranked, the current package is approved, and a person confirms both the provider
+   estimate and the tier's binding credit ceiling. DS12 controlled real-deal acceptance remains
+   required before routine dependence.
 7. Candidates keep provider/import provenance and enter **Needs Review** before activation;
    external data does not overwrite trusted buyer records.
 8. **Prepare recipient pool** records the exact approved package version, artifact hash, and
@@ -1410,8 +1412,11 @@ so staff can distinguish Stonegate-entered facts from outside data.
 
 ### 13.2 Buyer Discovery
 
-The DealMachine buyer-data adapter is retained only as an optional legacy workflow and is disabled
-when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the workflow:
+The DealMachine buyer-data adapter is a deal-specific supplement to Stonegate's owned Buyer
+Network. The production API manifest sets `BUYER_DATA_PROVIDER=dealmachine`; the local example
+remains fail-closed until a developer supplies an authorized key and deliberately enables it. Buyer
+discovery is independent from the disabled DealMachine underwriting-comp mode. The implemented
+workflow:
 
 1. Verifies the configured account and displays the paid plan, billing-cycle reset, and available
    credits without exposing the API key.
@@ -1421,13 +1426,20 @@ when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the work
 4. Stores the provider query, actual credit summary, and raw candidate evidence.
 5. Normalizes current multi-select property fields, excludes provider-DNC phone numbers from the
    imported contact suggestion, scores candidates, and explains the evidence.
-6. Requires a human to review before import.
-7. Links imported records to the existing buyer CRM without sending outreach.
+6. Stages provider candidates for human shortlist, pass, duplicate, and contact-quality review.
+7. Requires an explicit create, link-existing, or reject decision before a candidate can affect the
+   Buyer Network, and never sends outreach as part of discovery.
 
-The adapter is not required for Stonegate's current launch and should not be treated as an active
-buyer source unless the Owner deliberately reactivates and accepts it later. InvestorLift live
-transport, buyer discovery, and synchronization are not active. The separate DS8 manual House
-handoff can export an approved public listing bundle and record staff-observed provider evidence;
+DS11 adds owned-network-first guidance; sequential 10, 20, and 40 net-new candidate tiers; 30, 60,
+and 120 credit ceilings; a 250-credit per-deal cap; a 2,000-credit monthly disposition cap; exact
+preview confirmation; recent-result reuse; and duplicate-request protection. Those controls are
+implemented and configured for the production API. DS12 still must validate actual credits and
+candidate usefulness on a controlled real deal before routine dependence. Candidates remain staged
+for human review and cannot trigger automatic outreach.
+
+InvestorLift live transport, buyer discovery, and synchronization are not active. The separate DS8
+manual House handoff can export an approved public listing bundle and record staff-observed
+provider evidence;
 it never sends an InvestorLift campaign. Creating, editing, activating, or matching a Buyer Network
 record also never sends one. The governed House Outreach workflow can contact selected
 owned-network buyers through Stonegate's approved Resend or Twilio configuration.
@@ -1832,7 +1844,7 @@ telemarketing, recording, or real-estate advice.
 | Resend | Outbound and inbound operational email, including approved House buyer outreach with the frozen investor PDF | Implemented with signed events, UUID-fenced leases, durable route checkpointing, bounded retry, manager-only audited dead-letter recovery, restricted-mailbox isolation, bounded attachment downloads, and DS6 exact-message delivery/reply reconciliation | DNS and webhook configured; controlled mailbox and disposition-outreach acceptance plus malware-scanning decision remain |
 | Twilio | SMS, Voice, recordings, Call Intelligence, and approved House buyer SMS outreach | Implemented with transcript backoff, exhaustion visibility, audited manual retry, DS6 sender/permission/suppression preflight, delivery reconciliation, and uncertain-submission duplicate protection | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS, buyer-outreach SMS, and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
-| DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
+| DealMachine | Deal-specific House buyer discovery; underwriting-comp adapter is a separate disabled mode | Governed DS11 search tiers, credit limits, reuse, staged review, and production API configuration implemented | Controlled real-deal acceptance pending DS12; underwriting comps disabled |
 | InvestorLift | Manual approved-package handoff and reviewable provider evidence; future buyer-list enrichment or live transport | Provider-neutral/manual DS8 foundation implemented with public-only immutable revisions, exact approval, bundle export, manual source links/events/status, history export, and disconnect; no network client | Live API contract unverified and transport disabled; Buyer Network changes do not send or synchronize data |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |

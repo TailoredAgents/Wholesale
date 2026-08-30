@@ -2290,25 +2290,38 @@ Use Stonegate's existing Buyer CRM first:
 4. Upload and verify proof of funds when required.
 5. Record inquiries, showings, follow-up, and deposit activity.
 
-When DealMachine is configured, **External buyer intelligence** adds deal-specific candidates:
+When DealMachine is connected, **External buyer intelligence** adds deal-specific House candidates
+after Stonegate ranks the owned Buyer Network for free:
 
 1. Confirm the expected paid plan, billing-cycle reset, and available credits are visible.
-2. Select **Preview search cost**. The preview validates the request without consuming credits.
-3. Review the matching-property count and maximum property/contact credit estimate.
-4. Select **Run buyer search** only when the estimate is acceptable.
-5. Compare the actual credit summary with the preview, then review the ranked candidates, observed
+2. Start with **Best-Fit 10** and select **Preview search estimate**. The preview validates the exact
+   request without consuming credits. It is an estimate; the displayed 30-credit tier ceiling is
+   the binding maximum because live owner contacts can add credits. Stonegate binds the confirmation
+   to this exact preview; if the approved package, property, price, or scope changes, preview again.
+3. Review the matching-property count; property and owner credit estimate; dollar equivalent; tier
+   ceiling; credits already used on the deal; and monthly usage.
+4. Select **Search up to 10 best-fit buyers** only when the estimate is acceptable. **Expand Nearby
+   20** unlocks after that tier completes, and **Search Regional Investors 40** unlocks after Tier 2
+   completes. Review narrower results before deciding that the broader paid search is worthwhile.
+5. Compare the actual credit summary with the preview. A current identical result may show **Reuse
+   saved results** and spend no new provider credits. Then review each candidate's observed
    purchase count, no-mortgage signal, last purchase date, market, property type, and available
    contact information.
-6. Check only the candidates worth keeping.
-7. Select **Import selected**.
-8. Review the imported buyer in the Buyer CRM and complete missing criteria or proof information.
-9. Refresh the case's buyer ranking.
+6. Shortlist a good deal fit, pass a poor fit, reject unusable external evidence, link a reviewed
+   duplicate to the existing Stonegate buyer, or select **Approve into network** for a genuinely new
+   relationship.
+7. Review every approved candidate in the Buyer CRM. It starts as **Needs Review**; verify contact
+   identity, permission, buy box, and proof before activation.
+8. Refresh the case's buyer ranking.
+
+If a tier shows **Credit reconciliation required**, do not retry it. Stonegate has preserved an
+interrupted or incompletely reported paid attempt and will block another paid search until that
+provider usage is reconciled. The owned Buyer Network remains available throughout.
 
 The search does not send outreach and does not automatically add every result. Candidates remain
-outside the Buyer CRM until a person approves their import. DealMachine is disabled and is not part
-of the current launch plan; maintain buyers manually unless the Owner deliberately reactivates the
-legacy adapter and completes a new provider-quality, billing, permission, and production acceptance
-test.
+outside the Buyer CRM until a person makes an explicit conversion decision. The production API is
+configured for the governed DS11 workflow, but DS12 real-deal result and credit acceptance is still
+required before routine dependence. DealMachine underwriting comps remain disabled.
 
 ### Outreach
 

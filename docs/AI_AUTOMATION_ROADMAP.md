@@ -82,8 +82,8 @@ Delivered:
   evidence, source conflict and provenance review, deterministic adjusted-sale range diagnostics,
   and a supplied-evidence-only AI Comp Analyst draft with no valuation or offer authority.
   RealEstateAPI candidate admission is Owner-controlled and active; the analyst remains behind its
-  default-safe rollout mode. DealMachine evidence is legacy-only while that adapter remains
-  disabled.
+  default-safe rollout mode. DealMachine underwriting evidence is legacy-only while the separate
+  underwriting-comp adapter remains disabled.
 - AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
   deterministic closing readiness, deadline risk, duplicate-file protection, source-page
   confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
@@ -346,7 +346,8 @@ APIs required:
 - OpenAI.
 - RentCast.
 - RealEstateAPI with exact subject matching, saved snapshot reuse, and owner-controlled
-  shadow/candidate comp admission. DealMachine remains a disabled legacy adapter.
+  shadow/candidate comp admission. The separate DealMachine underwriting-comp adapter remains
+  disabled.
 - Optional licensed MLS/RESO or ATTOM adapter after measured need.
 - Twilio recording/transcription and internal calendar.
 - Optional route estimates only if operating data justifies them.

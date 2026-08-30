@@ -1,4 +1,6 @@
 from collections.abc import Iterator
+from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -125,8 +127,88 @@ class FakeDealMachineClient:
                 },
             ],
             "pagination": {"total_results": 3},
-            "credits": {"properties": 3, "people": 1},
+            "credits": {
+                "used": 4,
+                "properties": 3,
+                "people": 1,
+                "deduplicated": 0,
+            },
         }
+
+
+def _synthetic_import_run(
+    db: Session,
+    source: BuyerDiscoveryRun,
+) -> BuyerDiscoveryRun:
+    run = BuyerDiscoveryRun(
+        organization_id=source.organization_id,
+        disposition_case_id=source.disposition_case_id,
+        requested_by_user_id=source.requested_by_user_id,
+        provider=source.provider,
+        status="completed",
+        search_tier=source.search_tier,
+        request_fingerprint="synthetic-import-review-fixtures",
+        target_candidate_count=source.target_candidate_count,
+        estimated_credit_cap=source.estimated_credit_cap,
+        estimated_credits=0,
+        actual_credits=0,
+        search_snapshot={"test_fixture": "import review scenarios"},
+        provider_request={"test_fixture": True},
+        result_count=0,
+        imported_count=0,
+        credit_summary={
+            "used": 0,
+            "properties": 0,
+            "people": 0,
+            "deduplicated": 0,
+        },
+        error_message=None,
+        completed_at=datetime.now(UTC),
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def _clone_discovery_candidate(
+    db: Session,
+    source: BuyerDiscoveryCandidate,
+    run: BuyerDiscoveryRun,
+    **changes: object,
+) -> BuyerDiscoveryCandidate:
+    values: dict[str, object] = {
+        "organization_id": source.organization_id,
+        "discovery_run_id": run.id,
+        "buyer_id": None,
+        "provider": source.provider,
+        "external_key": source.external_key,
+        "name": source.name,
+        "company_name": source.company_name,
+        "email": source.email,
+        "phone": source.phone,
+        "market": source.market,
+        "state": source.state,
+        "property_types": deepcopy(source.property_types),
+        "observed_purchase_count": source.observed_purchase_count,
+        "no_mortgage_count": source.no_mortgage_count,
+        "last_purchase_date": source.last_purchase_date,
+        "min_purchase_price_cents": source.min_purchase_price_cents,
+        "max_purchase_price_cents": source.max_purchase_price_cents,
+        "score_basis_points": source.score_basis_points,
+        "score_components": deepcopy(source.score_components),
+        "evidence_snapshot": deepcopy(source.evidence_snapshot),
+        "provider_snapshot": deepcopy(source.provider_snapshot),
+        "status": "review",
+        "imported_at": None,
+    }
+    values.update(changes)
+    candidate = BuyerDiscoveryCandidate(**values)
+    db.add(candidate)
+    run.result_count += 1
+    db.commit()
+    db.refresh(candidate)
+    return candidate
 
 
 def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
@@ -167,23 +249,31 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert readiness.json()["connected"] is True
     assert readiness.json()["plan_name"] == "Pro"
     assert readiness.json()["credits_remaining"] == 19477
+    assert approve_disposition_package(client, case_id).status_code == 200
 
     estimate = client.post(
         "/api/v1/buyers/discovery-runs/estimate",
         headers=HEADERS,
-        json={"disposition_case_id": case_id, "max_candidates": 25},
+        json={
+            "disposition_case_id": case_id,
+            "search_tier": "best_fit",
+            "max_candidates": 10,
+        },
     )
     assert estimate.status_code == 200, estimate.text
     assert estimate.json()["estimated_credits"] == 4
     assert estimate.json()["enough_credits"] is True
+    request_fingerprint = estimate.json()["request_fingerprint"]
 
     stale_confirmation = client.post(
         "/api/v1/buyers/discovery-runs",
         headers=HEADERS,
         json={
             "disposition_case_id": case_id,
-            "max_candidates": 25,
+            "search_tier": "best_fit",
+            "max_candidates": 10,
             "confirmed_estimated_credits": 3,
+            "confirmed_request_fingerprint": request_fingerprint,
         },
     )
     assert stale_confirmation.status_code == 422
@@ -194,14 +284,19 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         headers=HEADERS,
         json={
             "disposition_case_id": case_id,
-            "max_candidates": 25,
+            "search_tier": "best_fit",
+            "max_candidates": 10,
             "confirmed_estimated_credits": 4,
+            "confirmed_request_fingerprint": request_fingerprint,
         },
     )
     assert discovery.status_code == 201, discovery.text
     payload = discovery.json()
     assert payload["result_count"] == 2
-    assert payload["credit_summary"] == {"properties": 3, "people": 1}
+    assert payload["actual_credits"] == 4
+    assert payload["credit_summary"]["used"] == 4
+    assert payload["credit_summary"]["properties"] == 3
+    assert payload["credit_summary"]["people"] == 1
     top = payload["candidates"][0]
     assert top["name"] == "Peachtree Capital LLC"
     assert top["observed_purchase_count"] == 2
@@ -230,7 +325,6 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         json={"status": "active"},
     )
     assert activated.status_code == 200
-    assert approve_disposition_package(client, case_id).status_code == 200
     matches = client.post(
         f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
@@ -240,27 +334,31 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert imported_match["qualification_status"] == "review_required"
     assert imported_match["recipient_status"] == "excluded"
 
-    second_run = client.post(
-        "/api/v1/buyers/discovery-runs",
-        headers=HEADERS,
-        json={
-            "disposition_case_id": case_id,
-            "max_candidates": 25,
-            "confirmed_estimated_credits": 4,
-        },
-    ).json()
-    contact_duplicate_candidate = db_session.get(
-        BuyerDiscoveryCandidate,
-        UUID(second_run["candidates"][0]["id"]),
+    source_run = db_session.get(BuyerDiscoveryRun, UUID(payload["id"]))
+    peachtree_source = db_session.get(BuyerDiscoveryCandidate, UUID(top["id"]))
+    taylor_payload = next(
+        candidate for candidate in payload["candidates"] if candidate["name"] == "Taylor Investor"
     )
-    assert contact_duplicate_candidate is not None
-    contact_duplicate_candidate.provider = "alternate_provider"
-    contact_duplicate_candidate.external_key = "alternate-contact-key"
-    contact_duplicate_candidate.name = "Different Buyer Name"
-    contact_duplicate_candidate.company_name = "Different Capital Group"
-    db_session.commit()
+    taylor_source = db_session.get(
+        BuyerDiscoveryCandidate,
+        UUID(taylor_payload["id"]),
+    )
+    assert source_run is not None
+    assert peachtree_source is not None
+    assert taylor_source is not None
+    review_run = _synthetic_import_run(db_session, source_run)
+
+    contact_duplicate_candidate = _clone_discovery_candidate(
+        db_session,
+        peachtree_source,
+        review_run,
+        provider="alternate_provider",
+        external_key="alternate-contact-key",
+        name="Different Buyer Name",
+        company_name="Different Capital Group",
+    )
     duplicate = client.post(
-        f"/api/v1/buyers/discovery-runs/{second_run['id']}/import",
+        f"/api/v1/buyers/discovery-runs/{review_run.id}/import",
         headers=HEADERS,
         json={"candidate_ids": [str(contact_duplicate_candidate.id)]},
     )
@@ -273,86 +371,64 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert contact_duplicate_result["status"] == "duplicate"
     assert contact_duplicate_result["buyer_id"] == imported_buyer_id
 
-    source_duplicate_candidate = next(
-        candidate
-        for candidate in second_run["candidates"]
-        if candidate["name"] == "Taylor Investor"
-    )
-    source_duplicate_row = db_session.get(
-        BuyerDiscoveryCandidate,
-        UUID(source_duplicate_candidate["id"]),
-    )
     canonical_buyer = db_session.get(Buyer, UUID(imported_buyer_id))
-    assert source_duplicate_row is not None and canonical_buyer is not None
-    source_duplicate_row.external_key = str(canonical_buyer.source_external_key)
-    db_session.commit()
+    assert canonical_buyer is not None
+    source_duplicate_row = _clone_discovery_candidate(
+        db_session,
+        taylor_source,
+        review_run,
+        external_key=str(canonical_buyer.source_external_key),
+    )
     source_duplicate = client.post(
-        f"/api/v1/buyers/discovery-runs/{second_run['id']}/import",
+        f"/api/v1/buyers/discovery-runs/{review_run.id}/import",
         headers=HEADERS,
-        json={"candidate_ids": [source_duplicate_candidate["id"]]},
+        json={"candidate_ids": [str(source_duplicate_row.id)]},
     )
     assert source_duplicate.status_code == 200
     source_duplicate_result = next(
         candidate
         for candidate in source_duplicate.json()["candidates"]
-        if candidate["id"] == source_duplicate_candidate["id"]
+        if candidate["id"] == str(source_duplicate_row.id)
     )
     assert source_duplicate_result["status"] == "duplicate"
     assert source_duplicate_result["buyer_id"] == imported_buyer_id
 
-    third_run = client.post(
-        "/api/v1/buyers/discovery-runs",
-        headers=HEADERS,
-        json={
-            "disposition_case_id": case_id,
-            "max_candidates": 25,
-            "confirmed_estimated_credits": 4,
-        },
-    ).json()
-    no_contact_candidate = next(
-        candidate for candidate in third_run["candidates"] if candidate["name"] == "Taylor Investor"
+    no_contact_candidate = _clone_discovery_candidate(
+        db_session,
+        taylor_source,
+        review_run,
     )
     quarantined = client.post(
-        f"/api/v1/buyers/discovery-runs/{third_run['id']}/import",
+        f"/api/v1/buyers/discovery-runs/{review_run.id}/import",
         headers=HEADERS,
-        json={"candidate_ids": [no_contact_candidate["id"]]},
+        json={"candidate_ids": [str(no_contact_candidate.id)]},
     )
     assert quarantined.status_code == 200
     quarantined_candidate = next(
         candidate
         for candidate in quarantined.json()["candidates"]
-        if candidate["id"] == no_contact_candidate["id"]
+        if candidate["id"] == str(no_contact_candidate.id)
     )
     assert quarantined_candidate["status"] == "needs_contact_review"
     assert quarantined_candidate["buyer_id"] is None
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 3
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 2
     assert (
-        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 6
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 5
     )
 
-    fourth_run = client.post(
-        "/api/v1/buyers/discovery-runs",
-        headers=HEADERS,
-        json={
-            "disposition_case_id": case_id,
-            "max_candidates": 25,
-            "confirmed_estimated_credits": 4,
-        },
-    ).json()
-    name_only_candidate = db_session.get(
-        BuyerDiscoveryCandidate,
-        UUID(fourth_run["candidates"][0]["id"]),
+    name_only_candidate = _clone_discovery_candidate(
+        db_session,
+        peachtree_source,
+        review_run,
+        provider="different_provider",
+        external_key="different-provider-contact",
+        email="distinct-buyer@example.com",
+        phone="6785550137",
     )
-    assert name_only_candidate is not None
     assert name_only_candidate.name == "Peachtree Capital LLC"
-    name_only_candidate.provider = "different_provider"
-    name_only_candidate.external_key = "different-provider-contact"
-    name_only_candidate.email = "distinct-buyer@example.com"
-    name_only_candidate.phone = "6785550137"
-    db_session.commit()
     name_review = client.post(
-        f"/api/v1/buyers/discovery-runs/{fourth_run['id']}/import",
+        f"/api/v1/buyers/discovery-runs/{review_run.id}/import",
         headers=HEADERS,
         json={"candidate_ids": [str(name_only_candidate.id)]},
     )
@@ -372,9 +448,9 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         in reviewed_candidate["evidence_snapshot"]["duplicate_review"]["possible_buyer_ids"]
     )
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 4
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 2
     assert (
-        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 8
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 6
     )
 
     shared_email = "shared-legacy-identity@example.com"
@@ -403,30 +479,20 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     )
     assert second_legacy.status_code == 201, second_legacy.text
 
-    fifth_run = client.post(
-        "/api/v1/buyers/discovery-runs",
-        headers=HEADERS,
-        json={
-            "disposition_case_id": case_id,
-            "max_candidates": 25,
-            "confirmed_estimated_credits": 4,
-        },
-    ).json()
-    ambiguous_candidate = db_session.get(
-        BuyerDiscoveryCandidate,
-        UUID(fifth_run["candidates"][0]["id"]),
+    ambiguous_candidate = _clone_discovery_candidate(
+        db_session,
+        peachtree_source,
+        review_run,
+        provider="ambiguous_provider",
+        external_key="ambiguous-strong-identity",
+        name="Distinct Discovery Candidate",
+        company_name="Distinct Discovery Company",
+        email=shared_email,
+        phone="6785550197",
     )
-    assert ambiguous_candidate is not None
-    ambiguous_candidate.provider = "ambiguous_provider"
-    ambiguous_candidate.external_key = "ambiguous-strong-identity"
-    ambiguous_candidate.name = "Distinct Discovery Candidate"
-    ambiguous_candidate.company_name = "Distinct Discovery Company"
-    ambiguous_candidate.email = shared_email
-    ambiguous_candidate.phone = "6785550197"
-    db_session.commit()
 
     ambiguous_review = client.post(
-        f"/api/v1/buyers/discovery-runs/{fifth_run['id']}/import",
+        f"/api/v1/buyers/discovery-runs/{review_run.id}/import",
         headers=HEADERS,
         json={"candidate_ids": [str(ambiguous_candidate.id)]},
     )
@@ -448,4 +514,8 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     db_session.refresh(ambiguous_candidate)
     assert ambiguous_candidate.imported_at is None
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 4
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 2
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 7
+    )
     get_settings.cache_clear()

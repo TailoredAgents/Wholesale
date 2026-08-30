@@ -20,6 +20,7 @@ from app.schemas.buyers import (
     BuyerDiscoveryEstimateRead,
     BuyerDiscoveryImport,
     BuyerDiscoveryRunRead,
+    BuyerDiscoverySummaryRead,
     BuyerDuplicatePreflightRead,
     BuyerDuplicatePreflightRequest,
     BuyerListResponse,
@@ -55,6 +56,20 @@ from app.services.inbox import ensure_buyer_conversation
 router = APIRouter(prefix="/api/v1/buyers", tags=["buyers"])
 view_buyers_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
 edit_buyers_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
+
+
+def require_buyer_discovery_permissions(
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> Principal:
+    if PermissionKeys.EDIT_DEALS not in principal.permission_keys:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: {PermissionKeys.EDIT_DEALS}",
+        )
+    return principal
+
+
+buyer_discovery_dependency = require_buyer_discovery_permissions
 
 
 @router.get("")
@@ -180,11 +195,26 @@ def read_latest_buyer_discovery(
     return buyer_discovery.latest_discovery_run(db, principal, case_id)
 
 
+@router.get("/discovery-summary")
+def read_buyer_discovery_summary(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
+) -> BuyerDiscoverySummaryRead:
+    try:
+        return buyer_discovery.discovery_summary(db, principal, case_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
 @router.post("/discovery-runs", status_code=201)
 def create_buyer_discovery(
     payload: BuyerDiscoveryCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+    principal: Annotated[Principal, Depends(buyer_discovery_dependency)],
 ) -> BuyerDiscoveryRunRead:
     try:
         return buyer_discovery.discover_buyers(db, principal, payload)
@@ -199,7 +229,7 @@ def create_buyer_discovery(
 def estimate_buyer_discovery(
     payload: BuyerDiscoveryEstimateCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+    principal: Annotated[Principal, Depends(buyer_discovery_dependency)],
 ) -> BuyerDiscoveryEstimateRead:
     try:
         return buyer_discovery.estimate_buyer_discovery(db, principal, payload)
