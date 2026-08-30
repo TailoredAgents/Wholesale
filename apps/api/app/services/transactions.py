@@ -78,6 +78,10 @@ EXECUTED_DOCUMENT_TYPE_BY_PACKAGE = {
     "addendum": "executed_addendum",
 }
 MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
+CHECKLIST_ITEMS_REQUIRING_COMPLETION_EVIDENCE = frozenset(
+    {"open_title", "seller_documents", "due_diligence", "closing_confirmed"}
+)
+MIN_CHECKLIST_EVIDENCE_NOTE_LENGTH = 10
 
 
 def utc_datetime(value: datetime) -> datetime:
@@ -456,7 +460,7 @@ def update_transaction(
             reason="Transaction coordination update",
         )
     )
-    if {"closing_date", "coordinator_user_id"} & changes.keys():
+    if {"closing_date", "coordinator_user_id", "due_diligence_deadline"} & changes.keys():
         from app.services.disposition_offer_room import (
             sync_transaction_offer_room_checkpoints,
         )
@@ -1166,6 +1170,11 @@ def mark_contract_executed(
         lead.stage_key = "under_contract"
         if deal:
             deal.stage_key = "under_contract"
+        from app.services.disposition_handoff import (
+            ensure_house_disposition_case_for_executed_transaction,
+        )
+
+        ensure_house_disposition_case_for_executed_transaction(db, transaction)
     add_event(
         db,
         principal,
@@ -1287,10 +1296,22 @@ def update_checklist_item(
         return None
     require_house_transaction_workflow(db, transaction)
     changes = payload.model_dump(exclude_unset=True)
+    if "evidence_notes" in changes:
+        evidence_notes = changes["evidence_notes"]
+        changes["evidence_notes"] = evidence_notes.strip() if evidence_notes else None
     if changes.get("status") == "complete" and item.dependency_item_id:
         dependency = db.get(TransactionChecklistItem, item.dependency_item_id)
         if dependency and dependency.status not in {"complete", "not_applicable"}:
             raise ValueError(f"Complete '{dependency.title}' first.")
+    if (
+        changes.get("status") == "complete"
+        and item.item_key in CHECKLIST_ITEMS_REQUIRING_COMPLETION_EVIDENCE
+    ):
+        evidence_notes = changes.get("evidence_notes", item.evidence_notes)
+        if not evidence_notes or len(evidence_notes.strip()) < MIN_CHECKLIST_EVIDENCE_NOTE_LENGTH:
+            raise ValueError(
+                f"Add a supporting evidence note before completing '{item.title}'."
+            )
     evidence_id = changes.get("evidence_document_id")
     if evidence_id and get_document(db, principal, transaction_id, evidence_id) is None:
         raise ValueError("Evidence document does not belong to this transaction.")

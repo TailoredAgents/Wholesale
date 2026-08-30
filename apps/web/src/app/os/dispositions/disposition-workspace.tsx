@@ -20,13 +20,14 @@ import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import { DispositionBuyerPool } from "./disposition-buyer-pool";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
+import { DispositionExecutionWorkspace } from "./disposition-execution-workspace";
 import { DispositionOfferRoom } from "./disposition-offer-room";
 import { DispositionPackageReadiness } from "./disposition-package-readiness";
 import { DispositionProviderWorkspace } from "./disposition-provider-workspace";
 import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
 
-type Tab = "package" | "buyers" | "outreach" | "offers" | "provider" | "reconciliation";
+type Tab = "package" | "buyers" | "execution" | "outreach" | "offers" | "provider" | "reconciliation";
 
 function money(cents: number | null) {
   return cents == null
@@ -349,7 +350,7 @@ export function DispositionWorkspace({
                   />
                 </CopilotLauncher>
               ) : null}
-              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "outreach", "offers", "provider", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "offers" ? "Offer Room" : item === "provider" ? "InvestorLift" : labelize(item)}</button>)}</nav>
+              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "execution" ? "Call queue" : item === "offers" ? "Offer Room" : item === "provider" ? "InvestorLift" : labelize(item)}</button>)}</nav>
 
               {tab === "package" ? (
                 <DispositionPackageReadiness
@@ -379,6 +380,19 @@ export function DispositionWorkspace({
                   onUploadProof={uploadProof}
                   packageApproved={selected.package_status === "approved"}
                   parentBusy={busy}
+                  request={request}
+                />
+              ) : null}
+
+              {tab === "execution" ? (
+                <DispositionExecutionWorkspace
+                  canEditDeals={canEditDeals}
+                  caseId={selected.id}
+                  downloadPackage={(path) =>
+                    download(path, `Stonegate-${selected.id}-investor-packet.pdf`)
+                  }
+                  key={selected.id}
+                  onMessage={setMessage}
                   request={request}
                 />
               ) : null}

@@ -120,6 +120,40 @@ test("closing protection keeps checklist, deadlines, alerts, and outcomes operat
   assert.match(room, /evidence: \{\}/);
 });
 
+test("the Offer Room gives Alex one evidence-backed buyer-to-closing path", () => {
+  for (const label of [
+    "Buyer offer recorded",
+    "Proof and terms verified",
+    "Primary and backup approved",
+    "Buyer deposit secured",
+    "Title and access cleared",
+    "Funded and closed",
+  ]) assert.match(room, new RegExp(label));
+  assert.match(room, /Interested buyer to funded closing/);
+  assert.match(room, /Nothing is marked complete from a guess/);
+  assert.match(room, /outcome\.outcome_type === "completed_close"/);
+  assert.match(room, /data\.strategy_agreement\.label/);
+  assert.match(room, /data\.strategy_agreement\.ready/);
+  assert.match(room, /data\.strategy_agreement\.blockers/);
+  assert.match(api, /strategy_agreement:/);
+  assert.match(room, /proof_verified_amount_cents >= offerForVerification\.amount_cents/);
+  assert.match(room, /new Date\(offerForVerification\.proof_expires_at\)\.getTime\(\) > generatedAt/);
+  assert.match(room, /new Date\(offerForVerification\.proposed_closing_at\)\.getTime\(\) > generatedAt/);
+  assert.match(room, /canonicalChecklistComplete\("title"\)/);
+  assert.match(room, /canonicalChecklistComplete\("access"\)/);
+  assert.match(room, /checkpoint\.canonical_source === "transaction_checklist"/);
+  assert.match(room, /hasCanonicalChecklistEvidence/);
+  assert.match(room, /checkpoint\.canonical_source === "buyer_offer"/);
+  assert.match(room, /depositCheckpoint\?\.status === "waived"/);
+  assert.match(room, /primaryEarnestMoneyCents != null/);
+  assert.match(room, /primaryEarnestMoneyCents === 0/);
+  assert.match(room, /resolved: closingComplete \|\| depositDecisionResolved/);
+  assert.match(room, /warning: !closingComplete && depositWaived/);
+  assert.match(room, /aria-current="step"/);
+  assert.match(roomStyles, /\.placementSteps li\[data-state="current"\]/);
+  assert.match(roomStyles, /scroll-snap-type: inline proximity/);
+});
+
 test("unknown mutation outcomes reuse stable idempotency keys", () => {
   assert.match(room, /pendingIdempotencyKeysRef/);
   assert.match(room, /pendingIdempotencyKey\(idempotencyAction, "offer"\)/);

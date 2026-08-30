@@ -1,12 +1,13 @@
 # Stonegate Buyer Network And Disposition Sidekick Roadmap
 
-Last updated: August 29, 2026
+Last updated: August 30, 2026
 
 > **Current status: DS0-DS8 complete; the DS9 repository implementation is complete but its
 > measured pilot is NOT MET; the DS10 derived House management dashboard is implemented; live
 > InvestorLift transport and expanded DS10 attribution/cost controls remain pending; DS11's
 > governed repository implementation and production API configuration are complete, while DS12
-> controlled real-deal acceptance remains pending.** Stonegate now has the audited,
+> repository preparation is complete and controlled real-deal acceptance remains pending.**
+> Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -31,8 +32,12 @@ Last updated: August 29, 2026
 > derived from canonical House disposition evidence while explicitly leaving campaign-cost,
 > correction-capable attribution, and causal performance claims pending. DS11 now supplies bounded,
 > cost-governed DealMachine buyer discovery; bulk CSV buyer migration is not planned because Alex
-> will maintain Stonegate-owned relationships one at a time. DS12 remains the final supervised
-> launch and operator-acceptance gate. Land outreach and live InvestorLift transport remain future
+> will maintain Stonegate-owned relationships one at a time. The DS12 preparation now also includes
+> automatic human-led House handoff after purchase-contract execution, authorized owner routing,
+> opt-in package-ready staff alerts, expiring investor-package links, a ranked one-to-one call queue,
+> permission-aware pre-call SMS and voice, showing follow-up, and evidence-backed buyer-placement
+> gates. DS12 remains the final supervised launch and operator-acceptance gate. Land outreach and
+> live InvestorLift transport remain future
 > work. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
@@ -1001,12 +1006,38 @@ spent silently.
 
 ## DS12 - Final Launch And Operator Acceptance
 
-**Status: Planned.**
+**Status: Repository preparation complete; controlled live-deal acceptance pending.**
 
 ### Goal
 
 Use a real Stonegate contracted property with Alex as the supervised end-to-end launch and operator
 acceptance case while keeping external communication and binding decisions human-controlled.
+
+### Repository Preparation Already Delivered
+
+- An executed House purchase agreement can create one idempotent disposition case and route it only
+  to an active, authorized Dispositions user in the human-led operating mode. Temporary setup
+  blockers are retried by the worker after configuration is corrected.
+- Approval of the current investor-package version can queue one staff SMS only when the selected
+  owner is still authorized, has explicitly opted into staff alerts, and has a valid mobile number.
+- Approved packets can be shared through auditable, expiring, revocable links tied to the exact
+  approved PDF version and hash. A failed packet SMS triggers a best-effort immediate revocation.
+- Alex has a ranked, one-buyer-at-a-time execution queue with a buyer profile, saved match evidence,
+  permission-aware pre-call SMS, a Stonegate voice call, structured outcomes, callbacks, retry tasks,
+  due-time re-entry into the queue, showings, private access-status tracking, and one 24-hour
+  post-showing follow-up.
+- Execution outcomes and showing creation use server-enforced idempotency so retries do not create
+  duplicate engagements or follow-up work.
+- The Offer Room now treats proof, buyer identity, executed assignment evidence, deposit evidence,
+  title/access evidence, and the completed-close outcome as canonical gates rather than allowing a
+  manually checked box to create a false green status.
+- After a buyer is interested, the intended path is: record and compare the offer, select primary and
+  backup buyers, execute the assignment, verify deposit and title/access milestones, confirm closing,
+  and preserve the buyer's result and buy-box history for future matching.
+
+These controls are implemented and automatically tested. They are not evidence that Alex has yet
+completed the workflow successfully on a production deal; that is the remaining DS12 acceptance
+work below.
 
 ### Work
 
@@ -1131,7 +1162,7 @@ Quality and safety measures:
 | DS9 | Governed Disposition Copilot | Repository implementation complete; measured pilot NOT MET pending 50 decisive reviews across 10 cases and every quality/safety gate |
 | DS10 | Management Intelligence And Learning | Derived canonical House dashboard implemented; production reconciliation and expanded attribution/cost/correction controls pending |
 | DS11 | Cost-Governed DealMachine Buyer Discovery | Repository implementation and production API configuration complete; controlled real-deal acceptance pending DS12 |
-| DS12 | Final Launch And Operator Acceptance | Planned with Alex and a real contracted property |
+| DS12 | Final Launch And Operator Acceptance | Repository preparation complete; controlled live-deal acceptance pending with Alex and a real contracted property |
 
 ## 15. Documentation Maintenance
 
@@ -1170,4 +1201,7 @@ net-new tiers, 30/60/120 credit ceilings, 250-credit per-deal cap, 2,000-credit 
 zero-credit preview, recent-result reuse, staged human review, and duplicate-request protection are
 implemented and configured on the production API. InvestorLift live transport remains later
 provider work after its contract is verified. DS12 is the formal end-to-end launch and
-operator-acceptance gate with Alex and a real contracted property.
+operator-acceptance gate with Alex and a real contracted property. Its repository preparation now
+provides the automatic handoff, secure packet delivery, one-to-one execution queue, showing follow-up,
+and canonical buyer-placement/closing evidence path that Alex described; only the bounded live pilot
+and resulting corrections remain before normal-use acceptance.

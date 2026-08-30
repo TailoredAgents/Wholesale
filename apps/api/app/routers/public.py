@@ -21,6 +21,7 @@ from app.schemas.public_intake import (
 )
 from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
+from app.services.disposition_packet_links import SharedPackageUnavailable, read_shared_package
 from app.services.marketing_experiments import list_public_experiments
 from app.services.public_intake import (
     capture_public_seller_address,
@@ -34,6 +35,50 @@ from app.services.request_rate_limit import (
 from app.services.trust_proof import get_public_trust_proofs
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+
+@router.get(
+    "/investor-packages/{token}",
+    name="download_shared_investor_package",
+)
+def download_shared_investor_package(
+    token: str,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
+) -> Response:
+    settings = get_settings()
+    if settings.public_intake_rate_limit_enabled:
+        enforce_public_rate_limit(
+            request,
+            route_key="investor-package:read",
+            limit=settings.public_conversion_event_rate_limit_requests,
+            window_seconds=settings.public_conversion_event_rate_limit_window_seconds,
+            detail="Too many investor package requests. Please wait before trying again.",
+        )
+    try:
+        content, file_name = read_shared_package(
+            db,
+            token,
+            client_address=get_ip_address(request),
+            user_agent=user_agent,
+        )
+    except SharedPackageUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE if exc.gone else status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "private, no-store, max-age=0",
+            "Content-Disposition": f'inline; filename="{file_name}"',
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+        },
+    )
 
 
 @router.get("/address-suggestions")

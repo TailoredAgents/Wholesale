@@ -242,6 +242,185 @@
   line-height: 1.45;
 }
 
+.placementPath {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.placementPathHeader {
+  min-height: 78px;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.placementPathHeader > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.placementPathHeader span,
+.placementNextAction span {
+  color: var(--brand-strong);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.placementPathHeader h5 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.placementPathHeader p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.placementProgress {
+  min-width: 92px;
+  padding: 9px 12px;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+}
+
+.placementProgress strong {
+  color: var(--brand-strong);
+  font-size: 17px;
+}
+
+.placementProgress span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.placementSteps {
+  margin: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(105px, 1fr));
+  gap: 0;
+  overflow-x: auto;
+  list-style: none;
+  overscroll-behavior-inline: contain;
+}
+
+.placementSteps li {
+  position: relative;
+  min-width: 105px;
+  min-height: 116px;
+  padding: 0 11px 9px;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 7px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.placementSteps li:last-child {
+  border-right: 0;
+}
+
+.placementStepIcon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.placementSteps li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.placementSteps strong {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.placementSteps small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.placementSteps a,
+.placementNextAction a {
+  color: var(--brand-strong);
+  font-size: 9px;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.placementSteps li[data-state="complete"] .placementStepIcon {
+  border-color: #b7d8c5;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.placementSteps li[data-state="current"] {
+  background: var(--brand-soft);
+}
+
+.placementSteps li[data-state="current"] .placementStepIcon {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.placementSteps li[data-state="warning"] {
+  background: #fff8e8;
+}
+
+.placementSteps li[data-state="warning"] .placementStepIcon {
+  border-color: #e6c38e;
+  background: #fff8e8;
+  color: #795400;
+}
+
+.placementNextAction {
+  min-height: 58px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.placementNextAction > div {
+  display: grid;
+  gap: 2px;
+}
+
+.placementNextAction strong {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.placementNextAction[data-complete="true"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
 .panel,
 .selectionCard,
 .timelinePanel,
@@ -1007,6 +1186,38 @@
   .sectionHeading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .placementPathHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .placementProgress {
+    width: 100%;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    justify-items: start;
+    gap: 8px;
+    border-left-width: 2px;
+  }
+
+  .placementSteps {
+    grid-template-columns: repeat(7, minmax(170px, 72vw));
+    scroll-snap-type: inline proximity;
+  }
+
+  .placementSteps li {
+    min-width: 170px;
+    scroll-snap-align: start;
+  }
+
+  .placementNextAction {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .placementNextAction a {
+    grid-column: 2;
   }
 
   .coverageSlots,

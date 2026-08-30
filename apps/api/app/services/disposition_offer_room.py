@@ -56,6 +56,7 @@ from app.schemas.disposition_offer_room import (
     OfferSelectionCreate,
     ReplacementOptionRead,
     SelectionSlotRead,
+    StrategyAgreementReadinessRead,
 )
 from app.services.dispositions import _proof_is_current_verified, audit, scoped_case
 from app.services.lead_lifecycle import lock_organization_lead, require_lead_not_closed_out
@@ -161,7 +162,7 @@ def assignment_offer_economics_snapshot(
         raise ValueError(
             "The assignment agreement economics do not equal the approved buyer offer."
         )
-    if (earnest_money_cents or 0) != (offer.earnest_money_cents or 0):
+    if earnest_money_cents != offer.earnest_money_cents:
         raise ValueError(
             "The assignment agreement earnest money does not equal the approved buyer offer."
         )
@@ -180,7 +181,7 @@ def assignment_offer_economics_snapshot(
         "base_purchase_price_cents": base_purchase_price_cents,
         "assignment_fee_cents": assignment_fee_cents,
         "end_buyer_price_cents": end_buyer_price_cents,
-        "earnest_money_cents": offer.earnest_money_cents or 0,
+        "earnest_money_cents": offer.earnest_money_cents,
         "deposit_due_at": _normalized_instant(offer.deposit_due_at),
         "closing_date": _normalized_business_date(offer.proposed_closing_at),
         "inspection_period_days": offer.due_diligence_days,
@@ -405,7 +406,7 @@ def _risk_and_score(
         if offer.amount_cents
         else 0
     )
-    if not offer.earnest_money_cents:
+    if offer.earnest_money_cents is None:
         risk += 1000
         flags.append(
             {
@@ -413,6 +414,16 @@ def _risk_and_score(
                 "severity": "warning",
                 "message": "No earnest-money deposit is stated.",
                 "evidence": {"earnest_money_cents": offer.earnest_money_cents},
+            }
+        )
+    elif offer.earnest_money_cents == 0:
+        risk += 1000
+        flags.append(
+            {
+                "code": "deposit_zero",
+                "severity": "warning",
+                "message": "The buyer offer explicitly requires no earnest-money deposit.",
+                "evidence": {"earnest_money_cents": 0},
             }
         )
     elif deposit_bps < 100:
@@ -1179,6 +1190,196 @@ def validate_assignment_package_authority(
     }
 
 
+def _assignment_execution_identity_is_valid(
+    db: Session,
+    transaction: Transaction,
+    package: ContractPackage,
+    binding: dict[str, Any],
+) -> bool:
+    def valid_identity_evidence(
+        evidence: object,
+        *,
+        signer_name: str,
+        signer_email: str,
+        source: str,
+    ) -> bool:
+        if not isinstance(evidence, dict) or evidence.get("source") != source:
+            return False
+        try:
+            expected = assignment_signer_identity_snapshot(
+                binding,
+                signer_name=signer_name,
+                signer_email=signer_email,
+                source=source,
+            )
+        except ValueError:
+            return False
+        return all(
+            evidence.get(key) == expected.get(key)
+            for key in ("source", "name", "normalized_name", "email", "identity_hash")
+        )
+
+    package_snapshot = package.terms_snapshot or {}
+    manual_evidence = package_snapshot.get("assignment_execution_identity")
+    if isinstance(manual_evidence, dict) and valid_identity_evidence(
+        manual_evidence,
+        signer_name=str(manual_evidence.get("name") or ""),
+        signer_email=str(manual_evidence.get("email") or ""),
+        source="manual_execution_attestation",
+    ):
+        try:
+            document_id = UUID(str(manual_evidence.get("document_id")))
+        except (TypeError, ValueError):
+            document_id = None
+        if document_id is not None:
+            document = db.scalar(
+                select(TransactionDocument).where(
+                    TransactionDocument.id == document_id,
+                    TransactionDocument.organization_id == transaction.organization_id,
+                    TransactionDocument.transaction_id == transaction.id,
+                    TransactionDocument.contract_package_id == package.id,
+                    TransactionDocument.document_type == "assignment_contract",
+                    TransactionDocument.status == "executed",
+                    TransactionDocument.deleted_at.is_(None),
+                )
+            )
+            if document is not None and document.sha256 == manual_evidence.get(
+                "document_sha256"
+            ):
+                return True
+
+    envelopes = list(
+        db.scalars(
+            select(EsignEnvelope).where(
+                EsignEnvelope.organization_id == transaction.organization_id,
+                EsignEnvelope.transaction_id == transaction.id,
+                EsignEnvelope.contract_package_id == package.id,
+                EsignEnvelope.status == "completed",
+                EsignEnvelope.completed_document_id.is_not(None),
+            )
+        ).all()
+    )
+    for envelope in envelopes:
+        completed_document = db.scalar(
+            select(TransactionDocument).where(
+                TransactionDocument.id == envelope.completed_document_id,
+                TransactionDocument.organization_id == transaction.organization_id,
+                TransactionDocument.transaction_id == transaction.id,
+                TransactionDocument.contract_package_id == package.id,
+                TransactionDocument.document_type == "assignment_contract",
+                TransactionDocument.status == "executed",
+                TransactionDocument.deleted_at.is_(None),
+            )
+        )
+        if completed_document is None:
+            continue
+        assignees = [
+            recipient
+            for recipient in db.scalars(
+                select(EsignRecipient).where(
+                    EsignRecipient.esign_envelope_id == envelope.id,
+                    EsignRecipient.organization_id == transaction.organization_id,
+                )
+            ).all()
+            if any(
+                role in recipient.placeholder_name.strip().casefold()
+                for role in ("assignee", "end buyer")
+            )
+        ]
+        if (
+            len(assignees) != 1
+            or assignees[0].status != "signed"
+            or assignees[0].signed_at is None
+        ):
+            continue
+        provider_evidence = (envelope.provider_payload or {}).get(
+            "assignment_execution_identity"
+        )
+        if valid_identity_evidence(
+            provider_evidence,
+            signer_name=assignees[0].name,
+            signer_email=assignees[0].email,
+            source="esign_recipient",
+        ):
+            return True
+    return False
+
+
+def has_current_executed_assignment_agreement(
+    db: Session,
+    transaction: Transaction,
+    *,
+    lock: bool = False,
+) -> bool:
+    """Return true only for an executed assignment bound to the current approved buyer."""
+    statement = select(ContractPackage).where(
+        ContractPackage.organization_id == transaction.organization_id,
+        ContractPackage.transaction_id == transaction.id,
+        ContractPackage.status == "executed",
+    )
+    if lock:
+        statement = statement.with_for_update(of=ContractPackage)
+    for package in db.scalars(statement).all():
+        try:
+            authority = validate_assignment_package_authority(
+                db,
+                transaction,
+                package,
+                gate="confirming executed buyer-agreement evidence",
+                lock=lock,
+            )
+        except ValueError:
+            continue
+        if authority is not None and _assignment_execution_identity_is_valid(
+            db,
+            transaction,
+            package,
+            authority["binding"],
+        ):
+            return True
+    return False
+
+
+def _strategy_agreement_readiness(
+    case: DispositionCase,
+    *,
+    assignment_execution_verified: bool,
+) -> StrategyAgreementReadinessRead:
+    if case.strategy == "assignment":
+        return StrategyAgreementReadinessRead(
+            strategy="assignment",
+            label="Buyer assignment executed",
+            ready=assignment_execution_verified,
+            blockers=(
+                []
+                if assignment_execution_verified
+                else [
+                    "Complete the governed assignment and signature workflow for the current "
+                    "approved buyer."
+                ]
+            ),
+        )
+    if case.strategy == "double_close":
+        return StrategyAgreementReadinessRead(
+            strategy="double_close",
+            label="End-buyer resale agreement executed",
+            ready=False,
+            blockers=[
+                "A governed second-leg end-buyer agreement is not yet available in the "
+                "Double Close workflow. Do not treat an assignment agreement as evidence."
+            ],
+        )
+    return StrategyAgreementReadinessRead(
+        strategy="novation",
+        label="Novation buyer agreement executed",
+        ready=False,
+        blockers=[
+            "A governed executed novation buyer agreement is not yet available in this "
+            "workflow. Do not treat an assignment agreement as evidence."
+        ],
+    )
+
+
 def build_assignment_buyer_binding(
     db: Session,
     principal: Principal,
@@ -1616,6 +1817,49 @@ def _checkpoint_status_from_source(status: str, completed_at: datetime | None) -
     return "pending"
 
 
+def _buyer_deposit_due_at(
+    offer: BuyerOffer,
+    transaction: Transaction,
+) -> datetime | None:
+    """Return an actionable deposit/waiver deadline without treating unknown EMD as zero."""
+    if offer.earnest_money_cents == 0:
+        return None
+    return offer.deposit_due_at or offer.proposed_closing_at or transaction.closing_date
+
+
+def _checklist_checkpoint_type(item: TransactionChecklistItem) -> str | None:
+    """Map stable transaction checklist records into Offer Room closing controls."""
+    item_key = (item.item_key or "").strip().casefold()
+    category = (item.category or "").strip().casefold()
+    haystack = f"{item_key} {category} {item.title}".casefold()
+    if item_key in {"open_title", "seller_documents"} or category == "title":
+        return "title"
+    if item_key == "due_diligence" or category == "access" or "access" in haystack:
+        return "access"
+    if item_key == "closing_confirmed" or category == "closing" or "closing" in haystack:
+        return "closing"
+    return None
+
+
+def _checklist_checkpoint_due_at(
+    item: TransactionChecklistItem,
+    transaction: Transaction,
+    primary: BuyerOffer,
+    checkpoint_type: str,
+) -> datetime | None:
+    if item.due_at is not None:
+        return item.due_at
+    if item.completed_at is not None:
+        return item.completed_at
+    if checkpoint_type == "access":
+        return (
+            transaction.due_diligence_deadline
+            or transaction.closing_date
+            or primary.proposed_closing_at
+        )
+    return transaction.closing_date or primary.proposed_closing_at
+
+
 def _upsert_canonical_checkpoint(
     db: Session,
     principal: Principal,
@@ -1745,8 +1989,12 @@ def _sync_canonical_checkpoints(
         selection,
         primary,
         checkpoint_type="buyer_deposit",
-        label="Buyer earnest-money deposit",
-        due_at=primary.deposit_due_at,
+        label=(
+            "Buyer earnest-money terms or waiver"
+            if primary.earnest_money_cents is None
+            else "Buyer earnest-money deposit"
+        ),
+        due_at=_buyer_deposit_due_at(primary, transaction),
         source="buyer_offer",
         source_record_id=primary.id,
         status="complete" if primary.deposit_received_at else "open",
@@ -1766,11 +2014,7 @@ def _sync_canonical_checkpoints(
         ).all()
     )
     for item in checklist:
-        haystack = f"{item.item_key or ''} {item.category} {item.title}".lower()
-        checkpoint_type = next(
-            (key for key in ("title", "access", "closing") if key in haystack),
-            None,
-        )
+        checkpoint_type = _checklist_checkpoint_type(item)
         if checkpoint_type is None:
             continue
         _upsert_canonical_checkpoint(
@@ -1781,7 +2025,12 @@ def _sync_canonical_checkpoints(
             primary,
             checkpoint_type=checkpoint_type,
             label=item.title,
-            due_at=item.due_at,
+            due_at=_checklist_checkpoint_due_at(
+                item,
+                transaction,
+                primary,
+                checkpoint_type,
+            ),
             source="transaction_checklist",
             source_record_id=item.id,
             status=item.status,
@@ -1928,42 +2177,68 @@ def _refresh_checkpoint_from_canonical_source(
     completed_at: datetime | None = None
     evidence: dict[str, Any] = {}
     if checkpoint.canonical_source == "transaction":
-        source = db.get(Transaction, checkpoint.source_record_id)
-        if source is not None:
-            due_at = source.closing_date
-            if source.status in {"cancelled", "canceled"}:
+        transaction_source = db.get(Transaction, checkpoint.source_record_id)
+        if transaction_source is not None:
+            due_at = transaction_source.closing_date
+            if transaction_source.status in {"cancelled", "canceled"}:
                 normalized_status = "cancelled"
-                completed_at = source.cancelled_at
+                completed_at = transaction_source.cancelled_at
             else:
-                completed_at = source.funded_at or source.closed_at
+                completed_at = transaction_source.funded_at or transaction_source.closed_at
                 normalized_status = "completed" if completed_at else "pending"
-            evidence = {"transaction_id": str(source.id), "title_company": source.title_company}
-    elif checkpoint.canonical_source == "transaction_checklist":
-        source = db.get(TransactionChecklistItem, checkpoint.source_record_id)
-        if source is not None:
-            due_at = source.due_at
-            completed_at = source.completed_at
-            normalized_status = _checkpoint_status_from_source(source.status, completed_at)
             evidence = {
-                "checklist_item_id": str(source.id),
-                "description": source.description,
+                "transaction_id": str(transaction_source.id),
+                "title_company": transaction_source.title_company,
+            }
+    elif checkpoint.canonical_source == "transaction_checklist":
+        checklist_source = db.get(TransactionChecklistItem, checkpoint.source_record_id)
+        if checklist_source is not None:
+            source_transaction = db.get(Transaction, checklist_source.transaction_id)
+            source_offer = db.get(BuyerOffer, checkpoint.offer_id)
+            checkpoint_type = _checklist_checkpoint_type(checklist_source)
+            if (
+                source_transaction is not None
+                and source_offer is not None
+                and checkpoint_type is not None
+            ):
+                due_at = _checklist_checkpoint_due_at(
+                    checklist_source,
+                    source_transaction,
+                    source_offer,
+                    checkpoint_type,
+                )
+            completed_at = checklist_source.completed_at
+            normalized_status = _checkpoint_status_from_source(
+                checklist_source.status,
+                completed_at,
+            )
+            evidence = {
+                "checklist_item_id": str(checklist_source.id),
+                "description": checklist_source.description,
                 "evidence_document_id": (
-                    str(source.evidence_document_id) if source.evidence_document_id else None
+                    str(checklist_source.evidence_document_id)
+                    if checklist_source.evidence_document_id
+                    else None
                 ),
-                "evidence_notes": source.evidence_notes,
+                "evidence_notes": checklist_source.evidence_notes,
             }
     elif checkpoint.canonical_source == "buyer_offer":
-        source = db.get(BuyerOffer, checkpoint.source_record_id)
-        if source is not None:
-            due_at = source.deposit_due_at
-            completed_at = source.deposit_received_at
+        offer_source = db.get(BuyerOffer, checkpoint.source_record_id)
+        if offer_source is not None:
+            source_case = db.get(DispositionCase, checkpoint.disposition_case_id)
+            source_transaction = (
+                db.get(Transaction, source_case.transaction_id) if source_case is not None else None
+            )
+            if source_transaction is not None:
+                due_at = _buyer_deposit_due_at(offer_source, source_transaction)
+            completed_at = offer_source.deposit_received_at
             normalized_status = "completed" if completed_at else "pending"
             if checkpoint.status == "waived" and completed_at is None:
                 normalized_status = "waived"
                 completed_at = checkpoint.completed_at
             evidence = {
-                "offer_id": str(source.id),
-                "earnest_money_cents": source.earnest_money_cents,
+                "offer_id": str(offer_source.id),
+                "earnest_money_cents": offer_source.earnest_money_cents,
             }
     if due_at is None:
         _cancel_checkpoint(db, checkpoint, cancelled_at=now)
@@ -2858,17 +3133,28 @@ def record_funded_transaction_buyer_outcome(
             DispositionClosingCheckpoint.selection_id == selection.id,
             DispositionClosingCheckpoint.offer_id == primary.id,
             DispositionClosingCheckpoint.checkpoint_type == "buyer_deposit",
+            DispositionClosingCheckpoint.canonical_source == "buyer_offer",
+            DispositionClosingCheckpoint.source_record_id == primary.id,
             DispositionClosingCheckpoint.status.in_(("completed", "waived")),
         )
         .order_by(DispositionClosingCheckpoint.updated_at.desc())
         .with_for_update()
     )
-    if (primary.earnest_money_cents or 0) > 0 and deposit_checkpoint is None:
+    if primary.earnest_money_cents is None and (
+        deposit_checkpoint is None or deposit_checkpoint.status != "waived"
+    ):
+        raise ValueError(
+            "The primary buyer's earnest money is unknown. Revise the approved offer to an "
+            "explicit zero or record a manager-approved canonical deposit waiver before funding."
+        )
+    if primary.earnest_money_cents is not None and primary.earnest_money_cents > 0 and (
+        deposit_checkpoint is None
+    ):
         raise ValueError(
             "Record the primary buyer's deposit or an explicit deposit waiver before funding."
         )
     if (
-        (primary.earnest_money_cents or 0) > 0
+        primary.earnest_money_cents != 0
         and deposit_checkpoint is not None
         and not _has_deposit_evidence_note(deposit_checkpoint.evidence_snapshot)
     ):
@@ -3103,6 +3389,7 @@ def _selection_read(
     buyers: dict[UUID, Buyer],
     offers: dict[UUID, BuyerOffer],
     live_coverage_by_offer: dict[UUID, dict[str, Any]],
+    completed_close_keys: set[tuple[UUID | None, UUID]],
 ) -> BuyerSelectionRead:
     reads: list[SelectionSlotRead] = []
     for item in sorted(slots, key=lambda value: (value.role != "primary", value.rank)):
@@ -3110,9 +3397,22 @@ def _selection_read(
         readiness_status = item.offer_snapshot.get("readiness_status", "provisional")
         live_offer = offers.get(item.offer_id)
         if selection.status == "active":
-            blockers.extend(
-                live_coverage_by_offer.get(item.offer_id, {}).get("readiness_blockers", [])
+            completed_primary = (
+                item.role == "primary"
+                and (selection.id, item.offer_id) in completed_close_keys
+                and live_offer is not None
+                and live_offer.status == "closed"
             )
+            if completed_primary:
+                # Canonical funding already revalidated live eligibility. Preserve that
+                # terminal fact instead of making a completed selection provisional later.
+                blockers = []
+            else:
+                blockers.extend(
+                    live_coverage_by_offer.get(item.offer_id, {}).get(
+                        "readiness_blockers", []
+                    )
+                )
             expected_status = "selected" if item.role == "primary" else "backup"
             if live_offer is None:
                 blockers.append("The approved offer is no longer available.")
@@ -3121,7 +3421,7 @@ def _selection_read(
                     blockers.append(
                         "Offer terms changed after approval; manager reapproval is required."
                     )
-                if live_offer.status != expected_status:
+                if live_offer.status != expected_status and not completed_primary:
                     blockers.append(
                         f"Approved {item.role} offer is now {live_offer.status.replace('_', ' ')}."
                     )
@@ -3168,6 +3468,12 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
     if lead is None:
         raise ValueError("The disposition lead is unavailable.")
     require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.id == case.transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
     offers = list(
         db.scalars(
             select(BuyerOffer)
@@ -3212,6 +3518,16 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
             .order_by(DispositionBuyerOutcome.occurred_at.desc())
         ).all()
     )
+    completed_close_keys = {
+        (item.selection_id, item.offer_id)
+        for item in outcome_rows
+        if item.outcome_type == "completed_close"
+        and transaction is not None
+        and transaction.status == "funded"
+        and transaction.funded_at is not None
+        and item.evidence_snapshot.get("transaction_id") == str(transaction.id)
+        and item.evidence_snapshot.get("selection_id") == str(item.selection_id)
+    }
     revision_rows = list(
         db.scalars(
             select(DispositionOfferRevision)
@@ -3280,6 +3596,29 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
             )
         ).all():
             slots_by_selection.setdefault(slot.selection_id, []).append(slot)
+    active_selection = next((item for item in selection_rows if item.status == "active"), None)
+    active_primary_slot = next(
+        (
+            slot
+            for slot in slots_by_selection.get(active_selection.id, [])
+            if slot.role == "primary"
+        ),
+        None,
+    ) if active_selection is not None else None
+    completed_assignment_close = bool(
+        case.strategy == "assignment"
+        and active_selection is not None
+        and active_primary_slot is not None
+        and (active_selection.id, active_primary_slot.offer_id) in completed_close_keys
+    )
+    assignment_execution_verified = bool(
+        case.strategy == "assignment"
+        and transaction is not None
+        and (
+            completed_assignment_close
+            or has_current_executed_assignment_agreement(db, transaction)
+        )
+    )
     selection_reads = [
         _selection_read(
             item,
@@ -3287,6 +3626,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
             buyers,
             {offer.id: offer for offer in offers},
             live_coverage_by_offer,
+            completed_close_keys,
         )
         for item in selection_rows
     ]
@@ -3453,6 +3793,12 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
     return OfferRoomRead(
         case_id=case.id,
         case_status=case.status,
+        disposition_strategy=case.strategy,
+        assignment_execution_verified=assignment_execution_verified,
+        strategy_agreement=_strategy_agreement_readiness(
+            case,
+            assignment_execution_verified=assignment_execution_verified,
+        ),
         generated_at=now,
         offers=offer_reads,
         revision_history=[

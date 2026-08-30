@@ -3108,6 +3108,15 @@ export type DispositionBuyerPoolEntry = {
   relationship_status: string | null;
   tier: string | null;
   temperature: string | null;
+  purchase_evidence: Array<{
+    provider_property_id: string | null;
+    address: string;
+    purchase_date: string | null;
+    purchase_price_cents: number | null;
+    property_types: string[];
+    distance_miles: number | null;
+    distance_basis: "saved_provider_coordinates" | null;
+  }>;
 };
 
 export type DispositionBuyerPoolPage = {
@@ -3117,6 +3126,59 @@ export type DispositionBuyerPoolPage = {
   page: number;
   page_size: number;
   entries: DispositionBuyerPoolEntry[];
+};
+
+export type DispositionExecutionPermission = {
+  status: string;
+  allowed: boolean;
+  blockers: string[];
+};
+
+export type DispositionExecutionCandidate = {
+  candidate_id: string;
+  buyer_id: string;
+  conversation_id: string | null;
+  name: string;
+  company_name: string | null;
+  phone: string | null;
+  email: string | null;
+  rank: number;
+  score_basis_points: number;
+  relationship_status: string | null;
+  tier: string | null;
+  temperature: string | null;
+  score_explanation: string[];
+  recent_purchase_reference: string | null;
+  sms: DispositionExecutionPermission;
+  voice: DispositionExecutionPermission;
+  sms_draft: string;
+};
+
+export type DispositionExecutionShowing = {
+  id: string;
+  candidate_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
+  access_status: "not_requested" | "pending" | "confirmed" | "shared_privately" | "not_required";
+  scheduled_at: string | null;
+  completed_at: string | null;
+  follow_up_task_id: string | null;
+  notes: string | null;
+};
+
+export type DispositionExecutionWorkspace = {
+  case_id: string;
+  deal_id: string;
+  asset_class: string;
+  property_address: string;
+  package_status: string;
+  package_pdf_path: string | null;
+  ready: boolean;
+  blockers: string[];
+  remaining_candidate_count: number;
+  current_candidate: DispositionExecutionCandidate | null;
+  showings: DispositionExecutionShowing[];
 };
 
 export type DispositionMatch = {
@@ -3296,6 +3358,14 @@ export type DispositionOfferOutcome = {
 export type DispositionOfferRoomWorkspace = {
   case_id: string;
   case_status: string;
+  disposition_strategy: string;
+  assignment_execution_verified: boolean;
+  strategy_agreement: {
+    strategy: "assignment" | "double_close" | "novation";
+    label: string;
+    ready: boolean;
+    blockers: string[];
+  };
   currency: string;
   generated_at: string;
   offers: DispositionOfferRoomOffer[];
@@ -3451,6 +3521,29 @@ export type DispositionPackageWorkspace = {
   approved_version: DispositionPackageVersion | null;
   approved_package_is_current: boolean;
   versions: DispositionPackageVersion[];
+};
+
+export type DispositionPackageShareLink = {
+  id: string;
+  disposition_case_id: string;
+  package_version_id: string;
+  package_version_number: number;
+  token_hint: string;
+  artifact_sha256: string;
+  lock_version: number;
+  status: "active" | "expired" | "revoked" | "artifact_unavailable";
+  expires_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  access_count: number;
+  first_accessed_at: string | null;
+  last_accessed_at: string | null;
+  created_by_user_id: string;
+  created_at: string;
+};
+
+export type DispositionPackageShareLinkIssued = DispositionPackageShareLink & {
+  share_url: string;
 };
 
 export type DispositionProviderPermission = {

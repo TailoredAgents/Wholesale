@@ -79,6 +79,10 @@ function discoveryCost(credits: number, rate = 0.0075) {
   return formatUsd(credits * rate);
 }
 
+function purchasePrice(cents: number | null) {
+  return cents == null ? "Price not recorded" : formatUsd(cents / 100);
+}
+
 const SOURCES: Array<{ value: DispositionBuyerPoolSource; label: string }> = [
   { value: "all", label: "All sources" },
   { value: "mine", label: "My buyers" },
@@ -693,6 +697,28 @@ export function DispositionBuyerPool({
                     {!entry.disqualifying_reasons.length && !entry.conflicting_evidence.length ? <small>No blocking evidence recorded.</small> : null}
                   </div>
                 </div>
+
+                {entry.purchase_evidence.length ? (
+                  <details className={styles.purchaseEvidence}>
+                    <summary>Recorded purchases ({entry.purchase_evidence.length})</summary>
+                    <div>
+                      {entry.purchase_evidence.map((purchase, index) => (
+                        <article key={purchase.provider_property_id ?? `${entry.id}-purchase-${index}`}>
+                          <strong>{purchase.address}</strong>
+                          <span>
+                            {purchase.purchase_date ? new Date(`${purchase.purchase_date}T12:00:00`).toLocaleDateString() : "Date not recorded"}
+                            {" · "}{purchasePrice(purchase.purchase_price_cents)}
+                            {purchase.property_types.length ? ` · ${purchase.property_types.join(", ")}` : ""}
+                          </span>
+                          {purchase.distance_miles != null && purchase.distance_basis === "saved_provider_coordinates" ? (
+                            <small>{purchase.distance_miles.toFixed(2)} miles from the subject using saved provider coordinates</small>
+                          ) : null}
+                        </article>
+                      ))}
+                      <p>Saved DealMachine recorded-sale evidence. Ownership strategy and connected portfolio are not verified.</p>
+                    </div>
+                  </details>
+                ) : null}
 
                 <dl className={styles.poolFacts}>
                   <div><dt>Proof</dt><dd>{labelize(entry.proof_status)}{entry.proof_expires_at ? ` · ${new Date(entry.proof_expires_at).toLocaleDateString()}` : ""}</dd></div>

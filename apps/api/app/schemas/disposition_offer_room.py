@@ -340,9 +340,19 @@ class BuyerOutcomeRead(BaseModel):
     reliability_delta_basis_points: int
 
 
+class StrategyAgreementReadinessRead(BaseModel):
+    strategy: Literal["assignment", "double_close", "novation"]
+    label: str
+    ready: bool
+    blockers: list[str]
+
+
 class OfferRoomRead(BaseModel):
     case_id: UUID
     case_status: str
+    disposition_strategy: str
+    assignment_execution_verified: bool
+    strategy_agreement: StrategyAgreementReadinessRead
     currency: Literal["USD"] = "USD"
     generated_at: datetime
     offers: list[OfferRoomOfferRead]

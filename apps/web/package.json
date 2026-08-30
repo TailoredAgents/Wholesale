@@ -32,6 +32,8 @@
     "audit:disposition-copilot": "node --test scripts/disposition-copilot-contract.test.mjs",
     "audit:disposition-intelligence": "node --test scripts/disposition-intelligence-contract.test.mjs",
     "audit:disposition-buyer-discovery": "node --test scripts/disposition-buyer-discovery-tiers-contract.test.mjs",
+    "audit:disposition-execution": "node --test scripts/disposition-execution-contract.test.mjs",
+    "audit:transaction-checklist-evidence": "node --test scripts/transaction-checklist-evidence-contract.test.mjs",
     "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:prospecting-pilot": "node --test scripts/prospecting-pilot-acceptance-contract.test.mjs",
     "audit:prospecting-dormancy": "node --test scripts/prospecting-dormancy-contract.test.mjs",

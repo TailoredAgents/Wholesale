@@ -93,6 +93,7 @@ def _create_offer(
     amount_cents: int,
     key: str,
     deposit_due_at: datetime | None = None,
+    earnest_money_cents: int | None = 250_000,
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/offers",
@@ -100,7 +101,7 @@ def _create_offer(
         json={
             "buyer_id": buyer_id,
             "amount_cents": amount_cents,
-            "earnest_money_cents": 250_000,
+            "earnest_money_cents": earnest_money_cents,
             "deposit_due_at": deposit_due_at.isoformat() if deposit_due_at else None,
             "due_diligence_days": 7,
             "contingencies": [],
@@ -142,6 +143,7 @@ def _setup_ready_case_with_offers(
     *,
     offer_count: int,
     deposit_due_at: datetime | None = None,
+    earnest_money_cents: int | None = 250_000,
 ) -> tuple[str, list[str], list[dict[str, Any]]]:
     _, transaction_id, first_buyer_id = setup_case_foundation(db, client)
     case_id = create_approved_disposition_case(client, transaction_id)
@@ -174,6 +176,7 @@ def _setup_ready_case_with_offers(
             amount_cents=20_000_000 - index * 100_000,
             key=f"ds7-offer-{index + 1:02d}",
             deposit_due_at=deposit_due_at,
+            earnest_money_cents=earnest_money_cents,
         )
         for index, (buyer_id, proof_id) in enumerate(zip(buyer_ids, proof_ids, strict=True))
     ]
@@ -199,6 +202,8 @@ def _complete_primary_deposit(
         if item["selection_id"] == selection_id
         and item["offer_id"] == primary_offer_id
         and item["checkpoint_type"] == "buyer_deposit"
+        and item["canonical_source"] == "buyer_offer"
+        and item["source_record_id"] == primary_offer_id
     )
     response = client.patch(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/{checkpoint['id']}",
@@ -283,7 +288,7 @@ def _create_assignment_package(
         "base_purchase_price_cents": transaction.purchase_price_cents,
         "assignment_fee_cents": transaction.assignment_fee_cents,
         "end_buyer_price_cents": primary_offer.amount_cents,
-        "earnest_money_cents": primary_offer.earnest_money_cents or 0,
+        "earnest_money_cents": primary_offer.earnest_money_cents,
         "deposit_due_at": (
             primary_offer.deposit_due_at.replace(tzinfo=UTC).isoformat()
             if primary_offer.deposit_due_at and primary_offer.deposit_due_at.tzinfo is None
@@ -592,6 +597,102 @@ def test_manager_can_supersede_backup_coverage_without_erasing_history(
     old_checkpoints = [item for item in body["checkpoints"] if item["id"] in first_checkpoint_ids]
     assert old_checkpoints
     assert all(item["status"] == "cancelled" for item in old_checkpoints)
+
+
+def test_default_transaction_checklist_drives_canonical_title_and_access_gates(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, _, offers = _setup_ready_case_with_offers(db_session, client, offer_count=2)
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(offers[0], [offers[1]], key="ds7-title-access-checklist"),
+    )
+    assert selected.status_code == 201, selected.text
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    checklist = list(
+        db_session.scalars(
+            select(TransactionChecklistItem)
+            .where(TransactionChecklistItem.transaction_id == case.transaction_id)
+            .order_by(TransactionChecklistItem.sort_order)
+        ).all()
+    )
+    expected_types = {
+        "open_title": "title",
+        "seller_documents": "title",
+        "due_diligence": "access",
+        "closing_confirmed": "closing",
+    }
+    canonical = {
+        item["source_record_id"]: item
+        for item in selected.json()["checkpoints"]
+        if item["canonical_source"] == "transaction_checklist"
+    }
+    for item in checklist:
+        if item.item_key not in expected_types:
+            continue
+        checkpoint = canonical[str(item.id)]
+        assert checkpoint["checkpoint_type"] == expected_types[item.item_key]
+        assert checkpoint["status"] == "pending"
+        assert checkpoint["due_at"] is not None
+
+    due_diligence = next(item for item in checklist if item.item_key == "due_diligence")
+    for item in checklist:
+        if item.sort_order > due_diligence.sort_order:
+            break
+        completed = client.patch(
+            f"/api/v1/transactions/{case.transaction_id}/checklist/{item.id}",
+            headers=HEADERS,
+            json={
+                "status": "complete",
+                "evidence_notes": f"Verified canonical evidence for {item.item_key}.",
+            },
+        )
+        assert completed.status_code == 200, completed.text
+    refreshed = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    mapped = {
+        item["source_record_id"]: item
+        for item in refreshed.json()["checkpoints"]
+        if item["canonical_source"] == "transaction_checklist"
+    }
+    assert mapped[str(due_diligence.id)]["checkpoint_type"] == "access"
+    assert mapped[str(due_diligence.id)]["status"] == "completed"
+    assert "Verified canonical evidence" in mapped[str(due_diligence.id)]["evidence"][
+        "evidence_notes"
+    ]
+
+
+@pytest.mark.parametrize("strategy", ["double_close", "novation"])
+def test_nonassignment_strategy_has_explicit_unresolved_agreement_gate(
+    db_session: Session,
+    api_db_override: None,
+    strategy: str,
+) -> None:
+    client = TestClient(app)
+    case_id, _, _ = _setup_ready_case_with_offers(db_session, client, offer_count=2)
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    case.strategy = strategy
+    db_session.commit()
+    response = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["assignment_execution_verified"] is False
+    assert body["strategy_agreement"]["strategy"] == strategy
+    assert body["strategy_agreement"]["ready"] is False
+    assert "assignment agreement as evidence" in " ".join(
+        body["strategy_agreement"]["blockers"]
+    ).lower()
 
 
 def test_deposit_completion_requires_a_substantive_confirmation_note(
@@ -1195,6 +1296,26 @@ def test_assignment_binding_survives_backup_reapproval_and_funding_is_exact_once
         ).all()
     )
     assert len(completed_outcomes) == 1
+    closed_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert closed_workspace.status_code == 200, closed_workspace.text
+    closed_body = closed_workspace.json()
+    assert closed_body["assignment_execution_verified"] is True
+    assert closed_body["strategy_agreement"] == {
+        "strategy": "assignment",
+        "label": "Buyer assignment executed",
+        "ready": True,
+        "blockers": [],
+    }
+    closed_primary = closed_body["current_selection"]["primary"]
+    assert closed_primary["offer_id"] == offers[0]["id"]
+    assert closed_primary["readiness_status"] == "ready"
+    assert closed_primary["readiness_blockers"] == []
+    assert next(item for item in closed_body["offers"] if item["id"] == offers[0]["id"])[
+        "status"
+    ] == "closed"
 
 
 def test_funding_requires_bound_assignment_and_documented_deposit(
@@ -1288,6 +1409,158 @@ def test_funding_requires_bound_assignment_and_documented_deposit(
     assert missing_deposit.status_code == 422, missing_deposit.text
     assert "deposit" in missing_deposit.json()["detail"].lower()
     db_session.rollback()
+
+
+def test_funding_ignores_noncanonical_offer_room_deposit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, _, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=2,
+        deposit_due_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(offers[0], [offers[1]], key="ds7-canonical-deposit-only"),
+    )
+    assert selected.status_code == 201, selected.text
+    case = db_session.get(DispositionCase, UUID(case_id))
+    selection = db_session.get(
+        DispositionBuyerSelection,
+        UUID(selected.json()["current_selection"]["id"]),
+    )
+    assert case is not None and selection is not None
+    owner = _owner(db_session)
+    db_session.add(
+        DispositionClosingCheckpoint(
+            organization_id=case.organization_id,
+            disposition_case_id=case.id,
+            selection_id=selection.id,
+            offer_id=UUID(offers[0]["id"]),
+            buyer_id=UUID(offers[0]["buyer_id"]),
+            responsible_user_id=owner.id,
+            created_by_user_id=owner.id,
+            updated_by_user_id=owner.id,
+            idempotency_key="ds7-manual-deposit-does-not-fund",
+            checkpoint_type="buyer_deposit",
+            label="Untrusted manual deposit marker",
+            canonical_source="offer_room",
+            source_record_id=None,
+            due_at=datetime.now(UTC) + timedelta(days=1),
+            status="completed",
+            lock_version=1,
+            deadline_version=1,
+            completed_at=datetime.now(UTC),
+            notes=None,
+            evidence_snapshot={
+                "confirmation_note": "Manual marker must never satisfy canonical funding."
+            },
+        )
+    )
+    db_session.commit()
+    _create_executed_assignment_package(db_session, client, case_id)
+    _satisfy_transaction_funding_prerequisites(db_session, client, case.transaction_id)
+
+    blocked = client.post(
+        f"/api/v1/transactions/{case.transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "funded", "notes": "Manual deposit must not authorize funding."},
+    )
+    assert blocked.status_code == 422, blocked.text
+    assert "deposit" in blocked.json()["detail"].lower()
+    db_session.rollback()
+
+    current = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert current.status_code == 200, current.text
+    _complete_primary_deposit(client, case_id, current.json())
+    funded = client.post(
+        f"/api/v1/transactions/{case.transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "funded", "notes": "Canonical deposit now authorizes funding."},
+    )
+    assert funded.status_code == 200, funded.text
+
+
+@pytest.mark.parametrize(
+    ("earnest_money_cents", "checkpoint_status", "expected_status"),
+    [(None, "completed", 422), (None, "waived", 200), (0, None, 200)],
+)
+def test_funding_requires_explicit_zero_or_canonical_waiver_for_unknown_emd(
+    db_session: Session,
+    api_db_override: None,
+    earnest_money_cents: int | None,
+    checkpoint_status: str | None,
+    expected_status: int,
+) -> None:
+    client = TestClient(app)
+    suffix = f"{earnest_money_cents}-{checkpoint_status}"
+    case_id, _, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=2,
+        earnest_money_cents=earnest_money_cents,
+    )
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(
+            offers[0],
+            [offers[1]],
+            key=f"ds7-emd-decision-{suffix}",
+        ),
+    )
+    assert selected.status_code == 201, selected.text
+    body = selected.json()
+    canonical = [
+        item
+        for item in body["checkpoints"]
+        if item["selection_id"] == body["current_selection"]["id"]
+        and item["offer_id"] == offers[0]["id"]
+        and item["checkpoint_type"] == "buyer_deposit"
+        and item["canonical_source"] == "buyer_offer"
+        and item["source_record_id"] == offers[0]["id"]
+    ]
+    if earnest_money_cents == 0:
+        assert canonical == []
+    else:
+        assert len(canonical) == 1
+        assert canonical[0]["due_at"] == offers[0]["proposed_closing_at"]
+        resolved = client.patch(
+            f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/"
+            f"{canonical[0]['id']}",
+            headers=HEADERS,
+            json={
+                "expected_lock_version": canonical[0]["lock_version"],
+                "status": checkpoint_status,
+                "evidence": {
+                    "support_note": "Manager documented the canonical unknown-deposit decision."
+                },
+                "reason": "Controlled unknown earnest-money funding decision.",
+            },
+        )
+        assert resolved.status_code == 200, resolved.text
+
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    _create_executed_assignment_package(db_session, client, case_id)
+    _satisfy_transaction_funding_prerequisites(db_session, client, case.transaction_id)
+    funded = client.post(
+        f"/api/v1/transactions/{case.transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "funded", "notes": "Controlled explicit EMD decision test."},
+    )
+    assert funded.status_code == expected_status, funded.text
+    if expected_status == 422:
+        detail = funded.json()["detail"].lower()
+        assert "explicit zero" in detail
+        assert "waiver" in detail
 
 
 def test_executed_assignment_blocks_primary_offer_terms_change(
@@ -1874,6 +2147,13 @@ def test_manual_assignment_execution_requires_matching_assignee_and_freezes_evid
         json=_selection_payload(offers[0], [offers[1]], key="ds7-manual-assignee-gates"),
     )
     assert selected.status_code == 201, selected.text
+    before_execution = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert before_execution.status_code == 200, before_execution.text
+    assert before_execution.json()["disposition_strategy"] == "assignment"
+    assert before_execution.json()["assignment_execution_verified"] is False
     package, buyer, _ = _approve_assignment_package(db_session, client, case_id)
     document = _upload_executed_assignment_document(client, package)
     buyer_email = buyer.normalized_email or buyer.email
@@ -1911,6 +2191,12 @@ def test_manual_assignment_execution_requires_matching_assignee_and_freezes_evid
         },
     )
     assert executed.status_code == 200, executed.text
+    after_execution = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert after_execution.status_code == 200, after_execution.text
+    assert after_execution.json()["assignment_execution_verified"] is True
     db_session.expire_all()
     stored_package = db_session.get(ContractPackage, package.id)
     stored_document = db_session.get(TransactionDocument, UUID(document["id"]))
@@ -1938,6 +2224,12 @@ def test_manual_assignment_execution_requires_matching_assignee_and_freezes_evid
     db_session.commit()
     db_session.refresh(stored_package)
     assert stored_package.terms_snapshot["assignment_execution_identity"] == evidence
+    stale_execution = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert stale_execution.status_code == 200, stale_execution.text
+    assert stale_execution.json()["assignment_execution_verified"] is False
 
 
 @pytest.mark.parametrize(

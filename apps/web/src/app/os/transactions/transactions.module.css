@@ -55,6 +55,11 @@
 .checkItem strong { font-size: 13px; }
 .checkItem span { color: var(--muted); font-size: 12px; line-height: 1.4; }
 .checkItem small { color: var(--info); font-size: 10px; font-weight: 750; }
+.checkEvidence { margin-top: 6px; display: grid; gap: 5px; }
+.checkEvidence > span { color: var(--text-soft); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.checkEvidence textarea { width: 100%; min-height: 58px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 11px; line-height: 1.4; resize: vertical; }
+.checkEvidence textarea:disabled { background: var(--surface-muted); color: var(--text-soft); opacity: 1; }
+.checkEvidence > small { color: var(--muted); font-weight: 650; }
 .facts { margin: 0; padding: 4px 14px; }
 .facts div { padding: 11px 0; display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
 .facts dt { color: var(--muted); font-size: 12px; }

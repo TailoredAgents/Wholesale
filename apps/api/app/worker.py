@@ -24,6 +24,10 @@ from app.services.call_intelligence import (
     process_next_call_transcript,
     process_next_pending_call_note_approval,
 )
+from app.services.disposition_handoff import (
+    process_next_disposition_handoff_recovery,
+    process_next_disposition_package_alert_recovery,
+)
 from app.services.disposition_offer_room import (
     process_next_closing_deadline_escalation,
 )
@@ -95,6 +99,11 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
         process_next_disposition_outreach_reconciliation,
     ),
     ("disposition_closing_deadlines", process_next_closing_deadline_escalation),
+    ("disposition_handoff_recovery", process_next_disposition_handoff_recovery),
+    (
+        "disposition_package_alert_recovery",
+        process_next_disposition_package_alert_recovery,
+    ),
     ("mailbox_notifications", process_next_mailbox_notification),
     ("acquisition_reminders", process_next_acquisition_reminder),
     ("lead_manager_escalations", process_next_escalation),

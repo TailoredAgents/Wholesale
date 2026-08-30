@@ -645,12 +645,19 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Existing cases are worked from the Disposition and Finance sections of the selected Deal.
 - `/os/dispositions` is setup-only when an executed transaction needs its first disposition case.
   A legacy `case` bookmark resolves to the same canonical Deal.
+- Executing a House purchase agreement now creates or reuses one disposition case, selects an
+  active Dispositions-authorized owner in the human-led operating mode, and records any temporary
+  setup blocker for worker retry after configuration is corrected.
 - The House Package view assembles saved evidence into a launch-readiness checklist, separates the
   buyer-visible preview from permission-gated private economics, and classifies each claim as a
   verified fact, seller statement, provider signal, Stonegate analysis, or unknown.
 - House package drafts are immutable versions. Approval freezes the exact public snapshot,
   evidence manifest, email/SMS summaries, and stored PDF bytes; material source changes make the
   approval stale and require a rebuilt, reapproved version.
+- Approval of the current package can notify the assigned disposition owner by staff SMS only when
+  that owner remains authorized, has opted into staff alerts, and has a valid mobile number.
+- Approved packets can also be exposed through an audited, expiring, revocable capability link tied
+  to the exact approved PDF version and hash. The public download never exposes private economics.
 - Deal packages, matches, engagement, offers, proof, buyer selection, reconciliation, and
   Disposition Copilot drafts remain server governed. **Prepare recipient pool** records exact
   `prepared_not_sent` recipients and sends no buyer communication. The separate House **Outreach**
@@ -659,6 +666,10 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - The House **Offer Room** compares normalized offer terms and execution evidence side by side. It
   keeps immutable offer revisions, negotiation events, selection versions, replacements, and buyer
   outcomes; a score or AI recommendation cannot select a buyer.
+- The House **Call queue** works one ranked canonical buyer at a time. It shows saved fit evidence,
+  uses permission-aware pre-call SMS and Stonegate voice, can text the approved packet through a
+  72-hour secure link, records structured outcomes, schedules callbacks/retries, and tracks showing
+  completion with one 24-hour follow-up task.
 - The House **InvestorLift** view is a manual-only provider handoff. It freezes a deterministic,
   public-only revision from the current approved package, requires separate exact-release approval,
   exports the approved JSON bundle, and records the manually published property ID and HTTPS URL.
@@ -1544,6 +1555,30 @@ remain visible without changing buyer reliability.
 
 This implementation is private, tenant-scoped, and House-only. It does not enable live InvestorLift
 transport or Land disposition.
+
+### 13.7 House Buyer Execution Queue
+
+The execution queue begins only after a House disposition case has a current approved investor
+package and ranked buyer-pool run. It presents one canonical Buyer Network record at a time with the
+saved ranking explanation and any address-level purchase reference already retained in Stonegate.
+It does not scrape new data or spend provider credits when the queue is opened.
+
+Each outbound action remains human initiated. SMS and voice revalidate the canonical buyer
+conversation and communication permission before provider submission. The packet-text action first
+creates an exact-version 72-hour secure link; if SMS submission is not accepted, Stonegate attempts
+to revoke that link immediately and leaves any unresolved link visible for manual revocation.
+
+Call outcomes and showing creation are idempotent. No answer creates a four-hour retry, voicemail
+creates a 24-hour follow-up, and callback requires a future time. Deferred buyers stay out of the
+active queue until that time, then reappear; the prior task closes when the next outcome is recorded.
+A showing also requires a future time; access is tracked only as a status so lockbox or alarm secrets
+are not placed in the general deal record. Completing the same showing repeatedly cannot create
+duplicate follow-up tasks.
+
+An interested buyer then moves through the canonical Offer Room path: executable offer, primary and
+backup selection, matching executed assignment evidence, deposit evidence, title/access completion,
+funding, and a completed-close buyer outcome. Buyer performance and future buy-box matching learn
+from the retained result without allowing a manually checked milestone to replace required evidence.
 
 ## 14. Finance And Accounting
 

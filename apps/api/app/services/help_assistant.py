@@ -431,7 +431,8 @@ def suggested_questions(role_keys: frozenset[str]) -> list[str]:
         questions.extend(
             [
                 "How do I prepare a buyer package?",
-                "How do I compare buyer offers?",
+                "How do I work the ranked buyer call queue?",
+                "How do I compare buyer offers and finish placement?",
             ]
         )
     elif role_keys & TRANSACTION_ROLES:

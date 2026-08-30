@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from hashlib import sha256
+from math import asin, cos, radians, sin, sqrt
 from typing import Any, Literal, cast
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from app.models.foundation import (
     DispositionCase,
     Lead,
     Property,
+    PropertyIntelligenceSnapshot,
 )
 from app.schemas.buyers import BuyerCreate
 from app.schemas.dispositions import (
@@ -351,6 +353,12 @@ def read_buyer_pool(
     total = len(filtered)
     start = (page - 1) * page_size
     selected = filtered[start : start + page_size]
+    purchase_evidence = _purchase_evidence_by_candidate(
+        db,
+        principal,
+        case,
+        [candidate for _, candidate, _ in selected],
+    )
     return BuyerPoolRead(
         case_id=case.id,
         run=_run_read(run),
@@ -370,6 +378,7 @@ def read_buyer_pool(
                     if candidate.possible_buyer_id
                     else None
                 ),
+                purchase_evidence.get(candidate.id, []),
             )
             for entry, candidate, source_type in selected
         ],
@@ -1367,6 +1376,7 @@ def _entry_read(
     source_type: str,
     buyer: Buyer | None,
     possible_buyer: Buyer | None,
+    purchase_evidence: list[dict[str, object]],
 ) -> BuyerPoolEntryRead:
     del db
     proof_status = str(entry.evidence_snapshot.get("proof_status", "unknown"))
@@ -1411,7 +1421,242 @@ def _entry_read(
         relationship_status=buyer.relationship_status if buyer else None,
         tier=buyer.tier if buyer else None,
         temperature=buyer.temperature if buyer else None,
+        purchase_evidence=purchase_evidence,
     )
+
+
+def _purchase_evidence_by_candidate(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    candidates: list[DispositionBuyerPoolCandidate],
+) -> dict[UUID, list[dict[str, object]]]:
+    discovery_ids = {
+        candidate.latest_discovery_candidate_id
+        for candidate in candidates
+        if candidate.latest_discovery_candidate_id is not None
+    }
+    if not discovery_ids:
+        return {}
+    discovery_records = {
+        item.id: item
+        for item in db.scalars(
+            select(BuyerDiscoveryCandidate).where(
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
+                BuyerDiscoveryCandidate.id.in_(discovery_ids),
+            )
+        ).all()
+    }
+    property_record = db.get(Property, case.property_id)
+    subject_coordinates = (
+        _saved_subject_coordinates(db, property_record)
+        if property_record is not None
+        and property_record.organization_id == principal.organization_id
+        else (None, None)
+    )
+    projected: dict[UUID, list[dict[str, object]]] = {}
+    for candidate in candidates:
+        discovery = discovery_records.get(candidate.latest_discovery_candidate_id)
+        if discovery is None or discovery.provider.casefold() != "dealmachine":
+            continue
+        snapshot = (
+            discovery.provider_snapshot
+            if isinstance(discovery.provider_snapshot, dict)
+            else {}
+        )
+        properties = snapshot.get("properties")
+        if not isinstance(properties, list):
+            continue
+        evidence = [
+            item
+            for raw in properties
+            if isinstance(raw, dict)
+            and (item := _project_purchase_evidence(raw, subject_coordinates)) is not None
+        ]
+        evidence.sort(
+            key=lambda item: (
+                item["purchase_date"] or date.min,
+                item["purchase_price_cents"] or 0,
+            ),
+            reverse=True,
+        )
+        projected[candidate.id] = evidence[:5]
+    return projected
+
+
+def _project_purchase_evidence(
+    raw: dict[str, Any],
+    subject_coordinates: tuple[float | None, float | None],
+) -> dict[str, object] | None:
+    address = ", ".join(
+        value
+        for value in (
+            _safe_string(raw.get("address")),
+            _safe_string(raw.get("city")),
+            " ".join(
+                value
+                for value in (
+                    _safe_string(raw.get("state")),
+                    _safe_string(raw.get("zip") or raw.get("postal_code") or raw.get("code")),
+                )
+                if value
+            ),
+        )
+        if value
+    )
+    if not address:
+        return None
+    property_types = _safe_strings(raw.get("property_type"))
+    latitude, longitude = _provider_coordinates(raw)
+    subject_latitude, subject_longitude = subject_coordinates
+    distance_miles: float | None = None
+    distance_basis: str | None = None
+    if None not in (subject_latitude, subject_longitude, latitude, longitude):
+        distance_miles = round(
+            _haversine_miles(
+                float(subject_latitude),
+                float(subject_longitude),
+                float(latitude),
+                float(longitude),
+            ),
+            2,
+        )
+        distance_basis = "saved_provider_coordinates"
+    return {
+        "provider_property_id": _safe_string(raw.get("dm_property_id") or raw.get("id")) or None,
+        "address": address,
+        "purchase_date": _safe_date(raw.get("last_sale_date")),
+        "purchase_price_cents": _safe_money_cents(raw.get("last_sale_price")),
+        "property_types": property_types,
+        "distance_miles": distance_miles,
+        "distance_basis": distance_basis,
+    }
+
+
+def _saved_subject_coordinates(
+    db: Session,
+    property_record: Property,
+) -> tuple[float | None, float | None]:
+    metadata = (
+        property_record.address_validation_metadata
+        if isinstance(property_record.address_validation_metadata, dict)
+        else {}
+    )
+    facts = metadata.get("facts") if isinstance(metadata.get("facts"), dict) else {}
+    coordinates = _valid_coordinates(
+        _safe_number(facts.get("latitude")),
+        _safe_number(facts.get("longitude")),
+    )
+    if coordinates != (None, None):
+        return coordinates
+    snapshot = db.scalar(
+        select(PropertyIntelligenceSnapshot)
+        .where(
+            PropertyIntelligenceSnapshot.organization_id == property_record.organization_id,
+            PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.is_current.is_(True),
+        )
+        .order_by(
+            PropertyIntelligenceSnapshot.version_number.desc(),
+            PropertyIntelligenceSnapshot.created_at.desc(),
+        )
+        .limit(1)
+    )
+    snapshot_facts = snapshot.facts if snapshot and isinstance(snapshot.facts, dict) else {}
+    return _valid_coordinates(
+        _safe_number(_fact_value(snapshot_facts.get("latitude"))),
+        _safe_number(_fact_value(snapshot_facts.get("longitude"))),
+    )
+
+
+def _provider_coordinates(raw: dict[str, Any]) -> tuple[float | None, float | None]:
+    candidates = [raw]
+    for key in ("location", "coordinates", "geo", "geocode"):
+        nested = raw.get(key)
+        if isinstance(nested, dict):
+            candidates.append(nested)
+    for candidate in candidates:
+        coordinates = _valid_coordinates(
+            _safe_number(candidate.get("latitude") or candidate.get("lat")),
+            _safe_number(
+                candidate.get("longitude") or candidate.get("lng") or candidate.get("lon")
+            ),
+        )
+        if coordinates != (None, None):
+            return coordinates
+    return None, None
+
+
+def _valid_coordinates(
+    latitude: float | None,
+    longitude: float | None,
+) -> tuple[float | None, float | None]:
+    if (
+        latitude is None
+        or longitude is None
+        or not -90 <= latitude <= 90
+        or not -180 <= longitude <= 180
+    ):
+        return None, None
+    return latitude, longitude
+
+
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    latitude_delta = radians(lat2 - lat1)
+    longitude_delta = radians(lon2 - lon1)
+    a = (
+        sin(latitude_delta / 2) ** 2
+        + cos(radians(lat1)) * cos(radians(lat2)) * sin(longitude_delta / 2) ** 2
+    )
+    return 3958.7613 * 2 * asin(sqrt(a))
+
+
+def _fact_value(value: object) -> object:
+    return value.get("value") if isinstance(value, dict) else value
+
+
+def _safe_string(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _safe_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
+def _safe_date(value: object) -> date | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
+
+
+def _safe_money_cents(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = (
+            float(value.replace(",", "").replace("$", ""))
+            if isinstance(value, str)
+            else float(value)
+        )
+    except (TypeError, ValueError):
+        return None
+    return round(number * 100)
+
+
+def _safe_number(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _run_read(run: DispositionBuyerPoolRun) -> BuyerPoolRunRead:

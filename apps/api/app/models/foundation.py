@@ -6259,6 +6259,73 @@ class DispositionPackageVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     pdf_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
 
+class DispositionPackageShareLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_package_share_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "token_digest",
+            name="uq_disposition_package_share_links_token_digest",
+        ),
+        CheckConstraint(
+            "lock_version > 0",
+            name="ck_disposition_package_share_links_lock_positive",
+        ),
+        CheckConstraint(
+            "access_count >= 0",
+            name="ck_disposition_package_share_links_access_count_nonnegative",
+        ),
+        Index(
+            "ix_disposition_package_share_links_org_case_created",
+            "organization_id",
+            "disposition_case_id",
+            "created_at",
+        ),
+        Index(
+            "ix_disposition_package_share_links_package_expiry",
+            "package_version_id",
+            "expires_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    package_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_package_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    revoked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_hint: Mapped[str] = mapped_column(String(12), nullable=False)
+    artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    access_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    first_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class DispositionProviderAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "disposition_provider_accounts"
     __table_args__ = (
@@ -7334,6 +7401,12 @@ class DispositionReplyLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "buyer_engagements"
     __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "idempotency_key",
+            name="uq_buyer_engagements_case_idempotency",
+        ),
         Index(
             "ix_buyer_engagements_relationship_schedule",
             "organization_id",
@@ -7355,6 +7428,14 @@ class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1000))
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    engagement_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
 
 
 class DispositionCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):

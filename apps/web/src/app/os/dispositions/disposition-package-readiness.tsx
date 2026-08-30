@@ -5,12 +5,14 @@ import {
   Check,
   CheckCircle2,
   Clipboard,
+  Ban,
   Download,
   FileClock,
   FileText,
   History,
   LoaderCircle,
   LockKeyhole,
+  Link2,
   Megaphone,
   RefreshCw,
   ShieldAlert,
@@ -27,6 +29,8 @@ import type {
   DispositionPackageReadinessCheck,
   DispositionPackageVersion,
   DispositionPackageWorkspace,
+  DispositionPackageShareLink,
+  DispositionPackageShareLinkIssued,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./disposition-package-readiness.module.css";
@@ -198,6 +202,9 @@ export function DispositionPackageReadiness({
   const [approvalReason, setApprovalReason] = useState("");
   const [attested, setAttested] = useState(false);
   const [copied, setCopied] = useState<"email" | "sms" | null>(null);
+  const [shareLinks, setShareLinks] = useState<DispositionPackageShareLink[]>([]);
+  const [issuedLink, setIssuedLink] = useState<DispositionPackageShareLinkIssued | null>(null);
+  const [copiedLink, setCopiedLink] = useState<"link" | "sms" | null>(null);
 
   useEffect(() => {
     requestRef.current = request;
@@ -209,12 +216,19 @@ export function DispositionPackageReadiness({
     setError(null);
     setSuccess(null);
     try {
-      const result = await requestRef.current<DispositionPackageWorkspace>(
-        `/api/v1/dispositions/cases/${caseId}/package`,
-        { cache: "no-store" },
-      );
+      const [result, links] = await Promise.all([
+        requestRef.current<DispositionPackageWorkspace>(
+          `/api/v1/dispositions/cases/${caseId}/package`,
+          { cache: "no-store" },
+        ),
+        requestRef.current<DispositionPackageShareLink[]>(
+          `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+          { cache: "no-store" },
+        ),
+      ]);
       if (sequence !== loadSequenceRef.current) return;
       setData(result);
+      setShareLinks(links);
       setLoadedCaseId(caseId);
     } catch (loadError) {
       if (sequence !== loadSequenceRef.current) return;
@@ -226,13 +240,20 @@ export function DispositionPackageReadiness({
 
   useEffect(() => {
     const sequence = ++loadSequenceRef.current;
-    void requestRef.current<DispositionPackageWorkspace>(
-      `/api/v1/dispositions/cases/${caseId}/package`,
-      { cache: "no-store" },
-    )
-      .then((result) => {
+    void Promise.all([
+      requestRef.current<DispositionPackageWorkspace>(
+        `/api/v1/dispositions/cases/${caseId}/package`,
+        { cache: "no-store" },
+      ),
+      requestRef.current<DispositionPackageShareLink[]>(
+        `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+        { cache: "no-store" },
+      ),
+    ])
+      .then(([result, links]) => {
         if (sequence !== loadSequenceRef.current) return;
         setData(result);
+        setShareLinks(links);
         setLoadedCaseId(caseId);
       })
       .catch((loadError: unknown) => {
@@ -356,6 +377,80 @@ export function DispositionPackageReadiness({
       window.setTimeout(() => setCopied(null), 1800);
     } catch {
       setError("Unable to copy the summary. Select the text and copy it manually.");
+    }
+  }
+
+  async function createShareLink() {
+    if (!canEditDeals || !currentApprovedVersion) return;
+    setBusyAction("share-link");
+    setError(null);
+    setSuccess(null);
+    try {
+      const issued = await requestRef.current<DispositionPackageShareLinkIssued>(
+        `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+        { method: "POST", body: JSON.stringify({ expires_in_hours: 72 }) },
+      );
+      setIssuedLink(issued);
+      setShareLinks((current) => [issued, ...current.filter((item) => item.id !== issued.id)]);
+      try {
+        await navigator.clipboard.writeText(issued.share_url);
+        setCopiedLink("link");
+        window.setTimeout(() => setCopiedLink(null), 1800);
+      } catch {
+        // The visible read-only URL remains available for manual copy.
+      }
+      const message = "Secure investor package link created and copied. It expires in 72 hours.";
+      setSuccess(message);
+      onMessage(message);
+    } catch (shareError) {
+      const detail = shareError instanceof Error ? shareError.message : "Unable to create a package link.";
+      setError(detail);
+      onMessage(detail);
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function copyShareLink(channel: "link" | "sms") {
+    if (!issuedLink || !data) return;
+    const value = channel === "sms"
+      ? `${data.sms_summary}\n\n${issuedLink.share_url}`
+      : issuedLink.share_url;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedLink(channel);
+      window.setTimeout(() => setCopiedLink(null), 1800);
+    } catch {
+      setError("Unable to copy the secure link. Select the visible URL and copy it manually.");
+    }
+  }
+
+  async function revokeShareLink(link: DispositionPackageShareLink) {
+    if (!canEditDeals || link.status !== "active") return;
+    setBusyAction(`revoke-${link.id}`);
+    setError(null);
+    try {
+      const revoked = await requestRef.current<DispositionPackageShareLink>(
+        `/api/v1/dispositions/cases/${caseId}/package/share-links/${link.id}/revoke`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            expected_version: link.lock_version,
+            reason: "Revoked from the disposition package workspace.",
+          }),
+        },
+      );
+      setShareLinks((current) => current.map((item) => item.id === revoked.id ? revoked : item));
+      if (issuedLink?.id === revoked.id) setIssuedLink(null);
+      const message = "Investor package link revoked.";
+      setSuccess(message);
+      onMessage(message);
+    } catch (revokeError) {
+      const detail = revokeError instanceof Error ? revokeError.message : "Unable to revoke the package link.";
+      setError(detail);
+      onMessage(detail);
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -512,6 +607,46 @@ export function DispositionPackageReadiness({
         <div className={styles.summaryGrid}>
           <label><span>Email summary</span><textarea readOnly rows={9} value={data.email_summary} /><button disabled={!currentApprovedVersion} onClick={() => void copySummary("email", data.email_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "email" ? "Copied" : "Copy email"}</button></label>
           <label><span>SMS summary</span><textarea readOnly rows={9} value={data.sms_summary} /><button disabled={!currentApprovedVersion} onClick={() => void copySummary("sms", data.sms_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "sms" ? "Copied" : "Copy SMS"}</button></label>
+        </div>
+      </section>
+
+      <section aria-labelledby="package-share-heading" className={styles.panel}>
+        <div className={styles.panelHeading}>
+          <div><span>Recipient-safe delivery</span><h5 id="package-share-heading">Secure investor packet link</h5></div>
+          <strong>Revocable - 72-hour expiry</strong>
+        </div>
+        <div className={styles.shareLinkWorkspace}>
+          <div className={styles.shareLinkActions}>
+            <p>Create a link to the exact approved PDF. Seller notes, private economics, and access instructions are excluded from this artifact.</p>
+            <button disabled={!canEditDeals || !currentApprovedVersion || busyAction !== null} onClick={() => void createShareLink()} type="button">
+              <Link2 aria-hidden="true" size={15} />{busyAction === "share-link" ? "Creating link..." : "Create & copy secure link"}
+            </button>
+          </div>
+          {issuedLink ? (
+            <div className={styles.issuedLink}>
+              <label><span>New secure link</span><input readOnly value={issuedLink.share_url} /></label>
+              <div>
+                <button onClick={() => void copyShareLink("link")} type="button"><Clipboard aria-hidden="true" size={14} />{copiedLink === "link" ? "Copied" : "Copy link"}</button>
+                <button onClick={() => void copyShareLink("sms")} type="button"><Clipboard aria-hidden="true" size={14} />{copiedLink === "sms" ? "Copied" : "Copy SMS + link"}</button>
+              </div>
+              <small>This raw link is shown only now. Stonegate stores a one-way token digest, not the reusable link secret.</small>
+            </div>
+          ) : null}
+          <div className={styles.shareLinkHistory}>
+            {shareLinks.map((link) => (
+              <article key={link.id}>
+                <div>
+                  <strong>Package v{link.package_version_number} - {labelize(link.status)}</strong>
+                  <span>Ends {dateTime(link.expires_at)} - {link.access_count} open{link.access_count === 1 ? "" : "s"} - token ...{link.token_hint}</span>
+                  {link.last_accessed_at ? <small>Last opened {dateTime(link.last_accessed_at)}</small> : <small>Not opened yet</small>}
+                </div>
+                {link.status === "active" ? (
+                  <button disabled={!canEditDeals || busyAction !== null} onClick={() => void revokeShareLink(link)} type="button"><Ban aria-hidden="true" size={14} />Revoke</button>
+                ) : null}
+              </article>
+            ))}
+            {!shareLinks.length ? <p className={styles.empty}>No investor package links have been created.</p> : null}
+          </div>
         </div>
       </section>
 

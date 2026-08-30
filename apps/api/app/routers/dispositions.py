@@ -9,10 +9,20 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.twilio_messaging import TwilioMessagingError
+from app.integrations.twilio_voice_calls import TwilioVoiceCallError
 from app.schemas.disposition_desk import (
     DispositionDeskCategory,
     DispositionDeskRead,
     DispositionDeskScope,
+)
+from app.schemas.disposition_execution import (
+    DispositionExecutionCallCreate,
+    DispositionExecutionOutcomeCreate,
+    DispositionExecutionSmsCreate,
+    DispositionExecutionWorkspaceRead,
+    DispositionShowingCreate,
+    DispositionShowingUpdate,
 )
 from app.schemas.disposition_intelligence import DispositionIntelligenceResponse
 from app.schemas.disposition_offer_room import (
@@ -60,6 +70,10 @@ from app.schemas.dispositions import (
     DispositionCopilotReviewRequest,
     DispositionOverview,
     DispositionPackageApprovalRequest,
+    DispositionPackageShareLinkCreate,
+    DispositionPackageShareLinkIssuedRead,
+    DispositionPackageShareLinkRead,
+    DispositionPackageShareLinkRevoke,
     DispositionPackageVersionCreate,
     DispositionPackageVersionRead,
     DispositionPackageWorkspaceRead,
@@ -69,13 +83,17 @@ from app.schemas.dispositions import (
     ProofVerificationRequest,
     ReconciliationDecision,
 )
+from app.schemas.inbox import SmsSendRead
+from app.schemas.voice import VoiceCallIntentRead
 from app.services import (
     disposition_buyer_pool,
     disposition_desk,
+    disposition_execution,
     disposition_intelligence,
     disposition_offer_room,
     disposition_outreach,
     disposition_packages,
+    disposition_packet_links,
     disposition_provider,
     dispositions,
 )
@@ -84,6 +102,16 @@ from app.services.disposition_copilot import (
     analyze_disposition,
     get_disposition_copilot_overview,
     review_recommendation,
+)
+from app.services.messaging import (
+    SmsComplianceError,
+    SmsConfigurationError,
+    SmsDispatchConflictError,
+)
+from app.services.voice import (
+    VoiceComplianceError,
+    VoiceConfigurationError,
+    VoiceIntentConflictError,
 )
 
 router = APIRouter(prefix="/api/v1/dispositions", tags=["dispositions"])
@@ -104,6 +132,14 @@ outreach_view_dependency = require_any_permission(
     PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
 )
 bulk_send_dependency = require_permission(PermissionKeys.SEND_BULK_COMMUNICATIONS)
+send_sms_dependency = require_any_permission(
+    PermissionKeys.SEND_SMS,
+    PermissionKeys.SEND_ASSIGNED_SMS,
+)
+call_dependency = require_any_permission(
+    PermissionKeys.PLACE_CALLS,
+    PermissionKeys.PLACE_ASSIGNED_CALLS,
+)
 
 
 def _require_private_economics(principal: Principal) -> Principal:
@@ -1094,6 +1130,225 @@ def read_case_buyer_pool(
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.get("/cases/{case_id}/package/share-links")
+def read_case_package_share_links(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> list[DispositionPackageShareLinkRead]:
+    result = disposition_packet_links.list_share_links(db, principal, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post("/cases/{case_id}/package/share-links", status_code=201)
+def create_case_package_share_link(
+    case_id: UUID,
+    payload: DispositionPackageShareLinkCreate,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionPackageShareLinkIssuedRead:
+    try:
+        result = disposition_packet_links.issue_share_link(
+            db,
+            principal,
+            case_id,
+            payload,
+            share_url_builder=lambda token: str(
+                request.url_for("download_shared_investor_package", token=token)
+            ),
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post("/cases/{case_id}/package/share-links/{link_id}/revoke")
+def revoke_case_package_share_link(
+    case_id: UUID,
+    link_id: UUID,
+    payload: DispositionPackageShareLinkRevoke,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionPackageShareLinkRead:
+    try:
+        result = disposition_packet_links.revoke_share_link(
+            db,
+            principal,
+            case_id,
+            link_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Package share link not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.get(
+    "/cases/{case_id}/execution",
+    dependencies=[Depends(buyer_view_dependency)],
+)
+def read_case_execution_workspace(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> DispositionExecutionWorkspaceRead:
+    try:
+        result = disposition_execution.read_workspace(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/execution/sms",
+    status_code=201,
+    dependencies=[Depends(buyer_edit_dependency), Depends(send_sms_dependency)],
+)
+def send_case_execution_sms(
+    case_id: UUID,
+    payload: DispositionExecutionSmsCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> SmsSendRead:
+    try:
+        return disposition_execution.send_pre_call_sms(db, principal, case_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except SmsComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except SmsDispatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SmsConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except TwilioMessagingError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post(
+    "/cases/{case_id}/execution/calls",
+    status_code=201,
+    dependencies=[Depends(buyer_edit_dependency), Depends(call_dependency)],
+)
+def start_case_execution_call(
+    case_id: UUID,
+    payload: DispositionExecutionCallCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> VoiceCallIntentRead:
+    try:
+        return disposition_execution.start_candidate_call(db, principal, case_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except TwilioVoiceCallError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post(
+    "/cases/{case_id}/execution/outcomes",
+    dependencies=[Depends(buyer_edit_dependency)],
+)
+def record_case_execution_outcome(
+    case_id: UUID,
+    payload: DispositionExecutionOutcomeCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionExecutionWorkspaceRead:
+    try:
+        result = disposition_execution.record_call_outcome(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.post(
+    "/cases/{case_id}/execution/showings",
+    status_code=201,
+    dependencies=[Depends(buyer_edit_dependency)],
+)
+def create_case_execution_showing(
+    case_id: UUID,
+    payload: DispositionShowingCreate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionExecutionWorkspaceRead:
+    try:
+        result = disposition_execution.create_showing(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.patch(
+    "/cases/{case_id}/execution/showings/{showing_id}",
+    dependencies=[Depends(buyer_edit_dependency)],
+)
+def update_case_execution_showing(
+    case_id: UUID,
+    showing_id: UUID,
+    payload: DispositionShowingUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionExecutionWorkspaceRead:
+    try:
+        result = disposition_execution.update_showing(
+            db,
+            principal,
+            case_id,
+            showing_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer showing not found.")
+    response.headers["Cache-Control"] = "private, no-store"
     return result
 
 

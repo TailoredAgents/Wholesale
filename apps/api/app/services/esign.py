@@ -2379,6 +2379,11 @@ def complete_envelope(
             lead.stage_key = "under_contract"
         if deal:
             deal.stage_key = "under_contract"
+        from app.services.disposition_handoff import (
+            ensure_house_disposition_case_for_executed_transaction,
+        )
+
+        ensure_house_disposition_case_for_executed_transaction(db, transaction)
     db.add(
         TransactionEvent(
             organization_id=envelope.organization_id,

@@ -48,6 +48,13 @@ function date(value: string | null) {
   return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not set";
 }
 
+const CHECKLIST_EVIDENCE_ITEM_KEYS = new Set([
+  "open_title",
+  "seller_documents",
+  "due_diligence",
+  "closing_confirmed",
+]);
+
 export function TransactionWorkspace({
   initialData,
   initialTab = "closing",
@@ -63,6 +70,7 @@ export function TransactionWorkspace({
   const [copilot, setCopilot] = useState<TransactionCopilotOverview | null>(null);
   const [f4Status, setF4Status] = useState<F4IntegrationStatus | null>(null);
   const [signaturePackageId, setSignaturePackageId] = useState<string | null>(null);
+  const [checklistEvidence, setChecklistEvidence] = useState<Record<string, string>>({});
   const tab = initialTab;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -113,11 +121,38 @@ export function TransactionWorkspace({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!detail) return;
+    setChecklistEvidence(Object.fromEntries(
+      detail.checklist.map((item) => [item.id, item.evidence_notes ?? ""]),
+    ));
+  }, [detail]);
+
   async function action(work: () => Promise<unknown>) {
     setBusy(true); setMessage(null);
     try { await work(); await reload(); setMessage("Saved."); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save."); }
     finally { setBusy(false); }
+  }
+
+  async function updateChecklistItem(item: TransactionDetail["checklist"][number]) {
+    if (!detail) return;
+    const nextStatus = item.status === "complete" ? "open" : "complete";
+    const requiresEvidence = Boolean(
+      item.item_key && CHECKLIST_EVIDENCE_ITEM_KEYS.has(item.item_key),
+    );
+    const evidenceNotes = (checklistEvidence[item.id] ?? item.evidence_notes ?? "").trim();
+    if (nextStatus === "complete" && requiresEvidence && evidenceNotes.length < 10) {
+      setMessage(`Add a supporting evidence note for “${item.title}” before completing it.`);
+      return;
+    }
+    await action(() => request(`/api/v1/transactions/${detail.id}/checklist/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: nextStatus,
+        ...(requiresEvidence ? { evidence_notes: evidenceNotes || null } : {}),
+      }),
+    }));
   }
 
   async function recoverSignWellDraft(envelopeId: string) {
@@ -411,7 +446,35 @@ export function TransactionWorkspace({
             {tab === "closing" ? <>
               <div className={styles.sectionGrid}>
               <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing controls</span><h4>Required workflow</h4></div><strong>{detail.checklist.filter((item) => item.status === "complete").length}/{detail.checklist.length}</strong></div>
-                <div className={styles.checklist}>{detail.checklist.map((item) => <div className={styles.checkItem} key={item.id}><button aria-label={item.status === "complete" ? "Reopen item" : "Complete item"} disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/checklist/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: item.status === "complete" ? "open" : "complete" }) }))} type="button">{item.status === "complete" ? <Check size={15} /> : null}</button><div><strong>{item.title}</strong><span>{item.description}</span><small>{labelize(item.category)} · {item.due_at ? date(item.due_at) : "No deadline"}</small></div></div>)}</div>
+                <div className={styles.checklist}>{detail.checklist.map((item) => {
+                  const requiresEvidence = Boolean(
+                    item.item_key && CHECKLIST_EVIDENCE_ITEM_KEYS.has(item.item_key),
+                  );
+                  return <div className={styles.checkItem} key={item.id}>
+                    <button aria-label={item.status === "complete" ? `Reopen ${item.title}` : `Complete ${item.title}`} disabled={busy} onClick={() => void updateChecklistItem(item)} type="button">{item.status === "complete" ? <Check size={15} /> : null}</button>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.description}</span>
+                      <small>{labelize(item.category)} · {item.due_at ? date(item.due_at) : "No deadline"}</small>
+                      {requiresEvidence ? <label className={styles.checkEvidence}>
+                        <span>Supporting evidence note</span>
+                        <textarea
+                          aria-label={`Supporting evidence for ${item.title}`}
+                          disabled={busy || item.status === "complete"}
+                          onChange={(event) => setChecklistEvidence((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))}
+                          placeholder="What was confirmed, by whom, and where is the supporting record?"
+                          required={item.status !== "complete"}
+                          rows={2}
+                          value={checklistEvidence[item.id] ?? item.evidence_notes ?? ""}
+                        />
+                        <small>{item.status === "complete" ? "Saved with this completion. Reopen the item to correct it." : "Required to mark this item complete."}</small>
+                      </label> : null}
+                    </div>
+                  </div>;
+                })}</div>
               </section>
               <div className={styles.rightStack}><aside className={styles.section}><div className={styles.sectionTitle}><div><span>Deal snapshot</span><h4>Dates and funds</h4></div></div><dl className={styles.facts}><div><dt>Closing</dt><dd>{date(detail.closing_date)}</dd></div><div><dt>Due diligence</dt><dd>{date(detail.due_diligence_deadline)}</dd></div><div><dt>Earnest money</dt><dd>{money(detail.earnest_money_cents)}</dd></div><div><dt>Title opened</dt><dd>{date(detail.title_opened_at)}</dd></div><div><dt>Coordinator</dt><dd>{detail.coordinator_name ?? "Unassigned"}</dd></div></dl>
                 <button className={styles.fundButton} disabled={busy || detail.status === "funded"} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/close`, { method: "POST", body: JSON.stringify({ outcome: "funded", notes: "Funding and closing confirmed by transaction coordinator." }) }))} type="button"><CircleDollarSign size={16} />Record funded closing</button></aside>

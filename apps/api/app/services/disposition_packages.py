@@ -1572,6 +1572,13 @@ def approve_version(
         },
         payload.reason,
     )
+    from app.services.disposition_handoff import queue_disposition_package_ready_alert
+
+    queue_disposition_package_ready_alert(
+        db,
+        disposition_case=case,
+        package_version=version,
+    )
     db.commit()
     return _version_read(
         principal,

@@ -32,6 +32,16 @@ import styles from "./disposition-offer-room.module.css";
 
 type Request = <T>(path: string, options?: RequestInit) => Promise<T>;
 type TimelineTab = "negotiation" | "selection" | "outcomes";
+type PlacementStepState = "complete" | "current" | "pending" | "warning";
+
+type PlacementStep = {
+  key: string;
+  label: string;
+  detail: string;
+  href: string;
+  resolved: boolean;
+  warning?: boolean;
+};
 
 type BuyerOption = {
   buyer_id: string;
@@ -99,6 +109,64 @@ function displayEvidence(evidence: Record<string, unknown>) {
 function isCheckpointOverdue(checkpoint: DispositionClosingCheckpoint) {
   return !["completed", "waived", "cancelled"].includes(checkpoint.status)
     && new Date(checkpoint.due_at).getTime() < Date.now();
+}
+
+function hasCanonicalChecklistEvidence(checkpoint: DispositionClosingCheckpoint) {
+  if (checkpoint.canonical_source !== "transaction_checklist" || !checkpoint.source_record_id) return false;
+  const documentId = checkpoint.evidence.evidence_document_id;
+  const evidenceNotes = checkpoint.evidence.evidence_notes;
+  return Boolean(
+    (typeof documentId === "string" && documentId.trim())
+      || (typeof evidenceNotes === "string" && evidenceNotes.trim().length >= 3),
+  );
+}
+
+function PlacementPath({ steps }: { steps: PlacementStep[] }) {
+  const currentIndex = steps.findIndex((step) => !step.resolved);
+  const resolvedCount = steps.filter((step) => step.resolved).length;
+  const nextStep = currentIndex >= 0 ? steps[currentIndex] : null;
+
+  return (
+    <section aria-labelledby="placement-path-heading" className={styles.placementPath}>
+      <div className={styles.placementPathHeader}>
+        <div>
+          <span>Interested buyer to funded closing</span>
+          <h5 id="placement-path-heading">Deal placement path</h5>
+          <p>Stonegate shows the next missing step from saved evidence. Nothing is marked complete from a guess.</p>
+        </div>
+        <div className={styles.placementProgress}>
+          <strong>{resolvedCount} of {steps.length}</strong>
+          <span>steps secured</span>
+        </div>
+      </div>
+      <ol className={styles.placementSteps}>
+        {steps.map((step, index) => {
+          const state: PlacementStepState = step.warning
+            ? "warning"
+            : step.resolved
+              ? "complete"
+              : index === currentIndex
+                ? "current"
+                : "pending";
+          return (
+            <li data-state={state} key={step.key}>
+              <span className={styles.placementStepIcon}>
+                {state === "complete" ? <Check aria-hidden="true" size={14} /> : state === "warning" ? <AlertTriangle aria-hidden="true" size={14} /> : index + 1}
+              </span>
+              <div>
+                <strong>{step.label}</strong>
+                <small>{step.detail}</small>
+              </div>
+              {state === "current" ? <a aria-current="step" href={step.href}>Do this next</a> : null}
+            </li>
+          );
+        })}
+      </ol>
+      <div className={styles.placementNextAction} data-complete={!nextStep}>
+        {nextStep ? <><ArrowRightLeft aria-hidden="true" size={16} /><div><span>Next action</span><strong>{nextStep.detail}</strong></div><a href={nextStep.href}>Open step</a></> : <><CheckCircle2 aria-hidden="true" size={17} /><div><span>Placement complete</span><strong>The funded close is preserved in buyer reliability history.</strong></div></>}
+      </div>
+    </section>
+  );
 }
 
 function OfferCard({
@@ -695,18 +763,24 @@ export function DispositionOfferRoom({
 
   const currentPrimary = data.current_selection?.primary ?? null;
   const currentBackups = data.current_selection?.backups ?? [];
+  const closingComplete = Boolean(
+    currentPrimary
+      && data.outcomes.some((outcome) =>
+        outcome.outcome_type === "completed_close" && outcome.offer_id === currentPrimary.offer_id,
+      ),
+  );
   const backupOfferIds = new Set(currentBackups.map((item) => item.offer_id));
   const offers = [...data.offers].sort((left, right) => left.comparison_rank - right.comparison_rank);
   const selectableOffers = offers.filter((offer) => ["received", "countering", "selected", "backup"].includes(offer.status));
   const selectionCoverageReady = new Set(selectableOffers.map((offer) => offer.buyer_id)).size >= 2;
   const offersById = new Map(offers.map((offer) => [offer.id, offer]));
   const currentCoverageSlots = [currentPrimary, ...currentBackups].filter((slot) => slot !== null);
-  const staleCoverageSlots = currentCoverageSlots.filter((slot) => {
+  const staleCoverageSlots = closingComplete ? [] : currentCoverageSlots.filter((slot) => {
     const liveOffer = offersById.get(slot.offer_id);
     const approvedLockVersion = Number(slot.offer_snapshot.lock_version);
     return !liveOffer || !Number.isFinite(approvedLockVersion) || liveOffer.lock_version !== approvedLockVersion;
   });
-  const liveCoverageBlockers = currentCoverageSlots.flatMap((slot) =>
+  const liveCoverageBlockers = closingComplete ? [] : currentCoverageSlots.flatMap((slot) =>
     slot.readiness_blockers.map((blocker) => `${slot.buyer_name}: ${blocker}`),
   );
   const overdue = data.checkpoints.filter((checkpoint) => checkpoint.is_overdue || isCheckpointOverdue(checkpoint));
@@ -715,6 +789,125 @@ export function DispositionOfferRoom({
   const attentionCheckpoint = attention
     ? data.checkpoints.find((checkpoint) => checkpoint.id === attention.checkpoint_id) ?? null
     : null;
+  const primaryOffer = currentPrimary ? offersById.get(currentPrimary.offer_id) ?? null : null;
+  const offerForVerification = primaryOffer ?? offers[0] ?? null;
+  const generatedAt = new Date(data.generated_at).getTime();
+  const termsVerified = Boolean(
+    offerForVerification
+      && offerForVerification.proof_status === "verified"
+      && offerForVerification.proof_verified_amount_cents != null
+      && offerForVerification.proof_verified_amount_cents >= offerForVerification.amount_cents
+      && offerForVerification.proof_expires_at
+      && new Date(offerForVerification.proof_expires_at).getTime() > generatedAt
+      && offerForVerification.proposed_closing_at
+      && new Date(offerForVerification.proposed_closing_at).getTime() > generatedAt
+      && offerForVerification.contingencies_confirmed,
+  );
+  const checkpointForPrimary = (checkpoint: DispositionClosingCheckpoint) => Boolean(
+    currentPrimary
+      && data.current_selection
+      && checkpoint.selection_id === data.current_selection.id
+      && checkpoint.offer_id === currentPrimary.offer_id,
+  );
+  const depositCheckpoint = data.checkpoints.find((checkpoint) =>
+    checkpointForPrimary(checkpoint)
+      && checkpoint.checkpoint_type === "buyer_deposit"
+      && checkpoint.canonical_source === "buyer_offer"
+      && checkpoint.source_record_id === currentPrimary?.offer_id,
+  ) ?? null;
+  const primaryEarnestMoneyCents = primaryOffer?.earnest_money_cents;
+  const depositKnown = primaryEarnestMoneyCents != null;
+  const depositRequired = Boolean(
+    currentPrimary && primaryEarnestMoneyCents != null && primaryEarnestMoneyCents > 0,
+  );
+  const depositNotRequired = Boolean(
+    currentPrimary && primaryEarnestMoneyCents === 0,
+  );
+  const depositWaived = depositCheckpoint?.status === "waived";
+  const depositEvidence = depositCheckpoint?.evidence ?? {};
+  const depositSupportNote = depositEvidence.confirmation_note ?? depositEvidence.support_note;
+  const depositDecisionResolved = Boolean(
+    currentPrimary
+      && (depositNotRequired || (
+        (depositCheckpoint?.status === "completed" || depositWaived)
+        && typeof depositSupportNote === "string"
+        && depositSupportNote.replace(/\s/g, "").length >= 10
+      )),
+  );
+  const canonicalChecklistComplete = (checkpointType: "title" | "access") => {
+    const checkpoints = data.checkpoints.filter((checkpoint) =>
+      checkpointForPrimary(checkpoint)
+        && checkpoint.checkpoint_type === checkpointType
+        && checkpoint.canonical_source === "transaction_checklist"
+        && checkpoint.status !== "cancelled",
+    );
+    return checkpoints.length > 0
+      && checkpoints.every((checkpoint) => checkpoint.status === "completed" && hasCanonicalChecklistEvidence(checkpoint));
+  };
+  const titleComplete = canonicalChecklistComplete("title");
+  const accessComplete = canonicalChecklistComplete("access");
+  const placementSteps: PlacementStep[] = [
+    {
+      key: "offer",
+      label: "Buyer offer recorded",
+      detail: offers.length ? `${offers.length} buyer offer${offers.length === 1 ? " is" : "s are"} available for comparison.` : "Record an interested buyer's complete offer terms.",
+      href: "#record-buyer-offer",
+      resolved: offers.length > 0,
+    },
+    {
+      key: "verification",
+      label: "Proof and terms verified",
+      detail: closingComplete ? "Funding preserved the verified offer terms used at close." : termsVerified ? "Proof of funds, closing date, and contingencies are confirmed." : "Verify proof of funds, closing date, and contingencies.",
+      href: "#offer-comparison-heading",
+      resolved: closingComplete || termsVerified,
+    },
+    {
+      key: "coverage",
+      label: "Primary and backup approved",
+      detail: currentPrimary && currentBackups.length ? `${currentPrimary.buyer_name} is primary with protected backup coverage.` : "Approve one primary buyer and at least one different backup.",
+      href: "#buyer-coverage",
+      resolved: closingComplete || Boolean(currentPrimary && currentBackups.length && !staleCoverageSlots.length && !liveCoverageBlockers.length),
+    },
+    {
+      key: "agreement",
+      label: data.strategy_agreement.label,
+      detail: data.strategy_agreement.ready
+        ? "The executed assignment, current approved buyer, signed identity, and approved economics all match."
+        : data.strategy_agreement.blockers.join(" "),
+      href: "#buyer-coverage",
+      resolved: data.strategy_agreement.ready,
+    },
+    {
+      key: "deposit",
+      label: closingComplete ? "Deposit decision preserved at close" : depositWaived ? "Buyer deposit waived" : !depositKnown ? "Buyer deposit terms unresolved" : depositRequired ? "Buyer deposit secured" : "No buyer deposit required",
+      detail: closingComplete
+        ? "Canonical funding preserved the deposit receipt, waiver, or explicit zero used at close."
+        : depositWaived
+        ? "A manager-approved waiver is recorded. Stonegate keeps this as an open warning instead of treating cash as received."
+        : depositDecisionResolved
+          ? depositRequired ? "The current buyer offer has a recorded receipt and support note." : "The approved offer requires no earnest-money deposit."
+          : !depositKnown
+            ? "Revise the approved offer to an explicit zero or record a manager-approved canonical waiver."
+            : "Record the current buyer's deposit receipt and support note.",
+      href: "#closing-protection-heading",
+      resolved: closingComplete || depositDecisionResolved,
+      warning: !closingComplete && depositWaived,
+    },
+    {
+      key: "title-access",
+      label: "Title and access cleared",
+      detail: titleComplete && accessComplete ? "Title and property-access milestones are complete." : "Complete both the title and property-access milestones.",
+      href: "#closing-protection-heading",
+      resolved: closingComplete || (titleComplete && accessComplete),
+    },
+    {
+      key: "closing",
+      label: "Funded and closed",
+      detail: closingComplete ? "Canonical transaction funding recorded the completed close." : "Complete funding in the Deal record; Stonegate will record the close automatically.",
+      href: "#closing-protection-heading",
+      resolved: closingComplete,
+    },
+  ];
 
   return (
     <div className={styles.workspace} id="offer-room">
@@ -742,6 +935,8 @@ export function DispositionOfferRoom({
         </div>
       ) : null}
 
+      <PlacementPath steps={placementSteps} />
+
       <div className={styles.selectionGrid}>
         <section aria-labelledby="offer-comparison-heading" className={styles.panel}>
           <div className={styles.sectionHeading}>
@@ -751,7 +946,7 @@ export function DispositionOfferRoom({
           {offers.length ? <div className={styles.comparisonViewport}>{offers.map((offer) => <OfferCard backupOfferIds={backupOfferIds} currency={data.currency} key={offer.id} offer={offer} primaryOfferId={currentPrimary?.offer_id ?? null} />)}</div> : <div className={styles.empty}><BadgeDollarSign aria-hidden="true" size={26} /><strong>No buyer offers recorded</strong><p>Record an interested buyer&apos;s complete terms below to start the comparison.</p></div>}
         </section>
 
-        <aside className={styles.selectionCard}>
+        <aside className={styles.selectionCard} id="buyer-coverage">
           <span>Current coverage</span>
           <h5>Human-approved primary and backups</h5>
           <p>Coverage remains visible until a completed close or a documented replacement.</p>
@@ -779,7 +974,7 @@ export function DispositionOfferRoom({
       </div>
 
       <div className={styles.operationsGrid}>
-        <section aria-labelledby="closing-protection-heading" className={styles.panel}>
+        <section aria-labelledby="closing-protection-heading" className={styles.panel} id="closing-milestones">
           <div className={styles.sectionHeading}>
             <div><span>Execution safeguards</span><h5 id="closing-protection-heading">Closing protection checklist</h5><p>Agreement, Signature, Deposit, Access, Title, buyer response, and Closing remain visible through completion.</p></div>
             <button className={styles.secondaryButton} disabled={busyAction !== null || !canEditDeals} onClick={() => void scanDeadlines()} type="button"><RefreshCw aria-hidden="true" size={14} />Scan deadlines</button>
@@ -827,7 +1022,7 @@ export function DispositionOfferRoom({
       </section>
 
       <div className={styles.formsGrid}>
-        <details className={styles.form}>
+        <details className={styles.form} id="record-buyer-offer">
           <summary><div><span>Normalized evidence</span><h5>Record buyer offer</h5><p>Capture every execution term, not only price.</p></div><ChevronDown aria-hidden="true" size={17} /></summary>
           <form className={styles.formBody} onSubmit={recordOffer}>
             <label><span>Buyer</span><select name="buyer_id" required><option value="">Select buyer</option>{normalizedBuyers.map((buyer) => <option key={buyer.buyer_id} value={buyer.buyer_id}>{buyer.buyer_name}</option>)}</select></label>

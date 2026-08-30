@@ -81,6 +81,23 @@
 .summaryGrid textarea, .economicsFields input, .approvalDialog textarea { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 11px; line-height: 1.5; resize: vertical; }
 .summaryGrid button, .buildPanel > button, .releasePanel > button, .versionList article > button, .dialogActions button { min-height: 44px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .summaryGrid button { justify-self: start; }
+.shareLinkWorkspace { display: grid; }
+.shareLinkActions { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); }
+.shareLinkActions p { margin: 0; max-width: 720px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.shareLinkActions button, .issuedLink button, .shareLinkHistory button { min-height: 44px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.shareLinkActions button { border-color: var(--brand); background: var(--brand); color: #fff; }
+.shareLinkActions button:disabled, .shareLinkHistory button:disabled { opacity: .45; cursor: not-allowed; }
+.issuedLink { padding: 12px 14px; display: grid; gap: 8px; border-bottom: 1px solid var(--line-soft); background: var(--brand-soft); }
+.issuedLink label { display: grid; gap: 5px; }
+.issuedLink label span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.issuedLink input { width: 100%; min-height: 42px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-size: 11px; }
+.issuedLink > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.issuedLink small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.shareLinkHistory { display: grid; }
+.shareLinkHistory article { padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.shareLinkHistory article > div { display: grid; gap: 3px; }
+.shareLinkHistory strong { font-size: 11px; }
+.shareLinkHistory span, .shareLinkHistory small { color: var(--muted); font-size: 10px; }
 .buildPanel, .releasePanel { display: grid; }
 .economicsFields { padding: 10px 14px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .economicsFields label { display: grid; gap: 5px; }
@@ -136,6 +153,8 @@
   .evidenceGroups > section, .summaryGrid label { border-right: 0; }
   .summaryGrid label { border-bottom: 1px solid var(--line-soft); }
   .summaryGrid button, .buildPanel > button, .releasePanel > button, .versionList article > button, .dialogActions button { min-height: 44px; }
+  .shareLinkActions, .shareLinkHistory article { align-items: stretch; flex-direction: column; }
+  .shareLinkActions button, .shareLinkHistory button { width: 100%; }
 }
 
 @media (max-width: 520px) {

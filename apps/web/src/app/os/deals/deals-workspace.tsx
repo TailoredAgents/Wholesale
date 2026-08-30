@@ -29,7 +29,7 @@ import styles from "./deals.module.css";
 
 type DealTab = "summary" | "contract" | "closing" | "documents" | "parties" | "disposition" | "finance" | "timeline";
 type DealView = "all" | "closing-exceptions" | "ready-for-disposition" | "buyer-needed" | "finance-review" | "completed" | "disposition";
-type DispositionTab = "package" | "buyers" | "outreach" | "offers" | "provider" | "reconciliation";
+type DispositionTab = "package" | "buyers" | "execution" | "outreach" | "offers" | "provider" | "reconciliation";
 type Display = "queue" | "table" | "board";
 
 const views: Array<{ key: DealView; label: string }> = [
@@ -141,7 +141,7 @@ export function DealsWorkspace({
   const view = views.some((item) => item.key === initialView) ? initialView as DealView : "all";
   const display = ["queue", "table", "board"].includes(initialDisplay ?? "") ? initialDisplay as Display : "queue";
   const tab = tabs.some((item) => item.key === initialTab) ? initialTab as DealTab : "summary";
-  const requestedDispositionTab = (["package", "buyers", "outreach", "offers", "provider", "reconciliation"] as DispositionTab[]).includes(initialDispositionTab as DispositionTab)
+  const requestedDispositionTab = (["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as DispositionTab[]).includes(initialDispositionTab as DispositionTab)
     ? initialDispositionTab as DispositionTab
     : "package";
   const dispositionTab = requestedDispositionTab === "outreach" && !canViewOutreach

@@ -47,6 +47,12 @@ from tests.test_dispositions import (
 
 OWNER_EMAIL = "owner@example.com"
 HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
+CANONICAL_EVIDENCE_CHECKLIST_KEYS = {
+    "open_title",
+    "seller_documents",
+    "due_diligence",
+    "closing_confirmed",
+}
 
 
 def pdf_page_streams(content: bytes) -> bytes:
@@ -255,6 +261,45 @@ def esign_send_payload() -> dict[str, object]:
     }
 
 
+def test_canonical_checklist_completion_requires_supporting_evidence(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id = setup_transaction(db_session, client)
+    detail = client.get(f"/api/v1/transactions/{transaction_id}", headers=HEADERS)
+    assert detail.status_code == 200, detail.text
+
+    completed_with_evidence: set[str] = set()
+    for item in detail.json()["checklist"]:
+        item_key = item["item_key"]
+        endpoint = f"/api/v1/transactions/{transaction_id}/checklist/{item['id']}"
+        if item_key in CANONICAL_EVIDENCE_CHECKLIST_KEYS:
+            missing = client.patch(endpoint, headers=HEADERS, json={"status": "complete"})
+            assert missing.status_code == 422, missing.text
+            assert "supporting evidence note" in missing.json()["detail"]
+            payload = {
+                "status": "complete",
+                "evidence_notes": f"  Verified support for {item_key} in the closing file.  ",
+            }
+            completed_with_evidence.add(item_key)
+        else:
+            payload = {"status": "complete"}
+
+        completed = client.patch(endpoint, headers=HEADERS, json=payload)
+        assert completed.status_code == 200, completed.text
+        saved_item = next(
+            saved for saved in completed.json()["checklist"] if saved["id"] == item["id"]
+        )
+        assert saved_item["status"] == "complete"
+        if item_key in CANONICAL_EVIDENCE_CHECKLIST_KEYS:
+            assert saved_item["evidence_notes"] == (
+                f"Verified support for {item_key} in the closing file."
+            )
+
+    assert completed_with_evidence == CANONICAL_EVIDENCE_CHECKLIST_KEYS
+
+
 def setup_governed_assignment_selection(
     db: Session,
     client: TestClient,
@@ -352,8 +397,15 @@ def setup_governed_assignment_selection(
 
 
 def test_contract_approval_execution_and_funding_gates(
-    db_session: Session, api_db_override: None
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
 ) -> None:
+    handoff_calls: list[UUID] = []
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, transaction: handoff_calls.append(transaction.id),
+    )
     client = TestClient(app)
     lead_id, transaction_id = setup_transaction(db_session, client)
     overview = client.get("/api/v1/transactions", headers=HEADERS)
@@ -419,6 +471,7 @@ def test_contract_approval_execution_and_funding_gates(
         },
     )
     assert executed.status_code == 200
+    assert handoff_calls == [UUID(transaction_id)]
     assert (
         client.get(f"/api/v1/leads/{lead_id}", headers=HEADERS).json()["stage_key"]
         == "under_contract"
@@ -432,10 +485,15 @@ def test_contract_approval_execution_and_funding_gates(
     assert blocked.status_code == 422
     detail = client.get(f"/api/v1/transactions/{transaction_id}", headers=HEADERS).json()
     for item in detail["checklist"]:
+        completion_payload: dict[str, object] = {"status": "complete"}
+        if item["item_key"] in CANONICAL_EVIDENCE_CHECKLIST_KEYS:
+            completion_payload["evidence_notes"] = (
+                f"Verified {item['item_key']} against the transaction closing file."
+            )
         response = client.patch(
             f"/api/v1/transactions/{transaction_id}/checklist/{item['id']}",
             headers=HEADERS,
-            json={"status": "complete"},
+            json=completion_payload,
         )
         assert response.status_code == 200
     funding = client.post(
@@ -2238,6 +2296,11 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     api_db_override: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
+    handoff_calls: list[UUID] = []
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, transaction: handoff_calls.append(transaction.id),
+    )
     monkeypatch.setenv("ESIGN_PROVIDER", "simulate")
     monkeypatch.setenv("ESIGN_SIGNWELL_WEBHOOK_ID", "test-signwell-webhook-id")
     monkeypatch.setenv("ESIGN_TEST_MODE", "true")
@@ -2382,6 +2445,7 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     )
     assert completed.status_code == 200, completed.text
     assert duplicate.status_code == 200
+    assert handoff_calls == [UUID(transaction_id)]
     detail = client.get(
         f"/api/v1/transactions/{transaction_id}",
         headers=HEADERS,

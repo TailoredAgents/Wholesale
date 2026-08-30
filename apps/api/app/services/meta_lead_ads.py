@@ -34,6 +34,10 @@ from app.schemas.staff_lead_alerts import (
 )
 from app.schemas.zapier import ZapierFacebookLeadCreate
 from app.services.communication_compliance import format_e164
+from app.services.disposition_handoff import (
+    PACKAGE_READY_ALERT_SOURCE_TYPE,
+    revalidate_disposition_package_ready_alert,
+)
 from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES, lock_organization_lead
 from app.services.property_validation import (
     PropertyRecordClient,
@@ -594,6 +598,25 @@ def process_next_staff_lead_alert(
     )
     if alert is None:
         return None
+    if (
+        alert.source_type == PACKAGE_READY_ALERT_SOURCE_TYPE
+        and not revalidate_disposition_package_ready_alert(db, alert, now=now)
+    ):
+        db.commit()
+        logger.warning(
+            "disposition_package_ready_alert_revalidation_blocked",
+            alert_id=str(alert.id),
+            source_event_id=str(alert.source_event_id),
+            recipient_user_id=str(alert.recipient_user_id),
+            status=alert.status,
+            next_attempt_at=(
+                alert.next_attempt_at.isoformat()
+                if alert.next_attempt_at is not None
+                else None
+            ),
+            reason=alert.last_error,
+        )
+        return alert.id
     alert.attempt_count += 1
     alert.last_attempt_at = now
     alert.next_attempt_at = None

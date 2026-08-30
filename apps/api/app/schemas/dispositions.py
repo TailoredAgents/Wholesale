@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -293,6 +293,46 @@ class DispositionPackageWorkspaceRead(BaseModel):
     versions: list[DispositionPackageVersionRead]
 
 
+class DispositionPackageShareLinkCreate(BaseModel):
+    expires_in_hours: int = Field(default=72, ge=1, le=168)
+
+
+class DispositionPackageShareLinkRevoke(BaseModel):
+    expected_version: int = Field(ge=1)
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if len(normalized) < 3:
+            raise ValueError("Revocation reason must contain at least 3 characters.")
+        return normalized
+
+
+class DispositionPackageShareLinkRead(BaseModel):
+    id: UUID
+    disposition_case_id: UUID
+    package_version_id: UUID
+    package_version_number: int
+    token_hint: str
+    artifact_sha256: str
+    lock_version: int
+    status: Literal["active", "expired", "revoked", "artifact_unavailable"]
+    expires_at: datetime
+    revoked_at: datetime | None
+    revocation_reason: str | None
+    access_count: int
+    first_accessed_at: datetime | None
+    last_accessed_at: datetime | None
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class DispositionPackageShareLinkIssuedRead(DispositionPackageShareLinkRead):
+    share_url: str
+
+
 BuyerPoolSourceFilter = Literal["all", "mine", "network", "external"]
 BuyerPoolDecision = Literal["undecided", "shortlisted", "passed"]
 BuyerPoolLifecycleStage = Literal[
@@ -319,6 +359,16 @@ class BuyerPoolRunRead(BaseModel):
     status: str
     source_counts: dict[str, int]
     generated_at: datetime
+
+
+class BuyerPurchaseEvidenceRead(BaseModel):
+    provider_property_id: str | None
+    address: str
+    purchase_date: date | None
+    purchase_price_cents: int | None
+    property_types: list[str]
+    distance_miles: float | None
+    distance_basis: Literal["saved_provider_coordinates"] | None
 
 
 class BuyerPoolEntryRead(BaseModel):
@@ -357,6 +407,7 @@ class BuyerPoolEntryRead(BaseModel):
     relationship_status: str | None
     tier: str | None
     temperature: str | None
+    purchase_evidence: list[BuyerPurchaseEvidenceRead] = Field(default_factory=list)
 
 
 class BuyerPoolRead(BaseModel):
