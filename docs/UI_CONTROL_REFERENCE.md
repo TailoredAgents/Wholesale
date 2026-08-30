@@ -1560,6 +1560,25 @@ No Copilot control sends, publishes, releases, applies, selects, accepts an offe
 changes economics, releases a contract, or marks funding. Perform an authorized action separately
 through the package, Outreach, InvestorLift, Offer Room, Transaction, or Finance workflow.
 
+### Disposition Performance
+
+Open **Deals > Disposition > Performance** for the read-only DS10 House disposition report.
+
+| Control | Effect | Boundary |
+| --- | --- | --- |
+| **Start date** / **End date** | Limits the evidence window | Dates filter retained evidence; they do not alter record timestamps |
+| **Deals**, **Buyers**, **Agents**, **Sources**, **Markets**, **Asset classes** | Narrows the report to a selected saved dimension | Missing or ambiguous attribution remains unknown |
+| **Apply filters** | Reloads the report with the selected filter intersection | Read-only; no workflow record changes |
+| **Clear filters** | Returns to the full authorized report scope | Does not clear or delete saved evidence |
+| Metric definition / provenance disclosure | Shows the canonical sources and definition supporting a metric | Use the source workflow to correct data; the report has no edit control |
+
+**Known**, **Partial**, and **Unavailable** are evidence states. Unavailable is not zero. Activity
+counts remain separate from selected, deposited, funded, and approved reconciled outcomes. Private
+economics show **Restricted** without the applicable financial permission, and campaign-cost
+measures stay unavailable without attributable cost evidence. The report cannot send outreach,
+select a Buyer, record an outcome, fund a transaction, post finance, or rewrite historical
+attribution.
+
 ### Governed Outreach
 
 The **Outreach** view is available only for the current House disposition workflow and buyers in

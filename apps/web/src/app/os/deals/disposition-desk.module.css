@@ -128,7 +128,7 @@
 .viewTabs {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
   overflow-x: auto;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -262,7 +262,7 @@
   .scopeControl a { flex: 1; min-height: 44px; }
   .healthBanner { grid-template-columns: 1fr; }
   .healthBanner p { grid-column: auto; }
-  .viewTabs { grid-template-columns: repeat(6, minmax(130px, 1fr)); }
+  .viewTabs { grid-template-columns: repeat(7, minmax(130px, 1fr)); }
   .workHeader { flex-direction: column; }
   .owner { width: 100%; flex-basis: auto; }
   .workFacts { grid-template-columns: 1fr; }

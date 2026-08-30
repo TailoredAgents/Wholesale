@@ -1725,6 +1725,22 @@ in every scored quality domain, and all authority, citation, quality, traceabili
 scenario-coverage gates in `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` pass. Ignored drafts are
 reported but excluded from the measured sample.
 
+### 16.6 DS10 Disposition Management Intelligence Boundary
+
+DS10 adds a read-only management view derived from Stonegate's canonical House disposition
+records. Activity such as outreach, replies, inquiries, and offers remains separate from selected,
+deposited, funded, and approved reconciled outcomes. Missing or conflicting evidence remains
+visible instead of being converted into a favorable result, and every rate retains its underlying
+sample and denominator.
+
+The dashboard is not a new transaction or finance ledger and cannot mutate a Buyer, package,
+campaign, provider record, offer, selection, outcome, transaction, reconciliation, communication,
+or financial record. It does not yet provide attributable disposition campaign costs, a frozen
+correction-capable winning-source decision, complete split-credit agent attribution, Land
+disposition intelligence, or causal claims about human-led versus AI-assisted performance. The
+exact evidence and acceptance contract is maintained in
+`DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md`.
+
 ## 17. Background Processing And Reliability
 
 The deployed API worker handles recurring operational jobs such as:

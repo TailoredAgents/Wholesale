@@ -1,15 +1,17 @@
 import {
   getDealOverview,
   getDispositionDesk,
+  getDispositionIntelligence,
   getDispositionOverview,
   getTransactionOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
-import type { DispositionDeskCategory } from "../../lib/api";
+import type { DispositionDeskCategory, DispositionIntelligenceQuery } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { StatusBadge } from "../_components/design-system";
 import { DealsWorkspace } from "./deals-workspace";
 import { DispositionDeskWorkspace } from "./disposition-desk-workspace";
+import { DispositionIntelligenceWorkspace } from "./disposition-intelligence-workspace";
 import styles from "./deals.module.css";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +21,18 @@ export default async function DealsPage({
 }: {
   searchParams: Promise<{
     deal?: string;
+    deal_id?: string;
     desk?: string;
     deskPage?: string;
     display?: string;
     dispositionTab?: string;
+    buyer_id?: string;
+    agent_user_id?: string;
+    source?: string;
+    market?: string;
+    asset_class?: string;
+    start_at?: string;
+    end_at?: string;
     scope?: string;
     tab?: string;
     view?: string;
@@ -32,6 +42,45 @@ export default async function DealsPage({
   const dispositionScope = params.scope === "team" ? "team" : "mine";
 
   if (params.view === "disposition") {
+    if (params.desk === "performance") {
+      const intelligenceFilters: DispositionIntelligenceQuery = {
+        deal_id: params.deal_id,
+        buyer_id: params.buyer_id,
+        agent_user_id: params.agent_user_id,
+        source: params.source,
+        market: params.market,
+        asset_class: params.asset_class,
+        start_at: params.start_at,
+        end_at: params.end_at,
+      };
+      const intelligenceResult = await getDispositionIntelligence(intelligenceFilters);
+      const intelligenceState = intelligenceResult.intelligence?.data_state;
+      const intelligenceStatus = !intelligenceResult.apiConnected
+        ? { label: "Performance unavailable", tone: "danger" as const }
+        : intelligenceState === "partial"
+          ? { label: "Performance evidence partial", tone: "warning" as const }
+          : intelligenceState === "unavailable"
+            ? { label: "No performance evidence", tone: "danger" as const }
+            : { label: "Performance evidence current", tone: "success" as const };
+
+      return (
+        <WorkspacePage>
+          <PageHeader
+            description="Understand completed disposition outcomes, buyer reliability, cycle time, source performance, and correction signals."
+            eyebrow="Operations / disposition intelligence"
+            meta={<StatusBadge tone={intelligenceStatus.tone}>{intelligenceStatus.label}</StatusBadge>}
+            title="Deals"
+          />
+          <DispositionIntelligenceWorkspace
+            apiConnected={intelligenceResult.apiConnected}
+            data={intelligenceResult.intelligence}
+            errorMessage={intelligenceResult.errorMessage}
+            filters={intelligenceFilters}
+          />
+        </WorkspacePage>
+      );
+    }
+
     const deskCategories = new Set<DispositionDeskCategory>([
       "today",
       "active_deals",

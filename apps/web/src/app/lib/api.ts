@@ -3744,6 +3744,178 @@ export type DispositionDeskOverview = {
   };
 };
 
+export type DispositionIntelligenceState =
+  | "known"
+  | "partial"
+  | "unavailable";
+
+export type DispositionIntelligenceDataState = DispositionIntelligenceState;
+
+export type DispositionIntelligenceQuery = {
+  deal_id?: string;
+  buyer_id?: string;
+  agent_user_id?: string;
+  source?: string;
+  market?: string;
+  asset_class?: string;
+  start_at?: string;
+  end_at?: string;
+};
+
+export type DispositionIntelligenceFilterOption = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+export type DispositionIntelligenceQualitySignal = {
+  key: string;
+  label: string;
+  state: DispositionIntelligenceState;
+  detail: string;
+  record_count: number;
+};
+
+export type DispositionIntelligenceMilestone = {
+  key: string;
+  label: string;
+  state: DispositionIntelligenceState;
+  count: number;
+  median_hours: number | null;
+  p90_hours: number | null;
+};
+
+export type DispositionIntelligenceRate = {
+  key: string;
+  label: string;
+  state: DispositionIntelligenceState;
+  numerator: number;
+  denominator: number;
+  rate_percent: number | null;
+};
+
+export type DispositionIntelligenceSourceRow = {
+  key: string;
+  label: string;
+  category: string;
+  state: DispositionIntelligenceState;
+  activity_count: number;
+  offers: number;
+  selected_buyers: number;
+  completed_assignments: number;
+  collected_revenue_cents: number | null;
+};
+
+export type DispositionIntelligenceBuyerRow = {
+  buyer_id: string;
+  name: string;
+  state: DispositionIntelligenceState;
+  replies: number;
+  showings: number;
+  offers: number;
+  selections: number;
+  completed_assignments: number;
+  fallouts: number;
+  retrades: number;
+  reliability_score_basis_points: number | null;
+  provenance: string;
+};
+
+export type DispositionIntelligenceAgentRow = {
+  user_id: string;
+  name: string;
+  state: DispositionIntelligenceState;
+  role: string;
+  packages_approved: number;
+  outreach_sent: number;
+  replies_reviewed: number;
+  selections_approved: number;
+  outcomes_recorded: number;
+  completed_assignments: number;
+};
+
+export type DispositionIntelligenceProvenance = {
+  metric_key: string;
+  state: DispositionIntelligenceState;
+  canonical_sources: string[];
+  definition: string;
+};
+
+export type DispositionIntelligenceResponse = {
+  generated_at: string;
+  scope: {
+    start_at: string | null;
+    end_at: string | null;
+    filters_applied: {
+      deal_id: string | null;
+      buyer_id: string | null;
+      agent_user_id: string | null;
+      source: string | null;
+      market: string | null;
+      asset_class: string | null;
+      start_at: string | null;
+      end_at: string | null;
+    };
+  };
+  access: {
+    private_economics_visible: boolean;
+  };
+  data_state: DispositionIntelligenceDataState;
+  data_quality: DispositionIntelligenceQualitySignal[];
+  activity: {
+    cases: number;
+    packages_approved: number;
+    outreach_sent: number;
+    replies: number;
+    inquiries: number;
+    showings: number;
+    offers: number;
+    selected_buyers: number;
+    deposits: number;
+  };
+  economics: {
+    state: DispositionIntelligenceState;
+    completed_assignments: number;
+    reconciled_completed_assignments: number;
+    contracted_assignment_spread_cents: number | null;
+    collected_revenue_cents: number | null;
+    approved_company_profit_cents: number | null;
+    campaign_cost_cents: number | null;
+    cost_per_offer_cents: number | null;
+    cost_per_selected_buyer_cents: number | null;
+    cost_per_completed_assignment_cents: number | null;
+    detail: string;
+  };
+  milestones: DispositionIntelligenceMilestone[];
+  rates: DispositionIntelligenceRate[];
+  sources: DispositionIntelligenceSourceRow[];
+  buyers: DispositionIntelligenceBuyerRow[];
+  agents: DispositionIntelligenceAgentRow[];
+  learning: {
+    state: DispositionIntelligenceState;
+    human_led_count: number;
+    ai_assisted_count: number;
+    minimum_comparison_sample: number;
+    comparison_allowed: boolean;
+    notice: string;
+    corrections: {
+      package_revisions: number;
+      match_overrides: number;
+      ai_corrections: number;
+      backup_buyer_saves: number;
+    };
+  };
+  provenance: DispositionIntelligenceProvenance[];
+  filter_options: {
+    deals: DispositionIntelligenceFilterOption[];
+    buyers: DispositionIntelligenceFilterOption[];
+    agents: DispositionIntelligenceFilterOption[];
+    sources: DispositionIntelligenceFilterOption[];
+    markets: DispositionIntelligenceFilterOption[];
+    asset_classes: DispositionIntelligenceFilterOption[];
+  };
+};
+
 export type DispositionCopilotCitation = {
   citation_id: string;
   source_type: "case_snapshot" | "package_version" | "buyer_pool_entry" |
@@ -7337,6 +7509,61 @@ export async function getDispositionDesk(
       apiConnected: false,
       errorMessage: error instanceof Error ? error.message : "Disposition desk request failed.",
       isStale: false,
+    };
+  }
+}
+
+function dispositionIntelligenceTimestamp(value: string, boundary: "start" | "end") {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return boundary === "start"
+    ? `${value}T00:00:00Z`
+    : `${value}T23:59:59.999Z`;
+}
+
+export async function getDispositionIntelligence(
+  filters: DispositionIntelligenceQuery = {},
+): Promise<{
+  intelligence: DispositionIntelligenceResponse | null;
+  apiConnected: boolean;
+  errorMessage: string | null;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const query = new URLSearchParams();
+    const scalarKeys: Array<keyof Omit<DispositionIntelligenceQuery, "start_at" | "end_at">> = [
+      "deal_id",
+      "buyer_id",
+      "agent_user_id",
+      "source",
+      "market",
+      "asset_class",
+    ];
+    for (const key of scalarKeys) {
+      const value = filters[key]?.trim();
+      if (value) query.set(key, value);
+    }
+    if (filters.start_at?.trim()) {
+      query.set("start_at", dispositionIntelligenceTimestamp(filters.start_at.trim(), "start"));
+    }
+    if (filters.end_at?.trim()) {
+      query.set("end_at", dispositionIntelligenceTimestamp(filters.end_at.trim(), "end"));
+    }
+    const suffix = query.size ? `?${query.toString()}` : "";
+    const response = await fetch(`${apiBaseUrl}/api/v1/dispositions/intelligence${suffix}`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      intelligence: (await response.json()) as DispositionIntelligenceResponse,
+      apiConnected: true,
+      errorMessage: null,
+    };
+  } catch (error) {
+    return {
+      intelligence: null,
+      apiConnected: false,
+      errorMessage: error instanceof Error ? error.message : "Disposition intelligence request failed.",
     };
   }
 }

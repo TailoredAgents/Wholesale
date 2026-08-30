@@ -313,6 +313,10 @@ export function DispositionDeskWorkspace({
             <strong>{data.metrics[metricKeys[item.key]]}</strong>
           </Link>
         ))}
+        <Link className={styles.viewTab} href="/os/deals?view=disposition&desk=performance">
+          <span>Performance</span>
+          <strong>View</strong>
+        </Link>
       </nav>
 
       <div className={styles.dashboardGrid}>

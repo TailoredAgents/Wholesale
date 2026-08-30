@@ -3,7 +3,8 @@
 Last updated: August 29, 2026
 
 > **Current status: DS0-DS8 complete; the DS9 repository implementation is complete but its
-> measured pilot is NOT MET; live InvestorLift transport and DS10-DS12 remain pending.** Stonegate now has the audited,
+> measured pilot is NOT MET; the DS10 derived House management dashboard is implemented; live
+> InvestorLift transport, expanded DS10 attribution/cost controls, and DS11-DS12 remain pending.** Stonegate now has the audited,
 > provider-independent Buyer Network foundation described in DS1 and the role-scoped Disposition
 > Desk described in DS2, plus the buyer profiles, independently versioned House and Land buy boxes,
 > relationship follow-ups, reusable proof review, and asset-safe House matching described in DS3.
@@ -24,8 +25,10 @@ Last updated: August 29, 2026
 > disconnect controls. DS9 adds a citation-gated, House-only, draft-only daily Copilot with four-way
 > human review, immutable trace evidence, and explicit evaluation gates. Its production pilot has
 > not met the required 50 decisive reviews across 10 cases. No direct InvestorLift API is claimed or
-> enabled because its transport contract remains unverified. Land outreach and DS10-DS12 remain
-> plans. DS6
+> enabled because its transport contract remains unverified. DS10 adds a read-only management view
+> derived from canonical House disposition evidence while explicitly leaving campaign-cost,
+> correction-capable attribution, and causal performance claims pending. Land outreach and
+> DS11-DS12 remain plans. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
 ## 1. Purpose And Authority
@@ -846,32 +849,51 @@ binding authority.
 
 ## DS10 - Management Intelligence And Learning
 
-**Status: Planned.**
+**Status: Repository implementation complete for the derived House dashboard; production
+reconciliation and expanded attribution/cost controls remain pending.**
 
 ### Goal
 
 Measure whether the system and disposition specialist improve completed assignments rather than
 merely increasing messages or nominal offers.
 
-### Work
+### Delivered Repository Scope
 
-- Measure time from executed contract to package approval, first outreach, first inquiry, first
-  offer, buyer selection, deposit, and close.
-- Compare agent-owned, Stonegate-network, InvestorLift, and other provider sources.
-- Measure assignment spread, campaign cost, cost per offer, cost per selected buyer, and cost per
+- Derive milestone and funnel observations from existing canonical House disposition records rather
+  than copying results into a competing reporting ledger.
+- Keep outreach, reply, inquiry, and offer activity separate from buyer selection, deposit, funded
+  close, and approved reconciled economics.
+- Derive buyer reliability context from documented Offer Room outcomes and retained cause evidence.
+- Preserve unknown and incomplete source, agent, milestone, and economic evidence rather than
+  silently filling gaps.
+- Keep the dashboard read-only, organization-scoped, and subject to the existing disposition and
+  financial permission boundaries.
+- Publish the exact evidence and acceptance boundary in
+  `DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md`.
+
+### Remaining Work
+
+- Add a disposition campaign-cost ledger before calculating cost per offer, selected buyer, or
   completed assignment.
-- Measure buyer reply, showing, offer, deposit, closing, retrade, and fallout rates.
-- Measure package corrections, match overrides, AI corrections, and backup-buyer saves.
-- Build buyer reliability from documented behavior rather than subjective labels alone.
-- Separate human-led and AI-assisted outcomes without claiming causation from small samples.
-- Provide deal, buyer, agent, source, market, asset, and time filters.
+- Add a frozen, correction-capable winning-source decision instead of relying on mutable Buyer
+  source context or ambiguous multi-source links.
+- Add append-only management corrections and full split-credit agent attribution.
+- Add a frozen historical market dimension and canonical cross-provider showing semantics.
+- Validate human-led versus AI-assisted comparisons with sufficient production samples; do not
+  claim causation from operating mode or small samples.
+- Implement and accept a separate Land disposition workflow before adding Land intelligence.
 
 ### Exit Criteria
 
-- Management can identify which source produced the winning buyer and completed assignment.
-- Vanity metrics remain separate from completed economic outcomes.
-- Reliability and agent metrics are explainable and correction-capable.
-- Reports reconcile to canonical deal and finance records.
+- **Met in repository:** activity metrics remain separate from completed economic outcomes.
+- **Met in repository:** displayed House milestones and outcomes are derived from canonical
+  disposition, transaction, and approved-reconciliation evidence, with incomplete evidence visible.
+- **Met in repository:** the dashboard is read-only and does not mutate operational or financial
+  records.
+- **Partially met:** source and agent context is explainable where the retained evidence is
+  unambiguous, but frozen attribution and append-only correction controls are not implemented.
+- **Not met:** attributable campaign cost, cost-per-outcome reporting, Land intelligence, and
+  production-validated causal comparisons.
 
 ## DS11 - Optional CSV Buyer Migration
 
@@ -1029,7 +1051,7 @@ Quality and safety measures:
 | DS7 | Offer Room And Closing Protection | Complete for current House disposition workflow |
 | DS8 | InvestorLift Provider Adapter | Provider-neutral/manual foundation complete; live transport blocked pending provider verification |
 | DS9 | Governed Disposition Copilot | Repository implementation complete; measured pilot NOT MET pending 50 decisive reviews across 10 cases and every quality/safety gate |
-| DS10 | Management Intelligence And Learning | Planned |
+| DS10 | Management Intelligence And Learning | Derived canonical House dashboard implemented; production reconciliation and expanded attribution/cost/correction controls pending |
 | DS11 | Optional CSV Buyer Migration | Planned after manual acceptance |
 | DS12 | Supervised Production Pilot And Acceptance | Planned |
 
@@ -1061,7 +1083,9 @@ explainable House deal buyer pool, DS5 provides the evidence-backed, approval-ga
   their own asset-safe implementation before being described as live. A live DS8 adapter follows
   only after InvestorLift supplies a verified integration contract and the bounded acceptance gate
   passes. DS9 now makes the Copilot technically measurable and keeps the production pilot explicitly
-  **NOT MET**; DS10 will turn reviewed operating outcomes into broader management learning.
+  **NOT MET**. DS10 now provides a bounded, read-only House management view of retained operating
+  outcomes. It does not yet provide a disposition campaign-cost ledger, frozen correction-capable
+  attribution, Land intelligence, or causal performance claims.
 DS11 remains a future efficiency feature because the immediate migration is expected to be mostly
 manual. DS12 is the formal production-acceptance gate, while relevant parts of the current deal may
 be used as supervised evidence throughout the build.

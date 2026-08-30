@@ -14,6 +14,7 @@ from app.schemas.disposition_desk import (
     DispositionDeskRead,
     DispositionDeskScope,
 )
+from app.schemas.disposition_intelligence import DispositionIntelligenceResponse
 from app.schemas.disposition_offer_room import (
     BuyerOutcomeCreate,
     ClosingCheckpointCreate,
@@ -71,6 +72,7 @@ from app.schemas.dispositions import (
 from app.services import (
     disposition_buyer_pool,
     disposition_desk,
+    disposition_intelligence,
     disposition_offer_room,
     disposition_outreach,
     disposition_packages,
@@ -138,6 +140,38 @@ def read_overview(
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> DispositionOverview:
     return dispositions.overview(db, principal)
+
+
+@router.get("/intelligence")
+def read_disposition_intelligence(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+    response: Response,
+    deal_id: Annotated[UUID | None, Query()] = None,
+    buyer_id: Annotated[UUID | None, Query()] = None,
+    agent_user_id: Annotated[UUID | None, Query()] = None,
+    source: Annotated[str | None, Query(max_length=120)] = None,
+    market: Annotated[str | None, Query(max_length=120)] = None,
+    asset_class: Annotated[str | None, Query(max_length=40)] = None,
+    start_at: Annotated[datetime | None, Query()] = None,
+    end_at: Annotated[datetime | None, Query()] = None,
+) -> DispositionIntelligenceResponse:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return disposition_intelligence.read_disposition_intelligence(
+            db,
+            principal,
+            deal_id=deal_id,
+            buyer_id=buyer_id,
+            agent_user_id=agent_user_id,
+            source=source,
+            market=market,
+            asset_class=asset_class,
+            start_at=start_at,
+            end_at=end_at,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
 
 
 @router.get("/desk")

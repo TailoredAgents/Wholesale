@@ -23,6 +23,7 @@ from app.models.foundation import (
     CompensationPlanVersion,
     DealDeduction,
     DealReconciliation,
+    DispositionBuyerOutcome,
     DispositionBuyerPoolCandidate,
     DispositionBuyerPoolEntry,
     DispositionBuyerPoolRun,
@@ -3064,3 +3065,255 @@ def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidat
     )
     assert campaign is not None
     assert campaign.recipient_count == 1
+
+
+def _complete_case_for_disposition_intelligence(
+    db: Session,
+    client: TestClient,
+) -> tuple[str, str, str]:
+    lead_id, transaction_id, buyer_id = setup_case_foundation(db, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    offer = record_offer_room_offer(
+        client,
+        case_id,
+        buyer_id,
+        amount_cents=19000000,
+        proof_document_id=None,
+        idempotency_key="ds10-canonical-offer",
+    )
+    owner = db.scalar(select(User).where(User.email == OWNER_EMAIL))
+    case = db.get(DispositionCase, UUID(case_id))
+    transaction = db.get(Transaction, UUID(transaction_id))
+    assert owner is not None and case is not None and transaction is not None
+    now = datetime.now(UTC).replace(microsecond=0)
+    transaction.status = "funded"
+    transaction.contract_executed_at = now - timedelta(days=10)
+    transaction.funded_at = now
+    transaction.closed_at = now
+    transaction.assignment_fee_cents = 4000000
+    db.add(
+        DispositionBuyerOutcome(
+            organization_id=case.organization_id,
+            disposition_case_id=case.id,
+            selection_id=None,
+            offer_id=UUID(offer["id"]),
+            buyer_id=UUID(buyer_id),
+            recorded_by_user_id=owner.id,
+            outcome_type="completed_close",
+            cause_category="completed",
+            reason="Canonical funded assignment completed for DS10 verification.",
+            details="Synthetic management-intelligence fixture.",
+            evidence_snapshot={"fixture": "ds10_completed_assignment"},
+            occurred_at=now,
+            history_applied_at=now,
+            completed_delta=1,
+            failed_delta=0,
+            reliability_delta_basis_points=100,
+            idempotency_key="ds10-completed-close",
+        )
+    )
+    db.add(
+        DealReconciliation(
+            organization_id=case.organization_id,
+            transaction_id=case.transaction_id,
+            disposition_case_id=case.id,
+            compensation_plan_version_id=case.compensation_plan_version_id,
+            disposition_operating_mode_id=case.disposition_operating_mode_id,
+            created_by_user_id=owner.id,
+            approved_by_user_id=owner.id,
+            status="approved",
+            gross_revenue_cents=4000000,
+            acquisition_reserve_cents=250000,
+            deal_deductions_cents=250000,
+            adjusted_deal_margin_cents=3500000,
+            total_compensation_cents=500000,
+            company_profit_cents=3000000,
+            company_margin_basis_points=7500,
+            target_margin_basis_points=3000,
+            snapshot={"fixture": "ds10_approved_reconciliation"},
+            approved_at=now,
+            notes="Approved synthetic reconciliation for DS10 verification.",
+        )
+    )
+    db.add(
+        RevenueRecord(
+            organization_id=case.organization_id,
+            lead_id=UUID(lead_id),
+            deal_id=case.deal_id,
+            transaction_id=case.transaction_id,
+            source="assignment_fee",
+            status="collected",
+            amount_cents=4000000,
+            received_at=now,
+            notes="Collected synthetic assignment revenue for DS10 verification.",
+        )
+    )
+    db.commit()
+    return case_id, str(case.deal_id), buyer_id
+
+
+def test_disposition_intelligence_empty_report_and_invalid_window(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/v1/dispositions/intelligence", headers=HEADERS)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["data_state"] == "unavailable"
+    assert payload["access"]["private_economics_visible"] is True
+    assert payload["activity"] == {
+        "cases": 0,
+        "packages_approved": 0,
+        "outreach_sent": 0,
+        "replies": 0,
+        "inquiries": 0,
+        "showings": 0,
+        "offers": 0,
+        "selected_buyers": 0,
+        "deposits": 0,
+    }
+    assert payload["economics"]["state"] == "unavailable"
+    assert payload["economics"]["completed_assignments"] == 0
+    assert payload["economics"]["campaign_cost_cents"] is None
+    assert all(payload["filter_options"][key] == [] for key in payload["filter_options"])
+    assert all(item["denominator"] == 0 for item in payload["rates"])
+
+    invalid = client.get(
+        "/api/v1/dispositions/intelligence",
+        headers=HEADERS,
+        params={
+            "start_at": "2026-08-30T00:00:00Z",
+            "end_at": "2026-08-01T00:00:00Z",
+        },
+    )
+    assert invalid.status_code == 422, invalid.text
+    assert "start_at must be on or before end_at" in invalid.json()["detail"]
+
+
+def test_disposition_intelligence_populated_canonical_assignment_and_filters(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, deal_id, buyer_id = _complete_case_for_disposition_intelligence(db_session, client)
+
+    response = client.get(
+        "/api/v1/dispositions/intelligence",
+        headers=HEADERS,
+        params={"deal_id": deal_id, "buyer_id": buyer_id, "asset_class": "house"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["data_state"] == "partial"
+    assert payload["activity"]["cases"] == 1
+    assert payload["activity"]["packages_approved"] == 1
+    assert payload["activity"]["offers"] == 1
+    assert payload["economics"]["state"] == "known"
+    assert payload["economics"]["completed_assignments"] == 1
+    assert payload["economics"]["reconciled_completed_assignments"] == 1
+    assert payload["economics"]["contracted_assignment_spread_cents"] == 4000000
+    assert payload["economics"]["collected_revenue_cents"] == 4000000
+    assert payload["economics"]["approved_company_profit_cents"] == 3000000
+    assert payload["economics"]["campaign_cost_cents"] is None
+    assert payload["scope"]["filters_applied"]["deal_id"] == deal_id
+    assert payload["scope"]["filters_applied"]["buyer_id"] == buyer_id
+    assert payload["scope"]["filters_applied"]["asset_class"] == "house"
+    assert payload["buyers"][0]["buyer_id"] == buyer_id
+    assert payload["buyers"][0]["completed_assignments"] == 1
+    assert any(item["completed_assignments"] == 1 for item in payload["sources"])
+    completed_provenance = next(
+        item for item in payload["provenance"] if item["metric_key"] == "completed_assignments"
+    )
+    assert completed_provenance["state"] == "known"
+    campaign_quality = next(
+        item for item in payload["data_quality"] if item["key"] == "campaign_cost"
+    )
+    assert campaign_quality["state"] == "unavailable"
+    assert any(option["value"] == deal_id for option in payload["filter_options"]["deals"])
+    assert any(option["value"] == buyer_id for option in payload["filter_options"]["buyers"])
+
+
+def test_disposition_intelligence_requires_deal_access_and_redacts_economics(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _complete_case_for_disposition_intelligence(db_session, client)
+    disposition_rep = add_user_with_role(
+        db_session,
+        email="ds10-disposition-rep@example.com",
+        display_name="DS10 Disposition Rep",
+        role_key="disposition_rep",
+    )
+    marketing_user = add_user_with_role(
+        db_session,
+        email="ds10-marketing@example.com",
+        display_name="DS10 Marketing",
+        role_key="marketing_manager",
+    )
+
+    restricted = client.get(
+        "/api/v1/dispositions/intelligence",
+        headers={"X-Dev-User-Email": disposition_rep.email},
+    )
+    assert restricted.status_code == 200, restricted.text
+    payload = restricted.json()
+    assert payload["access"]["private_economics_visible"] is False
+    assert payload["economics"]["completed_assignments"] == 1
+    for key in (
+        "contracted_assignment_spread_cents",
+        "collected_revenue_cents",
+        "approved_company_profit_cents",
+        "campaign_cost_cents",
+        "cost_per_offer_cents",
+        "cost_per_selected_buyer_cents",
+        "cost_per_completed_assignment_cents",
+    ):
+        assert payload["economics"][key] is None
+    assert all(item["collected_revenue_cents"] is None for item in payload["sources"])
+
+    forbidden = client.get(
+        "/api/v1/dispositions/intelligence",
+        headers={"X-Dev-User-Email": marketing_user.email},
+    )
+    assert forbidden.status_code == 403, forbidden.text
+    assert "deals:view" in forbidden.json()["detail"]
+
+
+def test_disposition_intelligence_is_organization_scoped(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, deal_id, buyer_id = _complete_case_for_disposition_intelligence(db_session, client)
+    other = bootstrap_foundation(
+        db_session,
+        organization_name="Other DS10 Organization",
+        admin_email="other-ds10-owner@example.com",
+        admin_name="Other DS10 Owner",
+    )
+    assert other.admin_user is not None
+
+    response = client.get(
+        "/api/v1/dispositions/intelligence",
+        headers={"X-Dev-User-Email": other.admin_user.email},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["data_state"] == "unavailable"
+    assert payload["activity"]["cases"] == 0
+    assert payload["economics"]["completed_assignments"] == 0
+    assert payload["buyers"] == []
+    assert payload["sources"] == []
+    assert payload["filter_options"]["deals"] == []
+    assert payload["filter_options"]["buyers"] == []
+    assert deal_id not in response.text
+    assert buyer_id not in response.text

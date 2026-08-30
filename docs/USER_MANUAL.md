@@ -2485,6 +2485,30 @@ every quality, citation, authority, traceability, and coverage gate in
 `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` passes. An organization-wide AI setting cannot change
 this boundary.
 
+### Disposition Performance
+
+Open **Deals**, choose the **Disposition** desk, then select **Performance**. This read-only report
+summarizes retained House disposition evidence; it does not change any deal or financial record.
+
+1. Start with **Outcome evidence**. Completed assignments and collected or approved economics are
+   different from replies, inquiries, offers, selections, or scheduled closings.
+2. Check the report's **Known**, **Partial**, or **Unavailable** state. Missing evidence is not the
+   same as zero.
+3. Use the date, Deal, Buyer, agent, source, market, and asset-class filters to narrow one report.
+   **Clear filters** restores the full authorized scope.
+4. Review milestone sample counts, median and 90th-percentile timing, and each rate's numerator and
+   denominator before drawing a conclusion.
+5. Use the source, Buyer, and agent tables as evidence-backed operating context. They are not a
+   compensation decision or proof that one person, channel, or AI workflow caused a close.
+6. Open **Definitions and provenance** when a metric is partial or disputed. Correct the canonical
+   source workflow; this report itself is intentionally read-only.
+
+Private assignment spread, revenue, profit, and cost values remain hidden without the applicable
+financial access. Campaign-cost metrics remain unavailable until Stonegate retains attributable
+disposition campaign cost. Unknown winning-source or agent evidence must remain unknown rather
+than being filled from current ownership or a mutable Buyer label. Land disposition intelligence is
+not active. See `DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md` for the complete boundary.
+
 **Prepare recipient pool** records which approved recipients may receive the exact approved package,
 including the observed identity and destination, as `prepared_not_sent`. It sends no messages.
 Governed delivery occurs only through a separately reviewed, approved, and released House

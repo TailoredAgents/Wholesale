@@ -307,6 +307,9 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
   to the current approved package, exact release approval and bundle download, manual property-link
   and status reconciliation, replay-safe staged inquiry/engagement/offer evidence, JSON/CSV export,
   and history-preserving disconnect
+- DS10 read-only House disposition management intelligence derived from canonical milestone,
+  activity, offer, selection, deposit, buyer-outcome, transaction, and approved-reconciliation
+  evidence, with activity separated from completed outcomes and incomplete evidence retained
 
 ### Current Provider Decision
 
@@ -348,6 +351,10 @@ establish production-provider acceptance.
     count toward the pilot samples.
     Keep the pilot **NOT MET** unless every threshold in
     `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` passes.
+11. Reconcile the DS10 dashboard against a manager-reviewed production sample before using it for
+    compensation or provider scaling. Do not claim attributable campaign cost, frozen winning
+    source, correction-capable agent credit, Land intelligence, or causal AI lift until the pending
+    requirements in `DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md` are implemented and accepted.
 
 ### Exit Criteria
 
