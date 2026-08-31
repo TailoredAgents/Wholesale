@@ -140,6 +140,7 @@ class VoiceSessionRead(BaseModel):
 
 class VoiceCallIntentCreate(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=120)
+    voice_line_id: UUID | None = None
 
 
 class VoiceCallIntentRead(BaseModel):
@@ -150,6 +151,34 @@ class VoiceCallIntentRead(BaseModel):
     status: str
     expires_at: datetime
     recording_enabled: bool
+
+
+class VoiceQuickDialCreate(BaseModel):
+    phone_number: str = Field(min_length=7, max_length=80)
+    contact_name: str | None = Field(default=None, max_length=255)
+    company_name: str | None = Field(default=None, max_length=255)
+    purpose: Literal[
+        "title_company",
+        "attorney",
+        "contractor",
+        "lender",
+        "investor",
+        "vendor",
+        "other",
+    ] = "other"
+    call_reason: str | None = Field(default=None, max_length=500)
+    voice_line_id: UUID | None = None
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class VoiceQuickDialRead(BaseModel):
+    conversation_id: UUID
+    contact_id: UUID
+    conversation_type: str
+    contact_name: str
+    reused_contact: bool
+    reused_conversation: bool
+    intent: VoiceCallIntentRead
 
 
 class VoiceRecordingRead(BaseModel):

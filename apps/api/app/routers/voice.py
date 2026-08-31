@@ -29,6 +29,8 @@ from app.schemas.voice import (
     VoiceLineRead,
     VoiceLineUserRead,
     VoiceProviderReadinessRead,
+    VoiceQuickDialCreate,
+    VoiceQuickDialRead,
     VoiceRecordingDelete,
     VoiceRecordingRead,
     VoiceSessionRead,
@@ -49,6 +51,8 @@ from app.services.voice import (
     VoiceConfigurationError,
     VoiceIntentConflictError,
     create_call_intent,
+    create_lead_call_intent,
+    create_quick_dial_intent,
     create_voice_line,
     create_voice_session,
     delete_recording,
@@ -69,9 +73,36 @@ call_dependency = require_any_permission(
     PermissionKeys.PLACE_CALLS,
     PermissionKeys.PLACE_ASSIGNED_CALLS,
 )
+quick_dial_dependency = require_permission(PermissionKeys.PLACE_CALLS)
 manage_lines_dependency = require_permission(PermissionKeys.MANAGE_VOICE_LINES)
 recording_dependency = require_permission(PermissionKeys.ACCESS_RECORDINGS)
 recording_management_dependency = require_permission(PermissionKeys.MANAGE_RECORDINGS)
+
+
+@router.post("/quick-dial", status_code=201)
+def create_quick_dial_call_intent(
+    payload: VoiceQuickDialCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(quick_dial_dependency)],
+) -> VoiceQuickDialRead:
+    try:
+        return create_quick_dial_intent(db, principal, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except VoiceConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("/session")
@@ -90,7 +121,13 @@ def create_conversation_call_intent(
     principal: Annotated[Principal, Depends(call_dependency)],
 ) -> VoiceCallIntentRead:
     try:
-        intent = create_call_intent(db, principal, conversation_id, payload)
+        intent = create_call_intent(
+            db,
+            principal,
+            conversation_id,
+            payload,
+            require_browser_voice=True,
+        )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -161,6 +198,36 @@ def create_forwarded_lead_call(
             detail=str(exc),
         ) from exc
     except (VoiceConfigurationError, TwilioVoiceCallError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if intent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return intent
+
+
+@router.post("/leads/{lead_id}/call-intents", status_code=201)
+def create_lead_browser_call_intent(
+    lead_id: UUID,
+    payload: VoiceCallIntentCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(call_dependency)],
+) -> VoiceCallIntentRead:
+    try:
+        intent = create_lead_call_intent(db, principal, lead_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except VoiceConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),

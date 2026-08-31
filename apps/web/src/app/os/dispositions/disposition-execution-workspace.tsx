@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Download,
+  Headphones,
   MessageSquareText,
   PhoneCall,
   RefreshCw,
@@ -11,17 +12,27 @@ import {
   SkipForward,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   DispositionExecutionShowing,
   DispositionExecutionWorkspace,
   DispositionPackageShareLinkIssued,
 } from "../../lib/api";
+import { useWebPhone } from "../_components/web-phone-provider";
 import { labelize } from "../os-utils";
 import styles from "./disposition-execution-workspace.module.css";
 
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
+type VoiceCallIntent = {
+  id: string;
+  conversation_id: string;
+  recipient: string;
+  from_number: string;
+  status: string;
+  expires_at: string;
+  recording_enabled: boolean;
+};
 type Outcome =
   | "interested"
   | "showing_scheduled"
@@ -70,11 +81,38 @@ export function DispositionExecutionWorkspace({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [smsDraft, setSmsDraft] = useState("");
+  const [smsComposerOpen, setSmsComposerOpen] = useState(false);
+  const [callCountdown, setCallCountdown] = useState<number | null>(null);
+  const [countdownCandidateId, setCountdownCandidateId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [callbackAt, setCallbackAt] = useState("");
+  const callCountdownTimer = useRef<number | null>(null);
+  const candidateIdRef = useRef<string | null>(null);
+  const webPhone = useWebPhone();
+  const browserCallActive = webPhone.status.callActive;
+  const browserCallActiveRef = useRef(browserCallActive);
   const [outcomeIdempotencyKey, setOutcomeIdempotencyKey] = useState(() =>
     idempotency("dispo-outcome"),
   );
+
+  const applyWorkspace = useCallback((result: DispositionExecutionWorkspace) => {
+    const nextCandidateId = result.current_candidate?.candidate_id ?? null;
+    if (candidateIdRef.current !== nextCandidateId) {
+      candidateIdRef.current = nextCandidateId;
+      setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
+      setSmsComposerOpen(false);
+      setCallCountdown(null);
+      setCountdownCandidateId(null);
+      setNotes("");
+      setCallbackAt("");
+      setSmsDraft(result.current_candidate?.sms_draft ?? "");
+      if (callCountdownTimer.current !== null) {
+        window.clearInterval(callCountdownTimer.current);
+        callCountdownTimer.current = null;
+      }
+    }
+    setWorkspace(result);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,25 +120,31 @@ export function DispositionExecutionWorkspace({
       const result = await request<DispositionExecutionWorkspace>(
         `/api/v1/dispositions/cases/${caseId}/execution`,
       );
-      setWorkspace(result);
-      setSmsDraft(result.current_candidate?.sms_draft ?? "");
+      applyWorkspace(result);
     } catch (error) {
       onMessage(error instanceof Error ? error.message : "Disposition call queue could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, [caseId, onMessage, request]);
+  }, [applyWorkspace, caseId, onMessage, request]);
 
   useEffect(() => {
+    // Initial remote workspace synchronization is intentionally client-side.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
-  const currentCandidateId = workspace?.current_candidate?.candidate_id ?? null;
   useEffect(() => {
-    if (currentCandidateId) {
-      setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
-    }
-  }, [currentCandidateId]);
+    browserCallActiveRef.current = browserCallActive;
+  }, [browserCallActive]);
+
+  useEffect(() => {
+    return () => {
+      if (callCountdownTimer.current !== null) {
+        window.clearInterval(callCountdownTimer.current);
+      }
+    };
+  }, []);
 
   async function action<T>(key: string, operation: () => Promise<T>, success: string) {
     setBusy(key);
@@ -120,35 +164,159 @@ export function DispositionExecutionWorkspace({
   async function sendSms() {
     const candidate = workspace?.current_candidate;
     if (!candidate) return;
+    const body = smsDraft.trim();
+    if (!body) {
+      onMessage("Review the introduction and enter a message before sending it.");
+      return;
+    }
     const result = await action(
       "sms",
-      () => request(`/api/v1/dispositions/cases/${caseId}/execution/sms`, {
-        method: "POST",
-        body: JSON.stringify({
-          candidate_id: candidate.candidate_id,
-          body: smsDraft,
-          idempotency_key: idempotency("dispo-sms"),
-        }),
-      }),
-      `Pre-call text accepted for ${candidate.name}.`,
+      async () => {
+        let headsetReady = false;
+        if (candidate.voice.allowed && !browserCallActiveRef.current) {
+          try {
+            await webPhone.initializeHeadset();
+            headsetReady = true;
+          } catch {
+            // The shared phone reports the exact microphone or configuration problem.
+            // The reviewed text may still be sent and the cellphone fallback stays available.
+          }
+        }
+        await request(`/api/v1/dispositions/cases/${caseId}/execution/sms`, {
+          method: "POST",
+          body: JSON.stringify({
+            candidate_id: candidate.candidate_id,
+            body,
+            idempotency_key: idempotency("dispo-sms"),
+          }),
+        });
+        return { headsetReady };
+      },
+      `Introduction text accepted for ${candidate.name}.`,
     );
-    if (result) await load();
+    if (!result) return;
+
+    setSmsComposerOpen(false);
+    if (candidate.voice.allowed) {
+      if (result.headsetReady) {
+        beginCallCountdown(candidate.candidate_id);
+        onMessage(`Introduction text accepted for ${candidate.name}. Browser call starts in 10 seconds unless you cancel.`);
+      } else if (browserCallActiveRef.current) {
+        onMessage(`Introduction text accepted for ${candidate.name}. Finish the current browser call before calling this buyer.`);
+      } else {
+        onMessage(`Introduction text accepted for ${candidate.name}. Browser audio is not ready; use the cellphone fallback if needed.`);
+      }
+    }
   }
 
-  async function startCall() {
+  function beginCallCountdown(candidateId: string) {
+    if (callCountdownTimer.current !== null) {
+      window.clearInterval(callCountdownTimer.current);
+    }
+    let remaining = 10;
+    setCountdownCandidateId(candidateId);
+    setCallCountdown(remaining);
+    callCountdownTimer.current = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        if (callCountdownTimer.current !== null) {
+          window.clearInterval(callCountdownTimer.current);
+          callCountdownTimer.current = null;
+        }
+        setCallCountdown(null);
+        void startBrowserCall(candidateId);
+        return;
+      }
+      setCallCountdown(remaining);
+    }, 1_000);
+  }
+
+  async function startBrowserCall(expectedCandidateId?: string) {
     const candidate = workspace?.current_candidate;
     if (!candidate) return;
+    if (browserCallActiveRef.current) {
+      setCallCountdown(null);
+      setCountdownCandidateId(null);
+      onMessage("End the current browser call before starting the next buyer call.");
+      return;
+    }
+    if (
+      (expectedCandidateId && expectedCandidateId !== candidate.candidate_id) ||
+      (countdownCandidateId && countdownCandidateId !== candidate.candidate_id)
+    ) {
+      setCallCountdown(null);
+      setCountdownCandidateId(null);
+      return;
+    }
+    if (callCountdownTimer.current !== null) {
+      window.clearInterval(callCountdownTimer.current);
+      callCountdownTimer.current = null;
+    }
+    setCallCountdown(null);
+    setCountdownCandidateId(null);
     await action(
-      "call",
-      () => request(`/api/v1/dispositions/cases/${caseId}/execution/calls`, {
-        method: "POST",
-        body: JSON.stringify({
-          candidate_id: candidate.candidate_id,
-          idempotency_key: idempotency("dispo-call"),
-        }),
-      }),
+      "browser-call",
+      async () => {
+        const intent = await request<VoiceCallIntent>(
+          `/api/v1/dispositions/cases/${caseId}/execution/calls`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              candidate_id: candidate.candidate_id,
+              idempotency_key: idempotency("dispo-browser-call"),
+            }),
+          },
+        );
+        await webPhone.startCall({
+          callIntentId: intent.id,
+          contextHref: `/os/deals?display=queue&tab=disposition&view=all&deal=${workspace?.deal_id ?? ""}`,
+          contextLabel: workspace?.property_address ?? "Disposition call queue",
+          displayName: candidate.name,
+          fromNumber: intent.from_number,
+          phoneNumber: intent.recipient,
+        });
+        return intent;
+      },
+      `Browser call started for ${candidate.name}.`,
+    );
+  }
+
+  async function startCellphoneCall() {
+    const candidate = workspace?.current_candidate;
+    if (!candidate) return;
+    if (callCountdownTimer.current !== null) {
+      window.clearInterval(callCountdownTimer.current);
+      callCountdownTimer.current = null;
+    }
+    setCallCountdown(null);
+    setCountdownCandidateId(null);
+    await action(
+      "cellphone-call",
+      async () => {
+        const callKey = idempotency("dispo-cellphone-call");
+        return request(
+          `/api/v1/dispositions/cases/${caseId}/execution/forwarded-calls`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              candidate_id: candidate.candidate_id,
+              idempotency_key: callKey,
+            }),
+          },
+        );
+      },
       `Stonegate is calling your cellphone first, then connecting ${candidate.name}.`,
     );
+  }
+
+  function cancelPreparedCall() {
+    if (callCountdownTimer.current !== null) {
+      window.clearInterval(callCountdownTimer.current);
+      callCountdownTimer.current = null;
+    }
+    setCallCountdown(null);
+    setCountdownCandidateId(null);
+    onMessage("The automatic browser call was cancelled. The introduction text remains in the conversation history.");
   }
 
   async function sendApprovedPacket() {
@@ -205,10 +373,7 @@ export function DispositionExecutionWorkspace({
       `${labelize(outcome)} recorded. The queue moved to the next ranked buyer.`,
     );
     if (result) {
-      setWorkspace(result);
-      setSmsDraft(result.current_candidate?.sms_draft ?? "");
-      setNotes("");
-      setCallbackAt("");
+      applyWorkspace(result);
     }
   }
 
@@ -239,7 +404,7 @@ export function DispositionExecutionWorkspace({
       ),
       `Showing scheduled with ${candidate.name}. Record the call outcome when the conversation ends.`,
     );
-    if (result) setWorkspace(result);
+    if (result) applyWorkspace(result);
   }
 
   async function updateShowing(
@@ -265,7 +430,7 @@ export function DispositionExecutionWorkspace({
         ? "Showing completed. A follow-up task is due in 24 hours."
         : `Showing marked ${labelize(status)}.`,
     );
-    if (result) setWorkspace(result);
+    if (result) applyWorkspace(result);
   }
 
   if (loading) {
@@ -320,15 +485,68 @@ export function DispositionExecutionWorkspace({
           </section>
 
           <section className={styles.panel}>
-            <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Step 1</span><h4>Permission-aware pre-call text</h4></div></div>
-            <textarea aria-label="Pre-call SMS draft" onChange={(event) => setSmsDraft(event.target.value)} rows={5} value={smsDraft} />
+            <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Step 1</span><h4>Review the introduction text</h4></div></div>
+            <p className={styles.help}>Nothing sends automatically. Open the draft, personalize it, then confirm the final message.</p>
             <PermissionLine allowed={candidate.sms.allowed} blockers={candidate.sms.blockers} channel="SMS" status={candidate.sms.status} />
-            <button disabled={disabled || !candidate.sms.allowed || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send pre-call text"}</button>
+
+            {!smsComposerOpen ? (
+              <button
+                disabled={disabled || !candidate.sms.allowed}
+                onClick={() => setSmsComposerOpen(true)}
+                type="button"
+              >
+                <MessageSquareText size={16} />Review introduction text
+              </button>
+            ) : (
+              <div className={styles.smsComposer}>
+                <div className={styles.messageContext}>
+                  <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
+                  <div><span>Property</span><strong>{workspace.property_address}</strong><small>Ranked buyer #{candidate.rank}</small></div>
+                </div>
+                <label>
+                  <span>Editable message</span>
+                  <textarea aria-label="Introduction SMS draft" onChange={(event) => setSmsDraft(event.target.value)} rows={6} value={smsDraft} />
+                </label>
+                <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
+                <div className={styles.composerActions}>
+                  <button
+                    className={styles.secondary}
+                    disabled={busy === "sms"}
+                    onClick={() => setSmsComposerOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button disabled={disabled || !smsDraft.trim()} onClick={() => void sendSms()} type="button">
+                    <MessageSquareText size={16} />
+                    {busy === "sms" ? "Sending…" : "Send text and prepare call"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {callCountdown !== null && countdownCandidateId === candidate.candidate_id ? (
+              <div aria-live="polite" className={styles.callCountdown} role="status">
+                <div className={styles.countdownNumber}>{callCountdown}</div>
+                <div>
+                  <strong>Introduction accepted</strong>
+                  <span>Calling {candidate.name} in {callCountdown} second{callCountdown === 1 ? "" : "s"}.</span>
+                </div>
+                <div className={styles.countdownActions}>
+                  <button disabled={disabled || webPhone.busy || browserCallActive} onClick={() => void startBrowserCall()} type="button">Call now</button>
+                  <button className={styles.secondary} disabled={busy !== null} onClick={cancelPreparedCall} type="button">Cancel</button>
+                </div>
+              </div>
+            ) : null}
+
             <div className={styles.divider} />
-            <div className={styles.sectionTitle}><PhoneCall size={18} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
-            <p className={styles.help}>This is a deliberate one-at-a-time call. Stonegate rings your cellphone first, then connects the buyer.</p>
+            <div className={styles.sectionTitle}><Headphones size={18} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
+            <p className={styles.help}>Browser calling is preferred for this deliberate one-at-a-time queue. Your cellphone remains available as a fallback.</p>
             <PermissionLine allowed={candidate.voice.allowed} blockers={candidate.voice.blockers} channel="Call" status={candidate.voice.status} />
-            <button disabled={disabled || !candidate.voice.allowed} onClick={() => void startCall()} type="button"><PhoneCall size={16} />{busy === "call" ? "Starting call…" : `Call ${candidate.name}`}</button>
+            <div className={styles.callActions}>
+              <button disabled={disabled || webPhone.busy || browserCallActive || !candidate.voice.allowed} onClick={() => void startBrowserCall()} type="button"><Headphones size={16} />{busy === "browser-call" || webPhone.busy ? "Starting browser call…" : browserCallActive ? "Browser call in progress" : `Call ${candidate.name} in browser`}</button>
+              <button className={styles.secondary} disabled={disabled || webPhone.busy || browserCallActive || !candidate.voice.allowed} onClick={() => void startCellphoneCall()} type="button"><PhoneCall size={16} />{busy === "cellphone-call" ? "Calling your cellphone…" : "Call through my cellphone"}</button>
+            </div>
             <div className={styles.divider} />
             <div className={styles.sectionTitle}><Download size={18} /><div><span>While connected</span><h4>Send the approved investor packet</h4></div></div>
             <p className={styles.help}>Creates a revocable link to the exact approved, investor-safe PDF and texts it only to this buyer.</p>

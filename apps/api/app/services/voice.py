@@ -1,9 +1,12 @@
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -63,6 +66,8 @@ from app.schemas.voice import (
     VoiceLineTeamRead,
     VoiceLineUserRead,
     VoiceProviderReadinessRead,
+    VoiceQuickDialCreate,
+    VoiceQuickDialRead,
     VoiceReadinessCheckRead,
     VoiceRecordingRead,
     VoiceSessionRead,
@@ -73,11 +78,14 @@ from app.services.call_intelligence import (
     enqueue_eligible_prospecting_call_transcript,
 )
 from app.services.communication_compliance import (
+    business_voice_permission_not_required,
+    business_voice_requested_phone_number,
     evaluate_voice_eligibility,
     format_e164,
     phone_lookup_values,
 )
 from app.services.inbox import (
+    create_general_conversation,
     ensure_buyer_conversation,
     ensure_primary_conversation,
     get_scoped_conversation,
@@ -86,6 +94,7 @@ from app.services.inbox import (
 )
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
+    LeadLifecycleConflictError,
     lock_organization_lead,
     require_lead_open_for_work,
 )
@@ -584,11 +593,203 @@ def create_voice_session(
     )
 
 
+def create_quick_dial_intent(
+    db: Session,
+    principal: Principal,
+    payload: VoiceQuickDialCreate,
+) -> VoiceQuickDialRead:
+    """Create or reuse a lightweight business thread and authorize one browser call.
+
+    Quick Dial is intentionally unavailable to assigned-only callers. The destination is
+    normalized by the server, and the caller may select only a company-owned VoiceLine that
+    the current user is assigned to. The client never supplies a caller-ID phone number.
+    """
+
+    if PermissionKeys.PLACE_CALLS not in principal.permission_keys:
+        raise PermissionError("Quick Dial requires permission to place company calls.")
+    destination = format_e164(payload.phone_number)
+    if destination is None:
+        raise VoiceComplianceError("Enter a valid phone number to use Quick Dial.")
+    validate_quick_dial_destination(db, principal, destination)
+    request_fingerprint = quick_dial_request_fingerprint(payload, destination)
+
+    existing_intent = db.scalar(
+        select(VoiceCallIntent).where(
+            VoiceCallIntent.organization_id == principal.organization_id,
+            VoiceCallIntent.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing_intent is not None:
+        return existing_quick_dial_to_read(
+            db,
+            principal,
+            payload,
+            destination=destination,
+            request_fingerprint=request_fingerprint,
+            intent=existing_intent,
+        )
+
+    contact, conversation = find_quick_dial_context(
+        db,
+        principal.organization_id,
+        destination,
+    )
+    reused_contact = contact is not None
+    reused_conversation = conversation is not None
+    if contact is None:
+        display_name = clean_quick_dial_name(payload) or f"Business {destination}"
+        contact = Contact(
+            organization_id=principal.organization_id,
+            legal_name=display_name,
+            preferred_name=None,
+            contact_type="business_contact",
+            assigned_user_id=principal.user_id,
+        )
+        db.add(contact)
+        db.flush()
+        db.add(
+            ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=contact.id,
+                method_type="phone",
+                value=destination,
+                normalized_value="".join(
+                    character for character in destination if character.isdigit()
+                ),
+                is_primary=True,
+            )
+        )
+        db.flush()
+    if conversation is None:
+        conversation = create_general_conversation(
+            db,
+            organization_id=principal.organization_id,
+            contact_id=contact.id,
+            assigned_user_id=principal.user_id,
+        )
+    elif conversation.conversation_type == "general" and conversation.status == "closed":
+        conversation.status = "open"
+        conversation.closed_at = None
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "source": (
+            (conversation.conversation_metadata or {}).get("source")
+            if reused_conversation
+            else "quick_dial"
+        ),
+        "quick_dial": {
+            "company_name": clean_optional_text(payload.company_name),
+            "contact_name": clean_optional_text(payload.contact_name),
+            "phone_number": destination,
+            "purpose": payload.purpose,
+            "call_reason": clean_optional_text(payload.call_reason),
+            "prepared_by_user_id": str(principal.user_id),
+            "request_fingerprint": request_fingerprint,
+        },
+    }
+    try:
+        intent_read = create_call_intent(
+            db,
+            principal,
+            conversation.id,
+            VoiceCallIntentCreate(
+                idempotency_key=payload.idempotency_key,
+                voice_line_id=(
+                    payload.voice_line_id if conversation.conversation_type == "general" else None
+                ),
+            ),
+            intent_source="quick_dial",
+            extra_intent_metadata={
+                "quick_dial_purpose": payload.purpose,
+                "call_reason": clean_optional_text(payload.call_reason),
+                "request_fingerprint": request_fingerprint,
+            },
+            require_browser_voice=True,
+            requested_recipient=destination,
+            commit=False,
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        winner = db.scalar(
+            select(VoiceCallIntent).where(
+                VoiceCallIntent.organization_id == principal.organization_id,
+                VoiceCallIntent.idempotency_key == payload.idempotency_key,
+            )
+        )
+        if winner is None:
+            raise VoiceIntentConflictError(
+                "The Quick Dial request conflicted with another call. Try again."
+            ) from exc
+        return existing_quick_dial_to_read(
+            db,
+            principal,
+            payload,
+            destination=destination,
+            request_fingerprint=request_fingerprint,
+            intent=winner,
+        )
+    except (
+        LeadLifecycleConflictError,
+        PermissionError,
+        VoiceComplianceError,
+        VoiceConfigurationError,
+        VoiceIntentConflictError,
+    ):
+        db.rollback()
+        raise
+    if intent_read is None:
+        db.rollback()
+        raise VoiceConfigurationError("The Quick Dial call intent could not be created.")
+    intent = db.get(VoiceCallIntent, intent_read.id)
+    if intent is None:
+        raise VoiceConfigurationError("The Quick Dial call intent could not be saved.")
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="communication.quick_dial_prepare",
+            entity_type="conversation",
+            entity_id=conversation.id,
+            previous_value=None,
+            new_value={
+                "contact_id": str(contact.id),
+                "conversation_type": conversation.conversation_type,
+                "voice_line_id": str(intent.voice_line_id),
+                "recipient": destination,
+                "purpose": payload.purpose,
+                "reused_contact": reused_contact,
+                "reused_conversation": reused_conversation,
+            },
+            reason=clean_optional_text(payload.call_reason) or "Manual company Quick Dial prepared",
+        )
+    )
+    db.commit()
+    line = db.get(VoiceLine, intent.voice_line_id)
+    if line is None:
+        raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
+    return VoiceQuickDialRead(
+        conversation_id=conversation.id,
+        contact_id=contact.id,
+        conversation_type=conversation.conversation_type,
+        contact_name=contact.legal_name,
+        reused_contact=reused_contact,
+        reused_conversation=reused_conversation,
+        intent=call_intent_to_read(intent, line, get_settings()),
+    )
+
+
 def create_call_intent(
     db: Session,
     principal: Principal,
     conversation_id: UUID,
     payload: VoiceCallIntentCreate,
+    *,
+    intent_source: str = "shared_inbox",
+    extra_intent_metadata: dict[str, object] | None = None,
+    require_browser_voice: bool = False,
+    requested_recipient: str | None = None,
+    commit: bool = True,
 ) -> VoiceCallIntentRead | None:
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
@@ -598,9 +799,21 @@ def create_call_intent(
         or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("Calls can only be placed from an assigned conversation.")
-    if conversation.conversation_type not in {"lead", "buyer"}:
+    if conversation.conversation_type not in {"lead", "buyer", "general"}:
         raise VoiceConfigurationError(
-            "Calling is only available from seller and buyer conversations."
+            "Calling is only available from seller, buyer, and company conversations."
+        )
+    if (
+        conversation.conversation_type == "general"
+        and PermissionKeys.PLACE_CALLS not in principal.permission_keys
+    ):
+        raise PermissionError("Company calls require permission to place calls.")
+    settings = get_settings()
+    if require_browser_voice and not settings.twilio_browser_voice_configured:
+        raise VoiceConfigurationError(
+            "Browser calling needs: "
+            + ", ".join(settings.twilio_browser_voice_configuration_blockers)
+            + "."
         )
     active_lead: Lead | None = None
     if conversation.conversation_type == "lead" and conversation.lead_id is not None:
@@ -619,8 +832,13 @@ def create_call_intent(
         )
     )
     if existing is not None:
-        if existing.conversation_id != conversation.id:
-            raise VoiceIntentConflictError("The idempotency key was already used for another call.")
+        validate_call_intent_replay(
+            existing,
+            principal,
+            conversation=conversation,
+            payload=payload,
+            intent_source=intent_source,
+        )
         line = db.get(VoiceLine, existing.voice_line_id)
         if line is None:
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
@@ -632,7 +850,15 @@ def create_call_intent(
         return None
     if contact is None:
         return None
-    eligibility = evaluate_voice_eligibility(db, contact)
+    eligibility = evaluate_voice_eligibility(
+        db,
+        contact,
+        require_permission=not business_voice_permission_not_required(conversation, contact),
+        requested_phone_number=(
+            requested_recipient
+            or business_voice_requested_phone_number(conversation, contact)
+        ),
+    )
     if not eligibility.can_call or eligibility.recipient is None:
         raise VoiceComplianceError(" ".join(eligibility.blockers))
     line = select_voice_line_for_conversation(
@@ -640,14 +866,20 @@ def create_call_intent(
         principal.organization_id,
         principal.user_id,
         conversation=conversation,
+        requested_line_id=payload.voice_line_id,
     )
     if line is None:
-        department = "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
+        department = (
+            "dispositions"
+            if conversation.conversation_type == "buyer"
+            else "company"
+            if conversation.conversation_type == "general"
+            else "acquisitions"
+        )
         raise VoiceConfigurationError(
             f"No authorized active Stonegate {department} line is available."
         )
     now = datetime.now(UTC)
-    settings = get_settings()
     intent = VoiceCallIntent(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
@@ -663,13 +895,45 @@ def create_call_intent(
         consumed_at=None,
         provider_call_id=None,
         intent_metadata={
-            "source": "shared_inbox",
+            "source": intent_source,
             "conversation_type": conversation.conversation_type,
             "department_key": line.department_key,
+            **(extra_intent_metadata or {}),
         },
     )
     db.add(intent)
-    db.commit()
+    try:
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    except IntegrityError as exc:
+        if not commit:
+            raise
+        db.rollback()
+        winner = db.scalar(
+            select(VoiceCallIntent).where(
+                VoiceCallIntent.organization_id == principal.organization_id,
+                VoiceCallIntent.idempotency_key == payload.idempotency_key,
+            )
+        )
+        if winner is None:
+            raise VoiceIntentConflictError(
+                "The call request conflicted with another request. Try again."
+            ) from exc
+        validate_call_intent_replay(
+            winner,
+            principal,
+            conversation=conversation,
+            payload=payload,
+            intent_source=intent_source,
+        )
+        winner_line = db.get(VoiceLine, winner.voice_line_id)
+        if winner_line is None:
+            raise VoiceConfigurationError(
+                "The selected Stonegate voice line no longer exists."
+            ) from exc
+        return call_intent_to_read(winner, winner_line, settings)
     return call_intent_to_read(intent, line, settings)
 
 
@@ -681,7 +945,13 @@ def start_forwarded_call(
     *,
     provider: TwilioVoiceCallProvider | None = None,
 ) -> VoiceCallIntentRead | None:
-    intent_read = create_call_intent(db, principal, conversation_id, payload)
+    intent_read = create_call_intent(
+        db,
+        principal,
+        conversation_id,
+        payload,
+        intent_source="forwarded_cellphone",
+    )
     if intent_read is None:
         return None
     intent = db.get(VoiceCallIntent, intent_read.id)
@@ -754,7 +1024,11 @@ def start_forwarded_call(
             entity_type=entity_type,
             entity_id=entity_id,
             event_type=f"{entity_type}.call_started",
-            summary="Outbound call started through the Stonegate cellphone bridge.",
+            summary=(
+                "Outbound company call started through the Stonegate cellphone bridge."
+                if entity_type == "conversation"
+                else "Outbound call started through the Stonegate cellphone bridge."
+            ),
         )
     )
     db.add(
@@ -806,6 +1080,11 @@ def start_forwarded_lead_call(
     if lead is None:
         return None
     require_lead_open_for_work(lead)
+    if PermissionKeys.PLACE_CALLS not in principal.permission_keys and (
+        PermissionKeys.PLACE_ASSIGNED_CALLS not in principal.permission_keys
+        or lead.assigned_user_id != principal.user_id
+    ):
+        raise PermissionError("Calls can only be placed from an assigned lead.")
     conversation = ensure_primary_conversation(db, lead)
     return start_forwarded_call(
         db,
@@ -813,6 +1092,33 @@ def start_forwarded_lead_call(
         conversation.id,
         payload,
         provider=provider,
+    )
+
+
+def create_lead_call_intent(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: VoiceCallIntentCreate,
+) -> VoiceCallIntentRead | None:
+    """Authorize one browser call from a lead without making the client find its thread."""
+
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=lead_id,
+    )
+    if lead is None:
+        return None
+    require_lead_open_for_work(lead)
+    conversation = ensure_primary_conversation(db, lead)
+    return create_call_intent(
+        db,
+        principal,
+        conversation.id,
+        payload,
+        intent_source="lead_detail",
+        require_browser_voice=True,
     )
 
 
@@ -925,8 +1231,33 @@ def process_outbound_voice_request(
         raise ValueError("Stonegate call intent has already been used.")
     existing_call = find_call(db, intent.organization_id, provider_call_id=call_sid)
     line = db.get(VoiceLine, intent.voice_line_id)
-    if line is None:
+    if line is None or line.organization_id != intent.organization_id:
         raise VoiceConfigurationError("Stonegate voice line is unavailable.")
+    if existing_call is None:
+        if line.status != "active":
+            raise VoiceConfigurationError("Stonegate voice line is no longer active.")
+        conversation = db.get(Conversation, conversation_id)
+        contact = db.get(Contact, contact_id)
+        if (
+            conversation is None
+            or conversation.organization_id != intent.organization_id
+            or contact is None
+            or contact.organization_id != intent.organization_id
+        ):
+            raise VoiceConfigurationError("Call conversation is unavailable.")
+        eligibility = evaluate_voice_eligibility(
+            db,
+            contact,
+            require_permission=not business_voice_permission_not_required(conversation, contact),
+            requested_phone_number=intent.recipient,
+        )
+        if (
+            not eligibility.can_call
+            or eligibility.recipient is None
+            or eligibility.recipient != intent.recipient
+        ):
+            detail = " ".join(eligibility.blockers) or "The contact phone number changed."
+            raise VoiceConfigurationError(f"Call authorization is no longer valid. {detail}")
     if existing_call is None:
         communication, call = create_call_records(
             db,
@@ -958,6 +1289,8 @@ def process_outbound_voice_request(
                 summary=(
                     "Outbound buyer call initiated from the shared inbox."
                     if entity_type == "buyer"
+                    else "Outbound company call initiated from Quick Dial."
+                    if entity_type == "conversation"
                     else "Outbound seller call initiated from the shared inbox."
                 ),
             )
@@ -1038,17 +1371,46 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
             recording_enabled=settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
         )
-    conversation_type = "buyer" if line.purpose_key == "buyer_relations" else "lead"
+    conversation_type = (
+        "buyer"
+        if line.purpose_key == "buyer_relations"
+        else "general"
+        if line.purpose_key == "company_general"
+        else "lead"
+    )
     conversation = find_conversation_by_phone(
         db,
         line.organization_id,
         caller,
         conversation_type=conversation_type,
     )
+    if conversation is None and conversation_type == "general":
+        # A known seller or buyer may call the general company line. Preserve the existing
+        # CRM history instead of creating a duplicate business contact solely from the line used.
+        for known_type in ("lead", "buyer"):
+            conversation = find_conversation_by_phone(
+                db,
+                line.organization_id,
+                caller,
+                conversation_type=known_type,
+            )
+            if conversation is not None:
+                break
+    if conversation is None and conversation_type != "general":
+        # A company contacted through Quick Dial may return the call on an acquisitions or
+        # dispositions line. Reuse its business thread before creating a fake seller or buyer.
+        conversation = find_conversation_by_phone(
+            db,
+            line.organization_id,
+            caller,
+            conversation_type="general",
+        )
     if conversation is None:
         conversation = (
             create_inbound_call_buyer(db, line, caller)
             if conversation_type == "buyer"
+            else create_inbound_call_general(db, line, caller)
+            if conversation_type == "general"
             else create_inbound_call_lead(db, line, caller)
         )
     target_user_ids = resolve_inbound_users(db, line, conversation.id)
@@ -1088,6 +1450,8 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
             summary=(
                 "Inbound buyer call received."
                 if entity_type == "buyer"
+                else "Inbound company call received."
+                if entity_type == "conversation"
                 else "Inbound seller call received."
             ),
         )
@@ -1207,9 +1571,7 @@ def process_voice_status(
         aggregate_terminal = callback_kind == "dial_result" or (
             not child_callback and status in FINAL_CALL_STATUSES
         )
-        callback_status = (
-            status if status in {"in-progress", "answered"} else call.status
-        )
+        callback_status = status if status in {"in-progress", "answered"} else call.status
         update_prospecting_callback_status(
             db,
             call,
@@ -1370,11 +1732,7 @@ def process_voice_recording(
         if recording_status == "completed":
             recording.recorded_at = completed_at
             recording.retention_expires_at = recording.retention_expires_at or retention_expires_at
-    if (
-        recording_status == "completed"
-        and not is_prospecting_call
-        and not is_prospecting_callback
-    ):
+    if recording_status == "completed" and not is_prospecting_call and not is_prospecting_callback:
         db.flush()
         enqueue_call_transcript(
             db,
@@ -2037,6 +2395,71 @@ def create_inbound_call_buyer(
     return conversation
 
 
+def create_inbound_call_general(
+    db: Session,
+    line: VoiceLine,
+    caller: str,
+) -> Conversation:
+    normalized = format_e164(caller) or caller
+    contact = Contact(
+        organization_id=line.organization_id,
+        legal_name=f"Business caller {normalized}",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=line.assigned_user_id,
+    )
+    db.add(contact)
+    db.flush()
+    db.add(
+        ContactMethod(
+            organization_id=line.organization_id,
+            contact_id=contact.id,
+            method_type="phone",
+            value=normalized,
+            normalized_value="".join(character for character in normalized if character.isdigit()),
+            is_primary=True,
+        )
+    )
+    conversation = create_general_conversation(
+        db,
+        organization_id=line.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=line.assigned_user_id,
+    )
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "source": "inbound_company_call",
+        "unified_timeline": True,
+    }
+    db.add(
+        ConsentRecord(
+            organization_id=line.organization_id,
+            contact_id=contact.id,
+            channel="phone",
+            status="granted",
+            source="inbound_call",
+            wording_version="caller-initiated-v1",
+            wording="Caller initiated a call to the Stonegate company line.",
+            normalized_address=normalized,
+            captured_ip=None,
+            user_agent=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=line.organization_id,
+            actor_user_id=None,
+            entity_type="conversation",
+            entity_id=conversation.id,
+            event_type="conversation.created_from_inbound_call",
+            summary="New company conversation created from an unknown inbound caller.",
+        )
+    )
+    return conversation
+
+
 def find_conversation_by_phone(
     db: Session,
     organization_id: UUID,
@@ -2063,6 +2486,162 @@ def find_conversation_by_phone(
             Conversation.created_at.desc(),
         )
     )
+
+
+def clean_optional_text(value: str | None) -> str | None:
+    normalized = " ".join((value or "").split()).strip()
+    return normalized or None
+
+
+def clean_quick_dial_name(payload: VoiceQuickDialCreate) -> str | None:
+    return clean_optional_text(payload.company_name) or clean_optional_text(payload.contact_name)
+
+
+def quick_dial_request_fingerprint(
+    payload: VoiceQuickDialCreate,
+    destination: str,
+) -> str:
+    canonical = {
+        "phone_number": destination,
+        "contact_name": clean_optional_text(payload.contact_name),
+        "company_name": clean_optional_text(payload.company_name),
+        "purpose": payload.purpose,
+        "call_reason": clean_optional_text(payload.call_reason),
+        "voice_line_id": str(payload.voice_line_id) if payload.voice_line_id else None,
+    }
+    serialized = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def existing_quick_dial_to_read(
+    db: Session,
+    principal: Principal,
+    payload: VoiceQuickDialCreate,
+    *,
+    destination: str,
+    request_fingerprint: str,
+    intent: VoiceCallIntent,
+) -> VoiceQuickDialRead:
+    metadata = intent.intent_metadata or {}
+    if (
+        intent.organization_id != principal.organization_id
+        or intent.actor_user_id != principal.user_id
+        or intent.recipient != destination
+        or metadata.get("source") != "quick_dial"
+        or metadata.get("request_fingerprint") != request_fingerprint
+        or (payload.voice_line_id is not None and intent.voice_line_id != payload.voice_line_id)
+    ):
+        raise VoiceIntentConflictError("The idempotency key was already used for another call.")
+    conversation_id, contact_id = require_warm_call_intent_context(intent)
+    conversation = db.get(Conversation, conversation_id)
+    contact = db.get(Contact, contact_id)
+    line = db.get(VoiceLine, intent.voice_line_id)
+    if (
+        conversation is None
+        or conversation.organization_id != principal.organization_id
+        or contact is None
+        or contact.organization_id != principal.organization_id
+        or line is None
+        or line.organization_id != principal.organization_id
+        or line.status != "active"
+    ):
+        raise VoiceConfigurationError("The saved Quick Dial call is no longer available.")
+    return VoiceQuickDialRead(
+        conversation_id=conversation.id,
+        contact_id=contact.id,
+        conversation_type=conversation.conversation_type,
+        contact_name=contact.legal_name,
+        reused_contact=True,
+        reused_conversation=True,
+        intent=call_intent_to_read(intent, line, get_settings()),
+    )
+
+
+def validate_call_intent_replay(
+    intent: VoiceCallIntent,
+    principal: Principal,
+    *,
+    conversation: Conversation,
+    payload: VoiceCallIntentCreate,
+    intent_source: str,
+) -> None:
+    metadata = intent.intent_metadata or {}
+    if (
+        intent.organization_id != principal.organization_id
+        or intent.actor_user_id != principal.user_id
+        or intent.conversation_id != conversation.id
+        or metadata.get("source") != intent_source
+    ):
+        raise VoiceIntentConflictError("The idempotency key was already used for another call.")
+    if payload.voice_line_id is not None and intent.voice_line_id != payload.voice_line_id:
+        raise VoiceIntentConflictError(
+            "The idempotency key was already used with another Stonegate line."
+        )
+
+
+def validate_quick_dial_destination(
+    db: Session,
+    principal: Principal,
+    destination: str,
+) -> None:
+    company_numbers = db.scalars(
+        select(VoiceLine.phone_number).where(
+            VoiceLine.organization_id == principal.organization_id,
+        )
+    ).all()
+    if destination in {format_e164(number) for number in company_numbers}:
+        raise VoiceComplianceError("Quick Dial cannot call a Stonegate company line.")
+    forwarding_numbers = db.scalars(
+        select(User.voice_forwarding_number).where(
+            User.organization_id == principal.organization_id,
+            User.is_active.is_(True),
+            User.voice_forwarding_number.is_not(None),
+        )
+    ).all()
+    if destination in {format_e164(number) for number in forwarding_numbers}:
+        raise VoiceComplianceError("Quick Dial cannot call a Stonegate staff forwarding number.")
+
+
+def find_quick_dial_context(
+    db: Session,
+    organization_id: UUID,
+    destination: str,
+) -> tuple[Contact | None, Conversation | None]:
+    lookup_values = phone_lookup_values(destination)
+    conversation = db.scalar(
+        select(Conversation)
+        .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
+        .where(
+            Conversation.organization_id == organization_id,
+            Conversation.conversation_type.in_(("general", "buyer", "lead")),
+            ContactMethod.organization_id == organization_id,
+            ContactMethod.method_type == "phone",
+            ContactMethod.normalized_value.in_(lookup_values),
+        )
+        .order_by(
+            (Conversation.status == "closed").asc(),
+            (Conversation.conversation_type == "general").desc(),
+            Conversation.last_activity_at.desc(),
+            Conversation.created_at.desc(),
+        )
+    )
+    if conversation is not None:
+        return db.get(Contact, conversation.contact_id), conversation
+    contact = db.scalar(
+        select(Contact)
+        .join(ContactMethod, ContactMethod.contact_id == Contact.id)
+        .where(
+            Contact.organization_id == organization_id,
+            ContactMethod.organization_id == organization_id,
+            ContactMethod.method_type == "phone",
+            ContactMethod.normalized_value.in_(lookup_values),
+        )
+        .order_by(
+            (Contact.contact_type == "business_contact").desc(),
+            Contact.created_at.desc(),
+        )
+    )
+    return contact, None
 
 
 def resolve_inbound_users(
@@ -2250,30 +2829,51 @@ def select_voice_line_for_conversation(
     user_id: UUID,
     *,
     conversation: Conversation,
+    requested_line_id: UUID | None = None,
 ) -> VoiceLine | None:
-    department_key = "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
-    purpose_key = (
-        "buyer_relations" if conversation.conversation_type == "buyer" else "seller_conversations"
-    )
+    if conversation.conversation_type == "buyer":
+        permitted_pairs = {("dispositions", "buyer_relations")}
+    elif conversation.conversation_type == "lead":
+        permitted_pairs = {("acquisitions", "seller_conversations")}
+    elif conversation.conversation_type == "general":
+        # Prefer a dedicated company line, but allow any authorized non-prospecting company
+        # number so Quick Dial does not require buying another Twilio number.
+        permitted_pairs = {
+            ("general", "company_general"),
+            ("acquisitions", "seller_conversations"),
+            ("dispositions", "buyer_relations"),
+        }
+    else:
+        return None
     team_ids = select(TeamMembership.team_id).where(
         TeamMembership.organization_id == organization_id,
         TeamMembership.user_id == user_id,
     )
-    return db.scalar(
-        select(VoiceLine)
-        .where(
-            VoiceLine.organization_id == organization_id,
-            VoiceLine.department_key == department_key,
-            VoiceLine.purpose_key == purpose_key,
-            VoiceLine.status == "active",
-            (
-                (VoiceLine.assigned_user_id == user_id)
-                | (VoiceLine.fallback_user_id == user_id)
-                | (VoiceLine.assigned_team_id.in_(team_ids))
-            ),
-        )
-        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    permitted = tuple(
+        (VoiceLine.department_key == department_key) & (VoiceLine.purpose_key == purpose_key)
+        for department_key, purpose_key in permitted_pairs
     )
+    query = select(VoiceLine).where(
+        VoiceLine.organization_id == organization_id,
+        VoiceLine.status == "active",
+        VoiceLine.purpose_key != "prospecting_outbound",
+        *([VoiceLine.id == requested_line_id] if requested_line_id is not None else []),
+        or_(*permitted),
+        (
+            (VoiceLine.assigned_user_id == user_id)
+            | (VoiceLine.fallback_user_id == user_id)
+            | (VoiceLine.assigned_team_id.in_(team_ids))
+        ),
+    )
+    if conversation.conversation_type == "general":
+        query = query.order_by(
+            (VoiceLine.purpose_key == "company_general").desc(),
+            VoiceLine.is_default.desc(),
+            VoiceLine.created_at.asc(),
+        )
+    else:
+        query = query.order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    return db.scalar(query)
 
 
 def conversation_activity_entity(

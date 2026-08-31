@@ -1,0 +1,448 @@
+"use client";
+
+import { useAuth } from "@clerk/nextjs";
+import { ExternalLink, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
+import Link from "next/link";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  INITIAL_WEB_PHONE_STATUS,
+  WebPhoneCancelledError,
+  WebPhoneRuntime,
+  type WebPhoneStatus,
+} from "./web-phone-runtime";
+import styles from "./web-phone.module.css";
+
+type VoiceLine = {
+  id: string;
+  phone_number: string;
+  label: string;
+  department_key: string;
+};
+
+type RawVoiceSession = {
+  can_initialize: boolean;
+  identity: string;
+  token: string | null;
+  expires_at: string | null;
+  line: VoiceLine | null;
+  recording_enabled: boolean;
+  blockers: string[];
+};
+
+export type WebPhoneSession = Omit<RawVoiceSession, "token">;
+
+export type WebPhoneCallTarget = {
+  callIntentId: string;
+  displayName: string;
+  phoneNumber?: string | null;
+  fromNumber?: string | null;
+  fromLabel?: string | null;
+  contextLabel?: string | null;
+  contextHref?: string | null;
+};
+
+export type ActiveWebPhoneCall = WebPhoneCallTarget & {
+  requestedAt: number;
+  audioEstablishedAt: number | null;
+};
+
+type WebPhoneContextValue = {
+  activeCall: ActiveWebPhoneCall | null;
+  busy: boolean;
+  hangUp: () => void;
+  initializeHeadset: () => Promise<void>;
+  reset: () => void;
+  session: WebPhoneSession | null;
+  startCall: (target: WebPhoneCallTarget) => Promise<void>;
+  status: WebPhoneStatus;
+  toggleMute: () => void;
+};
+
+const WebPhoneContext = createContext<WebPhoneContextValue | null>(null);
+
+function detailMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object" || !("detail" in payload)) return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) =>
+        item && typeof item === "object" && "msg" in item
+          ? String((item as { msg?: unknown }).msg ?? "")
+          : "",
+      )
+      .filter(Boolean);
+    if (messages.length) return messages.join(" ");
+  }
+  return fallback;
+}
+
+function safeSession(session: RawVoiceSession): WebPhoneSession {
+  return {
+    blockers: session.blockers,
+    can_initialize: session.can_initialize,
+    expires_at: session.expires_at,
+    identity: session.identity,
+    line: session.line,
+    recording_enabled: session.recording_enabled,
+  };
+}
+
+function audioStateLabel(status: WebPhoneStatus) {
+  const labels: Record<WebPhoneStatus["audioLink"], string> = {
+    idle: "Headset idle",
+    requesting_microphone: "Waiting for microphone",
+    ready: "Headset ready",
+    connecting: "Connecting browser call",
+    audio_established: "Browser audio connected",
+    reconnecting: "Reconnecting browser audio",
+    ended: "Call ended",
+    error: "Browser call needs attention",
+  };
+  return labels[status.audioLink];
+}
+
+function elapsedLabel(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+export function WebPhoneProvider({ children }: { children: ReactNode }) {
+  const { getToken } = useAuth();
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
+  const devUserEmail = useMemo(
+    () =>
+      process.env.NEXT_PUBLIC_DEV_USER_EMAIL ??
+      "richardaustindugger@users.noreply.github.com",
+    [],
+  );
+  const [activeCall, setActiveCall] = useState<ActiveWebPhoneCall | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [session, setSession] = useState<WebPhoneSession | null>(null);
+  const [status, setStatus] = useState<WebPhoneStatus>(INITIAL_WEB_PHONE_STATUS);
+  const activeCallRef = useRef<ActiveWebPhoneCall | null>(null);
+  const operationRef = useRef<Promise<void> | null>(null);
+  const runtimeRef = useRef<WebPhoneRuntime | null>(null);
+  const voiceIdentityRef = useRef<string | null>(null);
+
+  const publishActiveCall = useCallback((next: ActiveWebPhoneCall | null) => {
+    activeCallRef.current = next;
+    setActiveCall(next);
+  }, []);
+
+  const fetchVoiceSession = useCallback(async (): Promise<RawVoiceSession> => {
+    const token = await getToken({ skipCache: true }).catch(() => null);
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else headers["X-Dev-User-Email"] = devUserEmail;
+    const response = await fetch(`${apiBaseUrl}/api/v1/voice/session`, {
+      headers,
+      cache: "no-store",
+    });
+    const payload = (await response.json().catch(() => null)) as RawVoiceSession | null;
+    if (!response.ok || !payload) {
+      throw new Error(detailMessage(payload, "Stonegate could not initialize browser calling."));
+    }
+    return payload;
+  }, [apiBaseUrl, devUserEmail, getToken]);
+
+  const showFailure = useCallback((error: unknown) => {
+    const message = error instanceof Error ? error.message : "The browser phone action failed.";
+    const runtime = runtimeRef.current;
+    setStatus((current) => ({
+      ...current,
+      audioLink: runtime?.hasLiveAudio ? current.audioLink : "error",
+      callActive: Boolean(runtime?.hasLiveAudio),
+      message,
+    }));
+  }, []);
+
+  const refreshVoiceToken = useCallback(async () => {
+    try {
+      const voiceSession = await fetchVoiceSession();
+      setSession(safeSession(voiceSession));
+      if (!voiceSession.can_initialize || !voiceSession.token) {
+        throw new Error(voiceSession.blockers.join(" ") || "Browser Voice token refresh was blocked.");
+      }
+      if (voiceIdentityRef.current && voiceIdentityRef.current !== voiceSession.identity) {
+        throw new Error("The browser phone identity changed during an active call.");
+      }
+      runtimeRef.current?.updateToken(voiceSession.token);
+    } catch (error) {
+      showFailure(error);
+    }
+  }, [fetchVoiceSession, showFailure]);
+
+  const ensureRuntime = useCallback(() => {
+    if (runtimeRef.current) return runtimeRef.current;
+    const runtime = new WebPhoneRuntime({
+      onStatus: (next) => {
+        setStatus(next);
+        if (
+          next.audioLink === "audio_established" &&
+          activeCallRef.current &&
+          !activeCallRef.current.audioEstablishedAt
+        ) {
+          setElapsedSeconds(0);
+          publishActiveCall({ ...activeCallRef.current, audioEstablishedAt: Date.now() });
+        }
+      },
+      onTokenWillExpire: refreshVoiceToken,
+    });
+    runtimeRef.current = runtime;
+    return runtime;
+  }, [publishActiveCall, refreshVoiceToken]);
+
+  const prepareHeadset = useCallback(async () => {
+    const voiceSession = await fetchVoiceSession();
+    setSession(safeSession(voiceSession));
+    if (!voiceSession.can_initialize || !voiceSession.token) {
+      throw new Error(voiceSession.blockers.join(" ") || "Browser Voice is not ready.");
+    }
+
+    let runtime = ensureRuntime();
+    if (voiceIdentityRef.current && voiceIdentityRef.current !== voiceSession.identity) {
+      if (runtime.hasLiveAudio) {
+        throw new Error("Finish the current call before changing the browser phone identity.");
+      }
+      runtime.destroy();
+      runtimeRef.current = null;
+      runtime = ensureRuntime();
+    }
+    voiceIdentityRef.current = voiceSession.identity;
+    await runtime.initialize(voiceSession.token);
+  }, [ensureRuntime, fetchVoiceSession]);
+
+  const runExclusive = useCallback(async (operation: () => Promise<void>) => {
+    if (operationRef.current) throw new Error("Another browser phone action is already running.");
+    setBusy(true);
+    const running = operation();
+    operationRef.current = running;
+    try {
+      await running;
+    } finally {
+      if (operationRef.current === running) operationRef.current = null;
+      setBusy(false);
+    }
+  }, []);
+
+  const initializeHeadset = useCallback(
+    () =>
+      runExclusive(async () => {
+        try {
+          await prepareHeadset();
+        } catch (error) {
+          showFailure(error);
+          throw error;
+        }
+      }),
+    [prepareHeadset, runExclusive, showFailure],
+  );
+
+  const connectActiveTarget = useCallback(async () => {
+    const target = activeCallRef.current;
+    if (!target) throw new Error("Choose a call before connecting the browser phone.");
+    await prepareHeadset();
+    const runtime = runtimeRef.current;
+    if (!runtime) throw new Error("The browser phone is unavailable.");
+    await runtime.connect(target.callIntentId);
+  }, [prepareHeadset]);
+
+  const startCall = useCallback(
+    async (target: WebPhoneCallTarget) => {
+      if (!target.callIntentId.trim()) throw new Error("A call intent is required for browser calling.");
+      if (!target.displayName.trim()) throw new Error("A call recipient is required for browser calling.");
+      if (operationRef.current) throw new Error("Another browser phone action is already running.");
+      if (activeCallRef.current && runtimeRef.current?.hasLiveAudio) {
+        throw new Error("End the current browser call before starting another one.");
+      }
+      const next: ActiveWebPhoneCall = {
+        ...target,
+        callIntentId: target.callIntentId.trim(),
+        displayName: target.displayName.trim(),
+        requestedAt: Date.now(),
+        audioEstablishedAt: null,
+      };
+      setElapsedSeconds(0);
+      publishActiveCall(next);
+      return runExclusive(async () => {
+        try {
+          await connectActiveTarget();
+        } catch (error) {
+          if (!runtimeRef.current?.hasLiveAudio) publishActiveCall(null);
+          if (error instanceof WebPhoneCancelledError) throw error;
+          showFailure(error);
+          throw error;
+        }
+      });
+    },
+    [connectActiveTarget, publishActiveCall, runExclusive, showFailure],
+  );
+
+  const hangUp = useCallback(() => {
+    runtimeRef.current?.disconnectLocalAudio();
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.hasLiveAudio) throw new Error("There is no active browser call to mute.");
+    runtime.setMuted(!runtime.currentStatus.muted);
+  }, []);
+
+  const reset = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (runtime?.hasLiveAudio) throw new Error("End the current browser call before closing the phone.");
+    runtime?.destroy();
+    runtimeRef.current = null;
+    voiceIdentityRef.current = null;
+    publishActiveCall(null);
+    setSession(null);
+    setStatus(INITIAL_WEB_PHONE_STATUS);
+  }, [publishActiveCall]);
+
+  useEffect(() => {
+    const establishedAt = activeCall?.audioEstablishedAt;
+    if (
+      !establishedAt ||
+      !["audio_established", "reconnecting"].includes(status.audioLink)
+    ) {
+      return;
+    }
+    const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - establishedAt) / 1000)));
+    const interval = window.setInterval(update, 1_000);
+    return () => window.clearInterval(interval);
+  }, [activeCall?.audioEstablishedAt, status.audioLink]);
+
+  useEffect(
+    () => () => {
+      runtimeRef.current?.destroy();
+      runtimeRef.current = null;
+    },
+    [],
+  );
+
+  const value = useMemo<WebPhoneContextValue>(
+    () => ({
+      activeCall,
+      busy,
+      hangUp,
+      initializeHeadset,
+      reset,
+      session,
+      startCall,
+      status,
+      toggleMute,
+    }),
+    [
+      activeCall,
+      busy,
+      hangUp,
+      initializeHeadset,
+      reset,
+      session,
+      startCall,
+      status,
+      toggleMute,
+    ],
+  );
+  const panelVisible = Boolean(activeCall) || status.audioLink !== "idle";
+  const canMute = Boolean(
+    activeCall && status.callActive && ["audio_established", "reconnecting"].includes(status.audioLink),
+  );
+  const canEnd = Boolean(activeCall && status.callActive);
+
+  return (
+    <WebPhoneContext.Provider value={value}>
+      {children}
+      {panelVisible ? (
+        <aside
+          aria-label="Stonegate browser phone"
+          className={styles.panel}
+          data-audio-state={status.audioLink}
+        >
+          <div className={styles.statusIcon} aria-hidden="true">
+            <Phone size={18} />
+          </div>
+          <div className={styles.callCopy}>
+            <span>{activeCall ? activeCall.contextLabel ?? "Stonegate web phone" : "Stonegate web phone"}</span>
+            <strong>{activeCall?.displayName ?? audioStateLabel(status)}</strong>
+            <small>
+              {activeCall?.phoneNumber ? `${activeCall.phoneNumber} · ` : ""}
+              <span aria-live="polite">{audioStateLabel(status)}</span>
+              {status.audioLink === "audio_established" ? (
+                <span aria-live="off"> · {elapsedLabel(elapsedSeconds)}</span>
+              ) : null}
+            </small>
+            {status.message ? <small className={styles.message}>{status.message}</small> : null}
+          </div>
+          <div className={styles.controls}>
+            {activeCall?.contextHref ? (
+              <Link aria-label={`Open ${activeCall.displayName}`} href={activeCall.contextHref}>
+                <ExternalLink aria-hidden="true" size={16} />
+              </Link>
+            ) : null}
+            <button
+              aria-label={status.muted ? "Unmute browser call" : "Mute browser call"}
+              aria-pressed={status.muted}
+              disabled={!canMute || busy}
+              onClick={() => toggleMute()}
+              type="button"
+            >
+              {status.muted ? <MicOff aria-hidden="true" size={17} /> : <Mic aria-hidden="true" size={17} />}
+            </button>
+            <button
+              aria-label="End browser call"
+              className={styles.endButton}
+              disabled={!canEnd}
+              onClick={hangUp}
+              type="button"
+            >
+              <PhoneOff aria-hidden="true" size={17} />
+            </button>
+            {!status.callActive ? (
+              <button
+                aria-label="Close browser phone"
+                disabled={busy}
+                onClick={reset}
+                type="button"
+              >
+                <X aria-hidden="true" size={17} />
+              </button>
+            ) : null}
+          </div>
+          {activeCall?.fromNumber || session?.line ? (
+            <span className={styles.lineLabel}>
+              From {activeCall?.fromLabel ?? (
+                activeCall?.fromNumber && activeCall.fromNumber !== session?.line?.phone_number
+                  ? "Stonegate"
+                  : session?.line?.label ?? "Stonegate"
+              )} ·{" "}
+              {activeCall?.fromNumber ?? session?.line?.phone_number}
+            </span>
+          ) : null}
+        </aside>
+      ) : null}
+    </WebPhoneContext.Provider>
+  );
+}
+
+export function useWebPhone() {
+  const context = useContext(WebPhoneContext);
+  if (!context) throw new Error("useWebPhone must be used inside WebPhoneProvider.");
+  return context;
+}

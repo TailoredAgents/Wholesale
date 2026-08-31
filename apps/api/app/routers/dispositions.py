@@ -1286,6 +1286,44 @@ def start_case_execution_call(
 
 
 @router.post(
+    "/cases/{case_id}/execution/forwarded-calls",
+    status_code=201,
+    dependencies=[Depends(buyer_edit_dependency), Depends(call_dependency)],
+)
+def start_case_execution_forwarded_call(
+    case_id: UUID,
+    payload: DispositionExecutionCallCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> VoiceCallIntentRead:
+    try:
+        return disposition_execution.start_candidate_forwarded_call(
+            db,
+            principal,
+            case_id,
+            payload,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except TwilioVoiceCallError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post(
     "/cases/{case_id}/execution/outcomes",
     dependencies=[Depends(buyer_edit_dependency)],
 )

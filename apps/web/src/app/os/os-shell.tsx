@@ -8,6 +8,7 @@ import {
   History,
   MailPlus,
   Menu,
+  PhoneOutgoing,
   Plus,
   Search,
   UserRoundPlus,
@@ -21,6 +22,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceProfile } from "../lib/api";
 import { StonegateLogo } from "../stonegate-logo";
 import { AuthControls } from "./auth-controls";
+import { QuickDialDialog } from "./_components/quick-dial-dialog";
+import { WebPhoneProvider } from "./_components/web-phone-provider";
 import { HelpBubble } from "./help/help-workspace";
 import {
   defaultRouteForProfile,
@@ -67,12 +70,14 @@ export function OsShell({
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
+  const quickDialButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [quickDialOpen, setQuickDialOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<RecentDestination[]>([]);
   const [resolvedProfile, setResolvedProfile] = useState<WorkspaceProfile | null>(profile);
@@ -114,6 +119,7 @@ export function OsShell({
   const canComposeEmail =
     hasPermission("communications:send_email") ||
     hasPermission("communications:send_assigned_email");
+  const canQuickDial = hasPermission("communications:place_calls");
   const canOpenApprovals =
     hasPermission("offers:approve") || hasPermission("contracts:send");
   const canOpenNotifications =
@@ -221,6 +227,7 @@ export function OsShell({
         setSearchOpen(false);
         setNewOpen(false);
         setRecentOpen(false);
+        setQuickDialOpen(false);
       }
       if (
         event.key === "/" &&
@@ -282,8 +289,14 @@ export function OsShell({
     setRecentOpen(false);
   }
 
+  function closeQuickDial() {
+    setQuickDialOpen(false);
+    window.requestAnimationFrame(() => quickDialButtonRef.current?.focus());
+  }
+
   return (
-    <div className={`${theme.theme} ${styles.shell}`}>
+    <WebPhoneProvider>
+      <div className={`${theme.theme} ${styles.shell}`}>
       <a className={styles.skipLink} href="#main-content">
         Skip to main content
       </a>
@@ -421,7 +434,7 @@ export function OsShell({
               ) : null}
             </div>
 
-            {canCreateLead || canComposeEmail ? (
+            {canCreateLead || canComposeEmail || canQuickDial ? (
               <div
                 className={styles.headerMenuWrap}
                 onBlur={(event) => {
@@ -463,6 +476,22 @@ export function OsShell({
                           <small>Start a company conversation</small>
                         </div>
                       </Link>
+                    ) : null}
+                    {canQuickDial ? (
+                      <button
+                        onClick={() => {
+                          closeTransientUi();
+                          setQuickDialOpen(true);
+                        }}
+                        ref={quickDialButtonRef}
+                        type="button"
+                      >
+                        <PhoneOutgoing aria-hidden="true" size={16} />
+                        <div>
+                          <strong>Quick Dial</strong>
+                          <small>Call a company or professional</small>
+                        </div>
+                      </button>
                     ) : null}
                   </div>
                 ) : null}
@@ -532,8 +561,10 @@ export function OsShell({
           {children}
         </main>
         {helpProfile ? <HelpBubble devUserEmail={helpProfile.email} /> : null}
+        {quickDialOpen ? <QuickDialDialog onClose={closeQuickDial} /> : null}
       </div>
-    </div>
+      </div>
+    </WebPhoneProvider>
   );
 }
 

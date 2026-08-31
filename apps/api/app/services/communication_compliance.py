@@ -10,6 +10,7 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    Conversation,
     SuppressionRecord,
 )
 
@@ -123,18 +124,37 @@ def evaluate_voice_eligibility(
     *,
     settings: Settings | None = None,
     now: datetime | None = None,
+    require_permission: bool = True,
+    requested_phone_number: str | None = None,
 ) -> VoiceEligibility:
     settings = settings or get_settings()
-    phone_method = db.scalar(
-        select(ContactMethod)
-        .where(
-            ContactMethod.organization_id == contact.organization_id,
-            ContactMethod.contact_id == contact.id,
-            ContactMethod.method_type == "phone",
-        )
-        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    requested_recipient = (
+        format_e164(requested_phone_number) if requested_phone_number is not None else None
     )
-    recipient = format_e164(phone_method.normalized_value) if phone_method else None
+    phone_method_query = select(ContactMethod).where(
+        ContactMethod.organization_id == contact.organization_id,
+        ContactMethod.contact_id == contact.id,
+        ContactMethod.method_type == "phone",
+    )
+    if requested_phone_number is not None:
+        phone_method_query = phone_method_query.where(
+            ContactMethod.normalized_value.in_(
+                phone_lookup_values(requested_recipient or requested_phone_number)
+            )
+        )
+    phone_method = db.scalar(
+        phone_method_query.order_by(
+            ContactMethod.is_primary.desc(),
+            ContactMethod.created_at.asc(),
+        )
+    )
+    recipient = (
+        requested_recipient
+        if requested_recipient is not None and phone_method is not None
+        else format_e164(phone_method.normalized_value)
+        if phone_method is not None
+        else None
+    )
     latest_consent = db.scalar(
         select(ConsentRecord)
         .where(
@@ -165,7 +185,7 @@ def evaluate_voice_eligibility(
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller phone number is required.")
-    if consent_status != "granted":
+    if consent_status != "granted" and (require_permission or latest_consent is not None):
         blockers.append("Recorded phone contact permission is required.")
     if suppression is not None:
         blockers.append("This number is suppressed from phone calls.")
@@ -186,6 +206,37 @@ def evaluate_voice_eligibility(
         within_allowed_hours=within_allowed_hours,
         blockers=tuple(blockers),
     )
+
+
+def business_voice_permission_not_required(
+    conversation: Conversation,
+    contact: Contact,
+) -> bool:
+    """Allow deliberate B2B Quick Dial calls without fabricating consent evidence.
+
+    A generic inbound caller or email contact is not automatically a verified business call.
+    The explicit Quick Dial preparation marker is the evidence that staff intentionally chose
+    the business-call workflow. An existing denial/revocation still blocks the call in
+    ``evaluate_voice_eligibility``.
+    """
+
+    return business_voice_requested_phone_number(conversation, contact) is not None
+
+
+def business_voice_requested_phone_number(
+    conversation: Conversation,
+    contact: Contact,
+) -> str | None:
+    quick_dial = (conversation.conversation_metadata or {}).get("quick_dial")
+    if not (
+        conversation.conversation_type == "general"
+        and contact.contact_type == "business_contact"
+        and isinstance(quick_dial, dict)
+        and quick_dial.get("prepared_by_user_id")
+    ):
+        return None
+    phone_number = quick_dial.get("phone_number")
+    return phone_number if isinstance(phone_number, str) and format_e164(phone_number) else None
 
 
 def phone_lookup_values(value: str) -> tuple[str, ...]:

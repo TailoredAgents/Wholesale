@@ -48,7 +48,7 @@ from app.services.communication_compliance import (
 )
 from app.services.inbox import ensure_buyer_conversation
 from app.services.messaging import send_conversation_sms
-from app.services.voice import start_forwarded_call
+from app.services.voice import create_call_intent, start_forwarded_call
 
 EXECUTION_CASE_STATUSES = {
     "buyer_matching",
@@ -199,7 +199,34 @@ def start_candidate_call(
 ) -> VoiceCallIntentRead:
     _, _, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
     conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
-    db.commit()
+    result = create_call_intent(
+        db,
+        principal,
+        conversation.id,
+        VoiceCallIntentCreate(idempotency_key=payload.idempotency_key),
+        intent_source="disposition_execution",
+        require_browser_voice=True,
+    )
+    if result is None:
+        raise ValueError("The buyer conversation is unavailable.")
+    return result
+
+
+def start_candidate_forwarded_call(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    payload: DispositionExecutionCallCreate,
+) -> VoiceCallIntentRead:
+    """Start a disposition call through the staff member's configured cellphone.
+
+    This deliberately remains separate from ``start_candidate_call`` so the browser
+    SDK path may require browser-only Twilio credentials without disabling the
+    cellphone bridge fallback.
+    """
+
+    _, _, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
+    conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
     result = start_forwarded_call(
         db,
         principal,

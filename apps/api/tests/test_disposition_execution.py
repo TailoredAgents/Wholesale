@@ -1,13 +1,30 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from runpy import run_path
+from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
-from app.models.foundation import BuyerEngagement, Lead, Task
+from app.models.foundation import (
+    Buyer,
+    BuyerEngagement,
+    ConsentRecord,
+    DispositionBuyerPoolCandidate,
+    Lead,
+    Task,
+    User,
+    VoiceCallIntent,
+    VoiceLine,
+)
+from app.services.inbox import ensure_buyer_conversation
 from tests.test_dispositions import (
     HEADERS,
     create_approved_disposition_case,
@@ -16,6 +33,31 @@ from tests.test_dispositions import (
     upload_received_proof,
     verify_proof,
 )
+
+CELL_FORWARD_OWNER_EMAIL = HEADERS["X-Dev-User-Email"]
+
+
+@pytest.fixture
+def cellphone_voice_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
+    values = {
+        "TWILIO_VOICE_ENABLED": "true",
+        "TWILIO_ACCOUNT_SID": "AC00000000000000000000000000000000",
+        "TWILIO_AUTH_TOKEN": "test-voice-auth-token",
+        "TWILIO_VOICE_FROM_NUMBER": "+16785417725",
+        "TWILIO_WEBHOOK_BASE_URL": "https://api.stonegate.test",
+        "TWILIO_VALIDATE_WEBHOOK_SIGNATURES": "true",
+        "TWILIO_VOICE_ALLOWED_START_HOUR": "0",
+        "TWILIO_VOICE_ALLOWED_END_HOUR": "24",
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    for key in ("TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "TWILIO_TWIML_APP_SID"):
+        monkeypatch.delenv(key, raising=False)
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        get_settings.cache_clear()
 
 
 def _ready_execution_case(db: Session, client: TestClient) -> tuple[str, str]:
@@ -33,6 +75,82 @@ def _ready_execution_case(db: Session, client: TestClient) -> tuple[str, str]:
         item for item in refreshed.json()["entries"] if item["buyer_id"] == buyer_id
     )
     return case_id, candidate["candidate_id"]
+
+
+def test_disposition_cellphone_forwarding_remains_available_without_browser_credentials(
+    db_session: Session,
+    api_db_override: None,
+    cellphone_voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FakeVoiceProvider:
+        def start(self, **kwargs: str) -> TwilioVoiceCallResult:
+            return TwilioVoiceCallResult(
+                sid="CA00000000000000000000000000000088",
+                status="queued",
+            )
+
+    monkeypatch.setattr(
+        "app.services.voice.get_twilio_voice_call_provider",
+        lambda: FakeVoiceProvider(),
+    )
+    client = TestClient(app)
+    case_id, candidate_id = _ready_execution_case(db_session, client)
+    candidate = db_session.get(DispositionBuyerPoolCandidate, UUID(candidate_id))
+    assert candidate is not None
+    assert candidate.buyer_id is not None
+    buyer = db_session.get(Buyer, candidate.buyer_id)
+    assert buyer is not None
+    buyer.phone = "+14045550189"
+    buyer.normalized_phone = "+14045550189"
+    owner = db_session.scalar(select(User).where(User.email == CELL_FORWARD_OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550100"
+    owner.voice_forwarding_enabled = True
+    line = db_session.scalar(select(VoiceLine))
+    assert line is not None
+    line.department_key = "dispositions"
+    line.purpose_key = "buyer_relations"
+    line.assigned_user_id = owner.id
+    conversation = ensure_buyer_conversation(db_session, buyer, actor_user_id=owner.id)
+    db_session.add(
+        ConsentRecord(
+            organization_id=buyer.organization_id,
+            contact_id=conversation.contact_id,
+            channel="phone",
+            status="granted",
+            source="phone_call",
+            wording_version="manual-v1",
+            wording="Buyer granted phone contact permission.",
+            normalized_address="+14045550189",
+            captured_ip=None,
+            user_agent=None,
+        )
+    )
+    db_session.commit()
+    payload = {
+        "candidate_id": candidate_id,
+        "idempotency_key": "disposition-cellphone-fallback-001",
+    }
+
+    browser = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/calls",
+        headers=HEADERS,
+        json=payload,
+    )
+    forwarded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/forwarded-calls",
+        headers=HEADERS,
+        json={**payload, "idempotency_key": "disposition-cellphone-fallback-002"},
+    )
+
+    assert browser.status_code == 503, browser.text
+    assert "TWILIO_API_KEY_SID" in browser.text
+    assert forwarded.status_code == 201, forwarded.text
+    assert forwarded.json()["status"] == "started"
+    intent = db_session.get(VoiceCallIntent, UUID(forwarded.json()["id"]))
+    assert intent is not None
+    assert intent.intent_metadata["source"] == "forwarded_cellphone"
 
 
 def test_no_answer_creates_retry_task_before_queue_advances(

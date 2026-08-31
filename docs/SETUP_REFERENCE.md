@@ -769,10 +769,11 @@ production no-call check passes.
 - `PROSPECTING_NATIVE_DIALER_ORPHAN_GRACE_SECONDS=300`
 - `PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS=5`
 
-The D4 browser softphone also uses these existing Twilio variables. The first eight are readiness
-gates; the token TTL has a safe application default and is listed for deliberate tuning. This list
-intentionally contains names only: credentials belong in the API service environment and never in
-source, documentation, screenshots, URLs, browser storage, or frontend environment variables.
+The shared Stonegate browser phone uses these existing Twilio variables. The first eight are
+readiness gates; the token TTL has a safe application default and is listed for deliberate tuning.
+This list intentionally contains names only: credentials belong in the API service environment and
+never in source, documentation, screenshots, URLs, browser storage, or frontend environment
+variables.
 
 - `TWILIO_VOICE_ENABLED`
 - `TWILIO_ACCOUNT_SID`
@@ -814,6 +815,25 @@ open native pilot, and zero active sessions, legs, or provider calls. Do not tur
 back on or use a historical direct URL as a substitute for owner authorization. BatchDialer remains
 the calling system. My Calls remains available for manual qualification, notes, outcomes, and warm
 handoffs without a native dialer lease; agreed appointments are entered manually in Stonegate.
+
+### Shared Browser Calling Setup
+
+This setup powers deliberate warm calls from seller records and Inbox, the Dispositions one-to-one
+queue, and **New > Quick Dial**. It does not activate the dormant native VA prospecting dialer.
+
+1. Keep `PROSPECTING_NATIVE_DIALER_ENABLED=false` in both API and worker.
+2. In Twilio, create or select the TwiML App referenced by `TWILIO_TWIML_APP_SID`. Set its Voice
+   Request URL to POST to
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`.
+3. Put `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, and `TWILIO_TWIML_APP_SID` in the Render API
+   service alongside the existing Twilio Voice settings. Do not put them in the web service, source
+   code, or any `NEXT_PUBLIC_*` variable.
+4. In **Settings > Communications**, keep each staff member assigned to the active company line(s)
+   they are authorized to use. Disposition staff need an active Buyer Relations line; acquisitions
+   staff need an active Seller Conversations line. Quick Dial uses an authorized non-prospecting
+   company line.
+5. Keep the existing Twilio callback base URL on HTTPS and callback-signature validation enabled.
+   After deployment, allow microphone access when the OS first asks to prepare the browser headset.
 
 ### Historical D4 Twilio Browser Setup
 

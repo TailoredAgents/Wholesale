@@ -33,6 +33,17 @@ export default async function InboxPage({
   const params = await searchParams;
   if (params.manage === "email") redirect("/os/settings/communications");
   const requestedFilter = params.view as InboxFilterKey | undefined;
+  const initialChannel =
+    params.channel && composerChannels.has(params.channel as ComposerChannel)
+      ? (params.channel as ComposerChannel)
+      : "sms";
+  const workspaceKey = [
+    params.compose === "email" ? "compose-email" : "inbox",
+    params.conversation ?? "no-conversation",
+    params.lead ?? "no-lead",
+    initialChannel,
+    requestedFilter ?? "team",
+  ].join(":");
 
   return (
     <InboxWorkspace
@@ -41,12 +52,8 @@ export default async function InboxPage({
       initialEmailAdminOpen={false}
       initialGlobalComposeOpen={params.compose === "email"}
       initialLeadId={params.lead ?? null}
-      initialChannel={
-        params.channel && composerChannels.has(params.channel as ComposerChannel)
-          ? (params.channel as ComposerChannel)
-          : "sms"
-      }
-      key={params.compose === "email" ? "compose-email" : "inbox"}
+      initialChannel={initialChannel}
+      key={workspaceKey}
     />
   );
 }

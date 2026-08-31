@@ -21,8 +21,29 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(parent, /Call queue/);
   assert.match(workspace, /execution\/sms/);
   assert.match(workspace, /!candidate\.sms\.allowed/);
+  assert.match(workspace, /Review introduction text/);
+  assert.match(workspace, /Nothing sends automatically/);
+  assert.match(workspace, /aria-label="Introduction SMS draft"/);
+  assert.match(workspace, /Recipient/);
+  assert.match(workspace, /workspace\.property_address/);
+  assert.match(workspace, /Send text and prepare call/);
   assert.match(workspace, /execution\/calls/);
   assert.match(workspace, /!candidate\.voice\.allowed/);
+  assert.match(workspace, /useWebPhone/);
+  assert.match(workspace, /webPhone\.startCall/);
+  assert.match(workspace, /callIntentId: intent\.id/);
+  assert.match(workspace, /fromNumber: intent\.from_number/);
+  assert.match(workspace, /let remaining = 10/);
+  assert.match(workspace, /startBrowserCall\(candidateId\)/);
+  assert.match(workspace, /Call now/);
+  assert.match(workspace, /cancelPreparedCall/);
+  assert.match(
+    workspace,
+    /async function startCellphoneCall\(\)[\s\S]*window\.clearInterval\(callCountdownTimer\.current\)/,
+  );
+  assert.match(workspace, /Call through my cellphone/);
+  assert.match(workspace, /execution\/forwarded-calls/);
+  assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
   assert.match(workspace, /Open approved investor packet/);
   assert.match(workspace, /Text approved packet/);
   assert.match(workspace, /package\/share-links/);
@@ -34,6 +55,7 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /idempotency_key: `dispo-showing-/);
   assert.match(workspace, /outcome === "callback"/);
   assert.match(workspace, /No-answer gets a 4-hour retry task/);
+  assert.doesNotMatch(workspace, /setTimeout\([^)]*sendSms/);
 });
 
 test("showing controls persist state without exposing access secrets", async () => {

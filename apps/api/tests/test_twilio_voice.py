@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 from pytest import MonkeyPatch
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
 
@@ -18,6 +18,7 @@ from app.integrations.twilio_recordings import TwilioRecordingMedia
 from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
     AiOrchestratorEvent,
     AuditEvent,
     CallRecord,
@@ -26,11 +27,15 @@ from app.models.foundation import (
     CommunicationProviderEvent,
     ConsentRecord,
     Contact,
+    ContactMethod,
     Conversation,
+    ConversationAssignmentEvent,
+    ConversationContextLink,
     Lead,
     Organization,
     Role,
     RoleAssignment,
+    SuppressionRecord,
     Task,
     User,
     VoiceCallIntent,
@@ -812,6 +817,654 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     assert call_intent.status == "started"
 
 
+def test_quick_dial_creates_business_thread_and_reuses_it_idempotently(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    payload = {
+        "phone_number": "+14045550199",
+        "company_name": "Peachtree Title",
+        "purpose": "title_company",
+        "call_reason": "Confirm closing availability.",
+        "idempotency_key": "quick-dial-title-0001",
+    }
+
+    created = client.post("/api/v1/voice/quick-dial", headers=headers, json=payload)
+    duplicate = client.post("/api/v1/voice/quick-dial", headers=headers, json=payload)
+    second_intent = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={**payload, "idempotency_key": "quick-dial-title-0002"},
+    )
+
+    assert created.status_code == 201, created.text
+    assert duplicate.status_code == 201, duplicate.text
+    assert second_intent.status_code == 201, second_intent.text
+    body = created.json()
+    assert body["conversation_type"] == "general"
+    assert body["contact_name"] == "Peachtree Title"
+    assert body["reused_contact"] is False
+    assert body["reused_conversation"] is False
+    assert body["intent"]["recipient"] == "+14045550199"
+    assert body["intent"]["status"] == "pending"
+    assert duplicate.json()["intent"]["id"] == body["intent"]["id"]
+    assert second_intent.json()["conversation_id"] == body["conversation_id"]
+    assert second_intent.json()["contact_id"] == body["contact_id"]
+    assert second_intent.json()["intent"]["id"] != body["intent"]["id"]
+    contact = db_session.get(Contact, UUID(body["contact_id"]))
+    assert contact is not None
+    assert contact.contact_type == "business_contact"
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+def test_quick_dial_replay_is_bound_to_request_and_actor(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    owner_role = db_session.scalar(select(Role).where(Role.key == "owner"))
+    assert owner is not None
+    assert owner_role is not None
+    second_owner = User(
+        organization_id=owner.organization_id,
+        email="second-owner@example.com",
+        display_name="Second Owner",
+        is_active=True,
+    )
+    db_session.add(second_owner)
+    db_session.flush()
+    db_session.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=second_owner.id,
+            role_id=owner_role.id,
+        )
+    )
+    db_session.commit()
+    payload = {
+        "phone_number": "+14045550198",
+        "company_name": "Peachtree Inspections",
+        "purpose": "vendor",
+        "call_reason": "Confirm inspection availability.",
+        "idempotency_key": "quick-dial-replay-0001",
+    }
+
+    created = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    changed_request = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={**payload, "call_reason": "A different call."},
+    )
+    changed_actor = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": second_owner.email},
+        json=payload,
+    )
+
+    assert created.status_code == 201, created.text
+    assert changed_request.status_code == 409, changed_request.text
+    assert changed_actor.status_code == 409, changed_actor.text
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 1
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "communication.quick_dial_prepare")
+            )
+            or 0
+        )
+        == 1
+    )
+
+
+def test_quick_dial_does_not_override_recorded_phone_revocation(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    payload = {
+        "phone_number": "+14045550197",
+        "company_name": "North Metro Vendor",
+        "purpose": "vendor",
+        "idempotency_key": "quick-dial-revocation-0001",
+    }
+    created = client.post("/api/v1/voice/quick-dial", headers=headers, json=payload)
+    assert created.status_code == 201, created.text
+    contact = db_session.get(Contact, UUID(created.json()["contact_id"]))
+    assert contact is not None
+    db_session.add(
+        ConsentRecord(
+            organization_id=contact.organization_id,
+            contact_id=contact.id,
+            channel="phone",
+            status="revoked",
+            source="phone_call",
+            wording_version="manual-v1",
+            wording="The contact revoked phone permission.",
+            normalized_address="+14045550197",
+            captured_ip=None,
+            user_agent=None,
+        )
+    )
+    db_session.commit()
+
+    blocked = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={**payload, "idempotency_key": "quick-dial-revocation-0002"},
+    )
+
+    assert blocked.status_code == 422, blocked.text
+    assert "Recorded phone contact permission is required" in blocked.text
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 1
+
+
+def test_quick_dial_reuses_existing_business_contact_without_creating_a_lead(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Cobb Closing Counsel",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=owner.organization_id,
+            contact_id=contact.id,
+            method_type="phone",
+            value="(470) 555-0117",
+            normalized_value="4705550117",
+            is_primary=True,
+        )
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "phone_number": "+14705550117",
+            "purpose": "attorney",
+            "idempotency_key": "quick-dial-attorney-0001",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["contact_id"] == str(contact.id)
+    assert response.json()["reused_contact"] is True
+    assert response.json()["reused_conversation"] is False
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+def test_quick_dial_binds_an_existing_contact_to_the_exact_entered_number(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Multi-line Closing Company",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    db_session.add_all(
+        [
+            ContactMethod(
+                organization_id=owner.organization_id,
+                contact_id=contact.id,
+                method_type="phone",
+                value="(470) 555-0120",
+                normalized_value="4705550120",
+                is_primary=True,
+            ),
+            ContactMethod(
+                organization_id=owner.organization_id,
+                contact_id=contact.id,
+                method_type="phone",
+                value="(470) 555-0121",
+                normalized_value="4705550121",
+                is_primary=False,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "phone_number": "+14705550121",
+            "company_name": "Multi-line Closing Company",
+            "purpose": "title_company",
+            "idempotency_key": "quick-dial-secondary-number-0001",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["contact_id"] == str(contact.id)
+    assert body["intent"]["recipient"] == "+14705550121"
+    conversation = db_session.get(Conversation, UUID(body["conversation_id"]))
+    assert conversation is not None
+    assert conversation.conversation_metadata["quick_dial"]["phone_number"] == "+14705550121"
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["voice_eligibility"]["recipient"] == "+14705550121"
+
+
+def test_quick_dial_uses_only_the_selected_authorized_company_line(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    company_number = "+14705550191"
+    company_line = VoiceLine(
+        organization_id=owner.organization_id,
+        assigned_user_id=owner.id,
+        fallback_user_id=None,
+        assigned_team_id=None,
+        provider="twilio",
+        provider_phone_number_id=None,
+        phone_number=company_number,
+        label="Company calls",
+        department_key="general",
+        purpose_key="company_general",
+        status="active",
+        is_default=False,
+        inbound_route="assigned_user",
+        ring_strategy="sequential",
+        coverage_timezone="America/New_York",
+        coverage_start_hour=0,
+        coverage_end_hour=24,
+        missed_call_action="fallback_then_voicemail",
+        line_metadata={"source": "test"},
+    )
+    db_session.add(company_line)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "phone_number": "+14045550155",
+            "company_name": "Georgia Closing Services",
+            "purpose": "title_company",
+            "voice_line_id": str(company_line.id),
+            "idempotency_key": "quick-dial-company-line-0001",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["intent"]["from_number"] == company_number
+    intent = db_session.get(VoiceCallIntent, UUID(response.json()["intent"]["id"]))
+    assert intent is not None
+    assert intent.voice_line_id == company_line.id
+
+
+def test_quick_dial_requires_full_call_permission_and_rejects_internal_numbers(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    caller_role = db_session.scalar(select(Role).where(Role.key == "prospecting_caller"))
+    assert owner is not None
+    assert caller_role is not None
+    assigned_only_user = User(
+        organization_id=owner.organization_id,
+        email="assigned-caller@example.com",
+        display_name="Assigned Caller",
+        is_active=True,
+    )
+    db_session.add(assigned_only_user)
+    db_session.flush()
+    db_session.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=assigned_only_user.id,
+            role_id=caller_role.id,
+        )
+    )
+    db_session.commit()
+    payload = {
+        "phone_number": "+14045550188",
+        "purpose": "vendor",
+        "idempotency_key": "quick-dial-permission-0001",
+    }
+
+    forbidden = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": assigned_only_user.email},
+        json=payload,
+    )
+    own_line = client.post(
+        "/api/v1/voice/quick-dial",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={**payload, "phone_number": STONEGATE_NUMBER},
+    )
+
+    assert forbidden.status_code == 403
+    assert own_line.status_code == 422
+    assert "cannot call a Stonegate company line" in own_line.text
+
+
+def test_general_quick_dial_browser_call_creates_twiml_and_call_history(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    quick_dial = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={
+            "phone_number": "+14045550177",
+            "company_name": "North Georgia Surveying",
+            "purpose": "vendor",
+            "idempotency_key": "quick-dial-browser-0001",
+        },
+    )
+    assert quick_dial.status_code == 201, quick_dial.text
+    result = quick_dial.json()
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{result['conversation_id']}",
+        headers=headers,
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["voice_eligibility"]["can_call"] is True
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+    payload = {
+        "From": f"client:{session['identity']}",
+        "CallSid": "CA00000000000000000000000000000066",
+        "CallIntentId": result["intent"]["id"],
+    }
+
+    outbound = post_signed(client, "/api/v1/webhooks/twilio/voice/outbound", payload)
+    duplicate = post_signed(client, "/api/v1/webhooks/twilio/voice/outbound", payload)
+
+    assert outbound.status_code == 200, outbound.text
+    assert duplicate.status_code == 200, duplicate.text
+    assert "+14045550177" in outbound.text
+    assert f'callerId="{STONEGATE_NUMBER}"' in outbound.text
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    assert call.conversation_id == UUID(result["conversation_id"])
+    assert call.contact_id == UUID(result["contact_id"])
+    assert call.lead_id is None
+    assert int(db_session.scalar(select(func.count()).select_from(CallRecord)) or 0) == 1
+    activity = db_session.scalar(
+        select(ActivityEvent).where(ActivityEvent.event_type == "conversation.call_started")
+    )
+    assert activity is not None
+    assert activity.summary == "Outbound company call initiated from Quick Dial."
+
+
+def test_browser_calling_requires_browser_credentials_but_cellphone_forwarding_does_not(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FakeVoiceProvider:
+        def start(self, **kwargs: str) -> TwilioVoiceCallResult:
+            return TwilioVoiceCallResult(
+                sid="CA00000000000000000000000000000096",
+                status="queued",
+            )
+
+    for key in ("TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "TWILIO_TWIML_APP_SID"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        "app.services.voice.get_twilio_voice_call_provider",
+        lambda: FakeVoiceProvider(),
+    )
+    get_settings.cache_clear()
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    browser = client.post(
+        f"/api/v1/voice/leads/{conversation.lead_id}/call-intents",
+        headers=headers,
+        json={"idempotency_key": "missing-browser-credentials-0001"},
+    )
+    quick_dial = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={
+            "phone_number": "+14045550196",
+            "company_name": "Browser Credential Test",
+            "purpose": "vendor",
+            "idempotency_key": "missing-browser-credentials-0002",
+        },
+    )
+
+    assert browser.status_code == 503, browser.text
+    assert quick_dial.status_code == 503, quick_dial.text
+    assert "TWILIO_API_KEY_SID" in browser.text
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 0
+    assert (
+        db_session.scalar(
+            select(Contact).where(Contact.legal_name == "Browser Credential Test")
+        )
+        is None
+    )
+
+    forwarded = client.post(
+        f"/api/v1/voice/leads/{conversation.lead_id}/forwarded-calls",
+        headers=headers,
+        json={"idempotency_key": "cellphone-fallback-0001"},
+    )
+
+    assert forwarded.status_code == 201, forwarded.text
+    assert forwarded.json()["status"] == "started"
+
+
+def test_unassigned_lead_browser_call_does_not_persist_a_conversation(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    assert conversation.lead_id is not None
+    lead_id = conversation.lead_id
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    caller_role = db_session.scalar(select(Role).where(Role.key == "prospecting_caller"))
+    assert owner is not None
+    assert caller_role is not None
+    assigned_only_user = User(
+        organization_id=owner.organization_id,
+        email="unassigned-browser-caller@example.com",
+        display_name="Unassigned Browser Caller",
+        is_active=True,
+    )
+    db_session.add(assigned_only_user)
+    db_session.flush()
+    db_session.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=assigned_only_user.id,
+            role_id=caller_role.id,
+        )
+    )
+    db_session.execute(
+        delete(ConversationAssignmentEvent).where(
+            ConversationAssignmentEvent.conversation_id == conversation.id
+        )
+    )
+    db_session.execute(
+        delete(ConversationContextLink).where(
+            ConversationContextLink.conversation_id == conversation.id
+        )
+    )
+    db_session.execute(delete(Conversation).where(Conversation.id == conversation.id))
+    db_session.commit()
+    assert db_session.get(Lead, lead_id) is not None
+
+    response = client.post(
+        f"/api/v1/voice/leads/{lead_id}/call-intents",
+        headers={"X-Dev-User-Email": assigned_only_user.email},
+        json={"idempotency_key": "unassigned-lead-browser-0001"},
+    )
+
+    assert response.status_code in {403, 404}, response.text
+    db_session.rollback()
+    assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 0
+
+
+def test_outbound_execution_rechecks_suppression_after_intent_creation(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    quick_dial = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={
+            "phone_number": "+14045550195",
+            "company_name": "Suppression Test Vendor",
+            "purpose": "vendor",
+            "idempotency_key": "quick-dial-suppression-0001",
+        },
+    )
+    assert quick_dial.status_code == 201, quick_dial.text
+    result = quick_dial.json()
+    contact = db_session.get(Contact, UUID(result["contact_id"]))
+    assert contact is not None
+    db_session.add(
+        SuppressionRecord(
+            organization_id=contact.organization_id,
+            contact_id=contact.id,
+            channel="phone",
+            normalized_address="+14045550195",
+            status="active",
+            reason="Contact requested no calls.",
+            source="manual",
+            provider=None,
+            external_event_id=None,
+            suppressed_at=datetime.now(ZoneInfo("UTC")),
+            lifted_at=None,
+            suppression_metadata=None,
+        )
+    )
+    db_session.commit()
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        {
+            "From": f"client:{session['identity']}",
+            "CallSid": "CA00000000000000000000000000000095",
+            "CallIntentId": result["intent"]["id"],
+        },
+    )
+
+    assert outbound.status_code == 422, outbound.text
+    assert "suppressed from phone calls" in outbound.text
+    assert int(db_session.scalar(select(func.count()).select_from(CallRecord)) or 0) == 0
+    intent = db_session.get(VoiceCallIntent, UUID(result["intent"]["id"]))
+    assert intent is not None
+    assert intent.status == "pending"
+
+
 def test_manual_call_permission_unblocks_the_real_outbound_call_flow(
     db_session: Session,
     api_db_override: None,
@@ -937,6 +1590,112 @@ def test_forwarded_outbound_call_can_start_from_lead_page(
     assert call is not None
     assert call.from_number == STONEGATE_NUMBER
     assert call.to_number == SELLER_NUMBER
+
+
+def test_browser_call_intent_can_start_from_lead_page(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+
+    response = client.post(
+        f"/api/v1/voice/leads/{conversation.lead_id}/call-intents",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"idempotency_key": "lead-page-browser-call-0001"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["conversation_id"] == str(conversation.id)
+    assert response.json()["status"] == "pending"
+    assert response.json()["recipient"] == SELLER_NUMBER
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 0
+
+
+def test_general_line_inbound_call_reuses_known_seller_conversation(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    line = db_session.scalar(select(VoiceLine))
+    assert line is not None
+    line.department_key = "general"
+    line.purpose_key = "company_general"
+    db_session.commit()
+
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": SELLER_NUMBER,
+            "To": STONEGATE_NUMBER,
+            "CallSid": "CA00000000000000000000000000000093",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    call = db_session.scalar(
+        select(CallRecord).where(
+            CallRecord.provider_call_id == "CA00000000000000000000000000000093"
+        )
+    )
+    assert call is not None
+    assert call.conversation_id == conversation.id
+    assert call.lead_id == conversation.lead_id
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+
+
+def test_unknown_general_inbound_call_records_phone_permission(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    line = db_session.scalar(select(VoiceLine))
+    assert line is not None
+    line.department_key = "general"
+    line.purpose_key = "company_general"
+    db_session.commit()
+    caller = "+14045550194"
+
+    response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": caller,
+            "To": STONEGATE_NUMBER,
+            "CallSid": "CA00000000000000000000000000000094",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    contact = db_session.scalar(
+        select(Contact)
+        .join(ContactMethod, ContactMethod.contact_id == Contact.id)
+        .where(ContactMethod.normalized_value == "14045550194")
+    )
+    assert contact is not None
+    assert contact.contact_type == "business_contact"
+    consent = db_session.scalar(
+        select(ConsentRecord).where(
+            ConsentRecord.contact_id == contact.id,
+            ConsentRecord.channel == "phone",
+        )
+    )
+    assert consent is not None
+    assert consent.status == "granted"
+    assert consent.source == "inbound_call"
+    assert evaluate_voice_eligibility(db_session, contact).can_call is True
 
 
 def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(

@@ -2988,6 +2988,14 @@
   line-height: 1.4;
 }
 
+.callAction .cellphoneCallButton {
+  margin-left: 3px;
+  padding: 0 10px;
+  border-color: #9fb7aa;
+  background: #ffffff;
+  color: #245f43;
+}
+
 .landReadiness {
   padding: 14px 16px;
   border-bottom: 1px solid #e8e3d8;
@@ -7703,6 +7711,19 @@
 
   .quickActions > div {
     grid-column: 1 / -1;
+  }
+
+  .quickActions > div.callAction {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .quickActions > div.callAction button {
+    width: auto;
+  }
+
+  .quickActions > div.callAction > button:first-child {
+    width: 100%;
   }
 
   .reportActions {

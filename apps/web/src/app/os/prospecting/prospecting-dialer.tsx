@@ -79,6 +79,7 @@ type PendingDialerLeaseRecovery = {
 
 const INITIAL_SOFTPHONE_STATUS: ProspectingSoftphoneStatus = {
   audioLink: "idle",
+  callActive: false,
   microphone: "unchecked",
   muted: false,
   message: null,

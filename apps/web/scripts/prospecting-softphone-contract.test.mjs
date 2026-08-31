@@ -8,8 +8,12 @@ import ts from "typescript";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDirectory, "..");
-const softphone = readFileSync(
+const prospectingSoftphone = readFileSync(
   resolve(webRoot, "src/app/os/prospecting/prospecting-softphone.ts"),
+  "utf8",
+);
+const softphone = readFileSync(
+  resolve(webRoot, "src/app/os/_components/web-phone-runtime.ts"),
   "utf8",
 );
 const dialer = readFileSync(
@@ -40,7 +44,10 @@ function importTypeScriptForBehavior(source) {
 
 function importSoftphoneForBehavior() {
   if (!softphoneModulePromise) {
-    softphoneModulePromise = importTypeScriptForBehavior(softphone);
+    softphoneModulePromise = importTypeScriptForBehavior(softphone).then((module) => ({
+      ...module,
+      ProspectingSoftphone: module.WebPhoneRuntime,
+    }));
   }
   return softphoneModulePromise;
 }
@@ -53,6 +60,8 @@ function importDialerPolicyForBehavior() {
 }
 
 test("the prospecting softphone is client-only and lazy-loads the runtime SDK", () => {
+  assert.match(prospectingSoftphone, /^"use client";/);
+  assert.match(prospectingSoftphone, /class ProspectingSoftphone extends WebPhoneRuntime/);
   assert.match(softphone, /^"use client";/);
   assert.match(softphone, /import type \{ Call, Device \} from "@twilio\/voice-sdk"/);
   assert.match(softphone, /\(\) => import\("@twilio\/voice-sdk"\)/);
@@ -80,7 +89,7 @@ test("microphone denial and temporary audio loss have explicit recovery states",
 test("SDK accept is labeled as browser audio and not seller connection", () => {
   assert.match(softphone, /audioLink: "audio_established"/);
   assert.match(softphone, /Browser audio established/);
-  assert.match(softphone, /Seller answer and[\s\S]*server-side dial-leg snapshot/);
+  assert.match(softphone, /Recipient answer[\s\S]*server-side dial-leg snapshot/);
   assert.doesNotMatch(softphone, /accept[\s\S]{0,120}seller connected/i);
 });
 
@@ -135,6 +144,7 @@ test("concurrent initialization and connection are single-flight", async () => {
   fakeCall.emit("accept");
   await softphone.initialize("refreshed-token");
   assert.equal(statuses.at(-1).audioLink, "audio_established");
+  softphone.destroy();
 });
 
 test("destroying during connection invalidates and disconnects the late call", async () => {
@@ -242,6 +252,7 @@ test("token refresh and reconnect events preserve an established browser call", 
   call.emit("disconnect");
   assert.equal(softphone.hasLiveAudio, false);
   assert.equal(softphone.currentStatus.audioLink, "ended");
+  softphone.destroy();
 });
 
 test("dialer feature ownership fails closed until the single-tab controller is ready", async () => {

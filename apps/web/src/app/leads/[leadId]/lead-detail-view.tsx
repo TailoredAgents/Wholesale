@@ -1323,7 +1323,13 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
         <div className={styles.quickActions}>
           {!lead.archived_at ? (
             <>
-              {phone ? <LeadCallButton leadId={lead.id} /> : null}
+              {phone ? (
+                <LeadCallButton
+                  leadId={lead.id}
+                  phoneNumber={phone}
+                  sellerName={lead.seller_name}
+                />
+              ) : null}
               {phone ? <Link href={`/os/inbox?lead=${lead.id}&channel=sms`}>Text</Link> : null}
               {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
               <Link href={tabHref("property", { editLead: true }) + "#edit-lead"}>Edit lead</Link>

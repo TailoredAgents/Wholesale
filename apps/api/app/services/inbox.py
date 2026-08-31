@@ -71,6 +71,8 @@ from app.schemas.inbox import (
 )
 from app.services.call_intelligence import transcript_to_read
 from app.services.communication_compliance import (
+    business_voice_permission_not_required,
+    business_voice_requested_phone_number,
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
     format_e164,
@@ -1691,7 +1693,13 @@ def get_conversation_detail(
     )
     timeline.sort(key=lambda item: (item.occurred_at, str(item.id)))
     sms_eligibility = evaluate_sms_eligibility(db, contact)
-    voice_eligibility = evaluate_voice_eligibility(db, contact)
+    business_phone_number = business_voice_requested_phone_number(conversation, contact)
+    voice_eligibility = evaluate_voice_eligibility(
+        db,
+        contact,
+        require_permission=not business_voice_permission_not_required(conversation, contact),
+        requested_phone_number=business_phone_number,
+    )
 
     base = conversation_to_read(db, conversation)
     return ConversationDetailRead(

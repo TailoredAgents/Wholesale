@@ -1,0 +1,174 @@
+.panel {
+  position: fixed;
+  z-index: 70;
+  right: 88px;
+  bottom: 20px;
+  width: min(560px, calc(100vw - 112px));
+  min-height: 76px;
+  padding: 12px 14px 28px;
+  border: 1px solid rgba(24, 77, 55, 0.25);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 42px rgba(20, 45, 36, 0.2);
+  color: #173227;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(14px);
+}
+
+.panel[data-audio-state="audio_established"] {
+  border-color: rgba(37, 117, 80, 0.48);
+  box-shadow: 0 18px 42px rgba(20, 74, 51, 0.24);
+}
+
+.panel[data-audio-state="error"] {
+  border-color: rgba(162, 69, 52, 0.38);
+}
+
+.statusIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #e6f1eb;
+  color: #1f6848;
+  display: grid;
+  place-items: center;
+}
+
+.panel[data-audio-state="connecting"] .statusIcon,
+.panel[data-audio-state="reconnecting"] .statusIcon,
+.panel[data-audio-state="requesting_microphone"] .statusIcon {
+  animation: phonePulse 1.35s ease-in-out infinite;
+}
+
+.panel[data-audio-state="error"] .statusIcon {
+  background: #f8e9e5;
+  color: #9c3f32;
+}
+
+.callCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.callCopy span,
+.lineLabel {
+  color: #66756e;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.callCopy strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.callCopy small {
+  color: #53655d;
+  font-size: 11px;
+}
+
+.callCopy .message {
+  color: #7a4b3e;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.controls button,
+.controls a {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #cfd9d3;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #265d45;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.controls button:hover:not(:disabled),
+.controls a:hover {
+  border-color: #8eaa9b;
+  background: #edf4f0;
+}
+
+.controls button:focus-visible,
+.controls a:focus-visible {
+  outline: 3px solid rgba(47, 111, 78, 0.28);
+  outline-offset: 2px;
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.controls .endButton {
+  border-color: #b84f42;
+  background: #b84f42;
+  color: #ffffff;
+}
+
+.controls .endButton:hover:not(:disabled) {
+  border-color: #963c32;
+  background: #963c32;
+}
+
+.lineLabel {
+  position: absolute;
+  right: 14px;
+  bottom: 9px;
+  left: 68px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes phonePulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statusIcon {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .panel {
+    right: 12px;
+    bottom: 78px;
+    left: 12px;
+    width: auto;
+    padding-bottom: 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .controls {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .lineLabel {
+    display: none;
+  }
+}

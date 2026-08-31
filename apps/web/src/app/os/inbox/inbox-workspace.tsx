@@ -12,6 +12,7 @@ import {
   Clock3,
   Download,
   FileText,
+  Headphones,
   Inbox,
   Mail,
   MailOpen,
@@ -61,6 +62,7 @@ import {
   SMS_DELIVERY_REFRESH_MAX_ATTEMPTS,
 } from "./sms-delivery";
 import { SmsPermissionControl } from "../_components/sms-permission-control";
+import { useWebPhone } from "../_components/web-phone-provider";
 import styles from "./inbox.module.css";
 
 type Me = {
@@ -275,6 +277,16 @@ type ConversationResolution = {
   lead_id: string | null;
   status: string;
   message: string;
+};
+
+type VoiceCallIntent = {
+  id: string;
+  conversation_id: string;
+  recipient: string;
+  from_number: string;
+  status: string;
+  expires_at: string;
+  recording_enabled: boolean;
 };
 
 export type InboxFilterKey =
@@ -863,6 +875,7 @@ export function InboxWorkspace({
   initialChannel?: ComposerChannel;
 }) {
   const { getToken } = useAuth();
+  const webPhone = useWebPhone();
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
@@ -894,7 +907,9 @@ export function InboxWorkspace({
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
   const [channel, setChannel] = useState<ComposerChannel>(initialChannel);
-  const [callComposerMode, setCallComposerMode] = useState<"device" | "log">("device");
+  const [callComposerMode, setCallComposerMode] = useState<
+    "browser" | "cellphone" | "log"
+  >("browser");
   const [direction, setDirection] = useState<"inbound" | "outbound">("outbound");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -1024,7 +1039,11 @@ export function InboxWorkspace({
         );
         setDetail(item);
         if (item.conversation_type === "general") {
-          setChannel("email");
+          setChannel(
+            initialConversationId === conversationId && initialChannel === "call"
+              ? "call"
+              : "email",
+          );
           setDirection("outbound");
         }
         setQueueKey(item.conversation_type === "buyer" ? "dispositions" : item.queue_key);
@@ -1050,7 +1069,7 @@ export function InboxWorkspace({
         setDetailLoading(false);
       }
     },
-    [request],
+    [initialChannel, initialConversationId, request],
   );
 
   const reviewTranscript = useCallback(
@@ -1087,8 +1106,13 @@ export function InboxWorkspace({
     [loadConversations, loadDetail, request, selectedId],
   );
 
-  const startCall = useCallback(async () => {
-    if (!detail || forwardedCallStatus === "starting") return;
+  const startCellphoneCall = useCallback(async () => {
+    if (
+      !detail ||
+      forwardedCallStatus === "starting" ||
+      webPhone.busy ||
+      webPhone.status.callActive
+    ) return;
     const canPlaceCalls =
       me?.permissions.includes("communications:place_calls") ||
       (me?.permissions.includes("communications:place_assigned_calls") &&
@@ -1103,7 +1127,7 @@ export function InboxWorkspace({
     }
     setError(null);
     setChannel("call");
-    setCallComposerMode("device");
+    setCallComposerMode("cellphone");
     setForwardedCallStatus("starting");
     try {
       await request(`/api/v1/voice/conversations/${detail.id}/forwarded-calls`, {
@@ -1119,7 +1143,53 @@ export function InboxWorkspace({
       setForwardedCallStatus("idle");
       setError(callError instanceof Error ? callError.message : "Call could not start.");
     }
-  }, [detail, forwardedCallStatus, loadConversations, loadDetail, me, request]);
+  }, [detail, forwardedCallStatus, loadConversations, loadDetail, me, request, webPhone]);
+
+  const startBrowserCall = useCallback(async () => {
+    if (!detail || webPhone.busy) return;
+    const canPlaceCalls =
+      me?.permissions.includes("communications:place_calls") ||
+      (me?.permissions.includes("communications:place_assigned_calls") &&
+        detail.assigned_user_id === me.user_id);
+    if (!canPlaceCalls) {
+      setError("This conversation must be assigned to you before you can call.");
+      return;
+    }
+    if (!detail.voice_eligibility.can_call) {
+      setError(detail.voice_eligibility.blockers.join(" "));
+      return;
+    }
+    setError(null);
+    setChannel("call");
+    setCallComposerMode("browser");
+    try {
+      const intent = await request<VoiceCallIntent>(
+        `/api/v1/voice/conversations/${detail.id}/call-intents`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotency_key: window.crypto.randomUUID() }),
+        },
+      );
+      await webPhone.startCall({
+        callIntentId: intent.id,
+        contextHref: `/os/inbox?conversation=${encodeURIComponent(detail.id)}&channel=call`,
+        contextLabel:
+          detail.conversation_type === "buyer"
+            ? "Buyer conversation"
+            : detail.conversation_type === "general"
+              ? "Company conversation"
+              : detail.property_address || "Seller conversation",
+        displayName: detail.seller_name,
+        fromNumber: intent.from_number,
+        phoneNumber: intent.recipient,
+      });
+      window.setTimeout(() => {
+        void Promise.all([loadConversations(), loadDetail(detail.id)]);
+      }, 1200);
+    } catch (callError) {
+      setError(callError instanceof Error ? callError.message : "Browser call could not start.");
+    }
+  }, [detail, loadConversations, loadDetail, me, request, webPhone]);
 
   async function submitRecordingDeletion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1359,7 +1429,7 @@ export function InboxWorkspace({
   );
   const isLiveSms = channel === "sms" && direction === "outbound";
   const isLiveEmail = channel === "email";
-  const isVoiceComposer = channel === "call" && callComposerMode === "device";
+  const isVoiceComposer = channel === "call" && callComposerMode !== "log";
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
@@ -1901,7 +1971,7 @@ export function InboxWorkspace({
                       {detail.conversation_type === "general"
                         ? detail.status === "closed"
                           ? labelize(detail.mail_category || "archived")
-                          : "General email"
+                          : "Company conversation"
                         : detail.conversation_type === "buyer"
                           ? "Buyer"
                           : labelize(detail.stage_key)}
@@ -1910,7 +1980,7 @@ export function InboxWorkspace({
                   <p>
                     {detail.conversation_type === "general"
                       ? emailAliases.find((alias) => alias.id === detail.source_alias_id)
-                          ?.email_address || "Stonegate company email"
+                          ?.email_address || primaryPhone?.value || "Stonegate company conversation"
                       : detail.conversation_type === "buyer"
                         ? "Stonegate dispositions relationship"
                       : detail.property_address}
@@ -1929,9 +1999,9 @@ export function InboxWorkspace({
                 <div className={styles.contactActions}>
                   {primaryPhone ? (
                     <button
-                      disabled={forwardedCallStatus === "starting"}
-                      onClick={() => void startCall()}
-                      title={`Call ${primaryPhone.value} through Stonegate`}
+                      disabled={webPhone.busy || webPhone.status.callActive}
+                      onClick={() => void startBrowserCall()}
+                      title={`Call ${primaryPhone.value} in the Stonegate browser phone`}
                       type="button"
                     >
                       <Phone size={17} aria-hidden="true" />
@@ -2183,7 +2253,10 @@ export function InboxWorkspace({
                   {composerChannels
                     .filter(
                       (item) =>
-                        detail.conversation_type !== "general" || item.key === "email",
+                        detail.conversation_type !== "general" ||
+                        item.key === "email" ||
+                        (item.key === "call" &&
+                          Boolean(me?.permissions.includes("communications:place_calls"))),
                     )
                     .map((item) => {
                       const Icon = item.icon;
@@ -2208,9 +2281,19 @@ export function InboxWorkspace({
                       <div className={styles.callModeToggle}>
                         <button
                           className={
-                            callComposerMode === "device" ? styles.activeDirection : undefined
+                            callComposerMode === "browser" ? styles.activeDirection : undefined
                           }
-                          onClick={() => setCallComposerMode("device")}
+                          onClick={() => setCallComposerMode("browser")}
+                          type="button"
+                        >
+                          <Headphones size={13} aria-hidden="true" />
+                          Browser
+                        </button>
+                        <button
+                          className={
+                            callComposerMode === "cellphone" ? styles.activeDirection : undefined
+                          }
+                          onClick={() => setCallComposerMode("cellphone")}
                           type="button"
                         >
                           <PhoneCall size={13} aria-hidden="true" />
@@ -2248,8 +2331,14 @@ export function InboxWorkspace({
                         </div>
                       ) : (
                         <span className={styles.voiceLabel}>
-                          <PhoneCall size={14} aria-hidden="true" />
-                          Secure browser call
+                          {callComposerMode === "browser" ? (
+                            <Headphones size={14} aria-hidden="true" />
+                          ) : (
+                            <PhoneCall size={14} aria-hidden="true" />
+                          )}
+                          {callComposerMode === "browser"
+                            ? "Stonegate browser phone"
+                            : "Stonegate cellphone bridge"}
                         </span>
                       )}
                     </>
@@ -2501,21 +2590,42 @@ export function InboxWorkspace({
                       )}
                       <span>
                         {detail.voice_eligibility.can_call
-                          ? forwardedCallStatus === "started"
+                          ? callComposerMode === "cellphone" && forwardedCallStatus === "started"
                             ? "Answer your cellphone and press 1 to connect."
-                            : `Ready to call ${detail.voice_eligibility.recipient}`
+                            : callComposerMode === "browser"
+                              ? `Ready to call ${detail.voice_eligibility.recipient} through this browser.`
+                              : `Ready to call ${detail.voice_eligibility.recipient} through your cellphone.`
                           : detail.voice_eligibility.blockers.join(" ")}
                       </span>
                     </div>
                     <button
                       disabled={
-                        !detail.voice_eligibility.can_call || forwardedCallStatus === "starting"
+                        !detail.voice_eligibility.can_call ||
+                        (callComposerMode === "browser"
+                          ? webPhone.busy || webPhone.status.callActive
+                          : forwardedCallStatus === "starting" ||
+                            webPhone.busy ||
+                            webPhone.status.callActive)
                       }
-                      onClick={() => void startCall()}
+                      onClick={() =>
+                        void (callComposerMode === "browser"
+                          ? startBrowserCall()
+                          : startCellphoneCall())
+                      }
                       type="button"
                     >
-                      <PhoneCall size={17} aria-hidden="true" />
-                      {forwardedCallStatus === "starting" ? "Calling your cellphone" : "Call seller"}
+                      {callComposerMode === "browser" ? (
+                        <Headphones size={17} aria-hidden="true" />
+                      ) : (
+                        <PhoneCall size={17} aria-hidden="true" />
+                      )}
+                      {callComposerMode === "browser"
+                        ? webPhone.busy
+                          ? "Starting browser call"
+                          : "Call in browser"
+                        : forwardedCallStatus === "starting"
+                          ? "Calling your cellphone"
+                          : "Call through my cellphone"}
                     </button>
                   </div>
                 ) : (
