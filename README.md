@@ -5,7 +5,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 93 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 122 migrations.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker, plus lead intake, property research, AI preparation, alerts, and
   provider retries. Fair sweeps give every queue a turn. An independent liveness heartbeat remains

@@ -185,6 +185,10 @@ export default async function DealsPage({
           canEditBuyers={Boolean(profile?.permissions.includes("buyers:edit"))}
           canEditDeals={Boolean(profile?.permissions.includes("deals:edit"))}
           canManageOutreach={canManageOutreach}
+          canRecordExecutedContract={Boolean(
+            profile?.permissions.includes("contracts:record_executed") ||
+              profile?.permissions.includes("contracts:modify"),
+          )}
           canSendBulk={Boolean(profile?.permissions.includes("communications:send_bulk"))}
           canViewDisposition={canViewDisposition}
           canViewOutreach={canViewOutreach}

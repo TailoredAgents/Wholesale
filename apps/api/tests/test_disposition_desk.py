@@ -13,6 +13,7 @@ from app.models.foundation import (
     Buyer,
     BuyerOffer,
     BuyerProofDocument,
+    CompensationPlanVersion,
     Conversation,
     ConversationContextLink,
     Role,
@@ -30,6 +31,10 @@ from app.services import buyer_discovery
 from app.services import disposition_desk as disposition_desk_service
 from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_desk import read_desk
+from app.services.disposition_handoff import (
+    HANDOFF_SETUP_TASK_TYPE,
+    ensure_house_disposition_case_for_executed_transaction,
+)
 from tests.test_dispositions import (
     HEADERS,
     OWNER_EMAIL,
@@ -150,6 +155,134 @@ def test_disposition_desk_empty_read_model(
         }
     assert payload["source_health"]["canonical_data_status"] == "current"
     assert payload["source_health"]["external_provider_status"] == "not_configured"
+
+
+def test_disposition_desk_keeps_setup_blocked_executed_house_visible(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    plan = db_session.scalar(select(CompensationPlanVersion))
+    assert transaction is not None
+    assert plan is not None
+    transaction.contract_executed_at = datetime.now(UTC)
+    plan.status = "retired"
+    db_session.commit()
+
+    created = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    db_session.commit()
+    assert created is None
+
+    response = client.get("/api/v1/dispositions/desk?scope=mine", headers=HEADERS)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["metrics"]["active_deals"] == 1
+    intake = payload["active_deals"][0]
+    assert intake["key"] == f"setup:{transaction.id}"
+    assert intake["transaction_id"] == transaction_id
+    assert intake["disposition_case_id"] is None
+    assert intake["needs_setup"] is True
+    assert intake["blocker"] == "No active compensation plan."
+    assert intake["primary_action"] == {
+        "label": "Resolve setup",
+        "href": f"/os/dispositions?transaction={transaction.id}",
+    }
+    setup_task = db_session.scalar(
+        select(Task).where(
+            Task.deal_id == transaction.deal_id,
+            Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+        )
+    )
+    assert setup_task is not None
+    assert intake["task_id"] == str(setup_task.id)
+    assert any(item["task_id"] == str(setup_task.id) for item in payload["today"])
+
+    manager = _add_user(
+        db_session,
+        email="setup-scope-manager@example.com",
+        name="Setup Scope Manager",
+        role_key="disposition_manager",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    team = Team(
+        organization_id=manager.organization_id,
+        name="Setup Scope Team",
+        team_type="dispositions",
+        manager_user_id=manager.id,
+        is_active=True,
+    )
+    db_session.add(team)
+    db_session.flush()
+    db_session.add(
+        TeamMembership(
+            organization_id=manager.organization_id,
+            team_id=team.id,
+            user_id=owner.id,
+            membership_role="member",
+        )
+    )
+    db_session.commit()
+    manager_headers = {"X-Dev-User-Email": manager.email}
+
+    manager_mine = client.get(
+        "/api/v1/dispositions/desk?scope=mine",
+        headers=manager_headers,
+    )
+    manager_team = client.get(
+        "/api/v1/dispositions/desk?scope=team",
+        headers=manager_headers,
+    )
+
+    assert manager_mine.status_code == 200, manager_mine.text
+    assert manager_mine.json()["metrics"]["active_deals"] == 0
+    assert manager_team.status_code == 200, manager_team.text
+    assert manager_team.json()["metrics"]["active_deals"] == 1
+
+
+def test_disposition_desk_keeps_active_transaction_with_cancelled_case_visible(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.contract_executed_at = datetime.now(UTC)
+    db_session.commit()
+    disposition_case = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    assert disposition_case is not None
+    disposition_case.status = "cancelled"
+    db_session.commit()
+
+    reopened = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    db_session.commit()
+    assert reopened is None
+
+    response = client.get("/api/v1/dispositions/desk?scope=mine", headers=HEADERS)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["metrics"]["active_deals"] == 1
+    intake = payload["active_deals"][0]
+    assert intake["key"] == f"setup:{transaction.id}"
+    assert intake["needs_setup"] is True
+    assert intake["disposition_case_id"] == str(disposition_case.id)
+    assert intake["blocker"] == (
+        "The existing Disposition case is cancelled while its transaction remains active."
+    )
 
 
 def test_disposition_desk_scopes_buyers_and_authorizes_team_view(

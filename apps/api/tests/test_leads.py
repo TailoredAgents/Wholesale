@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import cast
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import func, select
@@ -1361,6 +1362,187 @@ def test_update_lead_stage_accepts_pipeline_appointment_scheduling(
 
     assert response.status_code == 200
     assert response.json()["stage_key"] == "appointment_scheduling"
+
+
+@pytest.mark.parametrize(
+    ("stage_key", "expected_detail"),
+    [
+        (
+            "offer_pending_approval",
+            "Offer stages are controlled by the Valuation & Offer workflow. "
+            "Use Valuation & Offer to prepare, approve, present, or negotiate an offer.",
+        ),
+        (
+            "offer_ready",
+            "Offer stages are controlled by the Valuation & Offer workflow. "
+            "Use Valuation & Offer to prepare, approve, present, or negotiate an offer.",
+        ),
+        (
+            "offer_presented",
+            "Offer Presented and Negotiating require recorded offer evidence. "
+            "Use Record outside offer or Valuation & Offer.",
+        ),
+        (
+            "negotiating",
+            "Offer Presented and Negotiating require recorded offer evidence. "
+            "Use Record outside offer or Valuation & Offer.",
+        ),
+        (
+            "under_contract",
+            "Under-contract status is controlled by the signed-contract workflow. "
+            "Use Contract & Deal to record or change an executed contract.",
+        ),
+    ],
+)
+def test_update_lead_stage_rejects_entering_house_workflow_controlled_stage(
+    db_session: Session,
+    api_db_override: None,
+    stage_key: str,
+    expected_detail: str,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": stage_key,
+            "expected_stage_key": "new",
+            "reason": "Attempted generic workflow bypass.",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == expected_detail
+    db_session.expire_all()
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    assert lead.stage_key == "new"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.stage_update")
+            )
+            or 0
+        )
+        == 0
+    )
+
+
+def test_update_lead_stage_rejects_leaving_under_contract_stage(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    lead.stage_key = "under_contract"
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "contacted",
+            "expected_stage_key": "under_contract",
+            "reason": "Attempted generic workflow bypass.",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "workflow" in response.json()["detail"].lower()
+    db_session.expire_all()
+    refreshed_lead = db_session.get(Lead, UUID(lead_id))
+    assert refreshed_lead is not None
+    assert refreshed_lead.stage_key == "under_contract"
+
+
+def test_update_lead_stage_allows_audited_retreat_from_offer_stage(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    lead.stage_key = "offer_presented"
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "underwriting",
+            "expected_stage_key": "offer_presented",
+            "reason": "Seller did not accept; return to underwriting for an audited revision.",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["stage_key"] == "underwriting"
+    audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "lead.stage_update",
+            AuditEvent.entity_id == UUID(lead_id),
+        )
+    )
+    assert audit is not None
+    assert audit.previous_value == {"stage_key": "offer_presented"}
+    assert audit.new_value == {"stage_key": "underwriting"}
+
+
+def test_update_lead_stage_requires_reason_for_offer_stage_retreat(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    lead.stage_key = "negotiating"
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "long_term_follow_up",
+            "expected_stage_key": "negotiating",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Explain why the lead is leaving the controlled offer workflow."
+    )
 
 
 def test_update_lead_stage_rejects_stale_pipeline_card(

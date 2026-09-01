@@ -99,6 +99,27 @@
 .empty { min-height: 220px; padding: 24px; color: var(--muted); display: grid; place-items: center; align-content: center; gap: 5px; text-align: center; }
 .empty strong { color: var(--text); }
 .backdrop { display: none; }
+.contractImportDialog { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-raised); overflow: hidden; }
+.contractImportDialog::backdrop { background: rgba(16, 25, 24, 0.58); }
+.contractImportHeader { min-height: 88px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.contractImportHeader > div { min-width: 0; display: grid; gap: 4px; }
+.contractImportHeader span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.contractImportHeader h2 { font-size: 20px; }
+.contractImportHeader p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.contractImportHeader button { flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.contractImportHeader button:hover, .contractImportHeader button:focus-visible { border-color: var(--brand); color: var(--brand-strong); outline: 2px solid var(--brand-soft); }
+.contractImportBody { max-height: calc(100vh - 122px); overflow-y: auto; }
+.contractImportBody > form { border-right: 0; }
+.offerActionDialog { width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-raised); overflow: hidden; }
+.offerActionDialog::backdrop { background: rgba(16, 25, 24, 0.58); }
+.offerActionHeader { min-height: 88px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.offerActionHeader > div { min-width: 0; display: grid; gap: 4px; }
+.offerActionHeader span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.offerActionHeader h2 { font-size: 20px; }
+.offerActionHeader p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.offerActionHeader button { flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.offerActionHeader button:hover, .offerActionHeader button:focus-visible { border-color: var(--brand); color: var(--brand-strong); outline: 2px solid var(--brand-soft); }
+.offerActionBody { max-height: calc(100vh - 122px); padding: 16px; overflow-y: auto; }
 
 @media (max-width: 1400px) {
   .metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
@@ -139,4 +160,12 @@
   .status { grid-column: 2; justify-self: end; }
   .owner { display: none; }
   .next { grid-column: 1 / -1; text-align: right; }
+  .contractImportDialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .contractImportHeader { padding: 14px; }
+  .contractImportHeader h2 { font-size: 18px; }
+  .contractImportBody { max-height: calc(100vh - 112px); }
+  .offerActionDialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .offerActionHeader { padding: 14px; }
+  .offerActionHeader h2 { font-size: 18px; }
+  .offerActionBody { max-height: calc(100vh - 112px); padding: 12px; }
 }

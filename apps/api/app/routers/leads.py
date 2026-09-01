@@ -1,7 +1,17 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
@@ -43,6 +53,8 @@ from app.schemas.leads import (
     LeadStageUpdate,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    OutsideOfferRecordCreate,
+    OutsideOfferRecordRead,
     PropertyIntelligenceRead,
     PropertyValidationRead,
     RepairCatalogRead,
@@ -52,6 +64,7 @@ from app.schemas.leads import (
     UnderwritingManualComparableCreate,
     UnderwritingManualComparableRead,
 )
+from app.schemas.transactions import ExecutedContractImport, ExecutedContractImportRead
 from app.schemas.underwriting_comp_copilot import (
     CompCopilotAnswerRead,
     CompCopilotAskRequest,
@@ -77,6 +90,7 @@ from app.services.leads import (
     list_leads,
     permanently_delete_lead,
     preview_lead_market_value,
+    record_outside_offer,
     reopen_lead,
     restore_lead,
     update_lead_contact_permission,
@@ -104,6 +118,7 @@ from app.services.repair_estimates import (
     get_repair_catalog,
     list_repair_estimates,
 )
+from app.services.transactions import MAX_DOCUMENT_BYTES, import_executed_contract
 from app.services.underwriting_comp_copilot import (
     ask_comp_copilot,
     get_comp_copilot_thread,
@@ -122,6 +137,11 @@ view_leads_dependency = require_any_permission(
 )
 view_full_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
 edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
+modify_contracts_dependency = require_permission(PermissionKeys.MODIFY_CONTRACTS)
+record_executed_contract_dependency = require_any_permission(
+    PermissionKeys.RECORD_EXECUTED_CONTRACTS,
+    PermissionKeys.MODIFY_CONTRACTS,
+)
 log_communications_dependency = require_any_permission(
     PermissionKeys.EDIT_LEADS,
     PermissionKeys.LOG_ASSIGNED_COMMUNICATIONS,
@@ -794,6 +814,84 @@ def open_lead_transaction(
     return lead
 
 
+@router.post(
+    "/{lead_id}/transactions/import-executed-contract",
+    status_code=201,
+)
+async def import_lead_executed_contract(
+    lead_id: UUID,
+    file: Annotated[UploadFile, File()],
+    seller_name: Annotated[str, Form(min_length=1, max_length=255)],
+    buyer_entity_name: Annotated[str, Form(min_length=1, max_length=255)],
+    purchase_price_cents: Annotated[int, Form(ge=1)],
+    executed_at: Annotated[str, Form()],
+    execution_source: Annotated[
+        Literal[
+            "docusign",
+            "signwell",
+            "pandadoc",
+            "adobe_sign",
+            "manual_upload",
+            "other",
+        ],
+        Form(),
+    ],
+    confirm_fully_executed: Annotated[bool, Form()],
+    attestation_reason: Annotated[str, Form(min_length=10, max_length=500)],
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(record_executed_contract_dependency)],
+    assignment_fee_cents: Annotated[int | None, Form(ge=0)] = None,
+    earnest_money_cents: Annotated[int | None, Form(ge=0)] = None,
+    title_company: Annotated[str | None, Form(max_length=255)] = None,
+    closing_date: Annotated[str | None, Form()] = None,
+    inspection_period_days: Annotated[int | None, Form(ge=0, le=120)] = None,
+    earnest_money_due_at: Annotated[str | None, Form()] = None,
+    due_diligence_deadline: Annotated[str | None, Form()] = None,
+    external_reference: Annotated[str | None, Form(max_length=255)] = None,
+    notes: Annotated[str | None, Form(max_length=2000)] = None,
+) -> ExecutedContractImportRead:
+    try:
+        payload = ExecutedContractImport.model_validate(
+            {
+                "file_name": file.filename or "",
+                "seller_name": seller_name,
+                "buyer_entity_name": buyer_entity_name,
+                "purchase_price_cents": purchase_price_cents,
+                "assignment_fee_cents": assignment_fee_cents,
+                "earnest_money_cents": earnest_money_cents,
+                "title_company": title_company,
+                "closing_date": closing_date,
+                "inspection_period_days": inspection_period_days,
+                "earnest_money_due_at": earnest_money_due_at,
+                "due_diligence_deadline": due_diligence_deadline,
+                "executed_at": executed_at,
+                "execution_source": execution_source,
+                "external_reference": external_reference,
+                "notes": notes,
+                "confirm_fully_executed": confirm_fully_executed,
+                "attestation_reason": attestation_reason,
+            }
+        )
+        result = import_executed_contract(
+            db,
+            principal,
+            lead_id,
+            payload,
+            content=await file.read(MAX_DOCUMENT_BYTES + 1),
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    finally:
+        await file.close()
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return result
+
+
 @router.post("/{lead_id}/buyer-offers", status_code=201)
 def record_lead_buyer_offer(
     lead_id: UUID,
@@ -849,6 +947,30 @@ def update_seller_lead_stage(
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead
+
+
+@router.post("/{lead_id}/outside-offers", status_code=201)
+def record_seller_outside_offer(
+    lead_id: UUID,
+    payload: OutsideOfferRecordCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> OutsideOfferRecordRead:
+    try:
+        event = record_outside_offer(db, principal, lead_id, payload)
+    except LeadStageConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return event
 
 
 @router.post("/{lead_id}/close-out")

@@ -3480,12 +3480,26 @@ export type DispositionPackageInternalEconomics = Record<string, unknown> & {
   approval_authority?: string | null;
 };
 
+export type DispositionPackageArtifactMetadata = {
+  source: "external_upload";
+  original_file_name: string;
+  content_type: "application/pdf";
+  size_bytes: number;
+  sha256: string;
+  uploaded_at: string;
+  uploaded_by_user_id: string;
+  malware_scan_status: string;
+  source_note: string | null;
+};
+
 export type DispositionPackageVersion = {
   id: string;
   disposition_case_id: string;
   version_number: number;
   lock_version: number;
   status: "draft" | "approved" | "superseded" | "rejected";
+  artifact_source: "stonegate_generated" | "external_upload";
+  artifact_metadata: DispositionPackageArtifactMetadata | null;
   policy_version: string;
   renderer_version: string;
   public_snapshot: DispositionPackagePublicSnapshot;
@@ -3843,6 +3857,8 @@ export type DispositionDeskItem = {
   task_id: string | null;
   offer_id: string | null;
   disposition_case_id: string | null;
+  transaction_id?: string | null;
+  needs_setup?: boolean;
   primary_action: DispositionDeskAction;
   secondary_action: DispositionDeskAction | null;
 };

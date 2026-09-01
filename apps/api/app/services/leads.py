@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
@@ -132,6 +132,8 @@ from app.schemas.leads import (
     LeadVoiceEligibilityRead,
     MarketAnalysisCompRead,
     MarketComparableRead,
+    OutsideOfferRecordCreate,
+    OutsideOfferRecordRead,
     PipelineStageCount,
     PropertyValidationRead,
     RepairEstimateItemInput,
@@ -433,6 +435,18 @@ SELLER_PIPELINE_STAGES = {
     "dead",
     "reopened",
 }
+HOUSE_OFFER_WORKFLOW_STAGES = frozenset(
+    {
+        "offer_pending_approval",
+        "offer_ready",
+        "offer_presented",
+        "negotiating",
+    }
+)
+HOUSE_CONTRACT_WORKFLOW_STAGES = frozenset({"under_contract"})
+HOUSE_WORKFLOW_CONTROLLED_STAGES = (
+    HOUSE_OFFER_WORKFLOW_STAGES | HOUSE_CONTRACT_WORKFLOW_STAGES
+)
 LAND_UNAVAILABLE_EXECUTION_STAGES = {
     "offer_pending_approval",
     "offer_ready",
@@ -1530,6 +1544,35 @@ def update_lead_stage(
         )
     if previous_stage == payload.stage_key:
         return get_lead_detail(db, principal, lead_id)
+    if lead.asset_class == "house" and (
+        previous_stage in HOUSE_CONTRACT_WORKFLOW_STAGES
+        or payload.stage_key in HOUSE_WORKFLOW_CONTROLLED_STAGES
+    ):
+        if (
+            previous_stage in HOUSE_CONTRACT_WORKFLOW_STAGES
+            or payload.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES
+        ):
+            raise ValueError(
+                "Under-contract status is controlled by the signed-contract workflow. "
+                "Use Contract & Deal to record or change an executed contract."
+            )
+        if payload.stage_key in {"offer_presented", "negotiating"}:
+            raise ValueError(
+                "Offer Presented and Negotiating require recorded offer evidence. "
+                "Use Record outside offer or Valuation & Offer."
+            )
+        raise ValueError(
+            "Offer stages are controlled by the Valuation & Offer workflow. "
+            "Use Valuation & Offer to prepare, approve, present, or negotiate an offer."
+        )
+    if (
+        lead.asset_class == "house"
+        and previous_stage in HOUSE_OFFER_WORKFLOW_STAGES
+        and len((payload.reason or "").strip()) < 10
+    ):
+        raise ValueError(
+            "Explain why the lead is leaving the controlled offer workflow."
+        )
     if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:
         require_house_workflow(lead.asset_class, workflow="Residential execution stage")
 
@@ -1566,6 +1609,118 @@ def update_lead_stage(
     db.commit()
     db.refresh(lead)
     return get_lead_detail(db, principal, lead_id)
+
+
+def record_outside_offer(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: OutsideOfferRecordCreate,
+) -> OutsideOfferRecordRead | None:
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
+    if lead is None:
+        return None
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError("Reopen this closed lead before recording an outside offer.")
+    require_house_workflow(lead.asset_class, workflow="Residential offer recording")
+    if lead.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES:
+        raise ValueError(
+            "This lead is already under contract. Record corrections in Contract & Deal."
+        )
+
+    previous_stage = lead.stage_key
+    if payload.expected_stage_key and payload.expected_stage_key != previous_stage:
+        raise LeadStageConflictError(
+            "This lead moved after the pipeline loaded. Refresh the board and try again."
+        )
+
+    occurred_at = payload.occurred_at
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=UTC)
+    else:
+        occurred_at = occurred_at.astimezone(UTC)
+    if occurred_at > datetime.now(UTC) + timedelta(minutes=5):
+        raise ValueError("The outside offer time cannot be in the future.")
+
+    recorded_stage: Literal["offer_presented", "negotiating"] = (
+        "negotiating"
+        if payload.outcome in {"countered", "negotiating"}
+        or previous_stage == "negotiating"
+        else "offer_presented"
+    )
+    seller_response = payload.seller_response.strip() if payload.seller_response else None
+    notes = payload.notes.strip() if payload.notes else None
+    evidence = {
+        "source": "outside_offer_catch_up",
+        "stage_key": recorded_stage,
+        "amount_cents": payload.amount_cents,
+        "occurred_at": occurred_at.isoformat(),
+        "method": payload.method,
+        "outcome": payload.outcome,
+        "seller_response": seller_response,
+        "notes": notes,
+    }
+
+    lead.stage_key = recorded_stage
+    sync_conversation_to_lead_stage(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason=(
+            f"Outside offer recorded via {payload.method}; seller outcome {payload.outcome}."
+        ),
+    )
+    audit = AuditEvent(
+        organization_id=principal.organization_id,
+        actor_user_id=principal.user_id,
+        actor_type="user",
+        action="lead.outside_offer.record",
+        entity_type="lead",
+        entity_id=lead.id,
+        previous_value={"stage_key": previous_stage},
+        new_value=evidence,
+        reason=(
+            f"Offer presented outside Stonegate via {payload.method}; "
+            f"seller outcome {payload.outcome}."
+        ),
+    )
+    db.add(audit)
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.outside_offer_recorded",
+            summary=(
+                f"Outside offer of ${payload.amount_cents / 100:,.2f} recorded via "
+                f"{payload.method.replace('_', ' ')}; seller outcome "
+                f"{payload.outcome.replace('_', ' ')}."
+            ),
+        )
+    )
+    db.flush()
+    event_id = audit.id
+    db.commit()
+
+    return OutsideOfferRecordRead(
+        event_id=event_id,
+        lead_id=lead.id,
+        previous_stage_key=previous_stage,
+        stage_key=recorded_stage,
+        amount_cents=payload.amount_cents,
+        occurred_at=occurred_at,
+        method=payload.method,
+        outcome=payload.outcome,
+        seller_response=seller_response,
+        notes=notes,
+    )
 
 
 def add_lead_note(

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
+    AuditEvent,
     Buyer,
     BuyerBuyBox,
     BuyerBuyBoxVersion,
@@ -18,14 +19,18 @@ from app.models.foundation import (
     BuyerEngagement,
     BuyerOffer,
     BuyerProofDocument,
+    Contact,
     Conversation,
     ConversationContextLink,
+    Deal,
     DispositionBuyerSelection,
     DispositionBuyerSelectionSlot,
     DispositionCase,
     DispositionClosingCheckpoint,
     DispositionDeadlineAlert,
     DispositionMatch,
+    Lead,
+    Property,
     Role,
     RoleAssignment,
     Task,
@@ -49,7 +54,12 @@ from app.schemas.disposition_desk import (
     DispositionDeskSourceHealthRead,
 )
 from app.services import buyer_discovery, deals
+from app.services.disposition_handoff import (
+    HANDOFF_PENDING_BLOCKER,
+    HANDOFF_SETUP_TASK_TYPE,
+)
 from app.services.dispositions import _proof_is_current_verified
+from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES
 
 ACTIVE_CASE_STATUSES = {
     "package_prep",
@@ -59,6 +69,7 @@ ACTIVE_CASE_STATUSES = {
     "buyer_selected",
 }
 COMPLETE_WORK_STATUSES = {"complete", "completed", "cancelled", "canceled", "not_applicable"}
+INACTIVE_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 EXECUTIVE_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
 EASTERN = ZoneInfo("America/New_York")
 MAX_SECTION_ITEMS = 100
@@ -179,6 +190,55 @@ def _users(db: Session, organization_id: UUID, user_ids: set[UUID | None]) -> di
 def _owner_name(user_id: UUID | None, users: dict[UUID, User]) -> str:
     user = users.get(user_id) if user_id else None
     return user.display_name if user else "Unassigned"
+
+
+def _blocked_handoff_owner(
+    audit: AuditEvent | None,
+    transaction: Transaction,
+    existing_case: DispositionCase | None,
+) -> UUID | None:
+    raw_owner = (audit.new_value or {}).get("owner_user_id") if audit is not None else None
+    if isinstance(raw_owner, str):
+        try:
+            return UUID(raw_owner)
+        except ValueError:
+            pass
+    return (
+        existing_case.owner_user_id
+        if existing_case is not None
+        else transaction.coordinator_user_id or transaction.owner_user_id
+    )
+
+
+def _blocked_handoff_reasons(
+    audit: AuditEvent | None,
+    existing_case: DispositionCase | None,
+) -> list[str]:
+    if audit is not None:
+        raw_blockers = (audit.new_value or {}).get("blockers")
+        if isinstance(raw_blockers, list):
+            blockers = [value.strip() for value in raw_blockers if isinstance(value, str)]
+            if blockers:
+                return blockers
+        if audit.reason and audit.reason.strip():
+            return [audit.reason.strip()]
+    if existing_case is not None:
+        return [
+            "The existing Disposition case is "
+            f"{existing_case.status.replace('_', ' ')} while its transaction remains active."
+        ]
+    return [HANDOFF_PENDING_BLOCKER]
+
+
+def _property_address(property_record: Property) -> str:
+    city_state_zip = " ".join(
+        value for value in (property_record.state, property_record.postal_code) if value
+    )
+    locality = ", ".join(value for value in (property_record.city, city_state_zip) if value)
+    return (
+        ", ".join(value for value in (property_record.street_address, locality) if value)
+        or "Address unavailable"
+    )
 
 
 def _severity(
@@ -326,13 +386,126 @@ def read_desk(
     case_by_id = {case.id: case for case in cases}
     case_ids = {case.id for case in cases}
 
-    deal_overview = deals.overview(db, principal, deal_ids=set(case_by_deal))
+    setup_rows = list(
+        db.execute(
+            select(Transaction, Deal, Lead, Contact, Property, DispositionCase)
+            .join(
+                Deal,
+                (Deal.id == Transaction.deal_id)
+                & (Deal.organization_id == Transaction.organization_id),
+            )
+            .join(
+                Lead,
+                (Lead.id == Transaction.lead_id)
+                & (Lead.organization_id == Transaction.organization_id),
+            )
+            .join(
+                Contact,
+                (Contact.id == Transaction.contact_id)
+                & (Contact.organization_id == Transaction.organization_id),
+            )
+            .join(
+                Property,
+                (Property.id == Transaction.property_id)
+                & (Property.organization_id == Transaction.organization_id),
+            )
+            .outerjoin(
+                DispositionCase,
+                (DispositionCase.transaction_id == Transaction.id)
+                & (DispositionCase.organization_id == Transaction.organization_id),
+            )
+            .where(
+                Transaction.organization_id == principal.organization_id,
+                or_(
+                    DispositionCase.id.is_(None),
+                    ~DispositionCase.status.in_(ACTIVE_CASE_STATUSES),
+                ),
+                Transaction.status.in_(("executed", "closing")),
+                Transaction.contract_executed_at.is_not(None),
+                Lead.asset_class == "house",
+                Lead.archived_at.is_(None),
+                ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
+                ~Deal.stage_key.in_(tuple(INACTIVE_DEAL_STAGES)),
+            )
+            .order_by(Transaction.contract_executed_at, Transaction.id)
+        )
+        .tuples()
+        .all()
+    )
+    setup_transaction_ids = {
+        setup_transaction.id for setup_transaction, _, _, _, _, _ in setup_rows
+    }
+    setup_audit_by_transaction: dict[UUID, AuditEvent] = {}
+    if setup_transaction_ids:
+        for blocked_audit in db.scalars(
+            select(AuditEvent)
+            .where(
+                AuditEvent.organization_id == principal.organization_id,
+                AuditEvent.action == "disposition.case_auto_create_blocked",
+                AuditEvent.entity_type == "transaction",
+                AuditEvent.entity_id.in_(setup_transaction_ids),
+            )
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        ).all():
+            if blocked_audit.entity_id is not None:
+                setup_audit_by_transaction.setdefault(
+                    blocked_audit.entity_id,
+                    blocked_audit,
+                )
+    setup_intakes: list[
+        tuple[
+            Transaction,
+            Deal,
+            Lead,
+            Contact,
+            Property,
+            DispositionCase | None,
+            UUID | None,
+            list[str],
+        ]
+    ] = []
+    for (
+        setup_transaction,
+        setup_deal,
+        setup_lead,
+        setup_contact,
+        setup_property,
+        joined_case,
+    ) in setup_rows:
+        latest_blocked_audit = setup_audit_by_transaction.get(setup_transaction.id)
+        setup_owner_id = _blocked_handoff_owner(
+            latest_blocked_audit,
+            setup_transaction,
+            joined_case,
+        )
+        if not _scoped(setup_owner_id, allowed_user_ids):
+            continue
+        setup_intakes.append(
+            (
+                setup_transaction,
+                setup_deal,
+                setup_lead,
+                setup_contact,
+                setup_property,
+                joined_case,
+                setup_owner_id,
+                _blocked_handoff_reasons(latest_blocked_audit, joined_case),
+            )
+        )
+    setup_deal_ids = {setup_deal.id for _, setup_deal, _, _, _, _, _, _ in setup_intakes}
+
+    deal_overview = deals.overview(
+        db,
+        principal,
+        deal_ids=set(case_by_deal) | setup_deal_ids,
+    )
     active_records_by_id: dict[UUID, DealQueueItemRead] = {}
     for item in deal_overview.items:
         if item.closing_status not in {"funded", "cancelled"} and item.id in case_by_deal:
             active_records_by_id.setdefault(item.id, item)
     active_records = list(active_records_by_id.values())
     active_deal_ids = {item.id for item in active_records}
+    operational_deal_ids = active_deal_ids | setup_deal_ids
 
     transactions = list(
         db.scalars(
@@ -405,11 +578,14 @@ def read_desk(
     )
     matched_buyer_ids = {match.buyer_id for match in match_rows}
     user_ids: set[UUID | None] = {case.owner_user_id for case in cases}
+    user_ids.update(owner_id for _, _, _, _, _, _, owner_id, _ in setup_intakes)
     task_rows = list(
         db.scalars(
             select(Task).where(
                 Task.organization_id == principal.organization_id,
-                Task.deal_id.in_(active_deal_ids) if active_deal_ids else Task.id.is_(None),
+                Task.deal_id.in_(operational_deal_ids)
+                if operational_deal_ids
+                else Task.id.is_(None),
                 Task.status.in_(("open", "in_progress")),
             )
         ).all()
@@ -476,7 +652,11 @@ def read_desk(
     )
     followups: list[BuyerEngagement] = []
     for followup in followup_rows:
-        case = case_by_id.get(followup.disposition_case_id)
+        case = (
+            case_by_id.get(followup.disposition_case_id)
+            if followup.disposition_case_id is not None
+            else None
+        )
         buyer = buyer_by_id.get(followup.buyer_id)
         relevant_owners = {
             followup.actor_user_id,
@@ -577,10 +757,59 @@ def read_desk(
             ):
                 viable_backup_case_ids.add(active_selection_case[slot.selection_id])
     users = _users(db, principal.organization_id, user_ids)
-    deal_by_id = {item.id: item for item in active_records}
+    deal_by_id = {item.id: item for item in deal_overview.items}
+    setup_task_by_deal = {
+        task.deal_id: task
+        for task in task_rows
+        if task.deal_id is not None and task.task_type == HANDOFF_SETUP_TASK_TYPE
+    }
 
     active_items: list[DispositionDeskItemRead] = []
     coverage_warnings: list[DispositionDeskItemRead] = []
+    for (
+        setup_transaction,
+        setup_deal,
+        _setup_lead,
+        setup_contact,
+        setup_property,
+        setup_existing_case,
+        setup_owner_id,
+        setup_blockers,
+    ) in setup_intakes:
+        setup_task = setup_task_by_deal.get(setup_deal.id)
+        active_items.append(
+            DispositionDeskItemRead(
+                key=f"setup:{setup_transaction.id}",
+                category="active_deals",
+                title=_property_address(setup_property),
+                context=f"{setup_contact.legal_name} | Executed contract",
+                owner_user_id=setup_owner_id,
+                owner_name=_owner_name(setup_owner_id, users),
+                due_at=(
+                    setup_task.due_at
+                    if setup_task is not None
+                    else setup_transaction.contract_executed_at
+                ),
+                reason="Executed House contract is waiting for Dispositions setup.",
+                blocker=" ".join(setup_blockers),
+                severity="danger",
+                deal_id=setup_deal.id,
+                transaction_id=setup_transaction.id,
+                task_id=setup_task.id if setup_task is not None else None,
+                disposition_case_id=(
+                    setup_existing_case.id if setup_existing_case is not None else None
+                ),
+                needs_setup=True,
+                primary_action=DispositionDeskActionRead(
+                    label="Resolve setup",
+                    href=f"/os/dispositions?transaction={setup_transaction.id}",
+                ),
+                secondary_action=DispositionDeskActionRead(
+                    label="Open deal",
+                    href=_deal_href(setup_deal.id),
+                ),
+            )
+        )
     for item in active_records:
         case = case_by_deal.get(item.id)
         blocker = next(
@@ -603,6 +832,7 @@ def read_desk(
                 blocker=blocker,
                 severity=_severity(item.next_deadline, blocker=bool(blocker)),
                 deal_id=item.id,
+                transaction_id=item.transaction_id,
                 disposition_case_id=case.id if case else None,
                 primary_action=DispositionDeskActionRead(
                     label="Open deal" if case else "Open disposition",
@@ -662,7 +892,11 @@ def read_desk(
 
     followup_items: list[DispositionDeskItemRead] = []
     for followup in followups:
-        case = case_by_id.get(followup.disposition_case_id)
+        case = (
+            case_by_id.get(followup.disposition_case_id)
+            if followup.disposition_case_id is not None
+            else None
+        )
         deal = deal_by_id.get(case.deal_id) if case else None
         buyer = buyer_by_id.get(followup.buyer_id)
         if buyer is None or (case is not None and deal is None):
@@ -804,10 +1038,10 @@ def read_desk(
         if case is None or deal is None:
             continue
         buyer = buyer_by_id.get(checkpoint.buyer_id) if checkpoint.buyer_id else None
-        alert = active_alert_by_checkpoint.get(checkpoint.id)
+        checkpoint_alert = active_alert_by_checkpoint.get(checkpoint.id)
         overdue = _aware(checkpoint.due_at) < now
         blocker = None
-        if checkpoint.status == "missed" or alert is not None:
+        if checkpoint.status == "missed" or checkpoint_alert is not None:
             blocker = "Missed closing checkpoint requires action."
         elif overdue:
             blocker = "Closing checkpoint is overdue."
@@ -830,7 +1064,7 @@ def read_desk(
                     "danger"
                     if checkpoint.status == "missed" or overdue
                     else "warning"
-                    if alert is not None
+                    if checkpoint_alert is not None
                     else _severity(checkpoint.due_at)
                 ),
                 deal_id=deal.id,

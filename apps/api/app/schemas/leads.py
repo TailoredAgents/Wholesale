@@ -1027,6 +1027,47 @@ class LeadStageUpdate(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class OutsideOfferRecordCreate(BaseModel):
+    """Facts for an offer that was presented outside Stonegate."""
+
+    amount_cents: int = Field(ge=1, le=1_000_000_000)
+    occurred_at: datetime
+    method: Literal["in_person", "phone", "sms", "email", "video", "other"]
+    outcome: Literal[
+        "presented",
+        "considering",
+        "countered",
+        "negotiating",
+        "accepted",
+        "declined",
+        "no_response",
+        "other",
+    ]
+    seller_response: str | None = Field(default=None, max_length=2000)
+    notes: str | None = Field(default=None, max_length=2000)
+    expected_stage_key: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator("seller_response", "notes", "expected_stage_key", mode="before")
+    @classmethod
+    def strip_optional_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+
+class OutsideOfferRecordRead(BaseModel):
+    event_id: UUID
+    lead_id: UUID
+    previous_stage_key: str
+    stage_key: Literal["offer_presented", "negotiating"]
+    amount_cents: int
+    occurred_at: datetime
+    method: str
+    outcome: str
+    seller_response: str | None
+    notes: str | None
+
+
 class LeadCloseOutRequest(BaseModel):
     disposition: Literal["dead", "disqualified"]
     reason: str = Field(min_length=10, max_length=500)

@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -33,7 +35,7 @@ def create_transaction(client: TestClient) -> tuple[str, str]:
         json={
             "purchase_price_cents": 17500000,
             "assignment_fee_cents": 2500000,
-            "closing_date": "2026-08-28T21:00:00Z",
+            "closing_date": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
         },
     )
     detail = transaction.json()["transactions"][0]

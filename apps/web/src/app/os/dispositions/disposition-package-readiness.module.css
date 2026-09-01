@@ -20,10 +20,22 @@
 .heroStatus strong { color: var(--brand-strong); font-size: 15px; }
 .heroStatus span { font-size: 11px; font-weight: 800; }
 .heroStatus small { color: var(--muted); font-size: 10px; }
+.packagePathChooser { border: 1px solid #b7d8c5; background: var(--surface); }
+.packagePathChooser > header { padding: 14px 16px; display: grid; gap: 4px; border-bottom: 1px solid var(--line-soft); background: var(--brand-soft); }
+.packagePathChooser > header > span { color: var(--brand-strong); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.packagePathChooser h5 { margin: 0; font-size: 16px; }
+.packagePathChooser p { max-width: 860px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.packagePathChooser > div { padding: 12px 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.packagePathChooser a { min-height: 88px; padding: 13px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 5px; color: var(--brand-strong); text-decoration: none; }
+.packagePathChooser a:hover { border-color: var(--brand); background: var(--surface-soft); }
+.packagePathChooser a > svg { margin-top: 1px; flex: 0 0 auto; }
+.packagePathChooser a > span { display: grid; gap: 5px; }
+.packagePathChooser a strong { font-size: 12px; }
+.packagePathChooser a small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .staleApproval { padding: 11px 13px; display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 9px; border: 1px solid #e7d1a5; background: #fff9e9; color: #795400; }
 .staleApproval div { display: grid; gap: 2px; }
 .staleApproval p { margin: 0; font-size: 10px; line-height: 1.45; }
-.panel, .buildPanel, .releasePanel { border: 1px solid var(--line); background: var(--surface); }
+.panel, .buildPanel, .releasePanel, .externalUploadPanel { border: 1px solid var(--line); background: var(--surface); }
 .panelHeading { min-height: 60px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); }
 .panelHeading > div { min-width: 0; display: grid; gap: 4px; }
 .panelHeading h5 { margin: 0; font-size: 15px; }
@@ -99,6 +111,7 @@
 .shareLinkHistory strong { font-size: 11px; }
 .shareLinkHistory span, .shareLinkHistory small { color: var(--muted); font-size: 10px; }
 .buildPanel, .releasePanel { display: grid; }
+.packagePathNote { margin: 0; padding: 11px 14px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .economicsFields { padding: 10px 14px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .economicsFields label { display: grid; gap: 5px; }
 .economicsFields label:last-child { grid-column: 1 / -1; }
@@ -107,6 +120,14 @@
 .releasePanel > button:first-of-type { border-color: var(--brand); background: var(--brand); color: #fff; }
 .releasePanel > p { margin: 11px 14px 14px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .buildPanel button:disabled, .releasePanel button:disabled, .versionList button:disabled, .dialogActions button:disabled { opacity: .45; cursor: not-allowed; }
+.externalUploadPanel { display: grid; }
+.externalUploadPanel > p { margin: 0; padding: 11px 14px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.externalUploadFields { padding: 11px 14px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.externalUploadFields label { min-width: 0; display: grid; gap: 5px; }
+.externalUploadFields label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.externalUploadFields input { width: 100%; min-height: 42px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 11px; }
+.externalUploadPanel > button { min-height: 44px; margin: 11px 14px 14px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--brand); border-radius: 4px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.externalUploadPanel > button:disabled { opacity: .45; cursor: not-allowed; }
 .versionList { display: grid; }
 .versionList article { min-height: 78px; padding: 11px 14px; display: grid; grid-template-columns: minmax(170px, 1fr) minmax(150px, .8fr) minmax(220px, 1.3fr) auto; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
 .versionIdentity { display: flex; align-items: center; gap: 8px; }
@@ -114,9 +135,12 @@
 .versionIdentity span, .versionMeta, .versionDecision { min-width: 0; display: grid; gap: 3px; }
 .versionIdentity strong, .versionDecision strong { font-size: 11px; }
 .versionIdentity small, .versionMeta small, .versionDecision small { color: var(--muted); overflow-wrap: anywhere; font-size: 10px; line-height: 1.35; }
+.versionIdentity small[data-status="blocked"], .versionDecision small[data-status="blocked"] { color: var(--danger); font-weight: 800; }
+.versionIdentity small[data-status="ready"] { color: var(--brand-strong); font-weight: 800; }
 .versionMeta > span { width: fit-content; color: var(--brand); font-size: 9px; font-weight: 850; text-transform: uppercase; }
 .versionMeta > span[data-status="rejected"] { color: var(--danger); }
 .versionMeta b { font-size: 9px; }
+.restrictedDraftPdf { color: var(--muted); font-size: 9px; font-weight: 800; text-align: right; text-transform: uppercase; }
 .empty { margin: 0; padding: 24px 14px; color: var(--muted); font-size: 11px; }
 .approvalDialog { width: min(560px, calc(100% - 28px)); padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text); box-shadow: 0 24px 80px rgb(0 0 0 / 24%); }
 .approvalDialog::backdrop { background: rgb(8 25 19 / 58%); }
@@ -155,6 +179,8 @@
   .summaryGrid button, .buildPanel > button, .releasePanel > button, .versionList article > button, .dialogActions button { min-height: 44px; }
   .shareLinkActions, .shareLinkHistory article { align-items: stretch; flex-direction: column; }
   .shareLinkActions button, .shareLinkHistory button { width: 100%; }
+  .externalUploadFields { grid-template-columns: 1fr; }
+  .packagePathChooser > div { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {

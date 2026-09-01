@@ -22,7 +22,7 @@
     "documents:migrate": "cd apps/api && uv run python -m app.cli.migrate_private_files",
     "ops:alert-test": "bash scripts/operations-alert-test.sh",
     "ops:smoke": "bash scripts/smoke-test.sh",
-    "worker": "cd apps/worker && uv run python -m worker.main"
+    "worker": "cd apps/api && uv run python -m app.worker"
   },
   "workspaces": [
     "apps/web"

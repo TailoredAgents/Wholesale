@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useMemo } from "react";
 
+import { ExecutedContractImportForm } from "../../leads/[leadId]/executed-contract-import-form";
 import type {
   DealOverview,
   DealQueueItem,
@@ -108,6 +109,7 @@ export function DealsWorkspace({
   canEditBuyers,
   canEditDeals,
   canManageOutreach,
+  canRecordExecutedContract,
   canApproveOutreach,
   canSendBulk,
   canViewDisposition,
@@ -125,6 +127,7 @@ export function DealsWorkspace({
   canEditBuyers: boolean;
   canEditDeals: boolean;
   canManageOutreach: boolean;
+  canRecordExecutedContract: boolean;
   canApproveOutreach: boolean;
   canSendBulk: boolean;
   canViewDisposition: boolean;
@@ -195,6 +198,25 @@ export function DealsWorkspace({
         <nav aria-label="Deal record sections" className={styles.tabs}>{tabs.map((item) => <Link className={tab === item.key ? styles.activeTab : ""} href={hrefFor(current, { tab: item.key })} key={item.key}>{item.label}</Link>)}</nav>
         <div className={styles.recordBody}>
           {tab === "summary" ? <DealSummary canViewEconomics={deals.can_view_economics} deal={selected} /> : null}
+          {tab === "contract" &&
+          canRecordExecutedContract &&
+          selected.contract_status !== "executed" &&
+          !["funded", "cancelled"].includes(selected.closing_status) ? (
+            <section aria-labelledby="deal-contract-catchup-heading" className={styles.contractCatchup}>
+              <header>
+                <div>
+                  <span>Outside Stonegate</span>
+                  <h3 id="deal-contract-catchup-heading">Record an already-signed contract</h3>
+                  <p>
+                    Transaction Coordinators can upload the executed agreement here without
+                    needing general Leads access. The same governed action moves the deal Under
+                    Contract and opens or queues the Dispositions handoff.
+                  </p>
+                </div>
+              </header>
+              <ExecutedContractImportForm leadId={selected.lead_id} sellerName={selected.seller_name} />
+            </section>
+          ) : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
           {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveBuyerSelection={canApproveBuyerSelection} canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}

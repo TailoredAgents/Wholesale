@@ -16,6 +16,7 @@ import {
   Megaphone,
   RefreshCw,
   ShieldAlert,
+  Upload,
   UsersRound,
   X,
   XCircle,
@@ -54,6 +55,7 @@ const classificationDescriptions: Record<DispositionPackageEvidenceClassificatio
 };
 
 const classifications = Object.keys(classificationLabels) as DispositionPackageEvidenceClassification[];
+const acceptableArtifactScanStatuses = new Set(["clean", "not_configured"]);
 
 function money(cents: number | null | undefined) {
   return cents == null
@@ -111,6 +113,16 @@ function sourceLabel(evidence: DispositionPackageEvidence) {
 
 function versionName(version: DispositionPackageVersion | null) {
   return version ? `v${version.version_number}` : "No version";
+}
+
+function externalArtifactScanIssue(version: DispositionPackageVersion | null) {
+  if (!version || version.artifact_source !== "external_upload") return null;
+  const scanStatus = version.artifact_metadata?.malware_scan_status?.trim().toLowerCase();
+  if (scanStatus && acceptableArtifactScanStatuses.has(scanStatus)) return null;
+  if (!scanStatus) {
+    return "The uploaded investor packet has no recorded PDF scan result. Upload a newly scanned PDF before approval.";
+  }
+  return `The uploaded investor packet scan is ${labelize(scanStatus)}. Upload a clean replacement PDF before approval.`;
 }
 
 function safePublicEntries(preview: Record<string, unknown>) {
@@ -279,14 +291,20 @@ export function DispositionPackageReadiness({
   const approvedVersion = data?.approved_version ?? null;
   const readiness = data?.current_readiness ?? null;
   const totalChecks = readiness?.checks.length ?? 0;
+  const latestArtifactScanIssue = externalArtifactScanIssue(latestVersion);
+  const approvedArtifactScanIssue = externalArtifactScanIssue(approvedVersion);
   const hasApprovalBlockers = Boolean(
     !data ||
       !latestVersion ||
+      latestArtifactScanIssue ||
       readiness?.status === "blocked" ||
       (readiness?.blocked_count ?? 0) > 0,
   );
   const currentApprovedVersion = Boolean(
-    data?.approved_package_is_current && approvedVersion && approvedVersion.is_current,
+    data?.approved_package_is_current &&
+      approvedVersion &&
+      approvedVersion.is_current &&
+      !approvedArtifactScanIssue,
   );
 
   async function mutate(
@@ -335,6 +353,39 @@ export function DispositionPackageReadiness({
         }),
       `Investor package ${data.latest_version ? "rebuilt" : "created"} from current saved evidence.`,
     );
+  }
+
+  async function uploadExternalPackage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data || !canEditDeals) return;
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const file = values.get("external_package_pdf");
+    if (!(file instanceof File) || file.size === 0) {
+      setError("Choose the completed investor-packet PDF.");
+      return;
+    }
+    const query = new URLSearchParams({
+      expected_latest_version: String(data.latest_version?.version_number ?? 0),
+      file_name: file.name,
+      content_type: "application/pdf",
+    });
+    const sourceNote = String(values.get("source_note") ?? "").trim();
+    if (sourceNote) query.set("source_note", sourceNote);
+    const uploaded = await mutate(
+      "external-upload",
+      () =>
+        requestRef.current<DispositionPackageVersion>(
+          `/api/v1/dispositions/cases/${caseId}/package/versions/external?${query.toString()}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/pdf" },
+            body: file,
+          },
+        ),
+      "External investor packet uploaded as an exact draft. Review it, then approve that version before outreach.",
+    );
+    if (uploaded) form.reset();
   }
 
   function openApproval() {
@@ -504,14 +555,36 @@ export function DispositionPackageReadiness({
         <div>
           <span><FileText aria-hidden="true" size={16} />Deal launch package</span>
           <h4>{previewHeadline}</h4>
-          <p>One approved, reproducible package supplies the PDF and buyer email/SMS summaries.</p>
+          <p>One approved package supplies the exact buyer PDF. Saved CRM facts still control readiness, matching, private economics, and email/SMS summaries.</p>
         </div>
-        <div className={styles.heroStatus} data-status={readiness.status}>
-          <strong>{labelize(readiness.status)}</strong>
+        <div className={styles.heroStatus} data-status={latestArtifactScanIssue ? "blocked" : readiness.status}>
+          <strong>{latestArtifactScanIssue ? "Blocked" : labelize(readiness.status)}</strong>
           <span>{readiness.ready_count} of {totalChecks} checks ready</span>
           <small>{versionName(latestVersion)} - {data.approved_package_is_current ? "approval current" : "approval required"}</small>
         </div>
       </header>
+
+      <section aria-labelledby="package-path-heading" className={styles.packagePathChooser}>
+        <header>
+          <span>Choose your packet path</span>
+          <h5 id="package-path-heading">How do you want to create the investor packet?</h5>
+          <p>
+            Both paths create a governed draft that must be reviewed and approved. Uploading an
+            existing PDF preserves that exact file; it does not replace Stonegate&apos;s CRM
+            readiness, buyer matching, private economics, or outreach-summary controls.
+          </p>
+        </header>
+        <div>
+          <a href="#build-with-stonegate">
+            <RefreshCw aria-hidden="true" size={18} />
+            <span><strong>Build with Stonegate</strong><small>Generate a packet from the current saved evidence and approved economics.</small></span>
+          </a>
+          <a href="#use-existing-pdf">
+            <Upload aria-hidden="true" size={18} />
+            <span><strong>Use existing PDF</strong><small>Upload your finished investor packet unchanged as the exact draft artifact.</small></span>
+          </a>
+        </div>
+      </section>
 
       {!data.approved_package_is_current && approvedVersion ? (
         <div className={styles.staleApproval} role="alert">
@@ -523,7 +596,7 @@ export function DispositionPackageReadiness({
       <section aria-labelledby="package-readiness-heading" className={styles.panel} ref={checklistRef} tabIndex={-1}>
         <div className={styles.panelHeading}>
           <div><span>Launch readiness</span><h5 id="package-readiness-heading">Evidence and preparation checks</h5></div>
-          <strong>{readiness.blocked_count} blocked - {readiness.warning_count} warnings</strong>
+          <strong>{readiness.blocked_count + (latestArtifactScanIssue ? 1 : 0)} blocked - {readiness.warning_count} warnings</strong>
         </div>
         <div className={styles.checkList}>
           {readiness.checks.map((check) => {
@@ -542,8 +615,9 @@ export function DispositionPackageReadiness({
           })}
           {!readiness.checks.length ? <p className={styles.empty}>No readiness checks were returned.</p> : null}
         </div>
-        {(readiness.blockers.length || readiness.warnings.length || readiness.unknowns.length) ? (
+        {(latestArtifactScanIssue || readiness.blockers.length || readiness.warnings.length || readiness.unknowns.length) ? (
           <div className={styles.readinessNotes}>
+            {latestArtifactScanIssue ? <p data-status="blocked"><ShieldAlert aria-hidden="true" size={14} />{latestArtifactScanIssue}</p> : null}
             {readiness.blockers.map((item) => <p data-status="blocked" key={`blocker-${item}`}><XCircle aria-hidden="true" size={14} />{item}</p>)}
             {readiness.warnings.map((item) => <p data-status="warning" key={`warning-${item}`}><AlertTriangle aria-hidden="true" size={14} />{item}</p>)}
             {readiness.unknowns.map((item) => <p data-status="unknown" key={`unknown-${item}`}><ShieldAlert aria-hidden="true" size={14} />{item}</p>)}
@@ -651,11 +725,12 @@ export function DispositionPackageReadiness({
       </section>
 
       <div className={styles.actionGrid}>
-        <form className={styles.buildPanel} onSubmit={rebuild}>
+        <form className={styles.buildPanel} id="build-with-stonegate" onSubmit={rebuild}>
           <div className={styles.panelHeading}>
-            <div><span>Immutable draft</span><h5>{latestVersion ? "Rebuild from current evidence" : "Create package draft"}</h5></div>
+            <div><span>Stonegate-built draft</span><h5>Build with Stonegate</h5></div>
             <RefreshCw aria-hidden="true" size={18} />
           </div>
+          <p className={styles.packagePathNote}>{latestVersion ? "Rebuild a new immutable version from the latest CRM evidence." : "Create the first immutable version from the current CRM evidence."}</p>
           {data.can_view_internal_economics && data.private_economics ? (
             <div className={styles.economicsFields}>
               <label><span>Investor asking price</span><input defaultValue={dollars(data.private_economics.buyer_asking_price_cents)} inputMode="decimal" name="asking_price" /></label>
@@ -679,13 +754,81 @@ export function DispositionPackageReadiness({
         </section>
       </div>
 
+      <form className={styles.externalUploadPanel} id="use-existing-pdf" onSubmit={uploadExternalPackage}>
+        <div className={styles.panelHeading}>
+          <div><span>Externally prepared packet</span><h5>Use existing PDF</h5></div>
+          <Upload aria-hidden="true" size={18} />
+        </div>
+        <p>
+          Upload the exact buyer-facing packet you already made. Stonegate preserves that PDF,
+          records its fingerprint, and uses it as the official packet only after human approval.
+          CRM facts still supply readiness, matching, private economics, and outreach summaries.
+        </p>
+        <div className={styles.externalUploadFields}>
+          <label>
+            <span>Investor packet PDF</span>
+            <input accept="application/pdf,.pdf" name="external_package_pdf" required type="file" />
+          </label>
+          <label>
+            <span>Source note</span>
+            <input maxLength={500} name="source_note" placeholder="Optional: who prepared it and when" />
+          </label>
+        </div>
+        <button disabled={!canEditDeals || busyAction !== null} type="submit">
+          {busyAction === "external-upload" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <Upload aria-hidden="true" size={15} />}
+          {busyAction === "external-upload" ? "Uploading exact PDF..." : "Upload external packet draft"}
+        </button>
+      </form>
+
       <section aria-labelledby="package-history-heading" className={styles.panel}>
         <div className={styles.panelHeading}>
           <div><span>Reproducible record</span><h5 id="package-history-heading">Version history</h5></div>
           <History aria-hidden="true" size={18} />
         </div>
         <div className={styles.versionList}>
-          {data.versions.map((version) => <article key={version.id}><div className={styles.versionIdentity}><FileClock aria-hidden="true" size={17} /><span><strong>Package v{version.version_number}</strong><small>Created {dateTime(version.created_at)}</small></span></div><div className={styles.versionMeta}><span data-status={version.status}>{labelize(version.status)}</span>{version.is_current ? <b>Current evidence</b> : null}<small>Fingerprint {version.source_fingerprint.slice(0, 12)}</small></div><div className={styles.versionDecision}>{version.approved_at ? <><strong>Approved {dateTime(version.approved_at)}</strong><small>Approver {version.approved_by_user_id?.slice(0, 8)} - {version.approval_reason}</small></> : <><strong>Not approved</strong><small>{version.readiness.blockers[0] ?? version.readiness.warnings[0] ?? "Awaiting human review"}</small></>}</div>{version.pdf_file_name || version.pdf_sha256 ? <button aria-label={`Download investor package version ${version.version_number}`} disabled={busyAction !== null} onClick={() => void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${version.id}/package.pdf`, version.pdf_file_name ?? `stonegate-investor-package-v${version.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />PDF</button> : null}</article>)}
+          {data.versions.map((version) => {
+            const scanIssue = externalArtifactScanIssue(version);
+            const scanStatus = version.artifact_metadata?.malware_scan_status ?? "missing";
+            const canDownloadVersionPdf =
+              version.status === "approved" || canEditDeals || data.can_approve;
+            return (
+              <article key={version.id}>
+                <div className={styles.versionIdentity}>
+                  <FileClock aria-hidden="true" size={17} />
+                  <span>
+                    <strong>Package v{version.version_number}</strong>
+                    <small>{version.artifact_source === "external_upload" ? "Uploaded external PDF" : "Stonegate-generated PDF"} - Created {dateTime(version.created_at)}</small>
+                    {version.artifact_source === "external_upload" ? <small data-status={scanIssue ? "blocked" : "ready"}>PDF scan: {labelize(scanStatus)}</small> : null}
+                    {version.artifact_metadata?.source_note ? <small>{version.artifact_metadata.source_note}</small> : null}
+                  </span>
+                </div>
+                <div className={styles.versionMeta}>
+                  <span data-status={version.status}>{labelize(version.status)}</span>
+                  {version.is_current ? <b>Current evidence</b> : null}
+                  <small>Fingerprint {version.source_fingerprint.slice(0, 12)}</small>
+                </div>
+                <div className={styles.versionDecision}>
+                  {version.approved_at ? (
+                    <>
+                      <strong>Approved {dateTime(version.approved_at)}</strong>
+                      <small>Approver {version.approved_by_user_id?.slice(0, 8)} - {version.approval_reason}</small>
+                      {scanIssue ? <small>{scanIssue}</small> : null}
+                    </>
+                  ) : (
+                    <>
+                      <strong>Not approved</strong>
+                      <small>{scanIssue ?? version.readiness.blockers[0] ?? version.readiness.warnings[0] ?? "Awaiting human review"}</small>
+                    </>
+                  )}
+                </div>
+                {(version.pdf_file_name || version.pdf_sha256) && canDownloadVersionPdf ? (
+                  <button aria-label={`Download investor package version ${version.version_number}`} disabled={busyAction !== null} onClick={() => void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${version.id}/package.pdf`, version.pdf_file_name ?? `stonegate-investor-package-v${version.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />PDF</button>
+                ) : version.pdf_file_name || version.pdf_sha256 ? (
+                  <small className={styles.restrictedDraftPdf}>Draft PDF restricted</small>
+                ) : null}
+              </article>
+            );
+          })}
           {!data.versions.length ? <p className={styles.empty}>No package versions have been created.</p> : null}
         </div>
       </section>
@@ -693,9 +836,9 @@ export function DispositionPackageReadiness({
       <dialog aria-labelledby="approve-package-title" className={styles.approvalDialog} onCancel={() => approvalDialogRef.current?.close()} ref={approvalDialogRef}>
         <form method="dialog"><button aria-label="Cancel package approval" onClick={() => approvalDialogRef.current?.close()} type="button"><X aria-hidden="true" size={18} /></button></form>
         <form onSubmit={approve}>
-          <div><span>Exact version approval</span><h4 id="approve-package-title">Approve investor package {versionName(latestVersion)}</h4><p>This freezes the public preview, evidence manifest, email/SMS summaries, and PDF for this version.</p></div>
+          <div><span>Exact version approval</span><h4 id="approve-package-title">Approve investor package {versionName(latestVersion)}</h4><p>{latestVersion?.artifact_source === "external_upload" ? "This approves the exact externally prepared PDF that was uploaded; Stonegate will not regenerate or replace its bytes." : "This freezes the public preview, evidence manifest, email/SMS summaries, and generated PDF for this version."}</p></div>
           <label><span>Approval reason</span><textarea aria-describedby="approval-reason-help" minLength={3} onChange={(event) => setApprovalReason(event.target.value)} ref={approvalReasonRef} required rows={4} value={approvalReason} /><small id="approval-reason-help">Record what you reviewed and why this version is ready for investors.</small></label>
-          <label className={styles.attestation}><input checked={attested} onChange={(event) => setAttested(event.target.checked)} required type="checkbox" /><span>I reviewed the investor-visible preview and supporting evidence for {versionName(latestVersion)}. No private floor, seller notes, or unverified claim is being presented as fact.</span></label>
+          <label className={styles.attestation}><input checked={attested} onChange={(event) => setAttested(event.target.checked)} required type="checkbox" /><span>{latestVersion?.artifact_source === "external_upload" ? `I reviewed the exact uploaded PDF for ${versionName(latestVersion)} as well as the saved evidence. It contains no private floor, seller notes, or unverified claim presented as fact.` : `I reviewed the investor-visible preview and supporting evidence for ${versionName(latestVersion)}. No private floor, seller notes, or unverified claim is being presented as fact.`}</span></label>
           <div className={styles.dialogActions}><button onClick={() => approvalDialogRef.current?.close()} type="button">Cancel</button><button disabled={!attested || approvalReason.trim().length < 3 || busyAction !== null} type="submit">{busyAction === "approve" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <Check aria-hidden="true" size={15} />}Approve exact version</button></div>
         </form>
       </dialog>

@@ -31,6 +31,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import {
+  ExecutedContractImportForm,
+  type ExecutedContractImportResponse,
+} from "../../leads/[leadId]/executed-contract-import-form";
+import {
+  OfferStageAction,
+  type OutsideOfferResponse,
+} from "../../leads/[leadId]/offer-stage-action";
 import type { LeadCloseOutResponse, LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import {
@@ -42,7 +50,6 @@ import {
   getPipelineStage,
   getSavedLeadViewCounts,
   isAddressOnlyLead,
-  leadCanEnterPipelineStage,
   leadSortOptions,
   labelize,
   pipelineStages,
@@ -114,7 +121,7 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
     if (lead.asset_class === "land") {
       return { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" };
     }
-    return { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Continue negotiation" };
+    return { href: `/os/leads/${lead.id}?tab=valuation#negotiation-governance`, label: "Continue negotiation" };
   }
   if (status === "Nurture") {
     return { href: `/os/inbox?lead=${lead.id}`, label: "Open follow-up" };
@@ -235,8 +242,111 @@ function LeadDragOverlay({ lead, tasks }: { lead: LeadListItem; tasks: SpeedToLe
   );
 }
 
+function ExecutedContractImportDialog({
+  lead,
+  onClose,
+  onRecorded,
+}: {
+  lead: LeadListItem;
+  onClose: () => void;
+  onRecorded: (result: ExecutedContractImportResponse) => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      aria-describedby="executed-contract-import-description"
+      aria-labelledby="executed-contract-import-title"
+      className={styles.contractImportDialog}
+      onClose={onClose}
+      ref={dialogRef}
+    >
+      <header className={styles.contractImportHeader}>
+        <div>
+          <span>Under Contract</span>
+          <h2 id="executed-contract-import-title">Record the signed contract</h2>
+          <p id="executed-contract-import-description">
+            {lead.seller_name} stays in {getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key)} until the executed agreement is verified and saved.
+          </p>
+        </div>
+        <button
+          aria-label="Cancel recording the signed contract"
+          onClick={() => dialogRef.current?.close()}
+          type="button"
+        >
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
+      <div className={styles.contractImportBody}>
+        <ExecutedContractImportForm
+          leadId={lead.id}
+          onRecorded={onRecorded}
+          sellerName={lead.seller_name}
+        />
+      </div>
+    </dialog>
+  );
+}
+
+function OfferStageActionDialog({
+  lead,
+  onClose,
+  onRecorded,
+}: {
+  lead: LeadListItem;
+  onClose: () => void;
+  onRecorded: (result: OutsideOfferResponse) => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      aria-describedby="offer-stage-action-description"
+      aria-labelledby="offer-stage-action-title"
+      className={styles.offerActionDialog}
+      onClose={onClose}
+      ref={dialogRef}
+    >
+      <header className={styles.offerActionHeader}>
+        <div>
+          <span>Offer</span>
+          <h2 id="offer-stage-action-title">Choose the offer workflow</h2>
+          <p id="offer-stage-action-description">
+            {lead.seller_name} stays in {getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key)} until an offer action is recorded.
+          </p>
+        </div>
+        <button aria-label="Cancel the offer action" onClick={() => dialogRef.current?.close()} type="button">
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
+      <div className={styles.offerActionBody}>
+        <OfferStageAction
+          assetClass={lead.asset_class}
+          expectedStageKey={lead.stage_key}
+          leadId={lead.id}
+          onCancel={() => dialogRef.current?.close()}
+          onRecorded={onRecorded}
+          sellerName={lead.seller_name}
+        />
+      </div>
+    </dialog>
+  );
+}
+
 export function LeadsWorkspace({
   canEditLead,
+  canImportExecutedContract,
+  canRecordOutsideOffer,
   initialAsset,
   initialDisplay,
   initialLeadId,
@@ -250,6 +360,8 @@ export function LeadsWorkspace({
   tasks,
 }: {
   canEditLead: boolean;
+  canImportExecutedContract: boolean;
+  canRecordOutsideOffer: boolean;
   initialAsset: "all" | "house" | "land";
   initialDisplay: "table" | "board";
   initialLeadId: string;
@@ -285,6 +397,8 @@ export function LeadsWorkspace({
   const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
   const [pendingLeadIds, setPendingLeadIds] = useState<Set<string>>(() => new Set());
   const [stageNotice, setStageNotice] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const [contractImportLeadId, setContractImportLeadId] = useState<string | null>(null);
+  const [offerActionLeadId, setOfferActionLeadId] = useState<string | null>(null);
   const pendingLeadIdsRef = useRef(new Set<string>());
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -350,6 +464,10 @@ export function LeadsWorkspace({
   const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
   const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
   const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
+  const contractImportLead =
+    workingLeads.find((lead) => lead.id === contractImportLeadId) ?? null;
+  const offerActionLead =
+    workingLeads.find((lead) => lead.id === offerActionLeadId) ?? null;
   const contactReadyLeads = workingLeads.filter((lead) => !isAddressOnlyLead(lead));
   const newLeadCount = contactReadyLeads.filter((lead) => lead.stage_key === "new").length;
   const qualifiedCount = contactReadyLeads.filter((lead) =>
@@ -433,6 +551,31 @@ export function LeadsWorkspace({
     return `/os/leads/${leadId}?returnTo=${encodeURIComponent(`/os/leads?${values.toString()}`)}`;
   }
 
+  function workspaceStageMoveBlockReason(lead: LeadListItem, targetStage: PipelineStage) {
+    if (
+      targetStage.key === "offer" &&
+      getPipelineStage(lead.stage_key)?.key !== "under_contract"
+    ) {
+      if (!canRecordOutsideOffer) {
+        return "Starting an offer action requires Lead editing access.";
+      }
+      return null;
+    }
+    if (
+      targetStage.key === "under_contract" &&
+      getPipelineStage(lead.stage_key)?.key !== "under_contract"
+    ) {
+      if (lead.asset_class !== "house") {
+        return "This signed-contract shortcut currently supports House leads. Use the Land Contract workflow for land.";
+      }
+      if (!canImportExecutedContract) {
+        return "Recording an executed contract requires executed-contract recording access.";
+      }
+      return null;
+    }
+    return pipelineStageMoveBlockReason(lead, targetStage);
+  }
+
   async function moveLeadToStage(leadId: string, targetStage: PipelineStage) {
     const lead = workingLeads.find((item) => item.id === leadId);
     if (!lead || !canEditLead || pendingLeadIdsRef.current.has(leadId)) return;
@@ -445,12 +588,26 @@ export function LeadsWorkspace({
       });
       return;
     }
-    const moveBlockReason = pipelineStageMoveBlockReason(lead, targetStage);
+    const moveBlockReason = workspaceStageMoveBlockReason(lead, targetStage);
     if (moveBlockReason) {
       setStageNotice({
         message: moveBlockReason,
         tone: "error",
       });
+      return;
+    }
+
+    if (targetStage.key === "under_contract") {
+      selectLead(leadId);
+      setContractImportLeadId(leadId);
+      setStageNotice(null);
+      return;
+    }
+
+    if (targetStage.key === "offer") {
+      selectLead(leadId);
+      setOfferActionLeadId(leadId);
+      setStageNotice(null);
       return;
     }
 
@@ -564,7 +721,7 @@ export function LeadsWorkspace({
       const targetStageKey = over?.data.current?.stageKey;
       const targetStage = pipelineStages.find((item) => item.key === targetStageKey);
       const blockedReason = lead && targetStage
-        ? pipelineStageMoveBlockReason(lead, targetStage)
+        ? workspaceStageMoveBlockReason(lead, targetStage)
         : null;
       if (blockedReason) return `${targetStage?.label ?? "That stage"} is unavailable. ${blockedReason}`;
       return targetStage ? `Over ${targetStage.label}.` : "Not over a pipeline stage.";
@@ -575,11 +732,15 @@ export function LeadsWorkspace({
       const targetStageKey = over?.data.current?.stageKey;
       const targetStage = pipelineStages.find((item) => item.key === targetStageKey);
       const blockedReason = lead && targetStage
-        ? pipelineStageMoveBlockReason(lead, targetStage)
+        ? workspaceStageMoveBlockReason(lead, targetStage)
         : null;
       if (blockedReason) return `Move blocked. ${blockedReason}`;
       return lead && targetStage
-        ? `${lead.seller_name} dropped in ${targetStage.label}. Saving the change.`
+        ? targetStage.key === "under_contract"
+          ? `${lead.seller_name} dropped in ${targetStage.label}. Opening the signed-contract form.`
+          : targetStage.key === "offer"
+            ? `${lead.seller_name} dropped in ${targetStage.label}. Opening the offer choices.`
+          : `${lead.seller_name} dropped in ${targetStage.label}. Saving the change.`
         : "Move cancelled.";
     },
     onDragCancel() {
@@ -749,7 +910,7 @@ export function LeadsWorkspace({
                     (lead) => getPipelineStage(lead.stage_key)?.key === pipelineStage.key,
                   );
                   const dropBlockedReason = activeLead
-                    ? pipelineStageMoveBlockReason(activeLead, pipelineStage) ?? undefined
+                    ? workspaceStageMoveBlockReason(activeLead, pipelineStage) ?? undefined
                     : undefined;
                   return (
                     <LeadBoardColumn
@@ -815,9 +976,9 @@ export function LeadsWorkspace({
                     >
                       {pipelineStages.map((pipelineStage) => (
                         <option
-                          disabled={!leadCanEnterPipelineStage(selectedLead, pipelineStage)}
+                          disabled={Boolean(workspaceStageMoveBlockReason(selectedLead, pipelineStage))}
                           key={pipelineStage.key}
-                          title={pipelineStageMoveBlockReason(selectedLead, pipelineStage) ?? undefined}
+                          title={workspaceStageMoveBlockReason(selectedLead, pipelineStage) ?? undefined}
                           value={pipelineStage.key}
                         >
                           {pipelineStage.label}
@@ -829,7 +990,7 @@ export function LeadsWorkspace({
                         ? "Saving stage…"
                         : getPipelineStage(selectedLead.stage_key)?.key === "under_contract"
                           ? "Under-contract stages move through Contract & Deal."
-                          : "Available on keyboard and mobile. Offer and contract stages use their controlled workflows."}
+                          : "Available on keyboard and mobile. Offer opens workflow choices; Under Contract opens the signed-contract form."}
                     </small>
                   </label>
                 ) : null}
@@ -877,6 +1038,41 @@ export function LeadsWorkspace({
           {mobileDetailOpen ? <button aria-label="Close seller preview" className={styles.backdrop} onClick={() => setMobileDetailOpen(false)} type="button" /> : null}
         </div>
       </section>
+      {contractImportLead ? (
+        <ExecutedContractImportDialog
+          lead={contractImportLead}
+          onClose={() => setContractImportLeadId(null)}
+          onRecorded={(result) => {
+            setWorkingLeads((current) =>
+              current.map((lead) =>
+                lead.id === result.lead_id ? { ...lead, stage_key: result.lead_stage } : lead,
+              ),
+            );
+            setStageNotice({
+              message: `${contractImportLead.seller_name} moved to Under Contract.`,
+              tone: "success",
+            });
+          }}
+        />
+      ) : null}
+      {offerActionLead ? (
+        <OfferStageActionDialog
+          lead={offerActionLead}
+          onClose={() => setOfferActionLeadId(null)}
+          onRecorded={(result) => {
+            setWorkingLeads((current) =>
+              current.map((lead) =>
+                lead.id === result.lead_id ? { ...lead, stage_key: result.stage_key } : lead,
+              ),
+            );
+            setOfferActionLeadId(null);
+            setStageNotice({
+              message: `${offerActionLead.seller_name} moved to ${result.stage_key === "negotiating" ? "Negotiating" : "Offer Presented"}.`,
+              tone: "success",
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

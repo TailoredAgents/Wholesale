@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -32,14 +33,19 @@ from app.models.foundation import (
 from app.schemas.dispositions import (
     DispositionEvidenceItemRead,
     DispositionPackageApprovalRequest,
+    DispositionPackageArtifactMetadataRead,
     DispositionPackageReadinessRead,
     DispositionPackageVersionCreate,
     DispositionPackageVersionRead,
     DispositionPackageWorkspaceRead,
 )
+from app.services.document_storage import scan_document
 
 PACKAGE_POLICY_VERSION = "buyer_safe_v1"
 PACKAGE_RENDERER_VERSION = "stonegate_pdf_v2"
+MAX_EXTERNAL_PACKAGE_PDF_SIZE = 15 * 1024 * 1024
+EXTERNAL_ARTIFACT_METADATA_KEY = "_external_artifact"
+ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES = frozenset({"clean", "not_configured"})
 ELIGIBLE_TRANSACTION_STATUSES = {"executed", "closing", "funded"}
 PUBLIC_PACKAGE_KEYS = {
     "headline",
@@ -1101,6 +1107,27 @@ def _version_matches_current_sources(
     )
 
 
+def _external_artifact_metadata(
+    version: DispositionPackageVersion,
+) -> dict[str, Any] | None:
+    readiness = version.readiness_snapshot
+    if not isinstance(readiness, dict):
+        return None
+    metadata = readiness.get(EXTERNAL_ARTIFACT_METADATA_KEY)
+    if not isinstance(metadata, dict) or metadata.get("source") != "external_upload":
+        return None
+    return dict(metadata)
+
+
+def _artifact_read(
+    version: DispositionPackageVersion,
+) -> DispositionPackageArtifactMetadataRead | None:
+    metadata = _external_artifact_metadata(version)
+    if metadata is None:
+        return None
+    return DispositionPackageArtifactMetadataRead.model_validate(metadata)
+
+
 def _version_read(
     principal: Principal,
     version: DispositionPackageVersion,
@@ -1133,6 +1160,12 @@ def _version_read(
         pdf_file_name=version.pdf_file_name,
         pdf_size=version.pdf_size,
         pdf_sha256=version.pdf_sha256,
+        artifact_source=(
+            "external_upload"
+            if _external_artifact_metadata(version) is not None
+            else "stonegate_generated"
+        ),
+        artifact_metadata=_artifact_read(version),
         created_by_user_id=version.created_by_user_id,
         approved_by_user_id=version.approved_by_user_id,
         approval_reason=version.approval_reason if can_view_private(principal) else None,
@@ -1374,6 +1407,153 @@ def build_version(
     )
 
 
+def build_external_version(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    *,
+    expected_latest_version: int,
+    file_name: str,
+    content_type: str,
+    content: bytes,
+    source_note: str | None = None,
+) -> DispositionPackageVersionRead | None:
+    """Create an immutable draft backed by the exact investor packet supplied by staff."""
+    from app.services.dispositions import scoped_case_for_mutation
+
+    normalized_type = content_type.split(";", 1)[0].strip().lower()
+    if normalized_type != "application/pdf":
+        raise ValueError("External investor packets must use the application/pdf content type.")
+    if not content:
+        raise ValueError("The external investor packet PDF is empty.")
+    if len(content) > MAX_EXTERNAL_PACKAGE_PDF_SIZE:
+        raise ValueError("External investor packet PDFs cannot exceed 15 MB.")
+    if not content.startswith(b"%PDF-"):
+        raise ValueError("The uploaded investor packet does not contain a valid PDF header.")
+    original_name = file_name.strip()
+    if not original_name or len(original_name) > 255 or not original_name.lower().endswith(".pdf"):
+        raise ValueError("Use a PDF file name no longer than 255 characters.")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original_name).strip(".-")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{safe_name or 'investor-packet'}.pdf"
+    normalized_note = " ".join((source_note or "").split()) or None
+    if normalized_note and len(normalized_note) > 500:
+        raise ValueError("The external packet source note cannot exceed 500 characters.")
+
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses={"package_prep", "buyer_matching", "marketed"},
+    )
+    if case is None:
+        return None
+    latest_number = (
+        db.scalar(
+            select(func.max(DispositionPackageVersion.version_number)).where(
+                DispositionPackageVersion.organization_id == principal.organization_id,
+                DispositionPackageVersion.disposition_case_id == case.id,
+            )
+        )
+        or 0
+    )
+    if latest_number != expected_latest_version:
+        raise ValueError(
+            "Package version changed. Expected latest version "
+            f"{expected_latest_version}; current latest is {latest_number}."
+        )
+    assembled = assemble_package(db, principal, case)
+    if case.strategy == "assignment" and int(
+        assembled["private_economics"]["minimum_acceptable_cents"]
+    ) < int(assembled["private_economics"]["contract_purchase_price_cents"]):
+        raise ValueError(
+            "Minimum acceptable price cannot be below the contract purchase price "
+            "for an assignment."
+        )
+    scan_status = scan_document(content)
+    digest = sha256(content).hexdigest()
+    uploaded_at = datetime.now(UTC)
+    artifact_metadata: dict[str, Any] = {
+        "source": "external_upload",
+        "original_file_name": safe_name,
+        "content_type": normalized_type,
+        "size_bytes": len(content),
+        "sha256": digest,
+        "uploaded_at": uploaded_at.isoformat(),
+        "uploaded_by_user_id": str(principal.user_id),
+        "malware_scan_status": scan_status,
+        "source_note": normalized_note,
+    }
+    for prior_draft in db.scalars(
+        select(DispositionPackageVersion).where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+            DispositionPackageVersion.status == "draft",
+        )
+    ).all():
+        prior_draft.status = "superseded"
+        prior_draft.lock_version += 1
+    readiness_snapshot = dict(assembled["readiness"])
+    readiness_snapshot[EXTERNAL_ARTIFACT_METADATA_KEY] = artifact_metadata
+    version = DispositionPackageVersion(
+        organization_id=principal.organization_id,
+        disposition_case_id=case.id,
+        created_by_user_id=principal.user_id,
+        approved_by_user_id=None,
+        version_number=latest_number + 1,
+        lock_version=1,
+        status="draft",
+        policy_version=PACKAGE_POLICY_VERSION,
+        renderer_version=PACKAGE_RENDERER_VERSION,
+        public_snapshot=assembled["public_snapshot"],
+        private_economics_snapshot=assembled["private_economics"],
+        evidence_manifest=assembled["evidence_manifest"],
+        readiness_snapshot=readiness_snapshot,
+        source_fingerprint=assembled["source_fingerprint"],
+        email_summary=assembled["email_summary"],
+        sms_summary=assembled["sms_summary"],
+        approval_reason=None,
+        approved_at=None,
+        pdf_file_name=safe_name,
+        pdf_content_type=normalized_type,
+        pdf_size=len(content),
+        pdf_sha256=digest,
+        pdf_data=content,
+    )
+    db.add(version)
+    case.package_status = "draft"
+    case.package_snapshot = sanitize_public_snapshot(assembled["public_snapshot"])
+    if case.status in {"package_prep", "marketed"}:
+        case.status = "buyer_matching"
+    db.flush()
+    _audit(
+        db,
+        principal,
+        "disposition.package_version_external_upload",
+        version.id,
+        {
+            "case_id": str(case.id),
+            "version_number": version.version_number,
+            "artifact_source": "external_upload",
+            "file_name": safe_name,
+            "content_type": normalized_type,
+            "size_bytes": len(content),
+            "sha256": digest,
+            "malware_scan_status": scan_status,
+            "source_fingerprint": version.source_fingerprint,
+        },
+        normalized_note or "Externally prepared investor packet uploaded for governed review.",
+    )
+    db.commit()
+    db.refresh(version)
+    return _version_read(
+        principal,
+        version,
+        current_fingerprint=assembled["source_fingerprint"],
+        latest_version_id=version.id,
+    )
+
+
 def _render_pdf(snapshot: dict[str, Any], approved_at: datetime, case_id: UUID) -> bytes:
     safe = sanitize_public_snapshot(snapshot)
     prop = _dict_section(safe, "property") or {}
@@ -1530,7 +1710,32 @@ def approve_version(
     if blockers:
         raise ValueError("Package approval is blocked: " + "; ".join(blockers))
     now = datetime.now(UTC)
-    pdf_data = _render_pdf(version.public_snapshot, now, case.id)
+    artifact_metadata = _external_artifact_metadata(version)
+    if artifact_metadata is not None:
+        if (
+            artifact_metadata.get("malware_scan_status")
+            not in ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES
+        ):
+            raise ValueError(
+                "The externally uploaded package is not in an acceptable malware scan state. "
+                "Upload a newly scanned package before approval."
+            )
+        if (
+            version.pdf_data is None
+            or version.pdf_content_type != "application/pdf"
+            or version.pdf_size != len(version.pdf_data)
+            or version.pdf_sha256 != sha256(bytes(version.pdf_data)).hexdigest()
+            or not bytes(version.pdf_data).startswith(b"%PDF-")
+            or artifact_metadata.get("size_bytes") != version.pdf_size
+            or artifact_metadata.get("sha256") != version.pdf_sha256
+        ):
+            raise ValueError(
+                "The externally uploaded package artifact failed its immutable integrity check. "
+                "Upload a new package version."
+            )
+        pdf_data = bytes(version.pdf_data)
+    else:
+        pdf_data = _render_pdf(version.public_snapshot, now, case.id)
     for prior in db.scalars(
         select(DispositionPackageVersion).where(
             DispositionPackageVersion.organization_id == principal.organization_id,
@@ -1545,11 +1750,15 @@ def approve_version(
     version.approved_by_user_id = principal.user_id
     version.approved_at = now
     version.approval_reason = payload.reason
-    version.pdf_file_name = f"stonegate-deal-package-{case.id}-v{version.version_number}.pdf"
-    version.pdf_content_type = "application/pdf"
-    version.pdf_size = len(pdf_data)
-    version.pdf_sha256 = sha256(pdf_data).hexdigest()
-    version.pdf_data = pdf_data
+    if artifact_metadata is None:
+        version.pdf_file_name = f"stonegate-deal-package-{case.id}-v{version.version_number}.pdf"
+        version.pdf_content_type = "application/pdf"
+        version.pdf_size = len(pdf_data)
+        version.pdf_sha256 = sha256(pdf_data).hexdigest()
+        version.pdf_data = pdf_data
+    version.readiness_snapshot = dict(current["readiness"])
+    if artifact_metadata is not None:
+        version.readiness_snapshot[EXTERNAL_ARTIFACT_METADATA_KEY] = artifact_metadata
     version.lock_version += 1
     case.asking_price_cents = int(economics["buyer_asking_price_cents"])
     case.minimum_acceptable_cents = int(economics["minimum_acceptable_cents"])
@@ -1569,6 +1778,10 @@ def approve_version(
             "case_id": str(case.id),
             "version_number": version.version_number,
             "source_fingerprint": version.source_fingerprint,
+            "artifact_source": (
+                "external_upload" if artifact_metadata is not None else "stonegate_generated"
+            ),
+            "artifact_sha256": version.pdf_sha256,
         },
         payload.reason,
     )
@@ -1646,6 +1859,29 @@ def exact_version_pdf(
     )
     if version is None or version.pdf_data is None or version.pdf_file_name is None:
         return None
+    artifact_metadata = _external_artifact_metadata(version)
+    if (
+        artifact_metadata is not None
+        and version.status != "approved"
+        and principal.permission_keys.isdisjoint(
+            {
+                PermissionKeys.EDIT_DEALS,
+                PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
+            }
+        )
+    ):
+        raise ValueError(
+            "Reviewing an unapproved external investor packet requires deal-edit or "
+            "package-approval permission."
+        )
+    if artifact_metadata is not None and (
+        artifact_metadata.get("malware_scan_status")
+        not in ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES
+    ):
+        raise ValueError(
+            "The externally uploaded package cannot be opened because its malware scan "
+            "state is not acceptable. Upload a newly scanned package."
+        )
     return bytes(version.pdf_data), version.pdf_file_name
 
 

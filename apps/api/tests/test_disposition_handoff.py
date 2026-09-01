@@ -17,6 +17,7 @@ from app.models.foundation import (
     Role,
     RoleAssignment,
     StaffLeadAlert,
+    Task,
     Team,
     TeamMembership,
     Transaction,
@@ -24,6 +25,7 @@ from app.models.foundation import (
 )
 from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_handoff import (
+    HANDOFF_SETUP_TASK_TYPE,
     PACKAGE_READY_ALERT_SOURCE_TYPE,
     ensure_house_disposition_case_for_executed_transaction,
     process_next_disposition_handoff_recovery,
@@ -347,6 +349,16 @@ def test_non_human_led_mode_does_not_auto_create_disposition_case(
     )
     assert audit is not None
     assert "No available human-led disposition operating mode." in audit.reason
+    setup_task = db_session.scalar(
+        select(Task).where(
+            Task.deal_id == transaction.deal_id,
+            Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+        )
+    )
+    assert setup_task is not None
+    assert setup_task.status == "open"
+    assert setup_task.priority == "urgent"
+    assert setup_task.responsible_user_id is not None
 
 
 def test_worker_recovers_handoff_after_temporary_configuration_block(
@@ -362,10 +374,7 @@ def test_worker_recovers_handoff_after_temporary_configuration_block(
     mode.key = "ai_assisted"
     db_session.commit()
 
-    assert (
-        ensure_house_disposition_case_for_executed_transaction(db_session, transaction)
-        is None
-    )
+    assert ensure_house_disposition_case_for_executed_transaction(db_session, transaction) is None
     db_session.commit()
     blocked = db_session.scalar(
         select(AuditEvent).where(
@@ -374,6 +383,14 @@ def test_worker_recovers_handoff_after_temporary_configuration_block(
         )
     )
     assert blocked is not None
+    setup_task = db_session.scalar(
+        select(Task).where(
+            Task.deal_id == transaction.deal_id,
+            Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+        )
+    )
+    assert setup_task is not None
+    assert setup_task.status == "open"
 
     mode.key = "human_led"
     blocked.created_at = datetime.now(UTC) - timedelta(minutes=6)
@@ -388,6 +405,52 @@ def test_worker_recovers_handoff_after_temporary_configuration_block(
         select(DispositionCase).where(DispositionCase.transaction_id == transaction.id)
     )
     assert recovered is not None
+    db_session.refresh(setup_task)
+    assert setup_task.status == "completed"
+    assert setup_task.outcome == "disposition_case_opened"
+
+
+def test_completed_handoff_does_not_create_setup_work_or_retry(
+    db_session: Session,
+) -> None:
+    transaction, _, _ = setup_executed_house_transaction(db_session)
+    disposition_case = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    assert disposition_case is not None
+    transaction.status = "funded"
+    disposition_case.status = "reconciled"
+    db_session.commit()
+
+    existing = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    db_session.commit()
+    recovered = process_next_disposition_handoff_recovery(db_session, get_settings())
+
+    assert existing is not None
+    assert existing.id == disposition_case.id
+    assert recovered is None
+    assert (
+        db_session.scalar(
+            select(Task.id).where(
+                Task.deal_id == transaction.deal_id,
+                Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+            )
+        )
+        is None
+    )
+    assert (
+        db_session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.entity_id == transaction.id,
+                AuditEvent.action == "disposition.case_auto_create_blocked",
+            )
+        )
+        is None
+    )
 
 
 def test_package_ready_sms_targets_only_case_owner_and_is_idempotent(
@@ -580,9 +643,7 @@ def test_queued_package_alert_rechecks_owner_opt_in_before_delivery(
 
     disposition_owner.lead_alert_sms_enabled = False
     db_session.commit()
-    settings = get_settings().model_copy(
-        update={"staff_lead_alert_sms_mode": "simulate"}
-    )
+    settings = get_settings().model_copy(update={"staff_lead_alert_sms_mode": "simulate"})
     assert process_next_staff_lead_alert(db_session, settings) == alert.id
 
     db_session.refresh(alert)
@@ -642,9 +703,7 @@ def test_queued_package_alert_rechecks_rbac_and_current_cellphone(
     disposition_owner.is_active = False
     db_session.commit()
 
-    settings = get_settings().model_copy(
-        update={"staff_lead_alert_sms_mode": "simulate"}
-    )
+    settings = get_settings().model_copy(update={"staff_lead_alert_sms_mode": "simulate"})
     assert process_next_staff_lead_alert(db_session, settings) == alert.id
     db_session.refresh(alert)
     assert alert.status == "blocked"
@@ -744,9 +803,7 @@ def test_stale_queued_owner_is_canceled_and_recovery_targets_current_owner(
     )
     assert stale_alert is not None
 
-    settings = get_settings().model_copy(
-        update={"staff_lead_alert_sms_mode": "simulate"}
-    )
+    settings = get_settings().model_copy(update={"staff_lead_alert_sms_mode": "simulate"})
     assert process_next_staff_lead_alert(db_session, settings) == stale_alert.id
     db_session.refresh(stale_alert)
     assert stale_alert.status == "canceled"
@@ -766,9 +823,7 @@ def test_stale_queued_owner_is_canceled_and_recovery_targets_current_owner(
         ).all()
     )
     latest_not_queued = next(
-        item
-        for item in attempts
-        if item.action == "disposition.package_ready_sms_not_queued"
+        item for item in attempts if item.action == "disposition.package_ready_sms_not_queued"
     )
     for item in attempts:
         item.created_at = datetime.now(UTC) - timedelta(

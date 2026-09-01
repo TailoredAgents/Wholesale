@@ -57,6 +57,10 @@ export default async function LeadsPage({
     ]);
 
   const canCreateLead = Boolean(profile?.permissions.includes("leads:edit"));
+  const canImportExecutedContract = Boolean(
+    profile?.permissions.includes("contracts:record_executed") ||
+      profile?.permissions.includes("contracts:modify"),
+  );
   const canUnderwrite = Boolean(
     profile?.permissions.includes("underwriting:edit") ||
       profile?.permissions.includes("underwriting:approve_arv"),
@@ -133,6 +137,8 @@ export default async function LeadsPage({
       {activeView === "database" ? (
         <LeadsWorkspace
           canEditLead={canCreateLead}
+          canImportExecutedContract={canImportExecutedContract}
+          canRecordOutsideOffer={canCreateLead}
           initialDisplay={display}
           initialAsset={requestedAsset as "all" | "house" | "land"}
           initialLeadId={first(params.lead)}

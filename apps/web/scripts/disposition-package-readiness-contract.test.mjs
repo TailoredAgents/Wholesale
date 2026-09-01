@@ -33,6 +33,35 @@ test("package reads and mutations use the immutable version contract", () => {
   assert.match(packageWorkspace, /loadSequenceRef/);
 });
 
+test("externally prepared packet PDFs remain exact governed package versions", () => {
+  assert.match(api, /artifact_source: "stonegate_generated" \| "external_upload"/);
+  assert.match(packageWorkspace, /uploadExternalPackage/);
+  assert.match(packageWorkspace, /package\/versions\/external/);
+  assert.match(packageWorkspace, /"Content-Type": "application\/pdf"/);
+  assert.match(packageWorkspace, /Use existing PDF/);
+  assert.match(packageWorkspace, /exact externally prepared PDF that was uploaded/);
+  assert.match(packageWorkspace, /version\.artifact_source === "external_upload"/);
+  assert.match(api, /malware_scan_status: string/);
+  assert.match(packageWorkspace, /acceptableArtifactScanStatuses/);
+  assert.match(packageWorkspace, /externalArtifactScanIssue/);
+  assert.match(packageWorkspace, /latestArtifactScanIssue/);
+  assert.match(packageWorkspace, /PDF scan:/);
+  assert.match(packageWorkspace, /hasApprovalBlockers/);
+});
+
+test("package starts with equal Stonegate-build and exact-PDF choices", () => {
+  assert.match(packageWorkspace, /Choose your packet path/);
+  assert.match(packageWorkspace, /Build with Stonegate/);
+  assert.match(packageWorkspace, /Use existing PDF/);
+  assert.match(packageWorkspace, /href="#build-with-stonegate"/);
+  assert.match(packageWorkspace, /href="#use-existing-pdf"/);
+  assert.match(packageWorkspace, /id="build-with-stonegate"/);
+  assert.match(packageWorkspace, /id="use-existing-pdf"/);
+  assert.match(packageWorkspace, /preserves that exact file/);
+  assert.match(packageWorkspace, /CRM[\s\S]*readiness[\s\S]*buyer matching[\s\S]*private economics[\s\S]*outreach-summary controls/);
+  assert.match(packageStyles, /\.packagePathChooser/);
+});
+
 test("readiness, evidence provenance, and deterministic summaries are visible", () => {
   assert.match(api, /export type DispositionPackageReadinessCheck/);
   assert.match(api, /can_view_internal_economics: boolean/);
@@ -78,6 +107,8 @@ test("approval and release controls are accessible and version-gated", () => {
   assert.doesNotMatch(packageWorkspace, /Approve simulated release/);
   assert.match(packageWorkspace, /currentApprovedVersion/);
   assert.match(packageWorkspace, /version\.pdf_file_name \|\| version\.pdf_sha256/);
+  assert.match(packageWorkspace, /version\.status === "approved" \|\| canEditDeals \|\| data\.can_approve/);
+  assert.match(packageWorkspace, /Draft PDF restricted/);
   assert.match(packageWorkspace, /Buyer ranking and recipient preparation require/);
   assert.match(packageWorkspace, /No buyer communication is sent/);
   assert.match(packageStyles, /min-height: 44px/);

@@ -1672,16 +1672,32 @@ drop destination remains visible. Use the recommended next action to open Inbox,
 Calendar, Valuation & Offer, Contract & Deal, or the complete record.
 
 If you have lead-edit access, drag the grip on a lead card into another column to change its saved
-pipeline stage. On a touch device, press and hold the grip briefly before moving it. The card moves
-immediately while Stonegate saves, then displays confirmation. If the save is rejected, the card
-returns to its original column and the board refreshes. Select the card and use **Move to stage** in
-the seller preview when dragging is inconvenient. Dropping inside the card's existing grouped
-column does not rewrite a more-specific stage such as Appointment Scheduled or Offer Presented.
+pipeline stage. On a touch device, press and hold the grip briefly before moving it. Ordinary stages
+save directly and display confirmation. If the save is rejected, the card returns to its original
+column and the board refreshes. Select the card and use **Move to stage** in the seller preview when
+dragging is inconvenient. Dropping inside the card's existing grouped column does not rewrite a
+more-specific stage such as Appointment Scheduled or Offer Presented.
 
-**Offer** and **Under Contract** are workflow-controlled destinations: prepare the offer in
-**Valuation & Offer** and complete the signed contract in **Contract & Deal** instead of dragging a
-card there. An under-contract card is locked on the board so an active deal cannot be moved out of
-sync. Staff without `leads:edit` can view and select pipeline cards but cannot move them.
+**Offer** and **Under Contract** are action destinations, not bare stage edits. Dragging a card to
+either column, or choosing either destination under **Move to stage**, opens the corresponding
+workflow while leaving the saved stage unchanged until its real-world event is recorded:
+
+- **Offer** opens a choice between **Stonegate Valuation & Offer** and **Record an outside offer**.
+  The first choice opens the governed offer decision. The second records an offer already presented
+  outside Stonegate and is available for House leads with `leads:edit`.
+- **Under Contract** opens **Record the signed agreement** for an eligible House lead when the user
+  has `contracts:record_executed` or the legacy-compatible `contracts:modify` permission. The stage
+  changes only after the exact fully executed PDF and contract facts save successfully.
+
+The seller record's **Change pipeline stage** control uses the same choices. The signed-contract
+catch-up form also appears in **Contract & Deal**, and in a selected **Deals > Contract** record so
+a Transaction Coordinator can use it without general Leads access. Under-contract cards remain
+locked on the board so an active deal cannot be moved out of sync. Staff without `leads:edit` can
+view and select pipeline cards but cannot drag them or use the pipeline stage selector.
+
+For an existing negotiation, **Continue negotiation** or **Negotiate** opens the seller's
+**Valuation & Offer** negotiation ledger at `?tab=valuation#negotiation-governance`; it does not
+open Contract & Deal.
 
 Move a stage only when the corresponding real-world event occurred. Stage movement does not
 replace qualification, approvals, or evidence.
@@ -2006,6 +2022,28 @@ offer and contract authority remains human-controlled.
 A newer underwriting version makes older authority stale. Generate a new offer plan instead of
 reusing stale approval.
 
+### Record An Offer Presented Outside Stonegate
+
+Use this House catch-up path when the team already presented an offer by phone, in person, text,
+email, or video meeting. From the Pipeline, choose or drag to **Offer**, then select **Record an
+outside offer**. The same choice is available from the seller record's **Change pipeline stage**
+control. This records the real event without inventing an internal offer-plan approval.
+
+1. Enter the actual offer amount and the past date and time it was presented.
+2. Choose the delivery method: Phone, In person, Text / SMS, Email, Video meeting, or Other.
+3. Choose the seller outcome: Presented, Considering, Countered, Negotiating, Verbally accepted,
+   Declined, No response, or Other.
+4. Add the seller's response and internal notes when available, then select **Record outside
+   offer**.
+
+**Countered** and **Negotiating** move the lead to **Negotiating**. Every other outcome moves it to
+**Offer Presented**, unless it was already Negotiating, in which case Stonegate does not move it
+backward. A verbal acceptance remains **Offer Presented** until the fully executed purchase
+agreement is recorded. The request is rejected if the lead changed after the form opened, the event
+time is in the future, the lead is already Under Contract, or the lead is Land. This action requires
+`leads:edit`; it does not require offer-approval permission. The amount, timing, method, outcome,
+optional seller response, optional notes, stage change, activity, and audit event remain together.
+
 ## 12. Reviews And Approvals In Tasks
 
 Open **Tasks > Needs Approval** for governed and AI decisions visible to your role. Without
@@ -2080,6 +2118,57 @@ Upload the exact package as a **Fully executed signed copy**, link it to that pa
 required signature, and use **Attest executed** with the required explanation. Never mark a
 contract executed merely because a draft was approved or an email was sent.
 See `SETUP_REFERENCE.md` for SignWell account setup and production acceptance.
+
+If the purchase agreement was already fully executed outside Stonegate, do not recreate an offer
+approval or pretend the external document was a Stonegate-generated package. Start the same action
+from any entry point available to your role:
+
+- Drag or choose **Under Contract** in the House Pipeline.
+- Use **Change pipeline stage** or **Contract & Deal > Record an already-signed contract** on the
+  seller record.
+- Open the selected property in **Deals**, choose **Contract**, and use **Record an already-signed
+  contract**. This is the entry point for a Transaction Coordinator who does not have general Leads
+  access.
+
+The form uploads the PDF and facts together as one multipart request; it does not put contract facts
+in the URL or transform the source document. Complete it as follows:
+
+1. Upload the exact fully executed PDF. It must have a `.pdf` name, PDF content, an acceptable file
+   scan state, and a size from 1 byte through 15 MB.
+2. Enter the required seller name and buyer entity exactly as written, purchase price greater than
+   zero, past execution date and time, and signature source. The supported sources are DocuSign,
+   SignWell, PandaDoc, Adobe Acrobat Sign, signed manually, and Other.
+3. Add the optional assignment fee, earnest money, title company or closing attorney, closing date,
+   zero-to-120-day inspection period, earnest-money due date, due-diligence deadline, external
+   envelope/reference, and contract notes when those facts are known. Optional amounts must be zero
+   or greater.
+4. Enter a verification note of at least 10 characters explaining how every required signature was
+   confirmed, check the exact-PDF attestation, and select **Record contract and open Dispositions**.
+
+This action requires the narrow `contracts:record_executed` permission; the existing
+`contracts:modify` permission remains accepted for compatibility. The intended standard roles are
+Acquisition Manager, Acquisition Representative, and Transaction Coordinator, while Owner,
+Founder/Operator, and CEO roles retain their full administrative authority. The permission does not
+grant unrelated lead, approval, contract-send, or Dispositions powers.
+
+On success, Stonegate creates or safely reuses the purchase transaction, preserves the exact signed
+PDF and checksum as executed evidence, records the actual terms, prepares the closing checklist and
+next action, retires conflicting draft authority where safe, and moves the lead, deal, and
+transaction to **Under Contract / Executed** in one audited operation. This catch-up path never
+manufactures a Stonegate offer approval.
+
+The response then shows one of two Dispositions outcomes:
+
+- **Ready:** the canonical House Disposition case opened, so Stonegate takes the user to it.
+- **Needs setup:** the contract is still recorded and remains visible on the Disposition Desk with
+  its setup blockers and an urgent setup task. The form links to the transaction handoff,
+  **People & Access**, and **Finance Policy**. Resolve the missing authorized Dispositions owner,
+  active compensation plan, or available human-led operating mode; Stonegate will retry the
+  handoff.
+
+Do not upload a second agreement to work around an existing active sent, approved, e-sign, or
+executed purchase-agreement workflow; reconcile that workflow first. Land agreements remain outside
+this House-only catch-up and Dispositions path.
 
 ### Closing
 
@@ -2259,24 +2348,43 @@ the new case will appear in the same Deal record.
 
 The current Package workspace is for contracted **House** deals only:
 
-1. Confirm the frozen compensation plan and disposition operating mode.
-2. Review **Launch readiness**. Resolve every blocker; review warnings, unknowns, freshness,
+1. At **Choose your packet path**, select **Build with Stonegate** or **Use existing PDF**. Both
+   paths create a governed draft; neither approves a packet or contacts a buyer.
+2. Confirm the frozen compensation plan and disposition operating mode.
+3. Review **Launch readiness**. Resolve every blocker; review warnings, unknowns, freshness,
    conflicts, and the provided remediation link before continuing.
-3. Review **Classified evidence**. Stonegate separates **Verified fact**, **Seller statement**,
+4. Review **Classified evidence**. Stonegate separates **Verified fact**, **Seller statement**,
    **Provider signal**, **Stonegate analysis**, and **Unknown** so an unsupported claim is not
    presented as fact.
-4. Compare the buyer-visible preview with the permission-gated private economics. Purchase basis,
+5. Compare the buyer-visible preview with the permission-gated private economics. Purchase basis,
    minimum acceptable amount, desired assignment fee, approval authority, and private notes must
    never be copied into the public preview, summaries, or investor PDF.
-5. Select **Build draft**. If a prior version exists or saved material evidence changed, select
-   **Rebuild draft**. Each draft is a separate immutable version tied to its source fingerprint.
-6. An authorized approver selects **Approve vN**, records why the version is ready, checks the
+6. Under **Build with Stonegate**, select **Build draft** or **Rebuild draft** to create a PDF from
+   the current saved evidence. Under **Use existing PDF**, upload the completed investor-packet PDF
+   and optionally record who prepared it and when. Stonegate preserves the exact uploaded bytes,
+   file hash, and PDF scan state as the new immutable draft; it does not regenerate or replace that
+   artifact during approval. Each path creates a new version tied to the current CRM source
+   fingerprint, and a new draft supersedes an older draft.
+7. An authorized approver selects **Approve vN**, records why the version is ready, checks the
    evidence attestation, and selects **Approve exact version**. A stale version cannot be reused;
    rebuild and reapprove it.
-7. Use **Download approved vN PDF** or the version-history **PDF** action. Stonegate serves the exact
-   PDF saved at approval, not a new document generated from later changes.
-8. **Refresh buyer ranking** and **Prepare recipient pool** require the current evidence to match
+8. Use **Download approved vN PDF** or the version-history **PDF** action. Stonegate serves the exact
+   PDF saved at approval, whether Stonegate generated it or staff uploaded it; later source changes
+   do not rewrite it.
+9. **Refresh buyer ranking** and **Prepare recipient pool** require the current evidence to match
    the approved version.
+
+Creating either draft requires `deals:edit`; changing private economics also requires the private-
+economics permission. Reviewing or downloading an unapproved external PDF requires `deals:edit` or
+`dispositions:approve_packages`, and approval itself requires
+`dispositions:approve_packages`. A valid external PDF must be no larger than 15 MB and must have a
+**Clean** or **Not configured** scan state before approval. The normal readiness blockers, current
+source fingerprint, reason, and human attestation still apply. After approval, normal deal viewers
+may download the exact approved artifact.
+
+An existing PDF replaces only the packet artifact. Saved CRM facts still govern readiness, buyer
+matching, private economics, email/SMS summaries, secure links, and outreach controls. Once
+approved, secure links and governed outreach use the exact approved uploaded PDF.
 
 Preparation binds each recipient to that exact version and stored artifact hash. Its status is
 `prepared_not_sent`: **Prepare recipient pool** sends no email or SMS. The separate **Outreach** tab

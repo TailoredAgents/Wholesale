@@ -12,6 +12,7 @@ class PermissionKeys:
     APPROVE_OFFERS = "offers:approve"
     SEND_CONTRACTS = "contracts:send"
     MODIFY_CONTRACTS = "contracts:modify"
+    RECORD_EXECUTED_CONTRACTS = "contracts:record_executed"
     EXPORT_BUYERS = "buyers:export"
     SEND_BULK_COMMUNICATIONS = "communications:send_bulk"
     ACCESS_RECORDINGS = "communications:access_recordings"
@@ -107,6 +108,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     ),
     PermissionDefinition(
         PermissionKeys.MODIFY_CONTRACTS, "Modify contracts", "Modify contract records."
+    ),
+    PermissionDefinition(
+        PermissionKeys.RECORD_EXECUTED_CONTRACTS,
+        "Record executed contracts",
+        "Adopt a fully executed agreement completed outside Stonegate.",
     ),
     PermissionDefinition(PermissionKeys.EXPORT_BUYERS, "Export buyers", "Export buyer data."),
     PermissionDefinition(
@@ -385,6 +391,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             *ACQUISITION_KEYS,
             PermissionKeys.APPROVE_ARV,
             PermissionKeys.APPROVE_OFFERS,
+            PermissionKeys.RECORD_EXECUTED_CONTRACTS,
             PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS,
             PermissionKeys.MANAGE_EMAIL_ACCOUNTS,
             PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
@@ -394,7 +401,11 @@ ROLES: tuple[RoleDefinition, ...] = (
     RoleDefinition(
         "acquisition_rep",
         "Acquisition representative",
-        (*ACQUISITION_KEYS, PermissionKeys.VIEW_ACQUISITION_OPERATIONS),
+        (
+            *ACQUISITION_KEYS,
+            PermissionKeys.RECORD_EXECUTED_CONTRACTS,
+            PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+        ),
     ),
     RoleDefinition(
         "operations_assistant",
@@ -445,6 +456,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.EDIT_DEALS,
             PermissionKeys.SEND_CONTRACTS,
             PermissionKeys.MODIFY_CONTRACTS,
+            PermissionKeys.RECORD_EXECUTED_CONTRACTS,
             PermissionKeys.VIEW_CONVERSATIONS,
             PermissionKeys.SEND_EMAIL,
         ),

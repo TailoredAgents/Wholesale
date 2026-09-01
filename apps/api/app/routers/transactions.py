@@ -574,7 +574,11 @@ def remove_transaction_document(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(contract_dependency)],
 ) -> Response:
-    if not delete_document(db, principal, transaction_id, document_id, payload):
+    try:
+        deleted = delete_document(db, principal, transaction_id, document_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Document not found.")
     return Response(status_code=204)
 

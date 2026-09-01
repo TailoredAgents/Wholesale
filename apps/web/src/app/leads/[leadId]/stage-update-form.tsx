@@ -1,8 +1,10 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ExecutedContractImportForm } from "./executed-contract-import-form";
+import { OfferStageAction } from "./offer-stage-action";
 import styles from "./page.module.css";
 
 const stages = [
@@ -15,21 +17,8 @@ const stages = [
   ["appointment_scheduling", "Appointment scheduling"],
   ["appointment_scheduled", "Appointment scheduled"],
   ["underwriting", "Underwriting"],
-  ["offer_pending_approval", "Offer pending approval"],
-  ["offer_ready", "Offer ready"],
-  ["offer_presented", "Offer presented"],
-  ["negotiating", "Negotiating"],
   ["long_term_follow_up", "Long-term follow-up"],
-  ["under_contract", "Under contract"],
 ];
-
-const landUnavailableStages = new Set([
-  "offer_pending_approval",
-  "offer_ready",
-  "offer_presented",
-  "negotiating",
-  "under_contract",
-]);
 
 const lifecycleStageLabels: Record<string, string> = {
   dead: "Dead",
@@ -37,19 +26,43 @@ const lifecycleStageLabels: Record<string, string> = {
   reopened: "Reopened",
 };
 
+const offerWorkflowStages = new Set([
+  "offer_pending_approval",
+  "offer_ready",
+  "offer_presented",
+  "negotiating",
+]);
+
+const offerWorkflowStageLabels: Record<string, string> = {
+  offer_pending_approval: "Offer pending approval",
+  offer_ready: "Offer ready",
+  offer_presented: "Offer presented",
+  negotiating: "Negotiating",
+};
+
 type Status = "idle" | "saving" | "saved" | "error";
 
 export function StageUpdateForm({
+  assetClass,
+  canImportExecutedContract,
+  canRecordOutsideOffer,
+  hasExecutedTransaction,
   leadId,
   currentStage,
-  assetClass,
+  sellerName,
 }: {
+  assetClass: "house" | "land";
+  canImportExecutedContract: boolean;
+  canRecordOutsideOffer: boolean;
+  hasExecutedTransaction: boolean;
   leadId: string;
   currentStage: string;
-  assetClass: "house" | "land";
+  sellerName: string;
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const [selectedStage, setSelectedStage] = useState(currentStage);
   const [status, setStatus] = useState<Status>("idle");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -59,10 +72,43 @@ export function StageUpdateForm({
     () => process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com",
     [],
   );
+  if (currentStage === "under_contract") {
+    return <p>Use Contract & Deal to manage the signed contract.</p>;
+  }
+
+  const canUseExecutedContractShortcut =
+    assetClass === "house" && canImportExecutedContract && !hasExecutedTransaction;
+
+  function cancelExecutedContractImport() {
+    setSelectedStage(currentStage);
+    setStatus("idle");
+    requestAnimationFrame(() => selectRef.current?.focus());
+  }
+
+  function cancelOfferAction() {
+    setSelectedStage(currentStage);
+    setStatus("idle");
+    requestAnimationFrame(() => selectRef.current?.focus());
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const requestedStage = String(formData.get("stage_key") ?? currentStage);
+    if (requestedStage === "offer_action") {
+      // Offer is also an action shortcut. The user must either enter the governed Stonegate
+      // workflow or record the real outside offer before an offer milestone is stored.
+      setSelectedStage("offer_action");
+      setStatus("idle");
+      return;
+    }
+    if (requestedStage === "under_contract") {
+      // Under Contract is an action shortcut, never a generic stage mutation. The signed-contract
+      // import below creates the transaction evidence and advances the stage atomically.
+      setSelectedStage("under_contract");
+      setStatus("idle");
+      return;
+    }
     setStatus("saving");
 
     try {
@@ -77,7 +123,7 @@ export function StageUpdateForm({
         method: "PATCH",
         headers,
         body: JSON.stringify({
-          stage_key: String(formData.get("stage_key") ?? currentStage),
+          stage_key: requestedStage,
           expected_stage_key: currentStage,
           reason: String(formData.get("reason") ?? "").trim() || null,
         }),
@@ -95,30 +141,96 @@ export function StageUpdateForm({
   }
 
   return (
-    <form className={styles.stageForm} onSubmit={handleSubmit}>
+    <div className={styles.stageActionFlow}>
+      <form className={styles.stageForm} onSubmit={handleSubmit}>
+      {offerWorkflowStages.has(currentStage) ? (
+        <p>
+          Use Valuation &amp; Offer to advance the offer. This control can only move the lead back
+          to a normal pipeline stage when the offer needs correction or follow-up.
+        </p>
+      ) : null}
       <label>
         <span>Stage</span>
-        <select name="stage_key" defaultValue={currentStage}>
+        <select
+          name="stage_key"
+          onChange={(event) => {
+            setSelectedStage(event.target.value);
+            setStatus("idle");
+          }}
+          ref={selectRef}
+          value={selectedStage}
+        >
+          {offerWorkflowStageLabels[currentStage] ? (
+            <option disabled value={currentStage}>{offerWorkflowStageLabels[currentStage]}</option>
+          ) : null}
           {lifecycleStageLabels[currentStage] ? (
             <option disabled value={currentStage}>{lifecycleStageLabels[currentStage]}</option>
           ) : null}
-          {stages.filter(([value]) => (
-            assetClass === "house" || !landUnavailableStages.has(value) || value === currentStage
-          )).map(([value, label]) => (
+          {stages.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
+          {canRecordOutsideOffer ? (
+            <option value="offer_action">Offer - choose workflow</option>
+          ) : null}
+          {canUseExecutedContractShortcut ? (
+            <option value="under_contract">Under Contract - record signed agreement</option>
+          ) : null}
         </select>
       </label>
-      <label>
-        <span>Reason</span>
-        <input name="reason" placeholder="Optional audit note" />
-      </label>
-      <button disabled={status === "saving"} type="submit">
-        Update stage
-      </button>
-      {status !== "idle" ? <p className={styles[status]}>{status}</p> : null}
-    </form>
+        {!["offer_action", "under_contract"].includes(selectedStage) ? (
+          <>
+            <label>
+              <span>Reason</span>
+              <input
+                minLength={offerWorkflowStages.has(currentStage) ? 10 : undefined}
+                name="reason"
+                placeholder={offerWorkflowStages.has(currentStage) ? "Why is this offer moving back?" : "Optional audit note"}
+                required={offerWorkflowStages.has(currentStage)}
+              />
+            </label>
+            <button disabled={status === "saving"} type="submit">
+              Update stage
+            </button>
+            {status !== "idle" ? <p className={styles[status]}>{status}</p> : null}
+          </>
+        ) : null}
+      </form>
+      {selectedStage === "offer_action" && canRecordOutsideOffer ? (
+        <section aria-labelledby="offer-stage-shortcut-heading" className={styles.stageWorkflowAction}>
+          <header>
+            <strong id="offer-stage-shortcut-heading">Choose how this offer happened</strong>
+            <p>
+              Continue in Stonegate or record an offer already presented outside the CRM.
+            </p>
+          </header>
+          <OfferStageAction
+            assetClass={assetClass}
+            expectedStageKey={currentStage}
+            leadId={leadId}
+            onCancel={cancelOfferAction}
+            onRecorded={() => setStatus("saved")}
+            sellerName={sellerName}
+          />
+        </section>
+      ) : null}
+      {selectedStage === "under_contract" && canUseExecutedContractShortcut ? (
+        <section aria-labelledby="signed-contract-shortcut-heading" className={styles.stageWorkflowAction}>
+          <header>
+            <strong id="signed-contract-shortcut-heading">Record the signed agreement</strong>
+            <p>
+              Under Contract requires the actual executed purchase agreement. Upload it here and
+              Stonegate will move the deal safely and open Dispositions.
+            </p>
+          </header>
+          <ExecutedContractImportForm
+            leadId={leadId}
+            onCancel={cancelExecutedContractImport}
+            sellerName={sellerName}
+          />
+        </section>
+      ) : null}
+    </div>
   );
 }

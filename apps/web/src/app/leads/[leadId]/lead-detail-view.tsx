@@ -19,6 +19,7 @@ import { AppointmentForm } from "./appointment-form";
 import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
+import { ExecutedContractImportForm } from "./executed-contract-import-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadCallButton } from "./lead-call-button";
 import { LeadEditForm } from "./lead-edit-form";
@@ -338,13 +339,17 @@ function InternalNotesPanel({ lead }: { lead: LeadDetail }) {
 
 function OverviewTab({
   activeAppointment,
+  canImportExecutedContract,
   canManagePhonePermission,
   canManageSmsPermission,
+  canRecordOutsideOffer,
   lead,
 }: {
   activeAppointment: LeadDetail["appointments"][number] | undefined;
+  canImportExecutedContract: boolean;
   canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
+  canRecordOutsideOffer: boolean;
   lead: LeadDetail;
 }) {
   const appointmentWorkspaceHref = activeAppointment
@@ -377,8 +382,13 @@ function OverviewTab({
           <ActionDisclosure label="Change pipeline stage">
             <StageUpdateForm
               assetClass={lead.asset_class}
+              canImportExecutedContract={canImportExecutedContract}
+              canRecordOutsideOffer={canRecordOutsideOffer}
               currentStage={lead.stage_key}
+              hasExecutedTransaction={lead.transactions.some((item) => item.status === "executed")}
+              key={lead.stage_key}
               leadId={lead.id}
+              sellerName={lead.seller_name}
             />
           </ActionDisclosure>
           <div className={styles.appointmentPreparation}>
@@ -643,7 +653,15 @@ function LandValuationTab({ lead }: { lead: LeadDetail }) {
   return <LandValuationWorkspace leadId={lead.id} />;
 }
 
-function DealTab({ lead, buyers }: { lead: LeadDetail; buyers: Awaited<ReturnType<typeof getBuyers>>["buyers"] }) {
+function DealTab({
+  buyers,
+  canImportExecutedContract,
+  lead,
+}: {
+  buyers: Awaited<ReturnType<typeof getBuyers>>["buyers"];
+  canImportExecutedContract: boolean;
+  lead: LeadDetail;
+}) {
   if (lead.asset_class === "land") {
     return (
       <div className={styles.tabGrid}>
@@ -697,6 +715,11 @@ function DealTab({ lead, buyers }: { lead: LeadDetail; buyers: Awaited<ReturnTyp
           <ActionDisclosure label="Open transaction">
             <TransactionForm leadId={lead.id} />
           </ActionDisclosure>
+          {canImportExecutedContract && !lead.transactions.some((item) => item.status === "executed") ? (
+            <ActionDisclosure label="Record an already-signed contract">
+              <ExecutedContractImportForm leadId={lead.id} sellerName={lead.seller_name} />
+            </ActionDisclosure>
+          ) : null}
         </section>
       </div>
       <aside className={styles.sideColumn}>
@@ -1286,6 +1309,11 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
       (profile?.permissions.includes("communications:place_assigned_calls") &&
         lead.assigned_user_id === profile.user_id),
   );
+  const canImportExecutedContract = Boolean(
+    profile?.permissions.includes("contracts:record_executed") ||
+      profile?.permissions.includes("contracts:modify"),
+  );
+  const canRecordOutsideOffer = Boolean(profile?.permissions.includes("leads:edit"));
   const lastContact = lead.communications[0]?.occurred_at ?? null;
   const addressOnlyLead = isAddressOnlyLead(lead);
   const tabHref = (tab: LeadTab, options?: { editLead?: boolean }) => {
@@ -1434,8 +1462,10 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
             {activeTab === "summary" ? (
               <OverviewTab
                 activeAppointment={activeAppointment}
+                canImportExecutedContract={canImportExecutedContract}
                 canManagePhonePermission={canManagePhonePermission}
                 canManageSmsPermission={canManageSmsPermission}
+                canRecordOutsideOffer={canRecordOutsideOffer}
                 lead={lead}
               />
             ) : null}
@@ -1460,7 +1490,13 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
                 : <UnderwritingTab lead={lead} />
             ) : null}
             {activeTab === "appointments" ? <AppointmentsTab lead={lead} /> : null}
-            {activeTab === "contract" ? <DealTab buyers={buyers} lead={lead} /> : null}
+            {activeTab === "contract" ? (
+              <DealTab
+                buyers={buyers}
+                canImportExecutedContract={canImportExecutedContract}
+                lead={lead}
+              />
+            ) : null}
             {activeTab === "files" ? <FilesTab lead={lead} /> : null}
           </section>
         </>

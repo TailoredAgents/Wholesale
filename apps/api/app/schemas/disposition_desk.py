@@ -34,11 +34,13 @@ class DispositionDeskItemRead(BaseModel):
     blocker: str | None
     severity: Literal["info", "warning", "danger"]
     deal_id: UUID | None = None
+    transaction_id: UUID | None = None
     buyer_id: UUID | None = None
     conversation_id: UUID | None = None
     task_id: UUID | None = None
     offer_id: UUID | None = None
     disposition_case_id: UUID | None = None
+    needs_setup: bool = False
     primary_action: DispositionDeskActionRead
     secondary_action: DispositionDeskActionRead | None = None
 

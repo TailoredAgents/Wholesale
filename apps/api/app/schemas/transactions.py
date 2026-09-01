@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class TransactionQueueItem(BaseModel):
@@ -77,6 +77,59 @@ class ManualContractExecutionAttestation(BaseModel):
     reason: str = Field(min_length=10, max_length=1000)
     assignee_name: str | None = Field(default=None, min_length=1, max_length=255)
     assignee_email: str | None = Field(default=None, min_length=3, max_length=320)
+
+
+class ExecutedContractImport(BaseModel):
+    """Verified facts for adopting a purchase agreement executed outside Stonegate."""
+
+    file_name: str = Field(min_length=1, max_length=255)
+    seller_name: str = Field(min_length=1, max_length=255)
+    buyer_entity_name: str = Field(min_length=1, max_length=255)
+    purchase_price_cents: int = Field(ge=1)
+    assignment_fee_cents: int | None = Field(default=None, ge=0)
+    earnest_money_cents: int | None = Field(default=None, ge=0)
+    title_company: str | None = Field(default=None, max_length=255)
+    closing_date: datetime | None = None
+    inspection_period_days: int | None = Field(default=None, ge=0, le=120)
+    earnest_money_due_at: datetime | None = None
+    due_diligence_deadline: datetime | None = None
+    executed_at: datetime
+    execution_source: Literal[
+        "docusign",
+        "signwell",
+        "pandadoc",
+        "adobe_sign",
+        "manual_upload",
+        "other",
+    ]
+    external_reference: str | None = Field(default=None, max_length=255)
+    notes: str | None = Field(default=None, max_length=2000)
+    confirm_fully_executed: bool
+    attestation_reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator(
+        "file_name",
+        "seller_name",
+        "buyer_entity_name",
+        "attestation_reason",
+        mode="before",
+    )
+    @classmethod
+    def strip_required_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class ExecutedContractImportRead(BaseModel):
+    transaction_id: UUID
+    contract_package_id: UUID
+    document_id: UUID
+    lead_id: UUID
+    lead_stage: str
+    transaction_status: str
+    disposition_case_id: UUID | None
+    disposition_handoff_ready: bool
+    disposition_handoff_status: Literal["ready", "needs_setup"]
+    disposition_handoff_blockers: list[str]
 
 
 class ManualContractWithdrawalAttestation(BaseModel):

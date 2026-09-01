@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
@@ -22,6 +22,7 @@ from app.models.foundation import (
     RoleAssignment,
     RolePermission,
     StaffLeadAlert,
+    Task,
     Team,
     TeamMembership,
     Transaction,
@@ -42,6 +43,8 @@ REQUIRED_DISPOSITION_OWNER_PERMISSION_KEYS = frozenset(
     }
 )
 HANDOFF_RECOVERY_INTERVAL = timedelta(minutes=5)
+HANDOFF_SETUP_TASK_TYPE = "disposition_handoff_setup"
+HANDOFF_PENDING_BLOCKER = "Disposition setup is incomplete; automatic retry is pending."
 PACKAGE_READY_ALERT_RECOVERY_WINDOW = timedelta(hours=24)
 ACTIVE_DISPOSITION_CASE_STATUSES = frozenset(
     {
@@ -52,9 +55,8 @@ ACTIVE_DISPOSITION_CASE_STATUSES = frozenset(
         "buyer_selected",
     }
 )
-INACTIVE_DISPOSITION_DEAL_STAGES = frozenset(
-    {"cancelled", "canceled", "closed", "dead", "funded"}
-)
+COMPLETED_DISPOSITION_CASE_STATUSES = frozenset({"closed", "reconciled"})
+INACTIVE_DISPOSITION_DEAL_STAGES = frozenset({"cancelled", "canceled", "closed", "dead", "funded"})
 
 
 @dataclass(frozen=True)
@@ -98,7 +100,36 @@ def ensure_house_disposition_case_for_executed_transaction(
         )
     )
     if existing is not None:
-        return existing
+        completed_handoff = (
+            locked_transaction.status == "funded"
+            and existing.status in COMPLETED_DISPOSITION_CASE_STATUSES
+        )
+        if existing.status in ACTIVE_DISPOSITION_CASE_STATUSES or completed_handoff:
+            _resolve_auto_create_blocked_tasks(db, transaction=locked_transaction, case=existing)
+            return existing
+        existing_owner = _active_authorized_disposition_user(
+            db,
+            locked_transaction.organization_id,
+            existing.owner_user_id,
+        )
+        owner_route = (
+            DispositionOwnerRoute(user=existing_owner, source="existing_case_owner")
+            if existing_owner is not None
+            else select_disposition_owner(
+                db,
+                organization_id=locked_transaction.organization_id,
+            )
+        )
+        _record_auto_create_blocked(
+            db,
+            transaction=locked_transaction,
+            blockers=[
+                "The existing Disposition case is "
+                f"{existing.status.replace('_', ' ')} while its transaction remains active."
+            ],
+            owner_route=owner_route,
+        )
+        return None
 
     lead = db.get(Lead, locked_transaction.lead_id)
     if (
@@ -183,6 +214,11 @@ def ensure_house_disposition_case_for_executed_transaction(
     locked_transaction.compensation_plan_version_id = plan.id
     locked_transaction.disposition_operating_mode_id = mode.id
     db.flush()
+    _resolve_auto_create_blocked_tasks(
+        db,
+        transaction=locked_transaction,
+        case=disposition_case,
+    )
     db.add(
         AuditEvent(
             organization_id=locked_transaction.organization_id,
@@ -207,6 +243,33 @@ def ensure_house_disposition_case_for_executed_transaction(
         )
     )
     return disposition_case
+
+
+def disposition_handoff_blockers(
+    db: Session,
+    transaction: Transaction,
+) -> list[str]:
+    """Read the durable blockers for an executed transaction waiting on setup."""
+    audit = db.scalar(
+        select(AuditEvent)
+        .where(
+            AuditEvent.organization_id == transaction.organization_id,
+            AuditEvent.action == "disposition.case_auto_create_blocked",
+            AuditEvent.entity_type == "transaction",
+            AuditEvent.entity_id == transaction.id,
+        )
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .limit(1)
+    )
+    if audit is not None:
+        raw_blockers = (audit.new_value or {}).get("blockers")
+        if isinstance(raw_blockers, list):
+            blockers = [value.strip() for value in raw_blockers if isinstance(value, str)]
+            if blockers:
+                return blockers
+        if audit.reason and audit.reason.strip():
+            return [audit.reason.strip()]
+    return [HANDOFF_PENDING_BLOCKER]
 
 
 def process_next_disposition_handoff_recovery(
@@ -239,7 +302,16 @@ def process_next_disposition_handoff_recovery(
             & (DispositionCase.transaction_id == Transaction.id),
         )
         .where(
-            DispositionCase.id.is_(None),
+            or_(
+                DispositionCase.id.is_(None),
+                and_(
+                    ~DispositionCase.status.in_(tuple(ACTIVE_DISPOSITION_CASE_STATUSES)),
+                    ~and_(
+                        Transaction.status == "funded",
+                        DispositionCase.status.in_(tuple(COMPLETED_DISPOSITION_CASE_STATUSES)),
+                    ),
+                ),
+            ),
             Transaction.status.in_(("executed", "closing", "funded")),
             Transaction.contract_executed_at.is_not(None),
             Lead.asset_class == "house",
@@ -413,9 +485,7 @@ def queue_disposition_package_ready_alert(
         disposition_case.owner_user_id,
     )
     sms_opted_in = bool(owner is not None and owner.lead_alert_sms_enabled)
-    owner_phone = format_e164(
-        owner.voice_forwarding_number if owner is not None else None
-    )
+    owner_phone = format_e164(owner.voice_forwarding_number if owner is not None else None)
     phone = owner_phone if sms_opted_in else None
     address = _property_address(db.get(Property, disposition_case.property_id))
     created = 0
@@ -593,13 +663,10 @@ def revalidate_disposition_package_ready_alert(
                 current_owner_id,
             )
             sms_opted_in = bool(
-                authorized_owner is not None
-                and authorized_owner.lead_alert_sms_enabled
+                authorized_owner is not None and authorized_owner.lead_alert_sms_enabled
             )
             owner_phone = format_e164(
-                authorized_owner.voice_forwarding_number
-                if authorized_owner is not None
-                else None
+                authorized_owner.voice_forwarding_number if authorized_owner is not None else None
             )
             if active_owner is None:
                 reason = "The assigned disposition owner is no longer active."
@@ -610,8 +677,7 @@ def revalidate_disposition_package_ready_alert(
                 )
             elif not sms_opted_in:
                 reason = (
-                    "The assigned disposition owner is no longer opted in to "
-                    "text-new-leads alerts."
+                    "The assigned disposition owner is no longer opted in to text-new-leads alerts."
                 )
             elif owner_phone is None:
                 reason = (
@@ -627,9 +693,7 @@ def revalidate_disposition_package_ready_alert(
 
     previous_error = alert.last_error
     alert.status = "canceled" if terminal else "blocked"
-    alert.next_attempt_at = (
-        None if terminal else checked_at + HANDOFF_RECOVERY_INTERVAL
-    )
+    alert.next_attempt_at = None if terminal else checked_at + HANDOFF_RECOVERY_INTERVAL
     alert.last_error = reason[:2000]
     if previous_error != reason:
         db.add(
@@ -645,15 +709,9 @@ def revalidate_disposition_package_ready_alert(
                     "queued_recipient_phone": alert.recipient_phone,
                 },
                 new_value={
-                    "case_id": (
-                        str(disposition_case.id)
-                        if disposition_case is not None
-                        else None
-                    ),
+                    "case_id": (str(disposition_case.id) if disposition_case is not None else None),
                     "deal_id": (
-                        str(disposition_case.deal_id)
-                        if disposition_case is not None
-                        else None
+                        str(disposition_case.deal_id) if disposition_case is not None else None
                     ),
                     "recipient_user_id": (
                         str(current_owner_id) if current_owner_id is not None else None
@@ -684,8 +742,7 @@ def process_next_disposition_package_alert_recovery(
         select(newer_package.id)
         .where(
             newer_package.organization_id == DispositionPackageVersion.organization_id,
-            newer_package.disposition_case_id
-            == DispositionPackageVersion.disposition_case_id,
+            newer_package.disposition_case_id == DispositionPackageVersion.disposition_case_id,
             newer_package.version_number > DispositionPackageVersion.version_number,
         )
         .correlate(DispositionPackageVersion)
@@ -713,7 +770,7 @@ def process_next_disposition_package_alert_recovery(
                     "disposition.package_ready_sms_queued",
                     "disposition.package_ready_sms_not_queued",
                 )
-            )
+            ),
         )
         .correlate(DispositionPackageVersion)
         .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
@@ -743,10 +800,7 @@ def process_next_disposition_package_alert_recovery(
         .join(
             DispositionCase,
             (DispositionCase.id == DispositionPackageVersion.disposition_case_id)
-            & (
-                DispositionCase.organization_id
-                == DispositionPackageVersion.organization_id
-            ),
+            & (DispositionCase.organization_id == DispositionPackageVersion.organization_id),
         )
         .join(
             Lead,
@@ -768,8 +822,7 @@ def process_next_disposition_package_alert_recovery(
             ~Deal.stage_key.in_(tuple(INACTIVE_DISPOSITION_DEAL_STAGES)),
             ~newer_version_exists,
             ~alert_exists,
-            latest_attempt_action
-            == "disposition.package_ready_sms_not_queued",
+            latest_attempt_action == "disposition.package_ready_sms_not_queued",
             latest_attempt_at >= recovery_floor,
             latest_attempt_at <= cutoff,
         )
@@ -937,6 +990,38 @@ def _record_auto_create_blocked(
     blockers: list[str],
     owner_route: DispositionOwnerRoute,
 ) -> None:
+    existing_task = db.scalar(
+        select(Task).where(
+            Task.organization_id == transaction.organization_id,
+            Task.deal_id == transaction.deal_id,
+            Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+            Task.status.in_(("open", "in_progress")),
+        )
+    )
+    if existing_task is None:
+        db.add(
+            Task(
+                organization_id=transaction.organization_id,
+                lead_id=transaction.lead_id,
+                deal_id=transaction.deal_id,
+                responsible_user_id=(
+                    owner_route.user.id
+                    if owner_route.user is not None
+                    else transaction.coordinator_user_id or transaction.owner_user_id
+                ),
+                task_type=HANDOFF_SETUP_TASK_TYPE,
+                work_kind="supporting",
+                title="Complete Dispositions setup for the executed House contract",
+                status="open",
+                priority="urgent",
+                due_at=datetime.now(UTC),
+                completed_at=None,
+                completed_by_user_id=None,
+                outcome=None,
+                completion_notes=None,
+                successor_task_id=None,
+            )
+        )
     recent = db.scalar(
         select(AuditEvent.id).where(
             AuditEvent.organization_id == transaction.organization_id,
@@ -970,17 +1055,35 @@ def _record_auto_create_blocked(
     )
 
 
+def _resolve_auto_create_blocked_tasks(
+    db: Session,
+    *,
+    transaction: Transaction,
+    case: DispositionCase,
+) -> None:
+    completed_at = datetime.now(UTC)
+    for task in db.scalars(
+        select(Task).where(
+            Task.organization_id == transaction.organization_id,
+            Task.deal_id == transaction.deal_id,
+            Task.task_type == HANDOFF_SETUP_TASK_TYPE,
+            Task.status.in_(("open", "in_progress")),
+        )
+    ).all():
+        task.status = "completed"
+        task.completed_at = completed_at
+        task.outcome = "disposition_case_opened"
+        task.completion_notes = f"Automatically resolved when Disposition case {case.id} opened."
+
+
 def _property_address(property_record: Property | None) -> str:
     if property_record is None:
         return "Address unavailable"
     city_state_zip = " ".join(
-        value
-        for value in (property_record.state, property_record.postal_code)
-        if value
+        value for value in (property_record.state, property_record.postal_code) if value
     )
-    locality = ", ".join(
-        value for value in (property_record.city, city_state_zip) if value
+    locality = ", ".join(value for value in (property_record.city, city_state_zip) if value)
+    return (
+        ", ".join(value for value in (property_record.street_address, locality) if value)
+        or "Address unavailable"
     )
-    return ", ".join(
-        value for value in (property_record.street_address, locality) if value
-    ) or "Address unavailable"

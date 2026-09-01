@@ -95,6 +95,13 @@
 .tabs a { height: 48px; padding: 0 2px; display: flex; align-items: center; border-bottom: 3px solid transparent; color: var(--muted); text-decoration: none; white-space: nowrap; font-size: 11px; font-weight: 800; }
 .tabs a.activeTab { color: var(--brand-strong); border-bottom-color: var(--brand); }
 .recordBody { min-height: 360px; }
+.contractCatchup { margin: 14px; border: 1px solid #d7c498; background: #fffdf7; }
+.contractCatchup > header { padding: 14px 16px; border-bottom: 1px solid #e2dcd2; background: #fff9e9; }
+.contractCatchup > header > div { display: grid; gap: 4px; }
+.contractCatchup > header span { color: #684e1c; font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.contractCatchup > header h3 { margin: 0; font-size: 16px; }
+.contractCatchup > header p { max-width: 780px; margin: 0; color: #684e1c; font-size: 11px; line-height: 1.5; }
+.contractCatchup > form { border-right: 0; background: var(--surface); }
 .summaryGrid { padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; background: var(--surface-soft); }
 .summaryGrid > section { border: 1px solid var(--line); background: var(--surface); }
 .summaryGrid header { min-height: 58px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line-soft); }

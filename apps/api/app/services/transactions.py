@@ -1,6 +1,10 @@
+import re
+from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from hashlib import sha256
-from typing import Any
+from typing import Any, Concatenate, Literal, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -9,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.domain.assets import require_house_workflow
 from app.models.foundation import (
+    ActivityEvent,
     ApprovalRequest,
     AuditEvent,
     Contact,
@@ -17,6 +22,8 @@ from app.models.foundation import (
     Deal,
     EsignEnvelope,
     Lead,
+    OfferConcession,
+    OfferNegotiationPlan,
     Property,
     Transaction,
     TransactionChecklistItem,
@@ -35,6 +42,8 @@ from app.schemas.transactions import (
     ContractTemplateRead,
     DocumentDeleteRequest,
     DocumentDownloadLinkRead,
+    ExecutedContractImport,
+    ExecutedContractImportRead,
     ManualContractExecutionAttestation,
     ManualContractWithdrawalAttestation,
     TransactionChecklistRead,
@@ -68,9 +77,11 @@ from app.services.document_storage import (
     store_content,
 )
 from app.services.esign import list_envelopes
+from app.services.tasks import create_deal_next_action
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
 TERMINAL_TRANSACTION_STATUSES = {"cancelled", "canceled", "closed", "funded"}
+TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 TERMINAL_LEAD_STAGES = {"dead", "disqualified", "lost", "closed"}
 EXECUTED_DOCUMENT_TYPE_BY_PACKAGE = {
     PURCHASE_AGREEMENT: "signed_purchase_agreement",
@@ -78,10 +89,88 @@ EXECUTED_DOCUMENT_TYPE_BY_PACKAGE = {
     "addendum": "executed_addendum",
 }
 MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
+EXTERNAL_EXECUTION_PENDING_STORAGE_KEY = "transactions.external_execution.pending_storage"
 CHECKLIST_ITEMS_REQUIRING_COMPLETION_EVIDENCE = frozenset(
     {"open_title", "seller_documents", "due_diligence", "closing_confirmed"}
 )
 MIN_CHECKLIST_EVIDENCE_NOTE_LENGTH = 10
+EXTERNAL_EXECUTION_SAFE_ENVELOPE_STATUSES = frozenset(
+    {"cancelled", "canceled", "declined", "expired", "error"}
+)
+DEFAULT_TRANSACTION_CHECKLIST_SPECS = (
+    (
+        "contract_approved",
+        "contract",
+        "Manager approves contract package",
+        "Verify seller, entity, price, deadlines, and special terms.",
+    ),
+    (
+        "contract_executed",
+        "contract",
+        "Record executed purchase agreement",
+        "Upload the signed agreement and record execution.",
+    ),
+    (
+        "earnest_money",
+        "funds",
+        "Confirm earnest money deposited",
+        "Record due and paid dates and attach receipt evidence.",
+    ),
+    (
+        "open_title",
+        "title",
+        "Open file with closing attorney",
+        "Add the closing attorney and confirm file intake.",
+    ),
+    (
+        "seller_documents",
+        "title",
+        "Collect disclosures and payoff details",
+        "Track seller documents, liens, mortgage payoff, and title requests.",
+    ),
+    (
+        "due_diligence",
+        "deadlines",
+        "Complete due diligence",
+        "Resolve inspection issues before the contractual deadline.",
+    ),
+    (
+        "assignment",
+        "disposition",
+        "Confirm buyer or assignment plan",
+        "Attach buyer approval, proof of funds, and assignment documents when applicable.",
+    ),
+    (
+        "closing_confirmed",
+        "closing",
+        "Confirm closing package and date",
+        "Confirm parties, settlement statement, signing, and funding instructions.",
+    ),
+)
+
+
+def cleanup_external_execution_storage_on_failure[**P, R](
+    operation: Callable[Concatenate[Session, P], R],
+) -> Callable[Concatenate[Session, P], R]:
+    """Remove a newly stored external agreement when its database adoption fails."""
+
+    @wraps(operation)
+    def wrapped(db: Session, /, *args: P.args, **kwargs: P.kwargs) -> R:
+        db.info.pop(EXTERNAL_EXECUTION_PENDING_STORAGE_KEY, None)
+        try:
+            return operation(db, *args, **kwargs)
+        except Exception:
+            stored = db.info.pop(EXTERNAL_EXECUTION_PENDING_STORAGE_KEY, None)
+            with suppress(Exception):
+                db.rollback()
+            if stored is not None and stored.provider != "database":
+                with suppress(Exception):
+                    delete_content(provider=stored.provider, key=stored.key)
+            raise
+        finally:
+            db.info.pop(EXTERNAL_EXECUTION_PENDING_STORAGE_KEY, None)
+
+    return cast(Callable[Concatenate[Session, P], R], wrapped)
 
 
 def utc_datetime(value: datetime) -> datetime:
@@ -851,6 +940,576 @@ def withdraw_sent_contract_package(
     return package_read(package)
 
 
+def _prepare_external_execution_checklist(
+    db: Session,
+    transaction: Transaction,
+    *,
+    document_id: UUID,
+    executed_at: datetime,
+) -> None:
+    existing_items = {
+        item.item_key: item
+        for item in db.scalars(
+            select(TransactionChecklistItem)
+            .where(TransactionChecklistItem.transaction_id == transaction.id)
+            .order_by(TransactionChecklistItem.sort_order)
+        ).all()
+        if item.item_key
+    }
+    previous_item: TransactionChecklistItem | None = None
+    for index, (item_key, category, title, description) in enumerate(
+        DEFAULT_TRANSACTION_CHECKLIST_SPECS,
+        start=1,
+    ):
+        item = existing_items.get(item_key)
+        if item is None:
+            item = TransactionChecklistItem(
+                organization_id=transaction.organization_id,
+                transaction_id=transaction.id,
+                responsible_user_id=transaction.coordinator_user_id or transaction.owner_user_id,
+                item_key=item_key,
+                category=category,
+                title=title,
+                description=description,
+                is_required=True,
+                dependency_item_id=previous_item.id if previous_item else None,
+                evidence_document_id=None,
+                evidence_notes=None,
+                escalated_at=None,
+                status="open",
+                due_at=transaction.closing_date if item_key == "closing_confirmed" else None,
+                completed_at=None,
+                sort_order=index,
+            )
+            db.add(item)
+            db.flush()
+        if item_key in {"contract_approved", "contract_executed"}:
+            item.status = "not_applicable" if item_key == "contract_approved" else "complete"
+            item.completed_at = executed_at
+            item.evidence_document_id = document_id
+            item.evidence_notes = (
+                "Normal internal package approval did not occur; an authorized operator "
+                "adopted the exact externally executed agreement."
+                if item_key == "contract_approved"
+                else "Verified against the exact externally executed purchase agreement."
+            )
+        previous_item = item
+
+
+def _retire_pending_offer_authority_for_external_execution(
+    db: Session,
+    principal: Principal,
+    lead: Lead,
+    *,
+    decided_at: datetime,
+) -> dict[str, list[str]]:
+    pending_plans = list(
+        db.scalars(
+            select(OfferNegotiationPlan)
+            .where(
+                OfferNegotiationPlan.organization_id == principal.organization_id,
+                OfferNegotiationPlan.lead_id == lead.id,
+                OfferNegotiationPlan.status == "pending",
+            )
+            .with_for_update(of=OfferNegotiationPlan)
+        ).all()
+    )
+    pending_concessions = list(
+        db.scalars(
+            select(OfferConcession)
+            .where(
+                OfferConcession.organization_id == principal.organization_id,
+                OfferConcession.lead_id == lead.id,
+                OfferConcession.status == "pending",
+            )
+            .with_for_update(of=OfferConcession)
+        ).all()
+    )
+    approval_ids: set[UUID] = {
+        plan.approval_request_id for plan in pending_plans if plan.approval_request_id is not None
+    }
+    approval_ids.update(
+        concession.approval_request_id
+        for concession in pending_concessions
+        if concession.approval_request_id is not None
+    )
+    pending_approvals = (
+        list(
+            db.scalars(
+                select(ApprovalRequest)
+                .where(
+                    ApprovalRequest.organization_id == principal.organization_id,
+                    ApprovalRequest.id.in_(approval_ids),
+                    ApprovalRequest.status == "pending",
+                )
+                .with_for_update(of=ApprovalRequest)
+            ).all()
+        )
+        if approval_ids
+        else []
+    )
+    decision_note = (
+        "Cancelled because an authorized operator recorded the fully executed external "
+        "purchase agreement."
+    )
+    for plan in pending_plans:
+        plan.status = "cancelled"
+    for concession in pending_concessions:
+        concession.status = "cancelled"
+        concession.decided_by_user_id = principal.user_id
+        concession.decided_at = decided_at
+        concession.decision_notes = decision_note
+    for approval in pending_approvals:
+        approval.status = "cancelled"
+        approval.decided_by_user_id = principal.user_id
+        approval.decided_at = decided_at
+        approval.decision_notes = decision_note
+    return {
+        "offer_plan_ids": [str(item.id) for item in pending_plans],
+        "concession_ids": [str(item.id) for item in pending_concessions],
+        "approval_request_ids": [str(item.id) for item in pending_approvals],
+    }
+
+
+@cleanup_external_execution_storage_on_failure
+def import_executed_contract(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: ExecutedContractImport,
+    *,
+    content: bytes,
+    content_type: str,
+) -> ExecutedContractImportRead | None:
+    """Adopt an already executed external House agreement as canonical evidence.
+
+    This is intentionally separate from the normal offer-authority and contract-send
+    workflow. It records historical facts supplied by an authorized operator and never
+    manufactures an internal approval that did not occur.
+    """
+    normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+    original_file_name = payload.file_name.strip()
+    file_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original_file_name).strip(".-")
+    seller_name = payload.seller_name.strip()
+    buyer_entity_name = payload.buyer_entity_name.strip()
+    if normalized_content_type != "application/pdf":
+        raise ValueError("The executed purchase agreement must be uploaded as a PDF.")
+    if not file_name or not file_name.lower().endswith(".pdf"):
+        raise ValueError("The executed purchase agreement file name must end in .pdf.")
+    if not seller_name:
+        raise ValueError("Seller name cannot be empty.")
+    if not buyer_entity_name:
+        raise ValueError("Buyer entity name cannot be empty.")
+    if not content or len(content) > MAX_DOCUMENT_BYTES:
+        raise ValueError("The executed purchase agreement must be between 1 byte and 15 MB.")
+    if not content.startswith(b"%PDF"):
+        raise ValueError("The uploaded file does not contain a valid PDF header.")
+
+    now = datetime.now(UTC)
+    executed_at = utc_datetime(payload.executed_at)
+    if executed_at > now + timedelta(minutes=5):
+        raise ValueError("The contract execution time cannot be in the future.")
+    if not payload.confirm_fully_executed:
+        raise ValueError("Confirm that every required party signed the uploaded agreement.")
+    attestation_reason = payload.attestation_reason.strip()
+    if len(attestation_reason) < 10:
+        raise ValueError("Explain how the fully executed agreement was verified.")
+
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
+    if lead is None:
+        return None
+    require_house_workflow(lead.asset_class, workflow="External executed purchase agreement")
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_LEAD_STAGES:
+        raise ValueError("Reopen the closed lead before importing an executed contract.")
+
+    transactions = list(
+        db.scalars(
+            select(Transaction)
+            .where(
+                Transaction.organization_id == principal.organization_id,
+                Transaction.lead_id == lead.id,
+            )
+            .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+            .with_for_update(of=Transaction)
+        ).all()
+    )
+    active_transactions = [item for item in transactions if item.status in ACTIVE_STATUSES]
+    if len(active_transactions) > 1:
+        raise ValueError(
+            "Multiple active transactions exist for this lead; resolve them before importing."
+        )
+    transaction = active_transactions[0] if active_transactions else None
+    if transaction is not None and transaction.status != "contract_prep":
+        raise ValueError(
+            "This lead already has an active sent, approved, or executed contract workflow."
+        )
+    if transaction is not None and transaction.contract_type != PURCHASE_AGREEMENT:
+        raise ValueError("The active transaction is not a seller purchase-agreement workflow.")
+
+    prior_transaction_status: str | None = None
+    prior_transaction_terms: dict[str, Any] | None = None
+    superseded_package_ids: list[str] = []
+    if transaction is not None:
+        prior_transaction_status = transaction.status
+        prior_transaction_terms = {
+            "purchase_price_cents": transaction.purchase_price_cents,
+            "assignment_fee_cents": transaction.assignment_fee_cents,
+            "earnest_money_cents": transaction.earnest_money_cents,
+            "closing_date": transaction.closing_date.isoformat()
+            if transaction.closing_date
+            else None,
+        }
+        packages = list(
+            db.scalars(
+                select(ContractPackage)
+                .where(
+                    ContractPackage.organization_id == principal.organization_id,
+                    ContractPackage.transaction_id == transaction.id,
+                )
+                .with_for_update(of=ContractPackage)
+            ).all()
+        )
+        unsafe_package = next(
+            (item for item in packages if item.status not in {"draft", "void"}),
+            None,
+        )
+        if unsafe_package is not None:
+            raise ValueError(
+                "An approved, pending, sent, or executed package already exists; use its "
+                "governed execution workflow instead."
+            )
+        unsafe_envelope = db.scalar(
+            select(EsignEnvelope.id).where(
+                EsignEnvelope.organization_id == principal.organization_id,
+                EsignEnvelope.transaction_id == transaction.id,
+                EsignEnvelope.status.not_in(tuple(EXTERNAL_EXECUTION_SAFE_ENVELOPE_STATUSES)),
+            )
+        )
+        if unsafe_envelope is not None:
+            raise ValueError(
+                "An e-sign workflow already exists for this transaction; reconcile or "
+                "cancel it first."
+            )
+        signed_evidence = db.scalar(
+            select(TransactionDocument.id).where(
+                TransactionDocument.organization_id == principal.organization_id,
+                TransactionDocument.transaction_id == transaction.id,
+                TransactionDocument.document_type == "signed_purchase_agreement",
+                TransactionDocument.deleted_at.is_(None),
+            )
+        )
+        if signed_evidence is not None:
+            raise ValueError(
+                "Signed purchase-agreement evidence already exists on this transaction."
+            )
+        for package in packages:
+            if package.status == "draft":
+                package.status = "void"
+                package.voided_at = now
+                superseded_package_ids.append(str(package.id))
+    else:
+        deal = db.scalar(
+            select(Deal)
+            .where(
+                Deal.organization_id == principal.organization_id,
+                Deal.lead_id == lead.id,
+            )
+            .order_by(Deal.created_at.desc(), Deal.id.desc())
+            .with_for_update(of=Deal)
+        )
+        if deal is None or deal.stage_key in TERMINAL_DEAL_STAGES:
+            deal = Deal(
+                organization_id=principal.organization_id,
+                lead_id=lead.id,
+                property_id=lead.property_id,
+                stage_key="contract_prep",
+                contract_price_cents=payload.purchase_price_cents,
+                assignment_fee_cents=payload.assignment_fee_cents,
+            )
+            db.add(deal)
+            db.flush()
+        transaction = Transaction(
+            organization_id=principal.organization_id,
+            deal_id=deal.id,
+            lead_id=lead.id,
+            property_id=lead.property_id,
+            contact_id=lead.contact_id,
+            owner_user_id=lead.assigned_user_id or principal.user_id,
+            coordinator_user_id=None,
+            status="contract_prep",
+            contract_type=PURCHASE_AGREEMENT,
+            purchase_price_cents=payload.purchase_price_cents,
+            assignment_fee_cents=payload.assignment_fee_cents,
+            earnest_money_cents=payload.earnest_money_cents,
+            title_company=payload.title_company.strip() if payload.title_company else None,
+            closing_date=utc_datetime(payload.closing_date) if payload.closing_date else None,
+            inspection_period_days=payload.inspection_period_days,
+            earnest_money_due_at=(
+                utc_datetime(payload.earnest_money_due_at) if payload.earnest_money_due_at else None
+            ),
+            due_diligence_deadline=(
+                utc_datetime(payload.due_diligence_deadline)
+                if payload.due_diligence_deadline
+                else None
+            ),
+            contract_sent_at=None,
+            contract_executed_at=None,
+            notes=payload.notes.strip() if payload.notes else None,
+            transaction_metadata={},
+        )
+        db.add(transaction)
+        db.flush()
+
+    deal = db.get(Deal, transaction.deal_id)
+    if deal is None or deal.organization_id != principal.organization_id:
+        raise ValueError("The transaction deal is no longer available.")
+
+    document_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"transactions/{transaction.id}",
+        record_id=document_id,
+        file_name=file_name,
+        content_type=normalized_content_type,
+        content=content,
+    )
+    db.info[EXTERNAL_EXECUTION_PENDING_STORAGE_KEY] = stored
+    if stored.malware_scan_status not in ACCEPTABLE_EXECUTION_SCAN_STATUSES:
+        raise ValueError("The executed agreement does not have an acceptable malware scan state.")
+
+    previous_lead_stage = lead.stage_key
+    transaction.purchase_price_cents = payload.purchase_price_cents
+    transaction.assignment_fee_cents = payload.assignment_fee_cents
+    transaction.earnest_money_cents = payload.earnest_money_cents
+    transaction.title_company = payload.title_company.strip() if payload.title_company else None
+    transaction.closing_date = utc_datetime(payload.closing_date) if payload.closing_date else None
+    transaction.inspection_period_days = payload.inspection_period_days
+    transaction.earnest_money_due_at = (
+        utc_datetime(payload.earnest_money_due_at) if payload.earnest_money_due_at else None
+    )
+    transaction.due_diligence_deadline = (
+        utc_datetime(payload.due_diligence_deadline) if payload.due_diligence_deadline else None
+    )
+    transaction.notes = payload.notes.strip() if payload.notes else transaction.notes
+    transaction.status = "executed"
+    transaction.contract_executed_at = executed_at
+    transaction.transaction_metadata = {
+        **(transaction.transaction_metadata or {}),
+        "source": "external_execution_import",
+        "esign_synced": False,
+        "external_execution_import": {
+            "schema_version": 1,
+            "source": payload.execution_source,
+            "external_reference": payload.external_reference.strip()
+            if payload.external_reference
+            else None,
+            "executed_at": executed_at.isoformat(),
+            "imported_at": now.isoformat(),
+            "imported_by_user_id": str(principal.user_id),
+        },
+    }
+    deal.stage_key = "under_contract"
+    deal.contract_price_cents = payload.purchase_price_cents
+    deal.assignment_fee_cents = payload.assignment_fee_cents
+    lead.stage_key = "under_contract"
+    retired_pending_authority = _retire_pending_offer_authority_for_external_execution(
+        db,
+        principal,
+        lead,
+        decided_at=now,
+    )
+
+    version = (
+        db.scalar(
+            select(func.max(ContractPackage.version_number)).where(
+                ContractPackage.transaction_id == transaction.id
+            )
+        )
+        or 0
+    ) + 1
+    contract_package = ContractPackage(
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        template_id=None,
+        created_by_user_id=principal.user_id,
+        approval_request_id=None,
+        version_number=version,
+        status="executed",
+        seller_name=seller_name,
+        buyer_entity_name=buyer_entity_name,
+        purchase_price_cents=payload.purchase_price_cents,
+        earnest_money_cents=payload.earnest_money_cents,
+        closing_date=utc_datetime(payload.closing_date) if payload.closing_date else None,
+        inspection_period_days=payload.inspection_period_days,
+        terms_snapshot={
+            "document_type": PURCHASE_AGREEMENT,
+            "authority_basis": "external_fully_executed_agreement",
+            "external_execution_import": {
+                "schema_version": 1,
+                "source": payload.execution_source,
+                "external_reference": payload.external_reference.strip()
+                if payload.external_reference
+                else None,
+                "document_id": str(document_id),
+                "confirm_fully_executed": payload.confirm_fully_executed,
+                "attested_by_user_id": str(principal.user_id),
+                "attestation_reason": attestation_reason,
+            },
+        },
+        notes=payload.notes.strip() if payload.notes else None,
+        approved_at=None,
+        sent_at=None,
+        executed_at=executed_at,
+        voided_at=None,
+    )
+    db.add(contract_package)
+    db.flush()
+
+    document = TransactionDocument(
+        id=document_id,
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        contract_package_id=contract_package.id,
+        uploaded_by_user_id=principal.user_id,
+        document_type="signed_purchase_agreement",
+        title="Externally executed purchase agreement",
+        status="executed",
+        file_name=file_name,
+        content_type=normalized_content_type,
+        file_size=len(content),
+        sha256=sha256(content).hexdigest(),
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
+        occurred_at=executed_at,
+        notes=(f"Imported from {payload.execution_source}; verified by authorized attestation."),
+    )
+    db.add(document)
+    db.flush()
+    _prepare_external_execution_checklist(
+        db,
+        transaction,
+        document_id=document.id,
+        executed_at=executed_at,
+    )
+    create_deal_next_action(
+        db,
+        deal=deal,
+        lead=lead,
+        responsible_user_id=transaction.coordinator_user_id or transaction.owner_user_id,
+        title="Open title and coordinate the executed purchase agreement",
+        due_at=transaction.earnest_money_due_at or transaction.closing_date,
+    )
+    add_event(
+        db,
+        principal,
+        transaction,
+        "contract.external_execution_imported",
+        f"Imported externally executed purchase agreement package v{version}.",
+        {
+            "package_id": str(contract_package.id),
+            "document_id": str(document.id),
+            "document_sha256": document.sha256,
+            "execution_source": payload.execution_source,
+            "external_reference": payload.external_reference,
+            "executed_at": executed_at.isoformat(),
+            "attested_by_user_id": str(principal.user_id),
+            "attestation_reason": attestation_reason,
+            "superseded_draft_package_ids": superseded_package_ids,
+            "retired_pending_authority": retired_pending_authority,
+        },
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.contract_external_execution_imported",
+            summary=("Already-signed purchase agreement recorded; lead moved to Under Contract."),
+        )
+    )
+
+    from app.services.disposition_handoff import (
+        disposition_handoff_blockers,
+        ensure_house_disposition_case_for_executed_transaction,
+    )
+
+    disposition_case = ensure_house_disposition_case_for_executed_transaction(db, transaction)
+    disposition_blockers = (
+        [] if disposition_case is not None else disposition_handoff_blockers(db, transaction)
+    )
+    disposition_status: Literal["ready", "needs_setup"] = (
+        "ready" if disposition_case is not None else "needs_setup"
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="contract.execution.external_import",
+            entity_type="transaction",
+            entity_id=transaction.id,
+            previous_value={
+                "lead_stage": previous_lead_stage,
+                "transaction_status": prior_transaction_status,
+                "transaction_terms": prior_transaction_terms,
+            },
+            new_value={
+                "lead_stage": lead.stage_key,
+                "transaction_status": transaction.status,
+                "contract_package_id": str(contract_package.id),
+                "document_id": str(document.id),
+                "document_sha256": document.sha256,
+                "purchase_price_cents": transaction.purchase_price_cents,
+                "assignment_fee_cents": transaction.assignment_fee_cents,
+                "earnest_money_cents": transaction.earnest_money_cents,
+                "closing_date": transaction.closing_date.isoformat()
+                if transaction.closing_date
+                else None,
+                "executed_at": executed_at.isoformat(),
+                "execution_source": payload.execution_source,
+                "external_reference": payload.external_reference,
+                "disposition_case_id": str(disposition_case.id)
+                if disposition_case is not None
+                else None,
+                "disposition_handoff_status": disposition_status,
+                "disposition_handoff_blockers": disposition_blockers,
+                "superseded_draft_package_ids": superseded_package_ids,
+                "retired_pending_authority": retired_pending_authority,
+            },
+            reason=attestation_reason,
+        )
+    )
+    db.commit()
+    db.info.pop(EXTERNAL_EXECUTION_PENDING_STORAGE_KEY, None)
+    return ExecutedContractImportRead(
+        transaction_id=transaction.id,
+        contract_package_id=contract_package.id,
+        document_id=document.id,
+        lead_id=lead.id,
+        lead_stage=lead.stage_key,
+        transaction_status=transaction.status,
+        disposition_case_id=disposition_case.id if disposition_case is not None else None,
+        disposition_handoff_ready=disposition_case is not None,
+        disposition_handoff_status=disposition_status,
+        disposition_handoff_blockers=disposition_blockers,
+    )
+
+
 def upload_document(
     db: Session,
     principal: Principal,
@@ -1038,6 +1697,22 @@ def delete_document(
     if transaction is None or document is None:
         return False
     require_house_transaction_workflow(db, transaction)
+    if (
+        document.document_type == "signed_purchase_agreement"
+        and document.status == "executed"
+        and document.contract_package_id is not None
+    ):
+        executed_package = db.scalar(
+            select(ContractPackage.id).where(
+                ContractPackage.id == document.contract_package_id,
+                ContractPackage.transaction_id == transaction.id,
+                ContractPackage.status == "executed",
+            )
+        )
+        if executed_package is not None:
+            raise ValueError(
+                "Executed purchase-agreement evidence is immutable and cannot be deleted."
+            )
     delete_content(provider=document.storage_provider, key=document.storage_key)
     now = datetime.now(UTC)
     document.deleted_at = now
@@ -1309,9 +1984,7 @@ def update_checklist_item(
     ):
         evidence_notes = changes.get("evidence_notes", item.evidence_notes)
         if not evidence_notes or len(evidence_notes.strip()) < MIN_CHECKLIST_EVIDENCE_NOTE_LENGTH:
-            raise ValueError(
-                f"Add a supporting evidence note before completing '{item.title}'."
-            )
+            raise ValueError(f"Add a supporting evidence note before completing '{item.title}'.")
     evidence_id = changes.get("evidence_document_id")
     if evidence_id and get_document(db, principal, transaction_id, evidence_id) is None:
         raise ValueError("Evidence document does not belong to this transaction.")

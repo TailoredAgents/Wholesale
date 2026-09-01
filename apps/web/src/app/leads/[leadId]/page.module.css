@@ -3381,6 +3381,156 @@
   border-right: 0;
 }
 
+.workflowNotice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #d7c498;
+  border-radius: 8px;
+  background: #fff9e9;
+  color: #684e1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.secondaryTermsNotice {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #7da58c;
+  background: #f7fbf8;
+  color: #44564b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.stageActionFlow {
+  display: grid;
+}
+
+.stageWorkflowAction {
+  border-top: 1px solid #e2dcd2;
+  background: #fff;
+}
+
+.stageWorkflowAction > header {
+  padding: 16px 18px 0;
+  display: grid;
+  gap: 5px;
+}
+
+.stageWorkflowAction > header strong {
+  color: #245f43;
+  font-size: 14px;
+}
+
+.stageWorkflowAction > header p {
+  margin: 0;
+  color: #555d5f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.transactionFormActions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 10px;
+}
+
+.transactionForm .secondaryFormAction {
+  border: 1px solid #b9c9bf;
+  background: #fff;
+  color: #245f43;
+}
+
+.offerStageAction {
+  display: grid;
+  gap: 12px;
+}
+
+.offerWorkflowOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.offerWorkflowOption {
+  min-width: 0;
+  min-height: 104px;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid #b9c9bf;
+  border-radius: 8px;
+  background: #fff;
+  color: #245f43;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.offerWorkflowOption:hover {
+  border-color: #2f6f4e;
+  background: #f7fbf8;
+}
+
+.offerWorkflowOption[data-disabled="true"] {
+  border-style: dashed;
+  background: #f4f3ef;
+  color: #747b7d;
+  cursor: not-allowed;
+}
+
+.offerWorkflowOption strong {
+  font-size: 14px;
+}
+
+.offerWorkflowOption span {
+  color: #555d5f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.outsideOfferForm {
+  border: 1px solid #d7c498;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.outsideOfferForm > header {
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid #e2dcd2;
+  background: #fff9e9;
+}
+
+.outsideOfferForm > header strong {
+  color: #684e1c;
+  font-size: 14px;
+}
+
+.outsideOfferForm > header p {
+  margin: 0;
+  color: #684e1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.offerActionCancel {
+  min-height: 44px;
+  padding: 9px 13px;
+  justify-self: start;
+  border: 1px solid #b9c9bf;
+  border-radius: 8px;
+  background: #fff;
+  color: #245f43;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .sideColumn .editGrid {
   grid-template-columns: 1fr;
 }
@@ -5814,6 +5964,56 @@
   display: grid;
   gap: 14px;
   box-shadow: 0 5px 18px rgb(37 71 51 / 8%);
+}
+
+.handoffReview {
+  display: grid;
+  gap: 10px;
+}
+
+.handoffBlockers {
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d7c498;
+  border-radius: 8px;
+  background: #fff9e9;
+  color: #684e1c;
+}
+
+.handoffBlockers strong {
+  font-size: 12px;
+}
+
+.handoffBlockers ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.handoffReviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.handoffReviewActions a {
+  min-height: 44px;
+  padding: 9px 12px;
+  display: inline-flex;
+  flex: 1 1 180px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #2f6f4e;
+  border-radius: 8px;
+  color: #285f43;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
 }
 
 .adjustmentUnavailable {

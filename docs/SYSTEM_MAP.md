@@ -113,8 +113,8 @@ so staff are not misled by a control that exists but lacks production credential
 
 ### 4.3 Database Evolution
 
-The database has 112 numbered Alembic migrations through
-`0112_batchdialer_campaign_asset_mapping`. Migrations are
+The database has 122 numbered Alembic migrations through
+`0122_disposition_execution`. Migrations are
 run automatically when the Render API starts and manually with `npm run db:migrate` locally.
 
 Schema changes must be additive or explicitly migrated. Production data must never depend on
@@ -615,6 +615,9 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Shows Contract, Closing, Disposition, and Finance as independent parallel states.
 - Provides Summary, Contract, Closing, Documents, Parties, Disposition, Finance, and Timeline
   record sections. The specialist sections embed the existing server-governed controls.
+- The Contract section exposes the same already-signed-contract catch-up action used from Leads,
+  so an authorized Transaction Coordinator can adopt outside execution evidence without receiving
+  broad Leads editing access.
 - Loads transaction or disposition data only when its corresponding record section is active.
 - Transaction and Disposition Copilots open as contextual drawers inside the Deal record and retain
   their existing draft, evidence, and human-review rules.
@@ -654,6 +657,9 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Executing a House purchase agreement now creates or reuses one disposition case, selects an
   active Dispositions-authorized owner in the human-led operating mode, and records any temporary
   setup blocker for worker retry after configuration is corrected.
+- An executed House transaction whose owner, compensation plan, or human-led operating setup is
+  incomplete remains visible on the Disposition Desk as a **Needs setup** intake. Its blocker text
+  and corrective links remain visible until retry can create the canonical case.
 - The House Package view assembles saved evidence into a launch-readiness checklist, separates the
   buyer-visible preview from permission-gated private economics, and classifies each claim as a
   verified fact, seller statement, provider signal, Stonegate analysis, or unknown.
@@ -975,6 +981,10 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
     operator correction burden without changing formulas automatically.
 26. Method changes remain evidence-backed human decisions. Historical analyses stay immutable and
     V2.2 remains available only as an engineering rollback.
+27. When staff presented an offer by phone, email, text, video, or in person outside Stonegate, an
+    authorized catch-up action records the amount, time, method, seller outcome, response, notes,
+    and audit evidence. It moves the House lead to Offer Presented or Negotiating without inventing
+    a Stonegate approval or allowing a bare stage patch to create offer authority.
 
 ### 8.8 Contract And E-Signature
 
@@ -1003,10 +1013,16 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 9. Manual execution requires the exact executed document type, an explicit executed evidence
    status, an acceptable scan state, and an audited human attestation. Provider completion records
    the completed envelope and executed document evidence.
+10. A separately permissioned House catch-up path accepts the exact already-signed PDF plus actual
+    purchase price, parties, execution time, and optional closing terms. In one transaction it
+    creates immutable executed evidence, retires superseded draft authority, aligns the Lead, Deal,
+    and Transaction to Under Contract, prepares closing follow-up, and initiates Dispositions. It
+    does not fabricate an internal offer approval, contract approval, or provider event.
 
 ### 8.9 Transaction Coordination
 
-1. The executed acquisition agreement opens the controlled transaction workflow.
+1. The executed acquisition agreement, whether completed through Stonegate or truthfully adopted
+   from an outside workflow, opens the controlled transaction workflow.
 2. Parties, title/closing information, earnest money, inspection or due-diligence dates, closing
    date, assignment strategy, and documents remain attached to the transaction.
 3. Checklist items and events make blockers and ownership visible.
@@ -1015,12 +1031,16 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 
 ### 8.10 Buyer And Disposition
 
-1. The disposition case is opened from the contracted transaction.
+1. The disposition case is opened from the contracted transaction when required operating setup is
+   ready. Otherwise the executed transaction remains an explicit setup-blocked Disposition intake
+   with corrective work and automatic retry; compensation or staffing setup never hides the deal.
 2. For a House deal, staff resolve launch-readiness blockers and review the classified source
    evidence, buyer-visible preview, and authorized private economics.
-3. **Build draft** creates an immutable package version. A separately authorized human records an
-   approval reason and attestation for the exact current version; material evidence changes require
-   a rebuilt and reapproved version.
+3. **Build with Stonegate** creates an immutable generated package version. **Use existing PDF**
+   instead accepts an externally prepared packet as the exact immutable artifact while Stonegate's
+   CRM facts continue to govern readiness, matching, and public summaries. A separately authorized
+   human records an approval reason and attestation for either exact current version; material
+   evidence changes require a rebuilt or replacement version and renewed approval.
 4. Approval stores the exact investor PDF and its SHA-256 instead of regenerating it from later
    mutable facts.
 5. Only **Active** buyers are eligible for future automated matching against markets, property
@@ -1474,6 +1494,13 @@ and public/private split. An authorized human approves one exact current version
 and reason. Approval stores the exact PDF bytes, filename, size, and SHA-256. If a material source
 changes, Stonegate marks the prior approval stale and blocks buyer ranking or recipient preparation
 until a new version is approved.
+
+Package creation presents **Build with Stonegate** and **Use existing PDF** as first-class choices.
+An external PDF is scanned and saved without regeneration, then follows the same immutable version,
+currency, approval, secure-link, download, email-attachment, and audit rules. Draft external bytes
+are reviewable only by deal editors or package approvers; normal deal viewers receive the artifact
+only after approval. The uploaded design does not replace CRM facts used for readiness, matching,
+private economics, or bounded outreach summaries.
 
 AI can organize evidence, rank buyers, and draft communication. Humans approve the package,
 prepared recipient pool, exact outreach revision, release, buyer selection, contract terms, and
@@ -1986,7 +2013,7 @@ runtime, external-action, orchestrator, run, tool, evaluation, comparison, and p
 Current repository verification includes:
 
 - API unit and integration tests under `apps/api/tests`
-- 90 API test modules
+- 153 API test modules
 - Ruff linting
 - MyPy type checking
 - Python and Node dependency vulnerability audits

@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, date, datetime, timedelta
+from hashlib import sha256
 from typing import Any
 from uuid import UUID
 
@@ -621,6 +622,261 @@ def test_disposition_package_is_recursively_public_safe_and_manager_approved(
     assert exact_pdf.headers["cache-control"] == "private, no-store"
     for forbidden in (floor_secret, basis_secret, fee_secret, seller_secret):
         assert forbidden.encode() not in exact_pdf.content
+
+
+def test_external_investor_packet_is_exact_immutable_and_uses_normal_approval(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+    rep = add_user_with_role(
+        db_session,
+        email="external-packet-rep@example.com",
+        display_name="External Packet Rep",
+        role_key="disposition_rep",
+    )
+    rep_headers = {"X-Dev-User-Email": rep.email}
+    exact_pdf = b"%PDF-1.7\nExternally prepared investor packet exact bytes\n%%EOF"
+
+    uploaded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/external",
+        headers={**rep_headers, "Content-Type": "application/pdf"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "Alex Investor Packet.pdf",
+            "content_type": "application/pdf",
+            "source_note": "Packet prepared outside Stonegate and reviewed in Dispositions.",
+        },
+        content=exact_pdf,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    payload = uploaded.json()
+    assert payload["status"] == "draft"
+    assert payload["artifact_source"] == "external_upload"
+    assert payload["pdf_file_name"] == "Alex-Investor-Packet.pdf"
+    assert payload["pdf_size"] == len(exact_pdf)
+    assert payload["pdf_sha256"] == sha256(exact_pdf).hexdigest()
+    assert payload["artifact_metadata"] == {
+        "source": "external_upload",
+        "original_file_name": "Alex-Investor-Packet.pdf",
+        "content_type": "application/pdf",
+        "size_bytes": len(exact_pdf),
+        "sha256": sha256(exact_pdf).hexdigest(),
+        "uploaded_at": payload["artifact_metadata"]["uploaded_at"],
+        "uploaded_by_user_id": str(rep.id),
+        "malware_scan_status": payload["artifact_metadata"]["malware_scan_status"],
+        "source_note": "Packet prepared outside Stonegate and reviewed in Dispositions.",
+    }
+    version = db_session.get(DispositionPackageVersion, UUID(payload["id"]))
+    assert version is not None
+    assert bytes(version.pdf_data or b"") == exact_pdf
+    assert version.pdf_sha256 == sha256(exact_pdf).hexdigest()
+    upload_audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_id == version.id,
+            AuditEvent.action == "disposition.package_version_external_upload",
+        )
+    )
+    assert upload_audit is not None
+    assert (upload_audit.new_value or {})["sha256"] == sha256(exact_pdf).hexdigest()
+
+    read_only = add_user_with_role(
+        db_session,
+        email="external-packet-viewer@example.com",
+        display_name="External Packet Viewer",
+        role_key="read_only_partner",
+    )
+    read_only_headers = {"X-Dev-User-Email": read_only.email}
+    unapproved_download = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/package.pdf",
+        headers=read_only_headers,
+    )
+    assert unapproved_download.status_code == 422, unapproved_download.text
+    assert "unapproved external investor packet" in unapproved_download.json()["detail"]
+
+    forbidden_approval = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/approval",
+        headers=rep_headers,
+        json={
+            "expected_version": payload["lock_version"],
+            "attestation": True,
+            "reason": "Rep should not be able to approve the external packet.",
+        },
+    )
+    assert forbidden_approval.status_code == 403, forbidden_approval.text
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": payload["lock_version"],
+            "attestation": True,
+            "reason": "Reviewed the exact external PDF and confirmed buyer-safe release content.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["artifact_source"] == "external_upload"
+    assert approved.json()["pdf_sha256"] == sha256(exact_pdf).hexdigest()
+    db_session.refresh(version)
+    assert bytes(version.pdf_data or b"") == exact_pdf
+
+    current_download = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package.pdf",
+        headers=HEADERS,
+    )
+    assert current_download.status_code == 200, current_download.text
+    assert current_download.content == exact_pdf
+    approved_download = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{version.id}/package.pdf",
+        headers=read_only_headers,
+    )
+    assert approved_download.status_code == 200, approved_download.text
+    assert approved_download.content == exact_pdf
+    issued = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+        json={"expires_in_hours": 72},
+    )
+    assert issued.status_code == 201, issued.text
+    assert issued.json()["artifact_sha256"] == sha256(exact_pdf).hexdigest()
+    package_ready_audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_id == version.id,
+            AuditEvent.action.in_(
+                {
+                    "disposition.package_ready_sms_queued",
+                    "disposition.package_ready_sms_not_queued",
+                }
+            ),
+        )
+    )
+    assert package_ready_audit is not None
+
+
+def test_external_investor_packet_rejects_non_pdf_and_oversized_content(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    case_id = created.json()["id"]
+    endpoint = f"/api/v1/dispositions/cases/{case_id}/package/versions/external"
+    invalid_type = client.post(
+        endpoint,
+        headers={**HEADERS, "Content-Type": "text/plain"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "packet.pdf",
+            "content_type": "application/pdf",
+        },
+        content=b"%PDF-1.7\nnot accepted under a false request type",
+    )
+    assert invalid_type.status_code == 422
+    invalid_magic = client.post(
+        endpoint,
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "packet.pdf",
+            "content_type": "application/pdf",
+        },
+        content=b"this is not a PDF",
+    )
+    assert invalid_magic.status_code == 422
+    assert "valid PDF header" in invalid_magic.json()["detail"]
+
+    monkeypatch.setattr("app.services.disposition_packages.MAX_EXTERNAL_PACKAGE_PDF_SIZE", 12)
+    oversized = client.post(
+        endpoint,
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "packet.pdf",
+            "content_type": "application/pdf",
+        },
+        content=b"%PDF-1.7\n1234",
+    )
+    assert oversized.status_code == 422
+    assert "cannot exceed 15 MB" in oversized.json()["detail"]
+
+
+def test_external_investor_packet_with_scan_error_cannot_be_approved(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    case_id = created.json()["id"]
+    monkeypatch.setattr("app.services.disposition_packages.scan_document", lambda _: "scan_error")
+    uploaded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/external",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "unscanned-packet.pdf",
+            "content_type": "application/pdf",
+        },
+        content=b"%PDF-1.7\nPDF whose scanner was temporarily unavailable\n%%EOF",
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["artifact_metadata"]["malware_scan_status"] == "scan_error"
+    blocked_preview = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/"
+        f"{uploaded.json()['id']}/package.pdf",
+        headers=HEADERS,
+    )
+    assert blocked_preview.status_code == 422, blocked_preview.text
+    assert "cannot be opened" in blocked_preview.json()["detail"]
+    blocked = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/"
+        f"{uploaded.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": uploaded.json()["lock_version"],
+            "attestation": True,
+            "reason": "Attempting approval while the malware scan is unresolved.",
+        },
+    )
+    assert blocked.status_code == 422, blocked.text
+    assert "malware scan state" in blocked.json()["detail"]
 
 
 def test_private_economics_permission_guards_writes_and_redacts_reads(

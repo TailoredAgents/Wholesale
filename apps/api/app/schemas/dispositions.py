@@ -250,6 +250,18 @@ class DispositionPackageApprovalRequest(BaseModel):
         return normalized
 
 
+class DispositionPackageArtifactMetadataRead(BaseModel):
+    source: Literal["external_upload"]
+    original_file_name: str
+    content_type: Literal["application/pdf"]
+    size_bytes: int = Field(ge=1)
+    sha256: str = Field(min_length=64, max_length=64)
+    uploaded_at: datetime
+    uploaded_by_user_id: UUID
+    malware_scan_status: str
+    source_note: str | None = None
+
+
 class DispositionPackageVersionRead(BaseModel):
     id: UUID
     disposition_case_id: UUID
@@ -268,6 +280,8 @@ class DispositionPackageVersionRead(BaseModel):
     pdf_file_name: str | None
     pdf_size: int | None
     pdf_sha256: str | None
+    artifact_source: Literal["stonegate_generated", "external_upload"]
+    artifact_metadata: DispositionPackageArtifactMetadataRead | None
     created_by_user_id: UUID
     approved_by_user_id: UUID | None
     approval_reason: str | None

@@ -103,6 +103,9 @@ export function TransactionWorkspace({
       request<F4IntegrationStatus>("/api/v1/transactions/integrations/f4"),
     ]);
     setDetail(nextDetail);
+    setChecklistEvidence(Object.fromEntries(
+      nextDetail.checklist.map((item) => [item.id, item.evidence_notes ?? ""]),
+    ));
     setCopilot(nextCopilot);
     setF4Status(nextF4Status);
   }
@@ -115,18 +118,20 @@ export function TransactionWorkspace({
       request<TransactionCopilotOverview>(`/api/v1/transactions/${selectedId}/copilot`),
       request<F4IntegrationStatus>("/api/v1/transactions/integrations/f4"),
     ])
-      .then(([value, nextCopilot, nextF4Status]) => { if (active) { setDetail(value); setCopilot(nextCopilot); setF4Status(nextF4Status); } })
+      .then(([value, nextCopilot, nextF4Status]) => {
+        if (active) {
+          setDetail(value);
+          setChecklistEvidence(Object.fromEntries(
+            value.checklist.map((item) => [item.id, item.evidence_notes ?? ""]),
+          ));
+          setCopilot(nextCopilot);
+          setF4Status(nextF4Status);
+        }
+      })
       .catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Unable to load transaction."); });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
-
-  useEffect(() => {
-    if (!detail) return;
-    setChecklistEvidence(Object.fromEntries(
-      detail.checklist.map((item) => [item.id, item.evidence_notes ?? ""]),
-    ));
-  }, [detail]);
 
   async function action(work: () => Promise<unknown>) {
     setBusy(true); setMessage(null);

@@ -134,7 +134,9 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
     <article className={styles.workCard} data-severity={item.severity}>
       <header className={styles.workHeader}>
         <div>
-          <StatusBadge tone={toneForSeverity(item.severity)}>{dueLabel(item.due_at)}</StatusBadge>
+          <StatusBadge tone={item.needs_setup ? "warning" : toneForSeverity(item.severity)}>
+            {item.needs_setup ? "Needs setup" : dueLabel(item.due_at)}
+          </StatusBadge>
           <h3>{item.title}</h3>
           <p>{item.context}</p>
         </div>
@@ -159,6 +161,13 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
           <dd>{item.blocker ?? "No blocker recorded"}</dd>
         </div>
       </dl>
+
+      {item.needs_setup ? (
+        <p className={styles.setupNotice}>
+          The executed transaction is safely recorded and visible here. Finish the listed setup
+          blocker so Stonegate can open the normal Dispositions case automatically.
+        </p>
+      ) : null}
 
       <footer className={styles.workActions}>
         <Link className={styles.primaryAction} href={item.primary_action.href}>

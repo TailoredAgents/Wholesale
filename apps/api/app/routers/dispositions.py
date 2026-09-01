@@ -778,6 +778,41 @@ def create_case_package_version(
     return result
 
 
+@router.post("/cases/{case_id}/package/versions/external", status_code=201)
+async def create_external_case_package_version(
+    case_id: UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+    expected_latest_version: Annotated[int, Query(ge=0)],
+    file_name: Annotated[str, Query(min_length=1, max_length=255)],
+    content_type: Annotated[str, Query(min_length=1, max_length=120)] = "application/pdf",
+    source_note: Annotated[str | None, Query(max_length=500)] = None,
+) -> DispositionPackageVersionRead:
+    request_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    declared_type = content_type.split(";", 1)[0].strip().lower()
+    if request_type != "application/pdf" or declared_type != "application/pdf":
+        raise invalid(ValueError("External investor packets must be uploaded as application/pdf."))
+    try:
+        result = disposition_packages.build_external_version(
+            db,
+            principal,
+            case_id,
+            expected_latest_version=expected_latest_version,
+            file_name=file_name,
+            content_type=declared_type,
+            content=await request.body(),
+            source_note=source_note,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
 @router.post("/cases/{case_id}/package/versions/{version_id}/approval")
 def approve_case_package_version(
     case_id: UUID,
@@ -1579,7 +1614,10 @@ def download_exact_package_version(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> Response:
-    result = disposition_packages.exact_version_pdf(db, principal, case_id, version_id)
+    try:
+        result = disposition_packages.exact_version_pdf(db, principal, case_id, version_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Stored package artifact not found.")
     content, file_name = result

@@ -44,7 +44,7 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
   if (status === "Negotiation") {
     return lead.asset_class === "land"
       ? { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" }
-      : { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Negotiate" };
+      : { href: `/os/leads/${lead.id}?tab=valuation#negotiation-governance`, label: "Negotiate" };
   }
   if (status === "Nurture") return { href: `/os/inbox?lead=${lead.id}`, label: "Follow up" };
   return { href: `/os/leads/${lead.id}`, label: "Open record" };

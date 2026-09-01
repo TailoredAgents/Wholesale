@@ -27,6 +27,8 @@ test("the canonical disposition desk is URL-backed and server-loaded", () => {
   assert.match(api, /\/api\/v1\/dispositions\/desk\?\$\{query\.toString\(\)\}/);
   assert.match(api, /cache: "no-store"/);
   assert.match(api, /sections: Record<DispositionDeskSectionKey, DispositionDeskSectionState>/);
+  assert.match(api, /transaction_id\?: string \| null/);
+  assert.match(api, /needs_setup\?: boolean/);
 
   for (const queryKey of ["desk", "deskPage", "scope", "dispositionTab", "view"]) {
     assert.match(page, new RegExp(`${queryKey}\\?: string`));
@@ -75,6 +77,8 @@ test("the desk exposes six operational queues with truthful scoped work context"
   assert.match(desk, />Blocker</);
   assert.match(desk, /item\.primary_action\.href/);
   assert.match(desk, /item\.secondary_action\.href/);
+  assert.match(desk, /item\.needs_setup \? "Needs setup"/);
+  assert.match(desk, /executed transaction is safely recorded and visible here/);
   assert.match(desk, /data\.buyer_network\.missing_proof/);
   assert.match(desk, /data\.coverage_warnings/);
 });

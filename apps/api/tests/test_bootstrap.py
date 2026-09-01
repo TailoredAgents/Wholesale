@@ -117,6 +117,27 @@ def test_bootstrap_refreshes_roles_for_legacy_organizations(db_session: Session)
     assert restored_count == 3
 
 
+def test_executed_contract_catchup_permission_is_narrowly_assigned() -> None:
+    role_permissions = {role.key: set(role.permission_keys) for role in ROLES}
+
+    for role_key in ("owner", "founder_operator", "ceo"):
+        assert PermissionKeys.RECORD_EXECUTED_CONTRACTS in role_permissions[role_key]
+    for role_key in ("acquisition_manager", "acquisition_rep", "transaction_coordinator"):
+        assert PermissionKeys.RECORD_EXECUTED_CONTRACTS in role_permissions[role_key]
+    for role_key in (
+        "administrator",
+        "operations_assistant",
+        "prospecting_caller",
+        "disposition_manager",
+        "disposition_rep",
+        "marketing_manager",
+        "finance_accounting",
+        "read_only_partner",
+        "restricted_vendor",
+    ):
+        assert PermissionKeys.RECORD_EXECUTED_CONTRACTS not in role_permissions[role_key]
+
+
 def test_bootstrap_from_env_logs_before_session_objects_detach(
     db_session: Session,
     monkeypatch: MonkeyPatch,

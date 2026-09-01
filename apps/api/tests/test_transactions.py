@@ -4,6 +4,7 @@ import re
 import zlib
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -18,16 +19,22 @@ from app.core.auth import principal_for_user
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
     ApprovalRequest,
     AuditEvent,
     ContractPackage,
+    Deal,
     EsignEnvelope,
     EsignProviderEvent,
     EsignRecipient,
     Lead,
     OfferConcession,
     OfferNegotiationPlan,
+    Organization,
+    Role,
+    RoleAssignment,
     Transaction,
+    TransactionChecklistItem,
     TransactionDocument,
     TransactionEvent,
     UnderwritingVersion,
@@ -246,6 +253,462 @@ def approve_purchase_package(client: TestClient, transaction_id: str) -> dict[st
     return cast(dict[str, object], package.json())
 
 
+def post_external_execution_import(
+    client: TestClient,
+    lead_id: str,
+    *,
+    content: bytes,
+    headers: dict[str, str] | None = None,
+    params: dict[str, object] | None = None,
+    content_type: str = "application/pdf",
+) -> httpx.Response:
+    form_values = dict(params or external_execution_import_params())
+    file_name = str(form_values.pop("file_name"))
+    form_data = {
+        key: ("true" if value is True else "false" if value is False else str(value))
+        for key, value in form_values.items()
+        if value is not None
+    }
+    return cast(
+        httpx.Response,
+        client.post(
+            f"/api/v1/leads/{lead_id}/transactions/import-executed-contract",
+            headers=headers or HEADERS,
+            data=form_data,
+            files={"file": (file_name, content, content_type)},
+        ),
+    )
+
+
+def test_owner_can_import_external_executed_contract_without_offer_authority(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    handoff_calls: list[UUID] = []
+    disposition_case_id = uuid4()
+
+    def fake_handoff(_db: Session, transaction: Transaction) -> SimpleNamespace:
+        handoff_calls.append(transaction.id)
+        return SimpleNamespace(id=disposition_case_id)
+
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        fake_handoff,
+    )
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\nfully executed purchase agreement",
+        params=external_execution_import_params(
+            file_name='..\\docusign-completed\"\r\nX-Test.pdf'
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    imported = response.json()
+    assert imported["lead_stage"] == "under_contract"
+    assert imported["transaction_status"] == "executed"
+    assert imported["disposition_case_id"] == str(disposition_case_id)
+    assert imported["disposition_handoff_ready"] is True
+    assert imported["disposition_handoff_status"] == "ready"
+    assert imported["disposition_handoff_blockers"] == []
+    transaction_id = UUID(imported["transaction_id"])
+    package_id = UUID(imported["contract_package_id"])
+    document_id = UUID(imported["document_id"])
+    assert handoff_calls == [transaction_id]
+
+    transaction = db_session.get(Transaction, transaction_id)
+    package = db_session.get(ContractPackage, package_id)
+    document = db_session.get(TransactionDocument, document_id)
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert transaction is not None
+    assert package is not None
+    assert document is not None
+    assert lead is not None
+    deal = db_session.get(Deal, transaction.deal_id)
+    assert deal is not None
+    assert transaction.contract_type == "purchase_agreement"
+    assert transaction.purchase_price_cents == 17_500_000
+    assert transaction.contract_executed_at is not None
+    assert transaction.contract_executed_at.replace(tzinfo=UTC) == datetime(
+        2026, 8, 31, 16, tzinfo=UTC
+    )
+    assert transaction.transaction_metadata is not None
+    assert transaction.transaction_metadata["source"] == "external_execution_import"
+    assert lead.stage_key == "under_contract"
+    assert deal.stage_key == "under_contract"
+    assert package.status == "executed"
+    assert package.approval_request_id is None
+    assert "purchase_authority" not in package.terms_snapshot
+    assert package.terms_snapshot["authority_basis"] == "external_fully_executed_agreement"
+    assert document.contract_package_id == package.id
+    assert document.document_type == "signed_purchase_agreement"
+    assert document.status == "executed"
+    assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.pdf", document.file_name)
+    assert document.sha256 == sha256(b"%PDF-1.7\nfully executed purchase agreement").hexdigest()
+
+    governed_items = {
+        item.item_key: item
+        for item in db_session.scalars(
+            select(TransactionChecklistItem).where(
+                TransactionChecklistItem.transaction_id == transaction.id
+            )
+        ).all()
+    }
+    assert set(governed_items) == CANONICAL_EVIDENCE_CHECKLIST_KEYS | {
+        "contract_approved",
+        "contract_executed",
+        "earnest_money",
+        "assignment",
+    }
+    assert governed_items["contract_approved"].status == "not_applicable"
+    assert "internal package approval did not occur" in (
+        governed_items["contract_approved"].evidence_notes or ""
+    )
+    assert governed_items["contract_executed"].status == "complete"
+    for item_key in ("contract_approved", "contract_executed"):
+        assert governed_items[item_key].evidence_document_id == document.id
+
+    audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "contract.execution.external_import",
+            AuditEvent.entity_id == transaction.id,
+        )
+    )
+    activity = db_session.scalar(
+        select(ActivityEvent).where(
+            ActivityEvent.event_type == "lead.contract_external_execution_imported",
+            ActivityEvent.entity_id == lead.id,
+        )
+    )
+    assert audit is not None
+    assert audit.new_value is not None
+    assert audit.new_value["document_sha256"] == document.sha256
+    assert activity is not None
+
+    immutable = client.request(
+        "DELETE",
+        f"/api/v1/transactions/{transaction.id}/documents/{document.id}",
+        headers=HEADERS,
+        json={"reason": "Attempted removal after external execution import."},
+    )
+    assert immutable.status_code == 422
+    assert "immutable" in immutable.json()["detail"]
+
+
+def test_external_execution_import_reuses_safe_contract_prep_and_voids_draft(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+    approved_plan = db_session.scalar(
+        select(OfferNegotiationPlan).where(
+            OfferNegotiationPlan.lead_id == UUID(lead_id),
+            OfferNegotiationPlan.status == "approved",
+        )
+    )
+    assert approved_plan is not None
+    pending_plan, pending_concession, plan_approval, concession_approval = (
+        seed_pending_offer_authority(db_session, lead_id)
+    )
+    draft = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages",
+        headers=HEADERS,
+        json=purchase_package_payload(),
+    )
+    assert draft.status_code == 201, draft.text
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, _transaction: None,
+    )
+
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\nreplacement external execution",
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["transaction_id"] == transaction_id
+    assert response.json()["disposition_handoff_ready"] is False
+    assert response.json()["disposition_handoff_status"] == "needs_setup"
+    assert response.json()["disposition_handoff_blockers"] == [
+        "Disposition setup is incomplete; automatic retry is pending."
+    ]
+    old_package = db_session.get(ContractPackage, UUID(draft.json()["id"]))
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert old_package is not None
+    assert transaction is not None
+    assert old_package.status == "void"
+    assert old_package.voided_at is not None
+    assert transaction.status == "executed"
+    assert transaction.purchase_price_cents == 17_500_000
+    db_session.refresh(approved_plan)
+    db_session.refresh(pending_plan)
+    db_session.refresh(pending_concession)
+    db_session.refresh(plan_approval)
+    db_session.refresh(concession_approval)
+    assert approved_plan.status == "approved"
+    assert pending_plan.status == "cancelled"
+    assert pending_concession.status == "cancelled"
+    assert plan_approval.status == "cancelled"
+    assert concession_approval.status == "cancelled"
+    assert "fully executed external" in (plan_approval.decision_notes or "")
+
+
+def test_external_execution_import_rejects_non_pdf_and_land(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    house_lead_id = create_external_import_lead(db_session, client)
+    invalid_pdf = post_external_execution_import(
+        client,
+        house_lead_id,
+        content=b"not a pdf",
+    )
+    assert invalid_pdf.status_code == 422
+    assert "valid PDF header" in invalid_pdf.json()["detail"]
+
+    land_lead_id = create_external_import_lead(db_session, client, asset_class="land")
+    land = post_external_execution_import(
+        client,
+        land_lead_id,
+        content=b"%PDF-1.7\nland agreement",
+    )
+    assert land.status_code == 409
+    assert "Land leads" in land.json()["detail"]
+
+
+def test_external_execution_import_refuses_active_sent_contract_workflow(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.status = "sent"
+    db_session.commit()
+
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\nconflicting agreement",
+    )
+
+    assert response.status_code == 422
+    assert "already has an active" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("empty_field", ["seller_name", "buyer_entity_name"])
+def test_external_execution_import_rejects_names_empty_after_trimming(
+    db_session: Session,
+    api_db_override: None,
+    empty_field: str,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        params=external_execution_import_params(**{empty_field: "   "}),
+        content=b"%PDF-1.7\nwhitespace name",
+    )
+
+    assert response.status_code == 422
+    assert (
+        db_session.scalar(select(Transaction.id).where(Transaction.lead_id == UUID(lead_id)))
+        is None
+    )
+
+
+def test_external_execution_import_does_not_resurrect_dead_deal(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    dead_deal = Deal(
+        organization_id=lead.organization_id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        stage_key="dead",
+        contract_price_cents=16_000_000,
+        assignment_fee_cents=2_000_000,
+    )
+    db_session.add(dead_deal)
+    db_session.commit()
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, _transaction: None,
+    )
+
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\nnew contract after dead deal",
+    )
+
+    assert response.status_code == 201, response.text
+    imported_transaction = db_session.get(Transaction, UUID(response.json()["transaction_id"]))
+    assert imported_transaction is not None
+    assert imported_transaction.deal_id != dead_deal.id
+    db_session.refresh(dead_deal)
+    assert dead_deal.stage_key == "dead"
+
+
+def test_external_execution_import_requires_contract_authority_permission(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    unrelated_headers = headers_for_transaction_role(
+        db_session,
+        role_key="operations_assistant",
+        email="catchup-unrelated@example.com",
+    )
+    acquisition_headers = headers_for_transaction_role(
+        db_session,
+        role_key="acquisition_rep",
+        email="catchup-acquisition@example.com",
+    )
+    denied = post_external_execution_import(
+        client,
+        lead_id,
+        headers=unrelated_headers,
+        content=b"%PDF-1.7\npermission test",
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == (
+        "Missing one of permissions: contracts:modify, contracts:record_executed"
+    )
+
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, _transaction: None,
+    )
+    allowed = post_external_execution_import(
+        client,
+        lead_id,
+        headers=acquisition_headers,
+        content=b"%PDF-1.7\npermission test",
+    )
+    assert allowed.status_code == 201, allowed.text
+
+
+def test_external_execution_import_keeps_object_storage_after_success(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    deleted: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        "app.services.transactions.store_content",
+        lambda **_kwargs: SimpleNamespace(
+            provider="s3",
+            key="org/transactions/executed-agreement.pdf",
+            database_bytes=None,
+            malware_scan_status="clean",
+            retention_until=datetime(2027, 9, 1, tzinfo=UTC),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.transactions.delete_content",
+        lambda *, provider, key: deleted.append((provider, key)),
+    )
+    monkeypatch.setattr(
+        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        lambda _db, _transaction: None,
+    )
+
+    response = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\nobject storage success",
+    )
+
+    assert response.status_code == 201, response.text
+    assert deleted == []
+    document = db_session.get(TransactionDocument, UUID(response.json()["document_id"]))
+    assert document is not None
+    assert document.storage_provider == "s3"
+    assert document.storage_key == "org/transactions/executed-agreement.pdf"
+
+
+@pytest.mark.parametrize("failure_point", ["handoff", "commit"])
+def test_external_execution_import_cleans_object_storage_after_failure(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+    failure_point: str,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    deleted: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        "app.services.transactions.store_content",
+        lambda **_kwargs: SimpleNamespace(
+            provider="s3",
+            key="org/transactions/failed-executed-agreement.pdf",
+            database_bytes=None,
+            malware_scan_status="clean",
+            retention_until=datetime(2027, 9, 1, tzinfo=UTC),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.transactions.delete_content",
+        lambda *, provider, key: deleted.append((provider, key)),
+    )
+    if failure_point == "handoff":
+
+        def fail_handoff(_db: Session, _transaction: Transaction) -> None:
+            raise RuntimeError("simulated handoff failure")
+
+        monkeypatch.setattr(
+            "app.services.disposition_handoff."
+            "ensure_house_disposition_case_for_executed_transaction",
+            fail_handoff,
+        )
+    else:
+        monkeypatch.setattr(
+            "app.services.disposition_handoff."
+            "ensure_house_disposition_case_for_executed_transaction",
+            lambda _db, _transaction: None,
+        )
+
+        def fail_commit() -> None:
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match=f"simulated {failure_point} failure"):
+        post_external_execution_import(
+            client,
+            lead_id,
+            content=b"%PDF-1.7\nobject storage failure",
+        )
+
+    assert deleted == [("s3", "org/transactions/failed-executed-agreement.pdf")]
+    assert (
+        db_session.scalar(select(Transaction.id).where(Transaction.lead_id == UUID(lead_id)))
+        is None
+    )
+
+
 def esign_send_payload() -> dict[str, object]:
     return {
         "subject": "Stonegate purchase agreement",
@@ -259,6 +722,201 @@ def esign_send_payload() -> dict[str, object]:
             }
         ],
     }
+
+
+def external_execution_import_params(**overrides: object) -> dict[str, object]:
+    params: dict[str, object] = {
+        "file_name": "docusign-completed-purchase-agreement.pdf",
+        "seller_name": "Jane Seller",
+        "buyer_entity_name": "Stonegate Acquisitions LLC",
+        "purchase_price_cents": 17_500_000,
+        "assignment_fee_cents": 2_500_000,
+        "earnest_money_cents": 100_000,
+        "title_company": "Peachtree Closing Law",
+        "closing_date": "2026-09-30T17:00:00Z",
+        "inspection_period_days": 10,
+        "earnest_money_due_at": "2026-09-03T17:00:00Z",
+        "due_diligence_deadline": "2026-09-10T17:00:00Z",
+        "executed_at": "2026-08-31T16:00:00Z",
+        "execution_source": "docusign",
+        "external_reference": "docu-envelope-123",
+        "notes": "Agreement was completed in DocuSign before Stonegate catch-up entry.",
+        "confirm_fully_executed": True,
+        "attestation_reason": "Compared every signature and the final terms in DocuSign.",
+    }
+    params.update(overrides)
+    return params
+
+
+def create_external_import_lead(
+    db: Session,
+    client: TestClient,
+    *,
+    asset_class: str = "house",
+) -> str:
+    bootstrap_foundation(
+        db,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    property_type = "vacant_land" if asset_class == "land" else "single_family"
+    response = client.post(
+        "/api/v1/leads",
+        headers=HEADERS,
+        json={
+            "contact": {"legal_name": "Jane Seller", "contact_type": "seller"},
+            "property": {
+                "street_address": "123 Peachtree St",
+                "city": "Atlanta",
+                "state": "GA",
+                "postal_code": "30303",
+                "property_type": property_type,
+            },
+            "source": "referral",
+            "stage_key": "qualified",
+            "asset_class": asset_class,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+def headers_for_transaction_role(
+    db: Session,
+    *,
+    role_key: str,
+    email: str,
+) -> dict[str, str]:
+    organization = db.scalar(select(Organization))
+    assert organization is not None
+    role = db.scalar(
+        select(Role).where(
+            Role.organization_id == organization.id,
+            Role.key == role_key,
+        )
+    )
+    assert role is not None
+    user = User(
+        organization_id=organization.id,
+        email=email,
+        display_name=email,
+        external_auth_id=None,
+        is_active=True,
+        calling_enabled=False,
+    )
+    db.add(user)
+    db.flush()
+    db.add(
+        RoleAssignment(
+            organization_id=organization.id,
+            user_id=user.id,
+            role_id=role.id,
+        )
+    )
+    db.commit()
+    return {"X-Dev-User-Email": email}
+
+
+def seed_pending_offer_authority(
+    db: Session,
+    lead_id: str,
+) -> tuple[OfferNegotiationPlan, OfferConcession, ApprovalRequest, ApprovalRequest]:
+    approved_plan = db.scalar(
+        select(OfferNegotiationPlan).where(
+            OfferNegotiationPlan.lead_id == UUID(lead_id),
+            OfferNegotiationPlan.status == "approved",
+        )
+    )
+    owner = db.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert approved_plan is not None
+    assert owner is not None
+    plan_approval = ApprovalRequest(
+        organization_id=approved_plan.organization_id,
+        requested_by_user_id=owner.id,
+        assigned_to_user_id=owner.id,
+        decided_by_user_id=None,
+        request_type="offer_ceiling",
+        entity_type="offer_negotiation_plan",
+        entity_id=None,
+        status="pending",
+        title="Pending offer plan",
+        summary="Pending authority should retire when signed terms are imported.",
+        approval_metadata={"lead_id": lead_id},
+    )
+    db.add(plan_approval)
+    db.flush()
+    pending_plan = OfferNegotiationPlan(
+        organization_id=approved_plan.organization_id,
+        lead_id=approved_plan.lead_id,
+        property_id=approved_plan.property_id,
+        underwriting_version_id=approved_plan.underwriting_version_id,
+        market_analysis_id=approved_plan.market_analysis_id,
+        approval_request_id=plan_approval.id,
+        created_by_user_id=owner.id,
+        status="pending",
+        seller_asking_price_cents=approved_plan.seller_asking_price_cents,
+        arv_low_cents=approved_plan.arv_low_cents,
+        arv_point_cents=approved_plan.arv_point_cents,
+        arv_high_cents=approved_plan.arv_high_cents,
+        total_rehab_cents=approved_plan.total_rehab_cents,
+        disposition_cents=approved_plan.disposition_cents,
+        opening_offer_cents=approved_plan.opening_offer_cents,
+        target_contract_cents=approved_plan.target_contract_cents,
+        stretch_contract_cents=approved_plan.stretch_contract_cents,
+        seller_ceiling_cents=approved_plan.seller_ceiling_cents,
+        seller_context=None,
+        rationale="Pending replacement authority fixture.",
+        source_snapshot={"fixture": "pending"},
+    )
+    db.add(pending_plan)
+    db.flush()
+    plan_approval.entity_id = pending_plan.id
+    concession_approval = ApprovalRequest(
+        organization_id=approved_plan.organization_id,
+        requested_by_user_id=owner.id,
+        assigned_to_user_id=owner.id,
+        decided_by_user_id=None,
+        request_type="offer_concession",
+        entity_type="offer_concession",
+        entity_id=None,
+        status="pending",
+        title="Pending concession",
+        summary="Pending concession should retire when signed terms are imported.",
+        approval_metadata={"lead_id": lead_id},
+    )
+    db.add(concession_approval)
+    db.flush()
+    pending_concession = OfferConcession(
+        organization_id=approved_plan.organization_id,
+        lead_id=approved_plan.lead_id,
+        property_id=approved_plan.property_id,
+        offer_negotiation_plan_id=pending_plan.id,
+        underwriting_version_id=approved_plan.underwriting_version_id,
+        appointment_id=None,
+        requested_by_user_id=owner.id,
+        approval_request_id=concession_approval.id,
+        decided_by_user_id=None,
+        presented_by_user_id=None,
+        sequence_number=1,
+        status="pending",
+        authority_basis="manager_approval_required",
+        previous_offer_cents=17_000_000,
+        proposed_offer_cents=17_500_000,
+        concession_delta_cents=500_000,
+        seller_counter_cents=17_500_000,
+        reason="Seller counter requires approval.",
+        seller_exchange="Seller requested a revised price.",
+        decision_notes=None,
+        decided_at=None,
+        presented_at=None,
+        source_snapshot={"fixture": "pending"},
+    )
+    db.add(pending_concession)
+    db.flush()
+    concession_approval.entity_id = pending_concession.id
+    db.commit()
+    return pending_plan, pending_concession, plan_approval, concession_approval
 
 
 def test_canonical_checklist_completion_requires_supporting_evidence(
@@ -389,9 +1047,9 @@ def setup_governed_assignment_selection(
     assert selected.status_code == 201, selected.text
     transaction = db.get(Transaction, UUID(transaction_id))
     assert transaction is not None
-    transaction.assignment_fee_cents = (
-        int(offers[0]["amount_cents"]) - transaction.purchase_price_cents
-    )
+    selected_amount = offers[0]["amount_cents"]
+    assert isinstance(selected_amount, int)
+    transaction.assignment_fee_cents = selected_amount - transaction.purchase_price_cents
     db.commit()
     return buyers[0]
 
