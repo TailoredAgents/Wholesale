@@ -17,13 +17,13 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { WorkspaceProfile } from "../lib/api";
 import { StonegateLogo } from "../stonegate-logo";
 import { AuthControls } from "./auth-controls";
-import { QuickDialDialog } from "./_components/quick-dial-dialog";
-import { WebPhoneProvider } from "./_components/web-phone-provider";
+import { QuickDialDialog, QuickDialLauncher } from "./_components/quick-dial-dialog";
+import { useWebPhone, WebPhoneProvider } from "./_components/web-phone-provider";
 import { HelpBubble } from "./help/help-workspace";
 import {
   defaultRouteForProfile,
@@ -43,6 +43,12 @@ type RecentDestination = {
 
 type AccessState = "verifying" | "resolved" | "error";
 
+type OsShellProps = {
+  children: ReactNode;
+  pendingApprovalCount?: number;
+  profile: WorkspaceProfile | null;
+};
+
 const recentStorageKey = "stonegate:recent-destinations";
 
 const developmentProfile: WorkspaceProfile = {
@@ -55,22 +61,24 @@ const developmentProfile: WorkspaceProfile = {
   unread_notification_count: 0,
 };
 
-export function OsShell({
-  children,
-  pendingApprovalCount = 0,
-  profile,
-}: {
-  children: ReactNode;
-  pendingApprovalCount?: number;
-  profile: WorkspaceProfile | null;
-}) {
+export function OsShell(props: OsShellProps) {
+  return (
+    <WebPhoneProvider>
+      <OsShellContent {...props} />
+    </WebPhoneProvider>
+  );
+}
+
+function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchQuery = searchParams.toString();
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const webPhone = useWebPhone();
   const searchRef = useRef<HTMLInputElement>(null);
-  const quickDialButtonRef = useRef<HTMLButtonElement>(null);
+  const quickDialLauncherRef = useRef<HTMLButtonElement>(null);
+  const quickDialReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -78,6 +86,8 @@ export function OsShell({
   const [newOpen, setNewOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [quickDialOpen, setQuickDialOpen] = useState(false);
+  const [quickDialSubmitting, setQuickDialSubmitting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<RecentDestination[]>([]);
   const [resolvedProfile, setResolvedProfile] = useState<WorkspaceProfile | null>(profile);
@@ -124,6 +134,26 @@ export function OsShell({
     hasPermission("offers:approve") || hasPermission("contracts:send");
   const canOpenNotifications =
     hasPermission("operations:view") || hasPermission("operations:manage");
+  const phoneOccupied = Boolean(webPhone.activeCall) || webPhone.status.audioLink !== "idle";
+  const previousPhoneOccupiedRef = useRef(phoneOccupied);
+
+  useEffect(() => {
+    if (!phoneOccupied) {
+      previousPhoneOccupiedRef.current = false;
+      return;
+    }
+    if (previousPhoneOccupiedRef.current) return;
+    previousPhoneOccupiedRef.current = true;
+    const displacedFloatingSurface = quickDialOpen || helpOpen;
+    quickDialReturnFocusRef.current = null;
+    setQuickDialOpen(false);
+    setHelpOpen(false);
+    if (displacedFloatingSurface) {
+      window.requestAnimationFrame(() => {
+        document.getElementById("stonegate-active-phone")?.focus();
+      });
+    }
+  }, [helpOpen, phoneOccupied, quickDialOpen]);
 
   useEffect(() => {
     if (profile || resolvedProfile || !isLoaded || !isSignedIn) return;
@@ -227,7 +257,6 @@ export function OsShell({
         setSearchOpen(false);
         setNewOpen(false);
         setRecentOpen(false);
-        setQuickDialOpen(false);
       }
       if (
         event.key === "/" &&
@@ -289,14 +318,28 @@ export function OsShell({
     setRecentOpen(false);
   }
 
-  function closeQuickDial() {
+  const closeQuickDial = useCallback((options?: { focusActiveCall?: boolean }) => {
     setQuickDialOpen(false);
-    window.requestAnimationFrame(() => quickDialButtonRef.current?.focus());
+    const returnTarget = quickDialReturnFocusRef.current;
+    quickDialReturnFocusRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (options?.focusActiveCall) {
+        document.getElementById("stonegate-active-phone")?.focus();
+      } else if (returnTarget?.isConnected) returnTarget.focus();
+      else quickDialLauncherRef.current?.focus();
+    });
+  }, [setQuickDialOpen]);
+
+  function openQuickDial(trigger: HTMLButtonElement) {
+    if (phoneOccupied || quickDialSubmitting) return;
+    quickDialReturnFocusRef.current = trigger;
+    closeTransientUi();
+    setHelpOpen(false);
+    setQuickDialOpen(true);
   }
 
   return (
-    <WebPhoneProvider>
-      <div className={`${theme.theme} ${styles.shell}`}>
+    <div className={`${theme.theme} ${styles.shell}`}>
       <a className={styles.skipLink} href="#main-content">
         Skip to main content
       </a>
@@ -479,11 +522,10 @@ export function OsShell({
                     ) : null}
                     {canQuickDial ? (
                       <button
-                        onClick={() => {
-                          closeTransientUi();
-                          setQuickDialOpen(true);
-                        }}
-                        ref={quickDialButtonRef}
+                        aria-controls="stonegate-quick-dial"
+                        aria-haspopup="dialog"
+                        disabled={phoneOccupied || quickDialSubmitting}
+                        onClick={(event) => openQuickDial(event.currentTarget)}
                         type="button"
                       >
                         <PhoneOutgoing aria-hidden="true" size={16} />
@@ -560,11 +602,33 @@ export function OsShell({
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {helpProfile ? <HelpBubble devUserEmail={helpProfile.email} /> : null}
-        {quickDialOpen ? <QuickDialDialog onClose={closeQuickDial} /> : null}
+        {helpProfile ? (
+          <HelpBubble
+            devUserEmail={helpProfile.email}
+            disabled={phoneOccupied || quickDialSubmitting}
+            onOpenChange={(nextOpen) => {
+              if (nextOpen && (phoneOccupied || quickDialSubmitting)) return;
+              setHelpOpen(nextOpen);
+              if (nextOpen && quickDialOpen) closeQuickDial();
+            }}
+            open={helpOpen}
+          />
+        ) : null}
+        {canQuickDial ? (
+          <QuickDialLauncher
+            buttonRef={quickDialLauncherRef}
+            expanded={quickDialOpen}
+            onOpen={openQuickDial}
+          />
+        ) : null}
+        {canQuickDial && quickDialOpen && !phoneOccupied ? (
+          <QuickDialDialog
+            onClose={closeQuickDial}
+            onSubmittingChange={setQuickDialSubmitting}
+          />
+        ) : null}
       </div>
-      </div>
-    </WebPhoneProvider>
+    </div>
   );
 }
 

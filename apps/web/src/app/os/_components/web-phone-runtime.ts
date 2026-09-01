@@ -148,6 +148,38 @@ export class WebPhoneRuntime {
     })();
   }
 
+  reserveCallOwnership(): Promise<void> | null {
+    if (
+      this.call ||
+      this.connectPromise ||
+      this.acquiringOwnership ||
+      (activeRuntimeOwner && activeRuntimeOwner !== this.owner)
+    ) {
+      throw new Error("Only one browser call can be active at a time.");
+    }
+    if (activeRuntimeOwner === this.owner) return null;
+
+    this.acquiringOwnership = true;
+    try {
+      const ownership = this.acquireCallOwnership();
+      if (!ownership) {
+        this.acquiringOwnership = false;
+        return null;
+      }
+      return ownership.finally(() => {
+        this.acquiringOwnership = false;
+      });
+    } catch (error) {
+      this.acquiringOwnership = false;
+      throw error;
+    }
+  }
+
+  releaseCallReservation(): void {
+    if (this.call || this.connectPromise) return;
+    this.releaseCallOwnership();
+  }
+
   async initialize(token: string): Promise<void> {
     this.latestToken = token;
     if (this.device) {
@@ -205,6 +237,7 @@ export class WebPhoneRuntime {
     }
 
     const { Device: TwilioDevice } = await this.loadVoiceSdk();
+    if (generation !== this.generation) throw new WebPhoneCancelledError();
     if (!TwilioDevice.isSupported) {
       this.publish({
         audioLink: "error",
@@ -259,13 +292,8 @@ export class WebPhoneRuntime {
       throw new Error("Only one browser call can be active at a time.");
     }
 
-    this.acquiringOwnership = true;
-    try {
-      const ownership = this.acquireCallOwnership();
-      if (ownership) await ownership;
-    } finally {
-      this.acquiringOwnership = false;
-    }
+    const reservation = this.reserveCallOwnership();
+    if (reservation) await reservation;
     if (generation !== this.generation) {
       this.releaseCallOwnership();
       throw new WebPhoneCancelledError();
@@ -299,6 +327,16 @@ export class WebPhoneRuntime {
     if (!this.call) throw new Error("There is no active browser audio connection.");
     this.call.mute(muted);
     this.publish({ muted });
+  }
+
+  sendDigits(digits: string) {
+    if (!this.call || this.status.audioLink !== "audio_established") {
+      throw new Error("Wait for browser audio to connect before using the keypad.");
+    }
+    if (!/^[0-9*#]+$/.test(digits)) {
+      throw new Error("The browser keypad received an unsupported tone.");
+    }
+    this.call.sendDigits(digits);
   }
 
   disconnectLocalAudio() {

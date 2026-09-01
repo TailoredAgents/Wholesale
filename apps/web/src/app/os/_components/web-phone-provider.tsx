@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { ExternalLink, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
+import { ExternalLink, Grid3x3, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
 import Link from "next/link";
 import {
   createContext,
@@ -61,7 +61,11 @@ type WebPhoneContextValue = {
   busy: boolean;
   hangUp: () => void;
   initializeHeadset: () => Promise<void>;
+  prepareAndStartCall: (
+    prepareTarget: () => Promise<WebPhoneCallTarget>,
+  ) => Promise<void>;
   reset: () => void;
+  sendDigits: (digits: string) => void;
   session: WebPhoneSession | null;
   startCall: (target: WebPhoneCallTarget) => Promise<void>;
   status: WebPhoneStatus;
@@ -69,6 +73,7 @@ type WebPhoneContextValue = {
 };
 
 const WebPhoneContext = createContext<WebPhoneContextValue | null>(null);
+const dtmfKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
 function detailMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object" || !("detail" in payload)) return fallback;
@@ -133,6 +138,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
   const [activeCall, setActiveCall] = useState<ActiveWebPhoneCall | null>(null);
   const [busy, setBusy] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [keypadOpen, setKeypadOpen] = useState(false);
   const [session, setSession] = useState<WebPhoneSession | null>(null);
   const [status, setStatus] = useState<WebPhoneStatus>(INITIAL_WEB_PHONE_STATUS);
   const activeCallRef = useRef<ActiveWebPhoneCall | null>(null);
@@ -254,20 +260,10 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     [prepareHeadset, runExclusive, showFailure],
   );
 
-  const connectActiveTarget = useCallback(async () => {
-    const target = activeCallRef.current;
-    if (!target) throw new Error("Choose a call before connecting the browser phone.");
-    await prepareHeadset();
-    const runtime = runtimeRef.current;
-    if (!runtime) throw new Error("The browser phone is unavailable.");
-    await runtime.connect(target.callIntentId);
-  }, [prepareHeadset]);
-
-  const startCall = useCallback(
+  const connectTarget = useCallback(
     async (target: WebPhoneCallTarget) => {
       if (!target.callIntentId.trim()) throw new Error("A call intent is required for browser calling.");
       if (!target.displayName.trim()) throw new Error("A call recipient is required for browser calling.");
-      if (operationRef.current) throw new Error("Another browser phone action is already running.");
       if (activeCallRef.current && runtimeRef.current?.hasLiveAudio) {
         throw new Error("End the current browser call before starting another one.");
       }
@@ -279,22 +275,55 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
         audioEstablishedAt: null,
       };
       setElapsedSeconds(0);
+      setKeypadOpen(false);
       publishActiveCall(next);
+      try {
+        await prepareHeadset();
+        const runtime = runtimeRef.current;
+        if (!runtime) throw new Error("The browser phone is unavailable.");
+        await runtime.connect(next.callIntentId);
+      } catch (error) {
+        if (!runtimeRef.current?.hasLiveAudio) publishActiveCall(null);
+        if (error instanceof WebPhoneCancelledError) throw error;
+        showFailure(error);
+        throw error;
+      }
+    },
+    [prepareHeadset, publishActiveCall, showFailure],
+  );
+
+  const startCall = useCallback(
+    async (target: WebPhoneCallTarget) => {
+      if (operationRef.current) throw new Error("Another browser phone action is already running.");
+      return runExclusive(() => connectTarget(target));
+    },
+    [connectTarget, runExclusive],
+  );
+
+  const prepareAndStartCall = useCallback(
+    async (prepareTarget: () => Promise<WebPhoneCallTarget>) => {
+      if (operationRef.current) throw new Error("Another browser phone action is already running.");
+      if (activeCallRef.current && runtimeRef.current?.hasLiveAudio) {
+        throw new Error("End the current browser call before starting another one.");
+      }
       return runExclusive(async () => {
+        const reservedRuntime = ensureRuntime();
+        const reservation = reservedRuntime.reserveCallOwnership();
+        if (reservation) await reservation;
         try {
-          await connectActiveTarget();
+          const target = await prepareTarget();
+          await connectTarget(target);
         } catch (error) {
-          if (!runtimeRef.current?.hasLiveAudio) publishActiveCall(null);
-          if (error instanceof WebPhoneCancelledError) throw error;
-          showFailure(error);
+          reservedRuntime.releaseCallReservation();
           throw error;
         }
       });
     },
-    [connectActiveTarget, publishActiveCall, runExclusive, showFailure],
+    [connectTarget, ensureRuntime, runExclusive],
   );
 
   const hangUp = useCallback(() => {
+    setKeypadOpen(false);
     runtimeRef.current?.disconnectLocalAudio();
   }, []);
 
@@ -304,12 +333,26 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     runtime.setMuted(!runtime.currentStatus.muted);
   }, []);
 
+  const sendDigits = useCallback(
+    (digits: string) => {
+      try {
+        const runtime = runtimeRef.current;
+        if (!runtime) throw new Error("The browser phone is unavailable.");
+        runtime.sendDigits(digits);
+      } catch (error) {
+        showFailure(error);
+      }
+    },
+    [showFailure],
+  );
+
   const reset = useCallback(() => {
     const runtime = runtimeRef.current;
     if (runtime?.hasLiveAudio) throw new Error("End the current browser call before closing the phone.");
     runtime?.destroy();
     runtimeRef.current = null;
     voiceIdentityRef.current = null;
+    setKeypadOpen(false);
     publishActiveCall(null);
     setSession(null);
     setStatus(INITIAL_WEB_PHONE_STATUS);
@@ -342,7 +385,9 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       busy,
       hangUp,
       initializeHeadset,
+      prepareAndStartCall,
       reset,
+      sendDigits,
       session,
       startCall,
       status,
@@ -353,7 +398,9 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       busy,
       hangUp,
       initializeHeadset,
+      prepareAndStartCall,
       reset,
+      sendDigits,
       session,
       startCall,
       status,
@@ -365,6 +412,10 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     activeCall && status.callActive && ["audio_established", "reconnecting"].includes(status.audioLink),
   );
   const canEnd = Boolean(activeCall && status.callActive);
+  const canUseKeypad = Boolean(
+    activeCall && status.callActive && status.audioLink === "audio_established",
+  );
+  const keypadVisible = keypadOpen && canUseKeypad;
 
   return (
     <WebPhoneContext.Provider value={value}>
@@ -372,8 +423,10 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       {panelVisible ? (
         <aside
           aria-label="Stonegate browser phone"
-          className={styles.panel}
+          className={`${styles.panel} ${keypadVisible ? styles.panelKeypadOpen : ""}`}
           data-audio-state={status.audioLink}
+          id="stonegate-active-phone"
+          tabIndex={-1}
         >
           <div className={styles.statusIcon} aria-hidden="true">
             <Phone size={18} />
@@ -397,6 +450,16 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
               </Link>
             ) : null}
             <button
+              aria-controls="stonegate-active-call-keypad"
+              aria-expanded={keypadVisible}
+              aria-label={keypadVisible ? "Close call keypad" : "Open call keypad"}
+              disabled={!canUseKeypad || busy}
+              onClick={() => setKeypadOpen((current) => !current)}
+              type="button"
+            >
+              <Grid3x3 aria-hidden="true" size={17} />
+            </button>
+            <button
               aria-label={status.muted ? "Unmute browser call" : "Mute browser call"}
               aria-pressed={status.muted}
               disabled={!canMute || busy}
@@ -409,6 +472,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
               aria-label="End browser call"
               className={styles.endButton}
               disabled={!canEnd}
+              id="stonegate-active-phone-end-call"
               onClick={hangUp}
               type="button"
             >
@@ -425,6 +489,25 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
               </button>
             ) : null}
           </div>
+          {keypadVisible ? (
+            <div
+              aria-label="Active call keypad"
+              className={styles.dtmfPad}
+              id="stonegate-active-call-keypad"
+              role="group"
+            >
+              {dtmfKeys.map((key) => (
+                <button
+                  aria-label={`Send ${key === "*" ? "star" : key === "#" ? "pound" : key} tone`}
+                  key={key}
+                  onClick={() => sendDigits(key)}
+                  type="button"
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {activeCall?.fromNumber || session?.line ? (
             <span className={styles.lineLabel}>
               From {activeCall?.fromLabel ?? (

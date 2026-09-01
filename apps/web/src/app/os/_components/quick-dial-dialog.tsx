@@ -1,8 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Building2, Headphones, PhoneCall, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Building2, Delete, Headphones, Phone, PhoneCall, X } from "lucide-react";
+import { FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { useWebPhone } from "./web-phone-provider";
 import styles from "./quick-dial-dialog.module.css";
@@ -44,6 +44,12 @@ const purposeOptions: Array<{ value: QuickDialPurpose; label: string }> = [
   { value: "other", label: "Other business call" },
 ];
 
+const dialPadKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+
+type QuickDialCloseOptions = {
+  focusActiveCall?: boolean;
+};
+
 function responseDetail(payload: unknown) {
   if (!payload || typeof payload !== "object" || !("detail" in payload)) {
     return "Stonegate could not prepare this call.";
@@ -63,11 +69,55 @@ function responseDetail(payload: unknown) {
   return "Stonegate could not prepare this call.";
 }
 
-export function QuickDialDialog({ onClose }: { onClose: () => void }) {
+export function QuickDialLauncher({
+  buttonRef,
+  expanded,
+  onOpen,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  expanded: boolean;
+  onOpen: (trigger: HTMLButtonElement) => void;
+}) {
+  const webPhone = useWebPhone();
+  const phoneOccupied = Boolean(webPhone.activeCall) || webPhone.status.audioLink !== "idle";
+
+  if (phoneOccupied) return null;
+
+  return (
+    <button
+      aria-controls="stonegate-quick-dial"
+      aria-expanded={expanded}
+      aria-haspopup="dialog"
+      aria-hidden={expanded}
+      aria-label="Open Stonegate phone"
+      className={`${styles.launcher} ${expanded ? styles.launcherHidden : ""}`}
+      disabled={expanded}
+      onClick={(event) => onOpen(event.currentTarget)}
+      ref={buttonRef}
+      title="Open Stonegate phone"
+      type="button"
+    >
+      <Phone aria-hidden="true" size={22} />
+      <span>Phone</span>
+    </button>
+  );
+}
+
+export function QuickDialDialog({
+  onClose,
+  onSubmittingChange,
+}: {
+  onClose: (options?: QuickDialCloseOptions) => void;
+  onSubmittingChange: (submitting: boolean) => void;
+}) {
   const { getToken } = useAuth();
   const webPhone = useWebPhone();
   const dialogRef = useRef<HTMLElement>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const submittingRef = useRef(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [contactName, setContactName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -87,121 +137,131 @@ export function QuickDialDialog({ onClose }: { onClose: () => void }) {
   );
 
   useEffect(() => {
+    submittingRef.current = submitting;
+  }, [submitting]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = null;
+      onSubmittingChange(false);
+    };
+  }, [onSubmittingChange]);
+
+  useEffect(() => {
+    idempotencyKeyRef.current = null;
+  }, [callReason, companyName, contactName, phoneNumber, purpose]);
+
+  useEffect(() => {
     const dialogElement = dialogRef.current;
     if (!dialogElement) return;
     const currentDialog: HTMLElement = dialogElement;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const backdrop = dialogElement.parentElement;
-    const workspace = backdrop?.parentElement;
-    const shell = workspace?.parentElement;
-    const backgroundElements = [
-      ...Array.from(workspace?.children ?? []).filter((element) => element !== backdrop),
-      ...Array.from(shell?.children ?? []).filter((element) => element !== workspace),
-    ].filter((element): element is HTMLElement => element instanceof HTMLElement);
-    const backgroundState = backgroundElements.map((element) => ({
-      element,
-      ariaHidden: element.getAttribute("aria-hidden"),
-      inert: element.inert,
-    }));
-    backgroundElements.forEach((element) => {
-      element.inert = true;
-      element.setAttribute("aria-hidden", "true");
-    });
-    const selector =
-      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const focusFrame = window.requestAnimationFrame(() => phoneInputRef.current?.focus());
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (submitting) return;
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(currentDialog.querySelectorAll<HTMLElement>(selector));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      if (event.key !== "Escape" || submittingRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
     }
 
     currentDialog.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       currentDialog.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      backgroundState.forEach(({ element, ariaHidden, inert }) => {
-        element.inert = inert;
-        if (ariaHidden === null) element.removeAttribute("aria-hidden");
-        else element.setAttribute("aria-hidden", ariaHidden);
-      });
     };
-  }, [onClose, submitting]);
+  }, [onClose]);
+
+  function appendDialPadKey(key: string) {
+    setPhoneNumber((current) => `${current}${key}`.slice(0, 80));
+    window.requestAnimationFrame(() => phoneInputRef.current?.focus());
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting || webPhone.busy || webPhone.status.callActive) return;
+    if (
+      submitting ||
+      requestControllerRef.current ||
+      webPhone.busy ||
+      webPhone.status.callActive
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setSubmitting(true);
+    onSubmittingChange(true);
     setError(null);
     try {
-      const idempotencyKey = idempotencyKeyRef.current ?? window.crypto.randomUUID();
-      idempotencyKeyRef.current = idempotencyKey;
-      const token = await getToken().catch(() => null);
-      const headers: Record<string, string> = {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      else headers["X-Dev-User-Email"] = devUserEmail;
-      const response = await fetch(`${apiBaseUrl}/api/v1/voice/quick-dial`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          contact_name: contactName.trim() || null,
-          company_name: companyName.trim() || null,
-          purpose,
-          call_reason: callReason.trim() || null,
-          idempotency_key: idempotencyKey,
-        }),
-      });
-      const payload = (await response.json().catch(() => null)) as QuickDialResponse | null;
-      if (!response.ok || !payload) throw new Error(responseDetail(payload));
+      await webPhone.prepareAndStartCall(async () => {
+        const idempotencyKey = idempotencyKeyRef.current ?? window.crypto.randomUUID();
+        idempotencyKeyRef.current = idempotencyKey;
+        const token = await getToken().catch(() => null);
+        if (controller.signal.aborted || !mountedRef.current) {
+          throw new DOMException("Quick Dial was closed.", "AbortError");
+        }
+        const headers: Record<string, string> = {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        else headers["X-Dev-User-Email"] = devUserEmail;
+        const response = await fetch(`${apiBaseUrl}/api/v1/voice/quick-dial`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            phone_number: phoneNumber,
+            contact_name: contactName.trim() || null,
+            company_name: companyName.trim() || null,
+            purpose,
+            call_reason: callReason.trim() || null,
+            idempotency_key: idempotencyKey,
+          }),
+          signal: controller.signal,
+        });
+        const payload = (await response.json().catch(() => null)) as QuickDialResponse | null;
+        if (controller.signal.aborted || !mountedRef.current) {
+          throw new DOMException("Quick Dial was closed.", "AbortError");
+        }
+        if (!response.ok || !payload) throw new Error(responseDetail(payload));
 
-      // A returned call authorization may be consumed by Twilio even when the SDK later
-      // reports a connection error. Rotate now so a deliberate retry creates a fresh intent.
-      idempotencyKeyRef.current = null;
-      await webPhone.startCall({
-        callIntentId: payload.intent.id,
-        contextHref: `/os/inbox?conversation=${encodeURIComponent(payload.conversation_id)}&channel=call`,
-        contextLabel: companyName.trim() || "Quick Dial",
-        displayName: payload.contact_name,
-        fromNumber: payload.intent.from_number,
-        phoneNumber: payload.intent.recipient,
+        // A returned call authorization may be consumed by Twilio even when the SDK later
+        // reports a connection error. Rotate now so a deliberate retry creates a fresh intent.
+        idempotencyKeyRef.current = null;
+        requestControllerRef.current = null;
+        return {
+          callIntentId: payload.intent.id,
+          contextHref: `/os/inbox?conversation=${encodeURIComponent(payload.conversation_id)}&channel=call`,
+          contextLabel: companyName.trim() || "Quick Dial",
+          displayName: payload.contact_name,
+          fromNumber: payload.intent.from_number,
+          phoneNumber: payload.intent.recipient,
+        };
       });
-      onClose();
+      if (mountedRef.current) onClose({ focusActiveCall: true });
     } catch (submitError) {
+      if (controller.signal.aborted || !mountedRef.current) return;
       setError(
         submitError instanceof Error ? submitError.message : "Stonegate could not start the call.",
       );
     } finally {
-      setSubmitting(false);
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+      if (mountedRef.current) {
+        setSubmitting(false);
+        onSubmittingChange(false);
+      }
     }
   }
 
   return (
-    <div className={styles.backdrop} role="presentation">
+    <div className={styles.dockLayer} role="presentation">
       <section
         aria-labelledby="quick-dial-title"
-        aria-modal="true"
+        aria-modal="false"
         className={styles.dialog}
+        id="stonegate-quick-dial"
         ref={dialogRef}
         role="dialog"
       >
@@ -212,76 +272,112 @@ export function QuickDialDialog({ onClose }: { onClose: () => void }) {
           <div>
             <span>Stonegate Web Phone</span>
             <h2 id="quick-dial-title">Quick Dial</h2>
-            <p>Call a company or professional without creating a seller lead.</p>
+            <p>Type or paste any business number and call from Stonegate.</p>
           </div>
-           <button aria-label="Close Quick Dial" className={styles.closeButton} disabled={submitting} onClick={onClose} type="button">
+          <button
+            aria-label="Close Quick Dial"
+            className={styles.closeButton}
+            disabled={submitting}
+            onClick={() => onClose()}
+            type="button"
+          >
             <X aria-hidden="true" size={18} />
           </button>
         </header>
 
         <form onSubmit={submit}>
-          <label className={styles.wideField}>
-            <span>Phone number</span>
-            <input
-              autoComplete="tel"
-              autoFocus
-              inputMode="tel"
-              maxLength={80}
-              onChange={(event) => setPhoneNumber(event.target.value)}
-              placeholder="(678) 555-0123"
-              required
-              type="tel"
-              value={phoneNumber}
-            />
-          </label>
-          <label>
-            <span>Contact name <small>Optional</small></span>
-            <input
-              autoComplete="name"
-              maxLength={255}
-              onChange={(event) => setContactName(event.target.value)}
-              placeholder="Jordan Smith"
-              value={contactName}
-            />
-          </label>
-          <label>
-            <span>Company <small>Optional</small></span>
-            <input
-              autoComplete="organization"
-              maxLength={255}
-              onChange={(event) => setCompanyName(event.target.value)}
-              placeholder="Peachtree Title"
-              value={companyName}
-            />
-          </label>
-          <label>
-            <span>Call type</span>
-            <select
-              onChange={(event) => setPurpose(event.target.value as QuickDialPurpose)}
-              value={purpose}
-            >
-              {purposeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
+          <fieldset className={styles.dialingFields} disabled={submitting}>
+            <label className={styles.wideField}>
+              <span>Phone number</span>
+              <input
+                autoComplete="tel"
+                inputMode="tel"
+                maxLength={80}
+                onChange={(event) => setPhoneNumber(event.target.value)}
+                placeholder="(678) 555-0123"
+                ref={phoneInputRef}
+                required
+                type="tel"
+                value={phoneNumber}
+              />
+            </label>
+            <div aria-label="Dial pad" className={styles.dialPad} role="group">
+              {dialPadKeys.map((key) => (
+                <button
+                  aria-label={`Enter ${key}`}
+                  key={key}
+                  onClick={() => appendDialPadKey(key)}
+                  type="button"
+                >
+                  {key}
+                </button>
               ))}
-            </select>
-          </label>
-          <label>
-            <span>Reason <small>Optional</small></span>
-            <input
-              maxLength={500}
-              onChange={(event) => setCallReason(event.target.value)}
-              placeholder="Discuss closing availability"
-              value={callReason}
-            />
-          </label>
+            </div>
+            <button
+              aria-label="Delete last phone digit"
+              className={styles.backspaceButton}
+              disabled={!phoneNumber}
+              onClick={() => setPhoneNumber((current) => current.slice(0, -1))}
+              type="button"
+            >
+              <Delete aria-hidden="true" size={18} />
+              Delete
+            </button>
+
+            <details className={styles.callDetails}>
+              <summary>Add contact details <span>Optional</span></summary>
+              <div className={styles.detailFields}>
+                <label>
+                  <span>Contact name</span>
+                  <input
+                    autoComplete="name"
+                    maxLength={255}
+                    onChange={(event) => setContactName(event.target.value)}
+                    placeholder="Jordan Smith"
+                    value={contactName}
+                  />
+                </label>
+                <label>
+                  <span>Company</span>
+                  <input
+                    autoComplete="organization"
+                    maxLength={255}
+                    onChange={(event) => setCompanyName(event.target.value)}
+                    placeholder="Peachtree Title"
+                    value={companyName}
+                  />
+                </label>
+                <label>
+                  <span>Call type</span>
+                  <select
+                    onChange={(event) => setPurpose(event.target.value as QuickDialPurpose)}
+                    value={purpose}
+                  >
+                    {purposeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Reason</span>
+                  <input
+                    maxLength={500}
+                    onChange={(event) => setCallReason(event.target.value)}
+                    placeholder="Discuss closing availability"
+                    value={callReason}
+                  />
+                </label>
+              </div>
+            </details>
+          </fieldset>
 
           <div className={styles.callNotice}>
             <Building2 aria-hidden="true" size={18} />
             <p>
-              Stonegate will reuse an existing matching contact when possible. Otherwise, this
-              creates a company contact and saves the call in Inbox.
+              Calls use your authorized Stonegate browser line. A matching contact is reused;
+              otherwise a business contact is created and the call is saved in Inbox.
             </p>
           </div>
           {error ? <p aria-live="assertive" className={styles.error}>{error}</p> : null}
@@ -291,7 +387,12 @@ export function QuickDialDialog({ onClose }: { onClose: () => void }) {
             </p>
           ) : null}
           <footer>
-            <button className={styles.cancelButton} disabled={submitting} onClick={onClose} type="button">
+            <button
+              className={styles.cancelButton}
+              disabled={submitting}
+              onClick={() => onClose()}
+              type="button"
+            >
               Cancel
             </button>
             <button

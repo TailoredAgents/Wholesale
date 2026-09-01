@@ -147,6 +147,50 @@ test("concurrent initialization and connection are single-flight", async () => {
   softphone.destroy();
 });
 
+test("a pre-call reservation blocks another runtime and can be released safely", async () => {
+  const { ProspectingSoftphone } = await importSoftphoneForBehavior();
+  const callbacks = { onStatus: () => {}, onTokenWillExpire: () => {} };
+  const first = new ProspectingSoftphone(callbacks);
+  const second = new ProspectingSoftphone(callbacks);
+
+  assert.equal(first.reserveCallOwnership(), null);
+  assert.throws(() => second.reserveCallOwnership(), /Only one browser call/);
+  first.releaseCallReservation();
+  assert.equal(second.reserveCallOwnership(), null);
+  second.releaseCallReservation();
+  first.destroy();
+  second.destroy();
+});
+
+test("destroying during the lazy SDK load never constructs a stale device", async () => {
+  const { ProspectingSoftphone } = await importSoftphoneForBehavior();
+  let deviceCount = 0;
+  let resolveSdk;
+  let reportSdkLoad;
+  const sdkLoadStarted = new Promise((resolve) => { reportSdkLoad = resolve; });
+  class FakeDevice extends EventEmitter {
+    static isSupported = true;
+    constructor() { super(); deviceCount += 1; }
+  }
+  const softphone = new ProspectingSoftphone(
+    { onStatus: () => {}, onTokenWillExpire: () => {} },
+    {
+      loadVoiceSdk: () => {
+        reportSdkLoad();
+        return new Promise((resolve) => { resolveSdk = resolve; });
+      },
+      requestMicrophone: async () => ({ getTracks: () => [{ stop() {} }] }),
+    },
+  );
+
+  const initialization = softphone.initialize("private-token");
+  await sdkLoadStarted;
+  softphone.destroy();
+  resolveSdk({ Device: FakeDevice });
+  await assert.rejects(initialization, /cancelled/);
+  assert.equal(deviceCount, 0);
+});
+
 test("destroying during connection invalidates and disconnects the late call", async () => {
   const { ProspectingSoftphone } = await importSoftphoneForBehavior();
   let resolveCall;
@@ -208,8 +252,10 @@ test("token refresh and reconnect events preserve an established browser call", 
   let tokenExpiryCount = 0;
   class FakeCall extends EventEmitter {
     muted = false;
+    tones = [];
     disconnect() { this.emit("disconnect"); }
     mute(value) { this.muted = value; this.emit("mute", value); }
+    sendDigits(digits) { this.tones.push(digits); }
   }
   const call = new FakeCall();
   class FakeDevice extends EventEmitter {
@@ -249,6 +295,9 @@ test("token refresh and reconnect events preserve an established browser call", 
   assert.equal(softphone.currentStatus.audioLink, "audio_established");
   softphone.setMuted(true);
   assert.equal(statuses.at(-1).muted, true);
+  softphone.sendDigits("12#");
+  assert.deepEqual(call.tones, ["12#"]);
+  assert.throws(() => softphone.sendDigits("A"), /unsupported tone/);
   call.emit("disconnect");
   assert.equal(softphone.hasLiveAudio, false);
   assert.equal(softphone.currentStatus.audioLink, "ended");

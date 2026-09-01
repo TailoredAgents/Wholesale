@@ -59,7 +59,17 @@ async function errorMessage(response: Response) {
   return `Stonegate Help returned ${response.status}.`;
 }
 
-export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
+export function HelpBubble({
+  devUserEmail,
+  disabled,
+  onOpenChange,
+  open,
+}: {
+  devUserEmail: string | null;
+  disabled: boolean;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
   const { getToken } = useAuth();
   const apiBase = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -73,9 +83,11 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
-  const [open, setOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const bubbleRef = useRef<HTMLButtonElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const previousOpenRef = useRef(open);
 
   const headers = useCallback(async (includeJson = false) => {
     const result: Record<string, string> = {};
@@ -121,6 +133,19 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
       behavior: "auto",
     });
   }, [busy, conversation.length, open, showSources]);
+
+  useEffect(() => {
+    const wasOpen = previousOpenRef.current;
+    previousOpenRef.current = open;
+    if (open) {
+      const frame = window.requestAnimationFrame(() => panelRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (wasOpen && !disabled) {
+      const frame = window.requestAnimationFrame(() => bubbleRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [disabled, open]);
 
   async function ask(event?: FormEvent) {
     event?.preventDefault();
@@ -182,18 +207,26 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
 
   return (
     <>
-      {!open ? (
-        <button
-          aria-label="Open Stonegate Help"
-          className={styles.bubble}
-          onClick={() => setOpen(true)}
-          type="button"
-        >
-          <MessageCircle aria-hidden="true" size={25} />
-        </button>
-      ) : null}
+      <button
+        aria-hidden={open}
+        aria-label="Open Stonegate Help"
+        className={`${styles.bubble} ${open ? styles.bubbleHidden : ""}`}
+        disabled={disabled || open}
+        onClick={() => onOpenChange(true)}
+        ref={bubbleRef}
+        type="button"
+      >
+        <MessageCircle aria-hidden="true" size={25} />
+      </button>
       {open ? (
-        <section aria-label="Stonegate Help" aria-modal="false" className={styles.panel} role="dialog">
+        <section
+          aria-label="Stonegate Help"
+          aria-modal="false"
+          className={styles.panel}
+          ref={panelRef}
+          role="dialog"
+          tabIndex={-1}
+        >
           <header className={styles.panelHeader}>
             <div>
               <span className={styles.panelMark}><MessageCircle aria-hidden="true" size={18} /></span>
@@ -208,7 +241,7 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
                   <ChevronLeft aria-hidden="true" size={19} />
                 </button>
               ) : null}
-              <button aria-label="Close Stonegate Help" onClick={() => setOpen(false)} type="button">
+              <button aria-label="Close Stonegate Help" onClick={() => onOpenChange(false)} type="button">
                 <X aria-hidden="true" size={19} />
               </button>
             </div>
