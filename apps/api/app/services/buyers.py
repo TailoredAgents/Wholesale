@@ -1854,6 +1854,47 @@ def _permission_read(
     )
 
 
+def mark_buyer_do_not_contact(
+    db: Session,
+    principal: Principal,
+    buyer: Buyer,
+    *,
+    reason: str,
+) -> bool:
+    """Apply the canonical buyer DNC lifecycle without committing the caller's unit of work."""
+
+    if buyer.organization_id != principal.organization_id:
+        raise ValueError("Buyer not found.")
+    changed = buyer.relationship_status != "do_not_contact"
+    if changed:
+        previous = {
+            "status": buyer.status,
+            "relationship_status": buyer.relationship_status,
+        }
+        buyer.relationship_status = "do_not_contact"
+        _activity(
+            db,
+            principal,
+            buyer,
+            "buyer.do_not_contact",
+            f"Buyer marked do not contact: {buyer.name}.",
+        )
+        _audit(
+            db,
+            principal,
+            buyer,
+            "buyer.do_not_contact",
+            previous,
+            {
+                "status": buyer.status,
+                "relationship_status": buyer.relationship_status,
+            },
+            reason,
+        )
+    _sync_do_not_contact_suppression(db, buyer)
+    return changed
+
+
 def _sync_do_not_contact_suppression(db: Session, buyer: Buyer) -> None:
     normalized_phone = buyer.normalized_phone
     if not normalized_phone or buyer.status == "archived":

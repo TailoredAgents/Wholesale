@@ -189,7 +189,10 @@ export default async function DealsPage({
             profile?.permissions.includes("contracts:record_executed") ||
               profile?.permissions.includes("contracts:modify"),
           )}
-          canSendBulk={Boolean(profile?.permissions.includes("communications:send_bulk"))}
+          canSendBulk={Boolean(
+            profile?.permissions.includes("dispositions:send_bulk_outreach")
+              || profile?.permissions.includes("communications:send_bulk"),
+          )}
           canViewDisposition={canViewDisposition}
           canViewOutreach={canViewOutreach}
           initialDealId={params.deal}

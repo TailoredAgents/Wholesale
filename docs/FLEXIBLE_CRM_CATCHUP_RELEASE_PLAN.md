@@ -4,6 +4,11 @@ Follow-up: `LAND_HOUSE_CRM_PARITY_RELEASE_PLAN.md` extends the evidence-backed o
 signed-contract import, Disposition handoff, and exact external-packet path to Land. The House-only
 boundary below describes this earlier release, not the current product boundary.
 
+Later follow-up: `DISPOSITION_ADVISORY_WORKFLOW_RELEASE_PLAN.md` supersedes this release's
+setup-blocked handoff semantics. Current House and Land execution creates or reuses the case
+immediately; missing owner, plan, or mode remains visible advisory setup on that same workable case.
+The checklist below is retained as the historical acceptance record for the earlier release.
+
 Status: Complete — verified and released to `origin/main`
 
 Release note: All automated gates passed. Manual authenticated browser acceptance was attempted but

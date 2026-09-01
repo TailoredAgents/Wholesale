@@ -333,7 +333,7 @@ def test_roleless_dispositions_team_manager_is_not_selected(
     assert audit.new_value["owner_routing_source"] == "dispositions_team_member"
 
 
-def test_non_human_led_mode_does_not_auto_create_disposition_case(
+def test_non_human_led_mode_opens_advisory_shell_without_blocking_task(
     db_session: Session,
 ) -> None:
     transaction, _, _ = setup_executed_house_transaction(db_session)
@@ -353,12 +353,13 @@ def test_non_human_led_mode_does_not_auto_create_disposition_case(
     )
     db_session.commit()
 
-    assert created is None
-    assert db_session.scalar(select(func.count()).select_from(DispositionCase)) == 0
+    assert created is not None
+    assert created.disposition_operating_mode_id is None
+    assert db_session.scalar(select(func.count()).select_from(DispositionCase)) == 1
     audit = db_session.scalar(
         select(AuditEvent).where(
-            AuditEvent.action == "disposition.case_auto_create_blocked",
-            AuditEvent.entity_id == transaction.id,
+            AuditEvent.action == "disposition.case_setup_incomplete",
+            AuditEvent.entity_id == created.id,
         )
     )
     assert audit is not None
@@ -369,10 +370,7 @@ def test_non_human_led_mode_does_not_auto_create_disposition_case(
             Task.task_type == HANDOFF_SETUP_TASK_TYPE,
         )
     )
-    assert setup_task is not None
-    assert setup_task.status == "open"
-    assert setup_task.priority == "urgent"
-    assert setup_task.responsible_user_id is not None
+    assert setup_task is None
 
 
 def test_worker_recovers_land_handoff_after_temporary_configuration_block(
@@ -391,26 +389,31 @@ def test_worker_recovers_land_handoff_after_temporary_configuration_block(
     mode.key = "ai_assisted"
     db_session.commit()
 
-    assert ensure_disposition_case_for_executed_transaction(db_session, transaction) is None
+    shell = ensure_disposition_case_for_executed_transaction(db_session, transaction)
+    assert shell is not None
+    assert shell.disposition_operating_mode_id is None
     db_session.commit()
-    blocked = db_session.scalar(
+    warning = db_session.scalar(
         select(AuditEvent).where(
-            AuditEvent.action == "disposition.case_auto_create_blocked",
-            AuditEvent.entity_id == transaction.id,
+            AuditEvent.action == "disposition.case_setup_incomplete",
+            AuditEvent.entity_id == shell.id,
         )
     )
-    assert blocked is not None
+    assert warning is not None
     setup_task = db_session.scalar(
         select(Task).where(
             Task.deal_id == transaction.deal_id,
             Task.task_type == HANDOFF_SETUP_TASK_TYPE,
         )
     )
-    assert setup_task is not None
-    assert setup_task.status == "open"
+    assert setup_task is None
+
+    # An unresolved advisory shell is throttled by its setup-warning timestamp,
+    # rather than being hot-polled on every worker pass.
+    assert process_next_disposition_handoff_recovery(db_session, get_settings()) is None
 
     mode.key = "human_led"
-    blocked.created_at = datetime.now(UTC) - timedelta(minutes=6)
+    warning.created_at = datetime.now(UTC) - timedelta(minutes=6)
     db_session.commit()
     processed_id = process_next_disposition_handoff_recovery(
         db_session,
@@ -422,10 +425,47 @@ def test_worker_recovers_land_handoff_after_temporary_configuration_block(
         select(DispositionCase).where(DispositionCase.transaction_id == transaction.id)
     )
     assert recovered is not None
+    assert recovered.id == shell.id
+    assert recovered.disposition_operating_mode_id == mode.id
     assert recovered.package_snapshot["asset_class"] == "land"
-    db_session.refresh(setup_task)
-    assert setup_task.status == "completed"
-    assert setup_task.outcome == "disposition_case_opened"
+
+
+def test_recovery_reroutes_deauthorized_case_owner_with_audit(
+    db_session: Session,
+) -> None:
+    transaction, disposition_owner, _ = setup_executed_house_transaction(db_session)
+    disposition_case = ensure_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    assert disposition_case is not None
+    original_assignment = db_session.scalar(
+        select(RoleAssignment).where(
+            RoleAssignment.organization_id == transaction.organization_id,
+            RoleAssignment.user_id == disposition_owner.id,
+        )
+    )
+    assert original_assignment is not None
+    db_session.delete(original_assignment)
+    db_session.commit()
+
+    recovered_id = process_next_disposition_handoff_recovery(db_session, get_settings())
+
+    assert recovered_id == transaction.id
+    db_session.refresh(disposition_case)
+    assert disposition_case.owner_user_id == transaction.owner_user_id
+    reroute = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.organization_id == transaction.organization_id,
+            AuditEvent.entity_id == disposition_case.id,
+            AuditEvent.action == "disposition.case_owner_rerouted",
+        )
+    )
+    assert reroute is not None
+    assert reroute.previous_value == {"owner_user_id": str(disposition_owner.id)}
+    assert reroute.new_value["owner_user_id"] == str(transaction.owner_user_id)
+    assert reroute.new_value["routing_source"] == "fallback_role:owner"
+    assert process_next_disposition_handoff_recovery(db_session, get_settings()) is None
 
 
 def test_completed_handoff_does_not_create_setup_work_or_retry(
@@ -513,7 +553,9 @@ def test_package_ready_sms_targets_only_case_owner_and_is_idempotent(
     assert alerts[0].recipient_user_id == disposition_owner.id
     assert alerts[0].recipient_phone == "+16785550123"
     assert "1806 Babbling Brk NW" in alerts[0].message_body
-    assert "package v1 is approved" in alerts[0].message_body
+    assert "package v1" in alerts[0].message_body
+    assert "was approved; checklist work may remain" in alerts[0].message_body
+    assert "deal ready" not in alerts[0].message_body.lower()
     assert (
         db_session.scalar(
             select(func.count())

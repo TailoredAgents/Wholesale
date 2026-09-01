@@ -21,6 +21,7 @@ from app.models.foundation import (
     DispositionBuyerPoolCandidate,
     DispositionBuyerPoolEntry,
     DispositionCampaign,
+    DispositionCampaignRecipient,
     DispositionMatch,
     User,
 )
@@ -177,7 +178,7 @@ def _decide(
     )
 
 
-def test_historical_shortlist_absent_from_latest_run_cannot_authorize_release(
+def test_durable_deal_pass_excludes_campaign_until_explicit_clear(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -193,14 +194,15 @@ def test_historical_shortlist_absent_from_latest_run_cannot_authorize_release(
     first_entry = next(
         item for item in first_run["entries"] if item["buyer_id"] == first_buyer_id
     )
-    shortlisted = _decide(
+    historical_pass = _decide(
         client,
         case_id=case_id,
         candidate_id=first_entry["candidate_id"],
         expected_version=first_entry["lock_version"],
-        decision_status="shortlisted",
+        decision_status="passed",
+        reason="Persistent deal Pass used to verify ranking-independent exclusion.",
     )
-    assert shortlisted.status_code == 200, shortlisted.text
+    assert historical_pass.status_code == 200, historical_pass.text
 
     latest = _refresh(client, case_id)
     latest_run_id = UUID(latest["run"]["id"])
@@ -218,6 +220,25 @@ def test_historical_shortlist_absent_from_latest_run_cannot_authorize_release(
         )
     )
     db_session.commit()
+    released_with_durable_pass = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert released_with_durable_pass.status_code == 200, released_with_durable_pass.text
+    first_campaign = db_session.scalar(
+        select(DispositionCampaign)
+        .where(DispositionCampaign.disposition_case_id == UUID(case_id))
+        .order_by(DispositionCampaign.created_at.desc(), DispositionCampaign.id.desc())
+    )
+    assert first_campaign is not None
+    assert set(
+        db_session.scalars(
+            select(DispositionCampaignRecipient.buyer_id).where(
+                DispositionCampaignRecipient.disposition_campaign_id == first_campaign.id
+            )
+        ).all()
+    ) == {UUID(second_buyer_id)}
+
     passed = _decide(
         client,
         case_id=case_id,
@@ -228,22 +249,117 @@ def test_historical_shortlist_absent_from_latest_run_cannot_authorize_release(
     )
     assert passed.status_code == 200, passed.text
 
+    released_with_every_buyer_passed = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert released_with_every_buyer_passed.status_code == 422
+    assert "non-suppressed buyers" in released_with_every_buyer_passed.json()["detail"]
+
+    passed_entry = next(
+        item
+        for item in passed.json()["entries"]
+        if item["candidate_id"] == current_entry["candidate_id"]
+    )
+    cleared = _decide(
+        client,
+        case_id=case_id,
+        candidate_id=current_entry["candidate_id"],
+        expected_version=passed_entry["lock_version"],
+        decision_status="undecided",
+        reason="The rep cleared the prior pass after the buyer re-engaged.",
+    )
+    assert cleared.status_code == 200, cleared.text
+    restored = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert restored.status_code == 200, restored.text
+    campaign_ids = list(
+        db_session.scalars(
+            select(DispositionCampaign.id).where(
+                DispositionCampaign.disposition_case_id == UUID(case_id)
+            )
+        ).all()
+    )
+    recipient_sets = {
+        frozenset(
+            db_session.scalars(
+                select(DispositionCampaignRecipient.buyer_id).where(
+                    DispositionCampaignRecipient.disposition_campaign_id == campaign_id
+                )
+            ).all()
+        )
+        for campaign_id in campaign_ids
+    }
+    # The first buyer remains durably passed even though its latest-run entry was removed.
+    assert frozenset({UUID(second_buyer_id)}) in recipient_sets
+
+    cleared_historical = _decide(
+        client,
+        case_id=case_id,
+        candidate_id=stale_entry["candidate_id"],
+        expected_version=stale_entry["lock_version"],
+        decision_status="undecided",
+        reason="The rep explicitly cleared the durable Pass outside rank membership.",
+    )
+    assert cleared_historical.status_code == 200, cleared_historical.text
+    fully_restored = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
+        headers=HEADERS,
+    )
+    assert fully_restored.status_code == 200, fully_restored.text
+    all_campaign_ids = db_session.scalars(
+        select(DispositionCampaign.id).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
+        )
+    ).all()
+    all_recipient_sets = {
+        frozenset(
+            db_session.scalars(
+                select(DispositionCampaignRecipient.buyer_id).where(
+                    DispositionCampaignRecipient.disposition_campaign_id == campaign_id
+                )
+            ).all()
+        )
+        for campaign_id in all_campaign_ids
+    }
+    assert frozenset({UUID(first_buyer_id), UUID(second_buyer_id)}) in all_recipient_sets
+
+
+def test_canonical_latest_pool_buyer_can_enter_campaign_without_legacy_match(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, buyer_id, _ = _ready_case(db_session, client)
+    latest = _refresh(client, case_id)
+    assert any(item["buyer_id"] == buyer_id for item in latest["entries"])
+    db_session.execute(
+        delete(DispositionMatch).where(
+            DispositionMatch.disposition_case_id == UUID(case_id)
+        )
+    )
+    db_session.commit()
+
     released = client.post(
         f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
         headers=HEADERS,
     )
-
-    assert released.status_code == 422, released.text
-    assert "Shortlist at least one" in released.json()["detail"]
-    assert (
-        db_session.scalar(
-            select(func.count(DispositionCampaign.id)).where(
-                DispositionCampaign.disposition_case_id == UUID(case_id)
-            )
+    assert released.status_code == 200, released.text
+    campaign = db_session.scalar(
+        select(DispositionCampaign).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
         )
-        == 0
     )
-
+    assert campaign is not None
+    assert list(
+        db_session.scalars(
+            select(DispositionCampaignRecipient.buyer_id).where(
+                DispositionCampaignRecipient.disposition_campaign_id == campaign.id
+            )
+        ).all()
+    ) == [UUID(buyer_id)]
 
 def test_decision_on_candidate_absent_from_latest_run_is_rejected(
     db_session: Session,
@@ -550,7 +666,7 @@ def test_evidence_refresh_bumps_lock_version_and_rejects_stale_decision(
     assert "another session" in stale.json()["detail"]
 
 
-def test_converting_shortlisted_external_candidate_cannot_release_unshortlisted_buyers(
+def test_converting_shortlisted_external_candidate_does_not_gate_other_pool_buyers(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -605,25 +721,29 @@ def test_converting_shortlisted_external_candidate_cannot_release_unshortlisted_
         f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
         headers=HEADERS,
     )
-    assert released.status_code == 422, released.text
-    assert "Shortlist at least one" in released.json()["detail"]
-    assert (
-        db_session.scalar(
-            select(func.count(DispositionCampaign.id)).where(
-                DispositionCampaign.disposition_case_id == UUID(case_id)
-            )
-        )
-        == 0
-    )
+    assert released.status_code == 200, released.text
     assert existing_buyer_id != converted_entry["buyer_id"]
+    campaign = db_session.scalar(
+        select(DispositionCampaign).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert campaign is not None
+    assert set(
+        db_session.scalars(
+            select(DispositionCampaignRecipient.buyer_id).where(
+                DispositionCampaignRecipient.disposition_campaign_id == campaign.id
+            )
+        ).all()
+    ) == {UUID(existing_buyer_id), UUID(converted_entry["buyer_id"])}
 
 
-def test_conversion_without_shortlist_still_keeps_reviewed_pool_boundary(
+def test_conversion_without_shortlist_can_still_enter_campaign(
     db_session: Session,
     api_db_override: None,
 ) -> None:
     client = TestClient(app)
-    case_id, _, _ = _ready_case(db_session, client)
+    case_id, existing_buyer_id, _ = _ready_case(db_session, client)
     _add_external_candidate(
         db_session,
         case_id=case_id,
@@ -647,13 +767,30 @@ def test_conversion_without_shortlist_still_keeps_reviewed_pool_boundary(
         },
     )
     assert converted.status_code == 200, converted.text
+    converted_entry = next(
+        item
+        for item in converted.json()["entries"]
+        if item["candidate_id"] == external["candidate_id"]
+    )
 
     released = client.post(
         f"/api/v1/dispositions/cases/{case_id}/campaigns/release",
         headers=HEADERS,
     )
-    assert released.status_code == 422, released.text
-    assert "Shortlist at least one" in released.json()["detail"]
+    assert released.status_code == 200, released.text
+    campaign = db_session.scalar(
+        select(DispositionCampaign).where(
+            DispositionCampaign.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert campaign is not None
+    assert set(
+        db_session.scalars(
+            select(DispositionCampaignRecipient.buyer_id).where(
+                DispositionCampaignRecipient.disposition_campaign_id == campaign.id
+            )
+        ).all()
+    ) == {UUID(existing_buyer_id), UUID(converted_entry["buyer_id"])}
 
 
 def test_run_snapshot_preserves_raw_capacity_activity_and_reliability_inputs(
@@ -841,7 +978,7 @@ def test_zero_available_capital_does_not_fall_back_to_buyer_capacity(
     assert entry.evidence_snapshot["score_inputs"]["effective_capacity_limit_cents"] == 0
 
 
-def test_shortlisted_link_existing_releases_only_the_canonical_buyer(
+def test_shortlisted_link_existing_dedupes_identity_without_gating_other_buyers(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -907,7 +1044,7 @@ def test_shortlisted_link_existing_releases_only_the_canonical_buyer(
         )
     )
     assert campaign is not None
-    assert campaign.recipient_count == 1
+    assert campaign.recipient_count == 2
     recipient_states = {
         str(match.buyer_id): match.recipient_status
         for match in db_session.scalars(
@@ -917,4 +1054,4 @@ def test_shortlisted_link_existing_releases_only_the_canonical_buyer(
         ).all()
     }
     assert recipient_states[canonical_buyer_id] == "prepared_not_sent"
-    assert recipient_states[other_buyer_id] == "proposed"
+    assert recipient_states[other_buyer_id] == "prepared_not_sent"

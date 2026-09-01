@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last verified: August 28, 2026
+Last verified: September 1, 2026
 
 ## How To Use This Guide
 
@@ -8,7 +8,9 @@ Every employee uses their own Stonegate login. Open **My Setup** to see the role
 you. Test your normal workspace, record what you tested, and submit it to your manager.
 
 The rule for every role is simple: use Stonegate as the company record, document the next action,
-and do not work around a blocked action or missing approval.
+and respect genuine access, communication-compliance, provider, signature, and funding stops.
+In Dispositions, setup and readiness checklist items are advisory; they are not blocked actions and
+do not force a specialist to work the desk in a fixed order.
 
 This is the practical job guide. Use [USER_MANUAL.md](./USER_MANUAL.md) for full workflows,
 [UI_CONTROL_REFERENCE.md](./UI_CONTROL_REFERENCE.md) for individual controls, and
@@ -159,12 +161,20 @@ transaction work.
 Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for Disposition**, then
 the selected Deal's Disposition section for package, buyer, and offer work.
 
-The Disposition representative may prepare and manage supervised outreach. Exact revision approval
-requires the separate outreach-approval permission. Release, resume, and safe-failure retry require
-both outreach approval and bulk-send authority; the standard Disposition manager role has both.
+The standard Disposition representative owns the complete day-to-day workflow. The role includes
+the narrow package, outreach, `dispositions:send_bulk_outreach`, manual provider-handoff, and
+buyer-selection approval permissions required to prepare, approve, release, resume, and safely
+retry disposition work. It does not receive the global marketing permission
+`communications:send_bulk`. The permissions remain separately auditable but do not create a
+routine manager wait state or grant unrelated administration, policy, accounting, or company-wide
+approval authority.
 
-- For House deals, resolve the package launch-readiness checklist, review evidence classifications,
-  and match only appropriate buyers against a current approved package version.
+- Treat setup, launch-readiness, proof, buyer-coverage, and backup items as an informational
+  checklist. Keep gaps visible and use judgment about what to address next; shop an incomplete deal
+  when that is the right operating move.
+- For House and Land, review evidence classifications and match appropriate buyers from current
+  case facts. Package approval is not required to rank, call, follow up, log activity, or record an
+  offer.
 - Search the Buyer Network before adding an investor, resolve duplicate warnings, and assign a
   relationship owner.
 - Review identity, contact path, criteria, permission evidence, source, and last-verified date
@@ -177,7 +187,9 @@ both outreach approval and bulk-send authority; the standard Disposition manager
   history.
 - Use **Paused**, **Do Not Contact**, or **Archived** when appropriate; only **Active** buyers can
   participate in future automated matching.
-- Do not select a buyer or release a package by bypassing approval gates.
+- Use the explicit exact-version approval records for a package, outreach revision, provider
+  handoff, and buyer selection. The representative may perform those approvals directly; the
+  explicit record preserves intent and audit history rather than imposing a manager queue.
 - Treat **Prepare recipient pool** as an audited `prepared_not_sent` record only. It sends no
   email or SMS. Use the separate House **Outreach** view for exact-message review, approval, and
   release. Land supports exact external-packet approval and asset-aware buyer-pool matching, while
@@ -523,11 +535,15 @@ current human disposition work according to the active compensation policy.
 
 ### When A Deal Enters Dispositions
 
-1. Open or select the contracted House or Land disposition case.
-2. Verify the executed contract, closing deadline, transaction, title/file, property identity, and
-   asset-specific valuation, diligence, inspection, and approved photo evidence.
-3. Review **Launch readiness**. Resolve every blocker and investigate warnings, unknowns, stale
-   sources, and conflicts through the displayed remediation links.
+1. Open or select the contracted House or Land disposition case. Stonegate opens the case shell
+   even when the owner, compensation plan, or operating mode still needs setup.
+2. Review the executed contract, closing deadline, transaction, title/file, property identity, and
+   asset-specific valuation, diligence, inspection, and photo evidence. Missing facts stay visible;
+   do not invent them.
+3. Review **Launch readiness** as an informational checklist. Warnings, unknowns, stale sources,
+   conflicts, and remediation links guide the next action but never dictate a required sequence.
+   Rank or call buyers, follow up, log activity, and record offers while items remain open when the
+   deal calls for it.
 4. Review **Classified evidence** and make sure verified facts, seller statements, provider signals,
    Stonegate analysis, and unknowns are labeled truthfully.
 5. Compare the investor-visible preview and summaries with the permission-gated private economics.
@@ -535,11 +551,16 @@ current human disposition work according to the active compensation policy.
 6. For House, select **Build draft** or **Rebuild draft**. For House or Land, **Use existing PDF**
    preserves the completed packet as the exact immutable version. A new version does not alter a
    prior version.
-7. An authorized approver records a reason, completes the attestation, and selects **Approve exact
-   version**. If material evidence changes, rebuild and reapprove before ranking or release.
-8. Download and review the stored approved-version PDF. The file is the exact artifact frozen at
-   approval.
-9. For House outreach, select **Prepare recipient pool** only after buyer qualification. Confirm that the prepared
+7. When the artifact is ready to be represented as approved, the Disposition representative records
+   a reason, completes the attestation, and selects **Approve exact version**. A usable incomplete
+   artifact may be shared earlier only with its visible **Preliminary** state preserved. If material
+   evidence changes, create a new version before representing the old artifact as current.
+8. Download and review the exact stored PDF. Approval does not regenerate its bytes; the version,
+   link, outreach revision, and provider handoff retain whether it was Preliminary or approved.
+   If package/source facts later drift, current downloads, link access, outreach delivery state, and
+   provider bundle downloads visibly downgrade to **Preliminary** without changing the frozen
+   bytes or approval history.
+9. For House outreach, select **Prepare recipient pool** for the selected buyers and artifact. Confirm that the prepared
    recipients and exact version were recorded as `prepared_not_sent`; this step sends nothing.
 10. Open **Outreach**. Select only the intended owned-network buyers and eligible email and/or SMS
     paths. Confirm the active Resend alias or Dispositions buyer-relations Twilio line, and keep the
@@ -547,16 +568,19 @@ current human disposition work according to the active compensation policy.
 11. Review the exact subject/body rendered for every delivery. Do not add purchase basis, minimum
     acceptable economics, desired assignment fee, seller notes, approval authority, or unsupported
     claims to buyer-visible copy.
-12. Create the immutable review revision. A human with outreach-approval permission must verify its
+12. Create the immutable review revision. The Disposition representative verifies its
     package, PDF hash, senders, recipients, destinations, channels, messages, exclusions, and delivery count;
     then record a reason, affirm the attestation, and approve the exact revision.
-13. An authorized manager explicitly releases it. Approval alone does not send. Watch delivery
+13. The same representative may explicitly release it. Approval alone does not send. Release is
+    blocked only by organization/role access, STOP/Do Not Contact/suppression or channel-permission
+    rules, missing or unusable destinations/senders, and provider unavailability. Watch delivery
     states; pause or cancel unsent work when needed, and retry only a failure the control identifies
     as safely retryable. Never force-retry `delivery_unknown` SMS.
 14. Work safely matched replies in the linked Buyer Inbox conversation and complete the review task.
     Ambiguous replies require reconciliation review before buyer, interest, or offer state changes.
 
-Steps 1-8 and the asset-aware Buyer pool support House and Land. Steps 9-14 are the governed
+The numbered list is a reference checklist, not a required progression. Steps 1-8 and the
+asset-aware Buyer pool support House and Land. Steps 9-14 are the governed
 House-only outreach workflow and reach only selected buyers already in Stonegate's owned Buyer
 Network. InvestorLift and Land outreach remain disabled. Real Resend/Twilio delivery and reply
 acceptance must still pass a controlled, capped production test before broad use.
@@ -584,6 +608,17 @@ acceptance must still pass a controlled, capped production test before broad use
 10. Archive or restore through the Buyer Network lifecycle controls; never delete relationship,
     permission, offer, or deal history to clean up a list.
 
+The ranking is advisory. Review the full pool and choose the buyer and action that fit the live
+situation; Stonegate does not require the first-ranked buyer to be completed before another buyer
+can be called or updated. A package-readiness, POF, or backup warning must remain visible, but it
+does not block logging an engagement or offer. STOP, Do Not Contact, suppression, channel
+permission, destination, and provider checks still control actual communication.
+
+**Pass for this deal** is a durable deal-specific choice, not a permanent Buyer Network status.
+It keeps the buyer out of the current prepared outreach pool. If the fit changes, select **Undo
+pass** or **Shortlist**, record why the decision changed, and continue; Stonegate retains the prior
+pass and reversal in audit history.
+
 Provider or file imports must retain their provenance and remain **Needs Review** until a person
 checks the record. Governed DealMachine House discovery may add staged candidates to a deal, but it
 does not automatically create buyers, grant contact permission, or send outreach. InvestorLift
@@ -600,27 +635,35 @@ released House **Outreach** revision can do so through Stonegate's existing comm
 3. Compare execution evidence, not price alone. Review proof coverage and expiration, deposit
    strength, closing compatibility, contingencies, funding confidence, buyer reliability, risk
    flags, and prior outcomes.
-4. A disposition representative may record and compare offers. Only a user with buyer-selection
-   approval may activate one primary and at least one different-buyer backup. AI and scores are
-   advisory and never approve the choice.
+4. The standard Disposition representative has buyer-selection approval and may activate one
+   primary without a manager wait. Add different-buyer backup coverage when available; its absence
+   remains a visible warning, not a workflow lock. AI and scores are advisory and never approve the
+   choice.
    If either approved offer changes later, treat the coverage as stale and approve a new version
    before promotion, assignment delivery, or funding.
-5. After selection, review closing protection daily. Change canonical closing, title, and access
-   checklist dates in the Transaction workspace; use Offer Room milestones for buyer response,
-   agreement, signature, deposit, and other buyer-specific obligations.
+5. Use closing protection as soon as an owned deadline is useful; buyer selection is not required.
+   Choose **Whole deal** for an independent case milestone or a recorded offer for a buyer-specific
+   milestone. Current primary/backup milestones follow that selection. Change canonical closing,
+   title, and access checklist dates in the Transaction workspace; use Offer Room milestones for
+   buyer response, agreement, signature, deposit, and other manual obligations.
 6. Acknowledge a deadline alert only after taking ownership. Acknowledgement does not complete the
    missed item. Resolve the source obligation or escalate to the manager.
-7. If the primary fails, the manager records the factual outcome and cause, then promotes an
-   eligible ranked backup. Never erase or rewrite the old offer, selection, checkpoint, or failure.
+7. If the primary fails, the authorized Disposition representative records the factual outcome and
+   cause. The next buyer may be any other viable recorded offer on the case, whether or not it was a
+   named backup. The representative may instead choose **No replacement now**; Stonegate
+   supersedes the active selection, clears buyer coverage, and reopens shopping. Never erase or
+   rewrite the old offer, selection, checkpoint, or failure, and reconcile any live assignment
+   obligation before changing the buyer.
 8. Record pass, withdrawal, fallout, and retrade causes accurately. Only buyer-responsible outcomes
    should reduce the buyer's performance record; do not blame the buyer for seller, title, property,
    Stonegate, or external failures.
 9. Record funding in the Transaction workspace. Funding automatically records the completed buyer
-   close exactly once. Assignment funding requires approved buyer coverage, executed assignment
-   evidence bound to the current buyer, offer economics, and assignee identity, plus buyer-deposit
-   evidence or an explicit manager-approved waiver.
-10. After promoting the last backup, qualify and approve replacement backup coverage. Keep the
-    transaction coordinator informed of changed terms and deadlines.
+   close exactly once. As a truthful financial boundary, assignment funding requires the selected
+   buyer, executed assignment evidence bound to that buyer, offer economics, matching assignee
+   identity, and buyer-deposit evidence or an explicit authorized waiver.
+10. After selecting a replacement, seek replacement backup coverage when practical and keep the
+    warning visible until then. If no replacement was recorded, continue shopping from the reopened
+    offer state. Keep the transaction coordinator informed of changed terms and deadlines.
 
 This Offer Room workflow is House-only. Land Offer Room, automated outreach, and InvestorLift remain
 outside the live workflow; Land external-packet approval and Buyer pool are available separately.

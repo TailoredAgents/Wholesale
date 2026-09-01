@@ -1857,10 +1857,10 @@ def mark_contract_executed(
         if deal:
             deal.stage_key = "under_contract"
         from app.services.disposition_handoff import (
-            ensure_house_disposition_case_for_executed_transaction,
+            ensure_disposition_case_for_executed_transaction,
         )
 
-        ensure_house_disposition_case_for_executed_transaction(db, transaction)
+        ensure_disposition_case_for_executed_transaction(db, transaction)
     add_event(
         db,
         principal,

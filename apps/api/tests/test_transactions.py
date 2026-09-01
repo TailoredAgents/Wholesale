@@ -1107,7 +1107,7 @@ def test_contract_approval_execution_and_funding_gates(
 ) -> None:
     handoff_calls: list[UUID] = []
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, transaction: handoff_calls.append(transaction.id),
     )
     client = TestClient(app)
@@ -3002,7 +3002,7 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
 ) -> None:
     handoff_calls: list[UUID] = []
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, transaction: handoff_calls.append(transaction.id),
     )
     monkeypatch.setenv("ESIGN_PROVIDER", "simulate")

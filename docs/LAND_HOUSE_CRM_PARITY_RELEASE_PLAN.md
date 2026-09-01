@@ -1,5 +1,10 @@
 # Land And House CRM Parity Release Plan
 
+Follow-up: `DISPOSITION_ADVISORY_WORKFLOW_RELEASE_PLAN.md` supersedes this release's setup-blocked
+intake semantics. Current House and Land execution creates or reuses the case immediately, while
+missing owner, plan, or mode remains advisory on the same workable case. The checklist below is the
+historical acceptance record for this earlier release.
+
 Status: Complete
 
 Verification record (September 1, 2026):

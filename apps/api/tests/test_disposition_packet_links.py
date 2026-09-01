@@ -10,9 +10,12 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models.foundation import (
     AuditEvent,
+    DispositionCase,
     DispositionPackageShareLink,
     DispositionPackageVersion,
+    Transaction,
 )
+from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_buyer_pool import _project_purchase_evidence
 from tests.test_dispositions import (
     HEADERS,
@@ -111,7 +114,7 @@ def test_secure_package_link_is_exact_audited_revocable_and_secret_is_not_stored
     assert client.get(path).status_code == 410
 
 
-def test_package_link_expires_and_is_invalidated_by_a_newer_version(
+def test_package_link_expires_but_remains_bound_after_a_newer_version(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -139,7 +142,86 @@ def test_package_link_expires_and_is_invalidated_by_a_newer_version(
         json={"expected_latest_version": version.version_number},
     )
     assert newer.status_code == 201, newer.text
-    assert client.get(path).status_code == 410
+    historical = client.get(path)
+    assert historical.status_code == 200
+    assert historical.content == bytes(version.pdf_data or b"")
+    listed = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["is_current_now"] is False
+    assert listed.json()[0]["is_preliminary"] is True
+    assert historical.headers["x-stonegate-package-status"] == "preliminary"
+    assert "PRELIMINARY-" in historical.headers["content-disposition"]
+
+
+def test_package_link_tightens_to_preliminary_after_source_facts_change(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, version = _approved_case(db_session, client)
+    issued = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+        json={"expires_in_hours": 1},
+    )
+    assert issued.status_code == 201, issued.text
+    assert issued.json()["was_current_at_issue"] is True
+    assert issued.json()["is_preliminary"] is False
+    original = bytes(version.pdf_data or b"")
+    disposition_case = db_session.get(DispositionCase, UUID(case_id))
+    assert disposition_case is not None
+    transaction = db_session.get(Transaction, disposition_case.transaction_id)
+    assert transaction is not None
+    transaction.purchase_price_cents += 1
+    db_session.commit()
+
+    listed = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["was_current_at_issue"] is True
+    assert listed.json()[0]["is_current_now"] is False
+    assert listed.json()[0]["is_preliminary"] is True
+    downloaded = client.get(urlparse(issued.json()["share_url"]).path)
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.content == original
+    assert downloaded.headers["x-stonegate-package-status"] == "preliminary"
+    assert "PRELIMINARY-" in downloaded.headers["content-disposition"]
+
+
+def test_package_link_listing_fails_closed_on_cross_tenant_version_reference(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, version = _approved_case(db_session, client)
+    issued = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+        json={"expires_in_hours": 1},
+    )
+    assert issued.status_code == 201, issued.text
+    other = bootstrap_foundation(
+        db_session,
+        organization_name="Other Packet Organization",
+        admin_email="other-packet-owner@example.com",
+        admin_name="Other Packet Owner",
+    )
+    version.organization_id = other.organization.id
+    db_session.commit()
+
+    listed = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package/share-links",
+        headers=HEADERS,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()[0]["status"] == "artifact_unavailable"
+    assert listed.json()[0]["package_version_number"] == 0
+    assert client.get(urlparse(issued.json()["share_url"]).path).status_code == 410
 
 
 def test_package_link_requires_a_complete_artifact_and_reports_later_damage(

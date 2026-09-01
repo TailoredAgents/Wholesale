@@ -480,7 +480,7 @@ def _satisfy_transaction_funding_prerequisites(
         assert uploaded.status_code == 201, uploaded.text
 
 
-def test_selection_requires_manager_and_rejects_stale_offer_terms(
+def test_disposition_rep_can_select_and_stale_offer_terms_are_rejected(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -495,12 +495,40 @@ def test_selection_requires_manager_and_rejects_stale_offer_terms(
     rep_headers = {"X-Dev-User-Email": rep.email}
     payload = _selection_payload(offers[0], [offers[1]], key="ds7-select-rbac")
 
-    forbidden = client.post(
+    authorized = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
         headers=rep_headers,
         json=payload,
     )
-    assert forbidden.status_code == 403, forbidden.text
+    assert authorized.status_code == 201, authorized.text
+    replay = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=rep_headers,
+        json=payload,
+    )
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["current_selection"]["id"] == authorized.json()[
+        "current_selection"
+    ]["id"]
+    conflict = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=rep_headers,
+        json=_selection_payload(
+            offers[1],
+            [offers[0]],
+            key="ds7-select-rbac",
+        ),
+    )
+    assert conflict.status_code == 422, conflict.text
+    assert "idempotency key" in conflict.json()["detail"].lower()
+
+    current_lock = authorized.json()["current_selection"]["lock_version"]
+    payload = _selection_payload(
+        offers[0],
+        [offers[1]],
+        key="ds7-select-stale",
+        expected_selection_lock_version=current_lock,
+    )
 
     revised = client.patch(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/offers/{offers[0]['id']}",
@@ -530,6 +558,7 @@ def test_selection_requires_manager_and_rejects_stale_offer_terms(
             fresh_offers[offers[0]["id"]],
             [fresh_offers[offers[1]["id"]]],
             key="ds7-select-fresh",
+            expected_selection_lock_version=current_lock,
         ),
     )
     assert selected.status_code == 201, selected.text
@@ -749,7 +778,7 @@ def test_deposit_completion_requires_a_substantive_confirmation_note(
     assert "cleared buyer funds" in stored["evidence"]["confirmation_note"]
 
 
-def test_deposit_waiver_requires_manager_permission_and_documented_reason(
+def test_disposition_rep_can_record_documented_deposit_waiver(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -782,26 +811,19 @@ def test_deposit_waiver_requires_manager_permission_and_documented_reason(
         "expected_lock_version": checkpoint["lock_version"],
         "status": "waived",
         "evidence": {
-            "support_note": "Manager approved no EMD because closing is scheduled immediately."
+            "support_note": "Authorized no EMD because closing is scheduled immediately."
         },
         "reason": "Documented exception to the normal deposit requirement.",
     }
-    forbidden = client.patch(
-        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/{checkpoint['id']}",
-        headers={"X-Dev-User-Email": rep.email},
-        json=waiver,
-    )
-    assert forbidden.status_code == 403, forbidden.text
-
     waived = client.patch(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/{checkpoint['id']}",
-        headers=HEADERS,
+        headers={"X-Dev-User-Email": rep.email},
         json=waiver,
     )
     assert waived.status_code == 200, waived.text
     stored = next(item for item in waived.json()["checkpoints"] if item["id"] == checkpoint["id"])
     assert stored["status"] == "waived"
-    assert "Manager approved" in stored["evidence"]["support_note"]
+    assert "Authorized" in stored["evidence"]["support_note"]
 
 
 def test_terminal_offer_outcome_cannot_penalize_buyer_twice(
@@ -1197,6 +1219,208 @@ def test_primary_outcome_requires_atomic_replacement_and_promotes_backup(
     assert original_buyer is not None
     db_session.refresh(original_buyer)
     assert original_buyer.failed_deals == 1
+
+
+def test_primary_replacement_rejects_selection_idempotency_key_collision(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, _, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=2,
+    )
+    shared_key = "ds7-selection-replacement-key-collision"
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(offers[0], [offers[1]], key=shared_key),
+    )
+    assert selected.status_code == 201, selected.text
+    current = selected.json()["current_selection"]
+
+    collided = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections/{current['id']}"
+        "/replace-primary",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": current["lock_version"],
+            "replacement_offer_id": offers[1]["id"],
+            "outcome_type": "fallout",
+            "cause_category": "buyer",
+            "reason": "A selection key cannot be replayed as a replacement command.",
+            "evidence": {"confirmation_note": "Cross-operation collision test."},
+            "idempotency_key": shared_key,
+        },
+    )
+    assert collided.status_code == 422, collided.text
+    assert "idempotency key" in collided.json()["detail"].lower()
+    assert (
+        db_session.scalar(
+            select(DispositionBuyerOutcome).where(
+                DispositionBuyerOutcome.disposition_case_id == UUID(case_id)
+            )
+        )
+        is None
+    )
+
+
+def test_arbitrary_replacement_drops_backup_offer_from_same_buyer(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, buyer_ids, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=3,
+    )
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(
+            offers[0],
+            [offers[1], offers[2]],
+            key="ds7-distinct-replacement-selection",
+        ),
+    )
+    assert selected.status_code == 201, selected.text
+    current = selected.json()["current_selection"]
+    _create_offer(
+        client,
+        case_id,
+        buyer_ids[1],
+        offers[1]["proof_document_id"],
+        amount_cents=offers[1]["amount_cents"] + 50_000,
+        key="ds7-alternate-offer-same-backup-buyer",
+    )
+    alternate = db_session.scalar(
+        select(BuyerOffer).where(
+            BuyerOffer.disposition_case_id == UUID(case_id),
+            BuyerOffer.idempotency_key == "ds7-alternate-offer-same-backup-buyer",
+        )
+    )
+    assert alternate is not None
+
+    replaced = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections/{current['id']}"
+        "/replace-primary",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": current["lock_version"],
+            "replacement_offer_id": str(alternate.id),
+            "expected_replacement_offer_lock_version": alternate.lock_version,
+            "outcome_type": "fallout",
+            "cause_category": "buyer",
+            "reason": "Promote the buyer's newly recorded terms without duplicate coverage.",
+            "evidence": {"confirmation_note": "Distinct buyer coverage test."},
+            "idempotency_key": "ds7-distinct-replacement-command",
+        },
+    )
+    assert replaced.status_code == 200, replaced.text
+    coverage = replaced.json()["current_selection"]
+    assert coverage["primary"]["offer_id"] == str(alternate.id)
+    assert [item["offer_id"] for item in coverage["backups"]] == [offers[2]["id"]]
+    assert all(
+        item["buyer_id"] != coverage["primary"]["buyer_id"]
+        for item in coverage["backups"]
+    )
+
+
+def test_primary_only_fallout_can_reopen_shopping_idempotently(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, _, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=1,
+    )
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(offers[0], [], key="ds7-primary-only-selection"),
+    )
+    assert selected.status_code == 201, selected.text
+    current = selected.json()["current_selection"]
+    request_url = (
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections/{current['id']}"
+        "/replace-primary"
+    )
+    client_key = "r" * 120
+    request_payload = {
+        "expected_lock_version": current["lock_version"],
+        "replacement_offer_id": None,
+        "expected_replacement_offer_lock_version": None,
+        "outcome_type": "fallout",
+        "cause_category": "buyer",
+        "reason": "The only selected buyer withdrew, so the rep reopened active shopping.",
+        "evidence": {"confirmation_note": "Buyer withdrawal was confirmed."},
+        "idempotency_key": client_key,
+    }
+    reopened = client.post(request_url, headers=HEADERS, json=request_payload)
+    assert reopened.status_code == 200, reopened.text
+    body = reopened.json()
+    assert body["case_status"] == "offers_received"
+    assert body["current_selection"] is None
+    assert body["selection_history"][0]["status"] == "replaced"
+    assert body["outcomes"][0]["offer_id"] == offers[0]["id"]
+
+    stored_case = db_session.get(DispositionCase, UUID(case_id))
+    assert stored_case is not None
+    db_session.refresh(stored_case)
+    assert stored_case.selected_buyer_id is None
+    assert stored_case.backup_buyer_id is None
+    stored_outcome = db_session.scalar(
+        select(DispositionBuyerOutcome).where(
+            DispositionBuyerOutcome.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert stored_outcome is not None
+    assert stored_outcome.idempotency_key.startswith("replacement-outcome:")
+    assert len(stored_outcome.idempotency_key) <= 120
+
+    replay = client.post(request_url, headers=HEADERS, json=request_payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["current_selection"] is None
+    assert len(replay.json()["outcomes"]) == 1
+
+    omitted_null = client.post(
+        request_url,
+        headers=HEADERS,
+        json={
+            key: value
+            for key, value in request_payload.items()
+            if key
+            not in {
+                "replacement_offer_id",
+                "expected_replacement_offer_lock_version",
+            }
+        },
+    )
+    assert omitted_null.status_code == 422, omitted_null.text
+    assert "idempotency key" in omitted_null.json()["detail"].lower()
+
+    conflict = client.post(
+        request_url,
+        headers=HEADERS,
+        json={
+            **request_payload,
+            "reason": "The same key must not silently accept materially different facts.",
+        },
+    )
+    assert conflict.status_code == 422, conflict.text
+    assert "idempotency key" in conflict.json()["detail"].lower()
+
+    stale = client.post(
+        request_url,
+        headers=HEADERS,
+        json={**request_payload, "idempotency_key": "ds7-primary-only-stale-retry"},
+    )
+    assert stale.status_code == 422, stale.text
+    assert "active primary" in stale.json()["detail"].lower()
 
 
 def test_manual_completed_close_outcome_is_not_exposed(
@@ -1598,7 +1822,7 @@ def test_executed_assignment_blocks_primary_offer_terms_change(
     assert "resolve" in detail
 
 
-def test_stale_backup_cannot_be_promoted_and_is_not_an_eligible_replacement(
+def test_changed_backup_terms_remain_selectable_with_current_offer_lock(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -1630,32 +1854,27 @@ def test_stale_backup_cannot_be_promoted_and_is_not_an_eligible_replacement(
     option = next(
         item for item in workspace["replacement_options"] if item["offer_id"] == offers[1]["id"]
     )
-    assert option["eligible"] is False
-    assert any("reapproval" in item.lower() for item in option["blockers"])
+    assert option["eligible"] is True
+    assert any("review the current terms" in item.lower() for item in option["blockers"])
 
-    blocked = client.post(
+    promoted = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/selections/{current['id']}"
         "/replace-primary",
         headers=HEADERS,
         json={
             "expected_lock_version": current["lock_version"],
             "replacement_offer_id": offers[1]["id"],
+            "expected_replacement_offer_lock_version": option["offer_lock_version"],
             "outcome_type": "withdrawal",
             "cause_category": "buyer",
-            "reason": "Primary withdrew, but stale backup terms cannot be promoted.",
-            "evidence": {"confirmation_note": "Controlled stale backup promotion attempt."},
+            "reason": "Primary withdrew, and the rep chose the revised recorded offer.",
+            "evidence": {"confirmation_note": "Revised offer terms were reviewed."},
             "idempotency_key": "ds7-stale-backup-promotion",
         },
     )
-    assert blocked.status_code == 422, blocked.text
-    after = client.get(
-        f"/api/v1/dispositions/cases/{case_id}/offer-room",
-        headers=HEADERS,
-    )
-    assert after.status_code == 200, after.text
-    assert after.json()["current_selection"]["id"] == current["id"]
-    assert after.json()["current_selection"]["primary"]["offer_id"] == offers[0]["id"]
-    assert after.json()["outcomes"] == []
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["current_selection"]["primary"]["offer_id"] == offers[1]["id"]
+    assert promoted.json()["outcomes"][0]["offer_id"] == offers[0]["id"]
 
 
 @pytest.mark.parametrize(
@@ -1724,10 +1943,10 @@ def test_backup_read_and_promotion_revalidate_live_buyer_eligibility(
     option = next(
         item for item in workspace["replacement_options"] if item["offer_id"] == offers[1]["id"]
     )
-    assert option["eligible"] is False
+    assert option["eligible"] is True
     assert expected_fragment in " ".join(option["blockers"]).lower()
 
-    blocked = client.post(
+    promoted = client.post(
         f"/api/v1/dispositions/cases/{case_id}/offer-room/selections/{current['id']}"
         "/replace-primary",
         headers=HEADERS,
@@ -1741,13 +1960,13 @@ def test_backup_read_and_promotion_revalidate_live_buyer_eligibility(
             "idempotency_key": f"ds7-invalid-backup-promotion-{invalid_kind}",
         },
     )
-    assert blocked.status_code == 422, blocked.text
+    assert promoted.status_code == 200, promoted.text
     assert (
         client.get(
             f"/api/v1/dispositions/cases/{case_id}/offer-room",
             headers=HEADERS,
         ).json()["current_selection"]["primary"]["offer_id"]
-        == offers[0]["id"]
+        == offers[1]["id"]
     )
 
 
@@ -1804,17 +2023,18 @@ def test_funding_revalidates_live_primary_buyer_eligibility(
         primary_match.qualification_status = "review_required"
     db_session.commit()
 
-    blocked = client.post(
+    funded = client.post(
         f"/api/v1/transactions/{case.transaction_id}/close",
         headers=HEADERS,
         json={"outcome": "funded", "notes": "Controlled live eligibility failure."},
     )
-    assert blocked.status_code == 422, blocked.text
-    db_session.rollback()
+    assert funded.status_code == 200, funded.text
     transaction = db_session.get(Transaction, case.transaction_id)
-    assert transaction is not None and transaction.status == "executed"
+    assert transaction is not None
+    db_session.refresh(transaction)
+    assert transaction.status == "funded"
     db_session.refresh(primary_buyer)
-    assert primary_buyer.completed_deals == 0
+    assert primary_buyer.completed_deals == 1
     assert (
         db_session.scalar(
             select(DispositionBuyerOutcome).where(
@@ -1822,7 +2042,7 @@ def test_funding_revalidates_live_primary_buyer_eligibility(
                 DispositionBuyerOutcome.outcome_type == "completed_close",
             )
         )
-        is None
+        is not None
     )
 
 
@@ -2938,6 +3158,183 @@ def test_funding_rejects_tampered_assignment_identity_or_economics(
     db_session.rollback()
     transaction = db_session.get(Transaction, case.transaction_id)
     assert transaction is not None and transaction.status == "executed"
+
+
+def test_whole_deal_checkpoint_is_operational_before_buyer_selection(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    initial = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room",
+        headers=HEADERS,
+    )
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["current_selection"] is None
+    assert initial.json()["case_status"] != "buyer_selected"
+
+    due_at = datetime.now(UTC) - timedelta(hours=1)
+    payload = {
+        "selection_id": None,
+        "offer_id": None,
+        "checkpoint_type": "title",
+        "label": "Confirm title file was opened",
+        "due_at": due_at.isoformat(),
+        "notes": "Whole-deal milestone created while buyer shopping continues.",
+        "evidence": {"source_note": "Requested from the title coordinator."},
+        "idempotency_key": "ds7-whole-deal-checkpoint-before-selection",
+    }
+    created = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints",
+        headers=HEADERS,
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    checkpoint = next(
+        item
+        for item in created.json()["checkpoints"]
+        if item["label"] == payload["label"]
+    )
+    assert checkpoint["selection_id"] is None
+    assert checkpoint["offer_id"] is None
+    assert checkpoint["buyer_id"] is None
+    assert checkpoint["evidence"] == payload["evidence"]
+    assert "_checkpoint_request_fingerprint" not in created.text
+
+    replay = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints",
+        headers=HEADERS,
+        json=payload,
+    )
+    assert replay.status_code == 201, replay.text
+    assert sum(
+        item["label"] == payload["label"] for item in replay.json()["checkpoints"]
+    ) == 1
+    conflict = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints",
+        headers=HEADERS,
+        json={**payload, "label": "A different checkpoint request"},
+    )
+    assert conflict.status_code == 422, conflict.text
+    assert "different closing checkpoint request" in conflict.json()["detail"].lower()
+
+    scanned = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/deadlines/scan",
+        headers=HEADERS,
+    )
+    assert scanned.status_code == 200, scanned.text
+    missed = next(
+        item for item in scanned.json()["checkpoints"] if item["id"] == checkpoint["id"]
+    )
+    assert missed["status"] == "missed"
+    alert = next(
+        item for item in scanned.json()["alerts"] if item["checkpoint_id"] == checkpoint["id"]
+    )
+    acknowledged = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/alerts/{alert['id']}/acknowledge",
+        headers=HEADERS,
+        json={"reason": "Disposition representative owns the title follow-up."},
+    )
+    assert acknowledged.status_code == 200, acknowledged.text
+
+    updated = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/{checkpoint['id']}",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": missed["lock_version"],
+            "status": "in_progress",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "reason": "Title follow-up is active and has a confirmed response date.",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    refreshed = next(
+        item for item in updated.json()["checkpoints"] if item["id"] == checkpoint["id"]
+    )
+    assert refreshed["status"] == "in_progress"
+    assert refreshed["selection_id"] is None
+    assert refreshed["offer_id"] is None
+
+
+def test_offer_specific_checkpoint_can_target_any_recorded_offer(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, buyer_ids, offers = _setup_ready_case_with_offers(
+        db_session,
+        client,
+        offer_count=3,
+    )
+    created = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints",
+        headers=HEADERS,
+        json={
+            "selection_id": None,
+            "offer_id": offers[2]["id"],
+            "checkpoint_type": "buyer_response",
+            "label": "Third buyer response window",
+            "due_at": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+            "notes": "Buyer-specific follow-up does not select this buyer.",
+            "evidence": {},
+            "idempotency_key": "ds7-unselected-offer-checkpoint",
+        },
+    )
+    assert created.status_code == 201, created.text
+    checkpoint = next(
+        item
+        for item in created.json()["checkpoints"]
+        if item["label"] == "Third buyer response window"
+    )
+    assert checkpoint["selection_id"] is None
+    assert checkpoint["offer_id"] == offers[2]["id"]
+    assert checkpoint["buyer_id"] == buyer_ids[2]
+
+    selected = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/selections",
+        headers=HEADERS,
+        json=_selection_payload(
+            offers[0],
+            [offers[1]],
+            key="ds7-unselected-offer-checkpoint-selection",
+        ),
+    )
+    assert selected.status_code == 201, selected.text
+    retained = next(
+        item for item in selected.json()["checkpoints"] if item["id"] == checkpoint["id"]
+    )
+    assert retained["status"] == "pending"
+    assert retained["selection_id"] is None
+
+    current_selection = selected.json()["current_selection"]
+    invalid_binding = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints",
+        headers=HEADERS,
+        json={
+            "selection_id": current_selection["id"],
+            "offer_id": offers[2]["id"],
+            "checkpoint_type": "buyer_response",
+            "label": "Invalid selected coverage binding",
+            "due_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
+            "evidence": {},
+            "idempotency_key": "ds7-invalid-selection-checkpoint-binding",
+        },
+    )
+    assert invalid_binding.status_code == 422, invalid_binding.text
+    assert "current buyer coverage" in invalid_binding.json()["detail"].lower()
+
+    updated = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/offer-room/checkpoints/{checkpoint['id']}",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": retained["lock_version"],
+            "status": "in_progress",
+            "reason": "The unselected buyer-specific follow-up is still active.",
+        },
+    )
+    assert updated.status_code == 200, updated.text
 
 
 def test_checkpoint_responsible_user_must_be_active_and_in_the_same_organization(

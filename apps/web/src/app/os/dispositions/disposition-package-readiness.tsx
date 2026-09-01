@@ -86,6 +86,10 @@ function dateTime(value: string | null | undefined) {
     : parsed.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+function shareLinkIsPreliminary(link: DispositionPackageShareLink) {
+  return link.is_preliminary === true || link.is_current_now === false;
+}
+
 function displayValue(value: unknown): string {
   if (value == null || value === "") return "Not recorded";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -184,7 +188,6 @@ export function DispositionPackageReadiness({
   caseId,
   dealId,
   leadId,
-  qualifiedBuyerCount,
   download,
   onCaseChanged,
   onMessage,
@@ -195,7 +198,6 @@ export function DispositionPackageReadiness({
   caseId: string;
   dealId: string;
   leadId: string;
-  qualifiedBuyerCount: number;
   download: (path: string, fileName: string) => Promise<void>;
   onCaseChanged: () => Promise<void>;
   onMessage: (message: string) => void;
@@ -295,19 +297,20 @@ export function DispositionPackageReadiness({
   const totalChecks = readiness?.checks.length ?? 0;
   const latestArtifactScanIssue = externalArtifactScanIssue(latestVersion);
   const approvedArtifactScanIssue = externalArtifactScanIssue(approvedVersion);
-  const hasApprovalBlockers = Boolean(
-    !data ||
-      !latestVersion ||
-      latestArtifactScanIssue ||
-      readiness?.status === "blocked" ||
-      (readiness?.blocked_count ?? 0) > 0,
-  );
   const currentApprovedVersion = Boolean(
     data?.approved_package_is_current &&
       approvedVersion &&
       approvedVersion.is_current &&
       !approvedArtifactScanIssue,
   );
+  const shoppingVersion = currentApprovedVersion ? approvedVersion : latestVersion;
+  const shoppingArtifactIssue = externalArtifactScanIssue(shoppingVersion);
+  const shoppingArtifactAvailable = Boolean(
+    shoppingVersion &&
+      !shoppingArtifactIssue &&
+      (shoppingVersion.pdf_file_name || shoppingVersion.pdf_sha256),
+  );
+  const shoppingIsPreliminary = !currentApprovedVersion;
 
   async function mutate(
     actionKey: string,
@@ -385,13 +388,13 @@ export function DispositionPackageReadiness({
             body: file,
           },
         ),
-      "External investor packet uploaded as an exact draft. Review it, then approve that version before outreach.",
+      "External investor packet uploaded as an exact draft. Review or approve it when useful; shopping and outreach may continue with its Preliminary label.",
     );
     if (uploaded) form.reset();
   }
 
   function openApproval() {
-    if (hasApprovalBlockers) {
+    if (!latestVersion || latestArtifactScanIssue) {
       checklistRef.current?.focus();
       return;
     }
@@ -403,7 +406,7 @@ export function DispositionPackageReadiness({
 
   async function approve(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!latestVersion?.is_current || !attested || approvalReason.trim().length < 3) return;
+    if (!latestVersion || !attested || approvalReason.trim().length < 3) return;
     const approved = await mutate(
       "approve",
       () =>
@@ -434,7 +437,7 @@ export function DispositionPackageReadiness({
   }
 
   async function createShareLink() {
-    if (!canEditDeals || !currentApprovedVersion) return;
+    if (!canEditDeals || !shoppingArtifactAvailable) return;
     setBusyAction("share-link");
     setError(null);
     setSuccess(null);
@@ -452,7 +455,7 @@ export function DispositionPackageReadiness({
       } catch {
         // The visible read-only URL remains available for manual copy.
       }
-      const message = "Secure investor package link created and copied. It expires in 72 hours.";
+      const message = `${shareLinkIsPreliminary(issued) ? "Preliminary" : "Approved"} investor package link created and copied. It expires in 72 hours.`;
       setSuccess(message);
       onMessage(message);
     } catch (shareError) {
@@ -549,7 +552,7 @@ export function DispositionPackageReadiness({
   const privateEntries = data.private_economics ? privateEconomicsEntries(data.private_economics) : [];
 
   return (
-    <div className={styles.workspace}>
+    <div className={styles.workspace} id="package-versions" tabIndex={-1}>
       {error ? <p className={styles.error} ref={statusRef} role="alert" tabIndex={-1}>{error}</p> : null}
       {success ? <p aria-live="polite" className={styles.success} role="status">{success}</p> : null}
 
@@ -557,12 +560,12 @@ export function DispositionPackageReadiness({
         <div>
           <span><FileText aria-hidden="true" size={16} />Deal launch package</span>
           <h4>{previewHeadline}</h4>
-          <p>One approved package supplies the exact buyer PDF. Saved CRM facts still control readiness, matching, private economics, and email/SMS summaries.</p>
+          <p>Build and improve the buyer-facing packet while you shop the deal. Readiness stays visible; approval controls package status, not access to safe preparation work.</p>
         </div>
         <div className={styles.heroStatus} data-status={latestArtifactScanIssue ? "blocked" : readiness.status}>
-          <strong>{latestArtifactScanIssue ? "Blocked" : labelize(readiness.status)}</strong>
+          <strong>{latestArtifactScanIssue ? "Artifact unavailable" : readiness.status === "ready" ? "Ready for review" : "Needs attention"}</strong>
           <span>{readiness.ready_count} of {totalChecks} checks ready</span>
-          <small>{versionName(latestVersion)} - {data.approved_package_is_current ? "approval current" : "approval required"}</small>
+          <small>{versionName(latestVersion)} - {data.approved_package_is_current ? "approved" : "preliminary shopping allowed"}</small>
         </div>
       </header>
 
@@ -589,22 +592,22 @@ export function DispositionPackageReadiness({
       </section>
 
       {!data.approved_package_is_current && approvedVersion ? (
-        <div className={styles.staleApproval} role="alert">
+        <div className={styles.staleApproval} role="status">
           <AlertTriangle aria-hidden="true" size={17} />
-          <div><strong>Approved v{approvedVersion.version_number} is no longer current.</strong><p>Saved deal evidence changed. Rebuild and approve a new version before buyer ranking or recipient preparation.</p></div>
+          <div><strong>Approved v{approvedVersion.version_number} is no longer current.</strong><p>Saved deal evidence changed. Buyer shopping and preparation can continue from the latest available facts, clearly marked Preliminary; rebuild and approve before treating the package as final.</p></div>
         </div>
       ) : null}
 
       <section aria-labelledby="package-readiness-heading" className={styles.panel} ref={checklistRef} tabIndex={-1}>
         <div className={styles.panelHeading}>
           <div><span>Launch readiness</span><h5 id="package-readiness-heading">Evidence and preparation checks</h5></div>
-          <strong>{readiness.blocked_count + (latestArtifactScanIssue ? 1 : 0)} blocked - {readiness.warning_count} warnings</strong>
+          <strong>{readiness.blocked_count + (latestArtifactScanIssue ? 1 : 0)} approval issues - {readiness.warning_count} warnings</strong>
         </div>
         <div className={styles.checkList}>
           {readiness.checks.map((check) => {
             const remediation = check.remediation ?? fallbackRemediation(check, dealId, leadId);
             return (
-              <article data-status={check.status} key={check.key}>
+              <article data-status={check.status} id={check.key} key={check.key} tabIndex={-1}>
                 <CheckIcon status={check.status} />
                 <div>
                   <strong>{check.label}</strong>
@@ -677,13 +680,14 @@ export function DispositionPackageReadiness({
 
       <section aria-labelledby="package-summaries-heading" className={styles.panel}>
         <div className={styles.panelHeading}>
-          <div><span>{currentApprovedVersion ? "Current approved facts" : "Draft - approval required"}</span><h5 id="package-summaries-heading">Deterministic buyer summaries</h5></div>
-          <strong>{currentApprovedVersion ? "Approved to copy" : "Preview only"}</strong>
+          <div><span>{currentApprovedVersion ? "Current approved facts" : "Preliminary - checklist incomplete"}</span><h5 id="package-summaries-heading">Deterministic buyer summaries</h5></div>
+          <strong>{currentApprovedVersion ? "Approved" : "Preliminary"}</strong>
         </div>
         <div className={styles.summaryGrid}>
-          <label><span>Email summary</span><textarea readOnly rows={9} value={data.email_summary} /><button disabled={!currentApprovedVersion} onClick={() => void copySummary("email", data.email_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "email" ? "Copied" : "Copy email"}</button></label>
-          <label><span>SMS summary</span><textarea readOnly rows={9} value={data.sms_summary} /><button disabled={!currentApprovedVersion} onClick={() => void copySummary("sms", data.sms_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "sms" ? "Copied" : "Copy SMS"}</button></label>
+          <label><span>Email summary</span><textarea readOnly rows={9} value={data.email_summary} /><button onClick={() => void copySummary("email", data.email_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "email" ? "Copied" : "Copy email"}</button></label>
+          <label><span>SMS summary</span><textarea readOnly rows={9} value={data.sms_summary} /><button onClick={() => void copySummary("sms", data.sms_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "sms" ? "Copied" : "Copy SMS"}</button></label>
         </div>
+        {shoppingIsPreliminary ? <p className={styles.permissionNote}>These summaries are Preliminary. Unknown or changed facts remain visible for review while buyer work continues.</p> : null}
       </section>
 
       <section aria-labelledby="package-share-heading" className={styles.panel}>
@@ -693,11 +697,12 @@ export function DispositionPackageReadiness({
         </div>
         <div className={styles.shareLinkWorkspace}>
           <div className={styles.shareLinkActions}>
-            <p>Create a link to the exact approved PDF. Seller notes, private economics, and access instructions are excluded from this artifact.</p>
-            <button disabled={!canEditDeals || !currentApprovedVersion || busyAction !== null} onClick={() => void createShareLink()} type="button">
+            <p>Create a link to the latest available buyer-safe PDF. An incomplete or unapproved version remains visibly Preliminary; seller notes, private economics, and access instructions stay excluded.</p>
+            <button disabled={!canEditDeals || !shoppingArtifactAvailable || busyAction !== null} onClick={() => void createShareLink()} type="button">
               <Link2 aria-hidden="true" size={15} />{busyAction === "share-link" ? "Creating link..." : "Create & copy secure link"}
             </button>
           </div>
+          {!shoppingArtifactAvailable ? <p className={styles.permissionNote}>{shoppingArtifactIssue ?? "Build or upload a concrete PDF artifact before creating a buyer link."}</p> : shoppingIsPreliminary ? <p className={styles.permissionNote}>This issued link permanently records Preliminary provenance. Create a new link after package approval for Approved provenance.</p> : null}
           {issuedLink ? (
             <div className={styles.issuedLink}>
               <label><span>New secure link</span><input readOnly value={issuedLink.share_url} /></label>
@@ -705,15 +710,15 @@ export function DispositionPackageReadiness({
                 <button onClick={() => void copyShareLink("link")} type="button"><Clipboard aria-hidden="true" size={14} />{copiedLink === "link" ? "Copied" : "Copy link"}</button>
                 <button onClick={() => void copyShareLink("sms")} type="button"><Clipboard aria-hidden="true" size={14} />{copiedLink === "sms" ? "Copied" : "Copy SMS + link"}</button>
               </div>
-              <small>This raw link is shown only now. Stonegate stores a one-way token digest, not the reusable link secret.</small>
+              <small>{shareLinkIsPreliminary(issuedLink) ? "Preliminary package - " : "Approved package - "}This raw link is shown only now. Stonegate stores a one-way token digest, not the reusable link secret.</small>
             </div>
           ) : null}
           <div className={styles.shareLinkHistory}>
             {shareLinks.map((link) => (
               <article key={link.id}>
                 <div>
-                  <strong>Package v{link.package_version_number} - {labelize(link.status)}</strong>
-                  <span>Ends {dateTime(link.expires_at)} - {link.access_count} open{link.access_count === 1 ? "" : "s"} - token ...{link.token_hint}</span>
+                  <strong>Package v{link.package_version_number} - {shareLinkIsPreliminary(link) ? "Preliminary" : "Approved"} - {labelize(link.status)}</strong>
+                  <span>Ends {dateTime(link.expires_at)} - {link.access_count} open{link.access_count === 1 ? "" : "s"} - token ...{link.token_hint}{link.is_current_now === false ? " - package or source facts changed since issue" : ""}</span>
                   {link.last_accessed_at ? <small>Last opened {dateTime(link.last_accessed_at)}</small> : <small>Not opened yet</small>}
                 </div>
                 {link.status === "active" ? (
@@ -736,7 +741,7 @@ export function DispositionPackageReadiness({
           {data.can_view_internal_economics && data.private_economics ? (
             <div className={styles.economicsFields}>
               <label><span>Investor asking price</span><input defaultValue={dollars(data.private_economics.buyer_asking_price_cents)} inputMode="decimal" name="asking_price" /></label>
-              <label><span>Approved minimum</span><input defaultValue={dollars(data.private_economics.minimum_acceptable_cents)} inputMode="decimal" name="minimum_acceptable" /></label>
+              <label><span>Internal minimum target</span><input defaultValue={dollars(data.private_economics.minimum_acceptable_cents)} inputMode="decimal" name="minimum_acceptable" /><small>Internal selection guidance; never included in the buyer package.</small></label>
               <label><span>Desired assignment fee</span><input defaultValue={dollars(data.private_economics.desired_assignment_fee_cents)} inputMode="decimal" name="desired_assignment_fee" /></label>
             </div>
           ) : <p className={styles.permissionNote}>You can rebuild the public package, but internal economics are hidden for your role.</p>}
@@ -748,13 +753,13 @@ export function DispositionPackageReadiness({
             <div><span>Human approval</span><h5>Approve and prepare</h5></div>
             <Check aria-hidden="true" size={18} />
           </div>
-          <button disabled={!canEditDeals || !data.can_approve || hasApprovalBlockers || !latestVersion?.is_current || latestVersion.status === "approved" || busyAction !== null} onClick={openApproval} type="button"><Check aria-hidden="true" size={15} />Approve {versionName(latestVersion)}</button>
+          <button disabled={!canEditDeals || !data.can_approve || !latestVersion || Boolean(latestArtifactScanIssue) || latestVersion.status === "approved" || busyAction !== null} onClick={openApproval} type="button"><Check aria-hidden="true" size={15} />Approve {versionName(latestVersion)}</button>
           <button disabled={!approvedVersion || busyAction !== null} onClick={() => approvedVersion && void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${approvedVersion.id}/package.pdf`, approvedVersion.pdf_file_name ?? `stonegate-investor-package-v${approvedVersion.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />Download approved {versionName(approvedVersion)} PDF</button>
           {assetClass === "house" ? <>
-            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || busyAction !== null} onClick={() => void mutate("rank", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/matches`, { method: "POST", body: "{}" }), "Buyer pool scored against the current approved package.")} type="button"><UsersRound aria-hidden="true" size={15} />Refresh buyer ranking</button>
-            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || qualifiedBuyerCount < 1 || busyAction !== null} onClick={() => void mutate("release", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, { method: "POST", body: "{}" }), "Approved recipient pool recorded. No buyer messages were sent.")} type="button"><Megaphone aria-hidden="true" size={15} />Prepare recipient pool</button>
-            <p id="release-version-requirement">Buyer ranking and recipient preparation require the current evidence fingerprint to match an approved package version. No buyer communication is sent by these controls.</p>
-          </> : <p>Approve the exact uploaded Land packet, then use the Buyer pool tab for asset-aware matching. Residential recipient preparation remains unavailable for Land.</p>}
+            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || busyAction !== null} onClick={() => void mutate("rank", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/matches`, { method: "POST", body: "{}" }), "Buyer pool refreshed from the latest available deal facts.")} type="button"><UsersRound aria-hidden="true" size={15} />Refresh buyer ranking</button>
+            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || busyAction !== null} onClick={() => void mutate("release", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, { method: "POST", body: "{}" }), "Recipient pool prepared. No buyer messages were sent.")} type="button"><Megaphone aria-hidden="true" size={15} />Prepare recipient pool</button>
+            <p id="release-version-requirement">Ranking and recipient preparation stay available while checklist work continues. Incomplete package, proof, or match evidence is carried forward as a visible warning. No buyer communication is sent by these controls.</p>
+          </> : <p>Upload and approve the exact Land packet when useful. The Buyer pool is available now for asset-aware matching, independently of package approval. Residential recipient preparation remains unavailable for Land.</p>}
         </section>
       </div>
 

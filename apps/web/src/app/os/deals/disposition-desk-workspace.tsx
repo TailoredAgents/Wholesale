@@ -40,7 +40,7 @@ const deskViews: Array<{
   {
     key: "today",
     label: "Today",
-    description: "The highest-priority disposition work due now or overdue.",
+    description: "A recommended starting point for due and high-attention work; other deal work remains available.",
     emptyTitle: "Today is clear",
     emptyMessage: "No disposition work is due today. Review active deals or buyer coverage next.",
   },
@@ -130,6 +130,19 @@ function toneForSeverity(severity: DispositionDeskItem["severity"]) {
 }
 
 function WorkItem({ item }: { item: DispositionDeskItem }) {
+  const caseWorkbench = item.category === "active_deals" && item.checklist
+    ? item.checklist
+    : null;
+  const checklistIssues = caseWorkbench?.issues?.length
+    ? caseWorkbench.issues
+    : item.blocker
+      ? [{ key: `${item.key}-legacy`, label: "Recorded checklist item", blocker_class: null, detail: item.blocker, href: null }]
+      : [];
+  const parallelActions = caseWorkbench?.parallel_actions?.length
+    ? caseWorkbench.parallel_actions
+    : item.secondary_action
+      ? [item.secondary_action]
+      : [];
   return (
     <article className={styles.workCard} data-severity={item.severity}>
       <header className={styles.workHeader}>
@@ -157,28 +170,45 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
           <dd>{item.reason}</dd>
         </div>
         <div>
-          <dt>Blocker</dt>
-          <dd>{item.blocker ?? "No blocker recorded"}</dd>
+          <dt>Checklist</dt>
+          <dd>{caseWorkbench ? `${caseWorkbench.completed_count} of ${caseWorkbench.total_count} actions complete - ${caseWorkbench.warning_count} need attention` : item.blocker ?? "No issue recorded"}</dd>
         </div>
       </dl>
 
+      {caseWorkbench ? (
+        <details className={styles.cardChecklist} open>
+          <summary><span>All checklist issues</span><strong>{caseWorkbench.warning_count}</strong></summary>
+          <div>
+            {checklistIssues.map((issue) => (
+              <article data-tone={issue.blocker_class ?? "warning"} key={issue.key}>
+                <AlertTriangle aria-hidden="true" size={14} />
+                <div><strong>{issue.label}</strong><span>{issue.detail}</span></div>
+                {issue.href ? <Link href={issue.href}>Open<ArrowRight aria-hidden="true" size={13} /></Link> : null}
+              </article>
+            ))}
+            {!checklistIssues.length ? <p>{caseWorkbench.warning_count ? <AlertTriangle aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}{caseWorkbench.warning_count ? "Open the deal workbench for the current issue details; other available actions remain usable." : "No open checklist issues. You can still choose any available parallel action."}</p> : null}
+          </div>
+        </details>
+      ) : null}
+
       {item.needs_setup ? (
         <p className={styles.setupNotice}>
-          The executed transaction is safely recorded and visible here. Finish the listed setup
-          blocker so Stonegate can open the normal Dispositions case automatically.
+          The executed transaction is safely recorded and visible here. Complete the listed setup
+          item when practical; it is advisory guidance, not a required first step. Use any
+          disposition actions available on this card while setup remains incomplete.
         </p>
       ) : null}
 
       <footer className={styles.workActions}>
-        <Link className={styles.primaryAction} href={item.primary_action.href}>
-          {item.primary_action.label}
-          <ArrowRight aria-hidden="true" size={15} />
-        </Link>
-        {item.secondary_action ? (
-          <Link className={styles.secondaryAction} href={item.secondary_action.href}>
-            {item.secondary_action.label}
+        <div className={styles.bestActionGroup}>
+          {caseWorkbench ? <span>Suggested action (optional)</span> : null}
+          <Link className={styles.primaryAction} href={caseWorkbench?.best_action_href ?? item.primary_action.href}>
+            {caseWorkbench?.best_action_label ?? item.primary_action.label}
+            <ArrowRight aria-hidden="true" size={15} />
           </Link>
-        ) : null}
+        </div>
+        {parallelActions.length ? <div className={styles.parallelActionGroup}><span>{caseWorkbench ? "Also available now" : "Related action"}</span><div>{parallelActions.slice(0, 3).map((action) => <Link className={styles.secondaryAction} href={action.href} key={`${action.href}-${action.label}`}>{action.label}</Link>)}</div></div> : null}
+        {caseWorkbench && caseWorkbench.parallel_action_keys.length > parallelActions.length ? <small className={styles.moreActions}>{caseWorkbench.parallel_action_keys.length - parallelActions.length} more available action{caseWorkbench.parallel_action_keys.length - parallelActions.length === 1 ? "" : "s"} are shown inside the deal workbench.</small> : null}
       </footer>
     </article>
   );

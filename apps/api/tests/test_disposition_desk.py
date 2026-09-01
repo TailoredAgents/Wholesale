@@ -160,7 +160,7 @@ def test_disposition_desk_empty_read_model(
     assert payload["source_health"]["external_provider_status"] == "not_configured"
 
 
-def test_disposition_desk_keeps_setup_blocked_parcel_only_land_visible(
+def test_disposition_desk_keeps_advisory_parcel_only_land_shell_visible(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -192,25 +192,26 @@ def test_disposition_desk_keeps_setup_blocked_parcel_only_land_visible(
         transaction,
     )
     db_session.commit()
-    assert created is None
+    assert created is not None
+    assert created.compensation_plan_version_id is None
 
     response = client.get("/api/v1/dispositions/desk?scope=mine", headers=HEADERS)
 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["metrics"]["active_deals"] == 1
-    intake = payload["active_deals"][0]
-    assert intake["key"] == f"setup:{transaction.id}"
+    intake = next(
+        item for item in payload["active_deals"] if item["disposition_case_id"] == str(created.id)
+    )
+    assert intake["key"] == f"deal:{transaction.deal_id}"
     assert intake["transaction_id"] == transaction_id
-    assert intake["disposition_case_id"] is None
-    assert intake["needs_setup"] is True
+    assert intake["disposition_case_id"] == str(created.id)
+    assert intake["needs_setup"] is False
     assert intake["asset_class"] == "land"
     assert intake["title"] == "APN LAND-DESK-100, Bibb, GA"
-    assert intake["reason"] == "Executed Land contract is waiting for Dispositions setup."
-    assert intake["blocker"] == "No active compensation plan."
-    assert intake["primary_action"] == {
-        "label": "Resolve setup",
-        "href": f"/os/dispositions?transaction={transaction.id}",
+    assert intake["checklist"]["warning_count"] > 0
+    assert "setup.compensation_plan" in {
+        issue["key"] for issue in intake["checklist"]["issues"]
     }
     setup_task = db_session.scalar(
         select(Task).where(
@@ -218,9 +219,7 @@ def test_disposition_desk_keeps_setup_blocked_parcel_only_land_visible(
             Task.task_type == HANDOFF_SETUP_TASK_TYPE,
         )
     )
-    assert setup_task is not None
-    assert intake["task_id"] == str(setup_task.id)
-    assert any(item["task_id"] == str(setup_task.id) for item in payload["today"])
+    assert setup_task is None
 
     manager = _add_user(
         db_session,
@@ -376,7 +375,9 @@ def test_disposition_desk_scopes_buyers_and_authorizes_team_view(
     assert team_view.json()["scope_member_count"] == 3
     assert team_view.json()["buyer_network"]["total"] == 2
     assert team_view.json()["buyer_network"]["unassigned"] == 0
-    assert "Unassigned records are excluded" in team_view.json()["scope_notice"]
+    assert "Unassigned active disposition cases are included" in team_view.json()[
+        "scope_notice"
+    ]
 
 
 def test_disposition_desk_aggregates_owned_work_with_canonical_links(

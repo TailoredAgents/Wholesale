@@ -161,6 +161,10 @@ class DispositionOutreachRevisionRead(BaseModel):
     approval_hash: str | None
     package_source_fingerprint: str
     artifact_sha256: str
+    package_status: str
+    package_was_current_at_prepare: bool
+    package_is_current_now: bool
+    package_is_preliminary: bool
     sender_snapshot: dict[str, object]
     created_by_user_id: UUID
     approved_by_user_id: UUID | None
@@ -181,6 +185,8 @@ class DispositionOutreachWorkspaceRead(BaseModel):
     package_version_id: UUID | None
     package_source_fingerprint: str | None
     artifact_sha256: str | None
+    package_status: str | None
+    package_is_preliminary: bool
     hard_recipient_cap: int
     readiness_status: Literal["ready", "blocked"]
     blockers: list[str]

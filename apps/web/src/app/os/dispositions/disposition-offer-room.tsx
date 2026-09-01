@@ -277,13 +277,13 @@ function CheckpointRow({
       <span className={styles.checkpointIcon}>{terminal ? <Check aria-hidden="true" size={15} /> : overdue ? <AlertTriangle aria-hidden="true" size={15} /> : <CalendarClock aria-hidden="true" size={15} />}</span>
       <div>
         <strong>{deadline.label}</strong>
-        <span>{labelize(deadline.checkpoint_type)}{deadline.buyer_name || buyerName ? ` - ${deadline.buyer_name ?? buyerName}` : ""}</span>
+        <span>{labelize(deadline.checkpoint_type)} - {deadline.buyer_name ?? buyerName ?? "Whole deal"}</span>
         <small>{complete ? `Completed ${dateTime(deadline.completed_at)}` : waived ? `Explicitly waived ${dateTime(deadline.completed_at)}` : cancelled ? "Cancelled" : overdue ? `Missed deadline - due ${dateTime(deadline.due_at)}` : `Due ${dateTime(deadline.due_at)}`}</small>
         {deadline.notes ? <small>{deadline.notes}</small> : null}
       </div>
       <div className={styles.checkpointActions}>
         {!terminal && depositDecision ? <label className={styles.depositEvidence} htmlFor={`deposit-evidence-${deadline.id}`}><span>Deposit evidence note</span><input id={`deposit-evidence-${deadline.id}`} maxLength={500} minLength={10} onChange={(event) => setEvidenceNote(event.target.value)} placeholder="Receipt, confirmation, or waiver basis (10+ characters)" value={evidenceNote} /></label> : null}
-        {!terminal && depositDecision ? <div className={styles.depositDecisions}><button className={styles.inlineButton} disabled={!canEdit || busy || !evidenceReady} onClick={() => onDecision(deadline, "completed", evidenceNote.trim())} type="button"><Check size={13} />Record deposit</button><button className={styles.waiveButton} disabled={!canEdit || !canApproveWaiver || busy || !evidenceReady} onClick={() => onDecision(deadline, "waived", evidenceNote.trim())} title={!canApproveWaiver ? "Manager approval is required to waive a buyer deposit." : undefined} type="button">Waive deposit</button>{!canApproveWaiver ? <small>Manager approval is required to waive a deposit.</small> : null}</div> : null}
+        {!terminal && depositDecision ? <div className={styles.depositDecisions}><button className={styles.inlineButton} disabled={!canEdit || busy || !evidenceReady} onClick={() => onDecision(deadline, "completed", evidenceNote.trim())} type="button"><Check size={13} />Record deposit</button><button className={styles.waiveButton} disabled={!canEdit || !canApproveWaiver || busy || !evidenceReady} onClick={() => onDecision(deadline, "waived", evidenceNote.trim())} title={!canApproveWaiver ? "Deposit-waiver approval permission is required." : undefined} type="button">Waive deposit</button>{!canApproveWaiver ? <small>Your current role does not include deposit-waiver approval.</small> : null}</div> : null}
         {!terminal && !depositDecision && !canonicalReadOnly ? <button className={styles.inlineButton} disabled={!canEdit || busy} onClick={() => onDecision(deadline, "completed")} type="button"><Check size={13} />Complete milestone</button> : null}
         {!terminal && canonicalReadOnly ? <small>Update in Deal / Transaction</small> : null}
       </div>
@@ -317,6 +317,7 @@ export function DispositionOfferRoom({
   const [success, setSuccess] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [timelineTab, setTimelineTab] = useState<TimelineTab>("negotiation");
+  const [replacementOfferId, setReplacementOfferId] = useState("");
   const statusRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef(request);
   const loadSequenceRef = useRef(0);
@@ -543,20 +544,33 @@ export function DispositionOfferRoom({
     const primaryOfferId = String(values.get("primary_offer_id") ?? "");
     const backupOfferId = String(values.get("backup_offer_id") ?? "");
     const primaryOffer = data?.offers.find((offer) => offer.id === primaryOfferId);
-    const backupOffer = data?.offers.find((offer) => offer.id === backupOfferId);
-    if (!primaryOffer || !backupOffer) {
-      const detail = "Select a current primary offer and backup offer before approval.";
+    const backupOffer = backupOfferId
+      ? data?.offers.find((offer) => offer.id === backupOfferId)
+      : null;
+    if (!primaryOffer) {
+      const detail = "Select a current primary offer before approval.";
       setError(detail);
       onMessage(detail);
       return;
     }
-    if (primaryOfferId === backupOfferId || primaryOffer.buyer_id === backupOffer.buyer_id) {
+    if (backupOfferId && !backupOffer) {
+      const detail = "The selected backup offer is no longer available. Refresh and choose again.";
+      setError(detail);
+      onMessage(detail);
+      return;
+    }
+    if (backupOffer && (primaryOfferId === backupOfferId || primaryOffer.buyer_id === backupOffer.buyer_id)) {
       const detail = "Primary and backup coverage must use offers from different buyers.";
       setError(detail);
       onMessage(detail);
       requestAnimationFrame(() => statusRef.current?.focus());
       return;
     }
+    const backupOfferIds = backupOffer ? [backupOffer.id] : [];
+    const expectedOfferLockVersions: Record<string, number> = {
+      [primaryOffer.id]: primaryOffer.lock_version,
+    };
+    if (backupOffer) expectedOfferLockVersions[backupOffer.id] = backupOffer.lock_version;
     const idempotencyAction = `selection:${caseId}`;
     const saved = await mutate(
       "selection",
@@ -565,17 +579,16 @@ export function DispositionOfferRoom({
         body: JSON.stringify({
           idempotency_key: pendingIdempotencyKey(idempotencyAction, "selection"),
           primary_offer_id: primaryOfferId,
-          backup_offer_ids: [backupOfferId],
-          expected_offer_lock_versions: {
-            [primaryOfferId]: primaryOffer.lock_version,
-            [backupOfferId]: backupOffer.lock_version,
-          },
+          backup_offer_ids: backupOfferIds,
+          expected_offer_lock_versions: expectedOfferLockVersions,
           expected_selection_lock_version: data?.current_selection?.lock_version ?? null,
           reason: values.get("selection_reason"),
           eligibility_override_reason: values.get("eligibility_override_reason") || null,
         }),
       }),
-      "Human buyer selection approved and preserved.",
+      backupOffer
+        ? "Human buyer selection approved with backup coverage and preserved."
+        : "Human primary buyer selection approved. Missing backup coverage remains visible as a warning.",
     );
     if (saved) {
       clearPendingIdempotencyKey(idempotencyAction);
@@ -587,6 +600,16 @@ export function DispositionOfferRoom({
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
+    const relatedOfferId = String(values.get("offer_id") ?? "").trim();
+    const currentSelectionOfferIds = new Set([
+      data?.current_selection?.primary?.offer_id,
+      ...(data?.current_selection?.backups.map((item) => item.offer_id) ?? []),
+    ].filter((offerId): offerId is string => Boolean(offerId)));
+    const bindsToCurrentSelection = Boolean(
+      relatedOfferId
+        && data?.current_selection
+        && currentSelectionOfferIds.has(relatedOfferId),
+    );
     const idempotencyAction = `checkpoint:${caseId}`;
     const saved = await mutate(
       "checkpoint",
@@ -594,11 +617,11 @@ export function DispositionOfferRoom({
         method: "POST",
         body: JSON.stringify({
           idempotency_key: pendingIdempotencyKey(idempotencyAction, "checkpoint"),
-          selection_id: data?.current_selection?.id ?? null,
+          selection_id: bindsToCurrentSelection ? data?.current_selection?.id ?? null : null,
           checkpoint_type: values.get("checkpoint_type"),
           label: values.get("label"),
           due_at: iso(values.get("due_at")),
-          offer_id: values.get("offer_id") || null,
+          offer_id: relatedOfferId || null,
           notes: values.get("notes") || null,
           evidence: {},
         }),
@@ -617,7 +640,7 @@ export function DispositionOfferRoom({
     evidenceNote?: string,
   ) {
     if (status === "waived" && !canApproveBuyerSelection) {
-      const detail = "Manager approval is required to waive a buyer deposit.";
+      const detail = "Deposit-waiver approval permission is required.";
       setError(detail);
       onMessage(detail);
       return;
@@ -678,7 +701,7 @@ export function DispositionOfferRoom({
   async function replacePrimary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canApproveBuyerSelection) {
-      const detail = "Buyer replacement requires the buyer-selection approval permission.";
+      const detail = "Primary buyer recovery requires the buyer-selection approval permission.";
       setError(detail);
       onMessage(detail);
       return;
@@ -686,7 +709,25 @@ export function DispositionOfferRoom({
     if (!data?.current_selection) return;
     const form = event.currentTarget;
     const values = new FormData(form);
-    const idempotencyAction = `replacement:${caseId}:${data.current_selection.id}`;
+    const selectedReplacementOfferId = String(values.get("replacement_offer_id") ?? "");
+    const replacementOption = selectedReplacementOfferId
+      ? data.replacement_options.find(
+          (item) => item.offer_id === selectedReplacementOfferId && item.eligible,
+        ) ?? null
+      : null;
+    if (selectedReplacementOfferId && !replacementOption) {
+      const detail = "The selected replacement offer is no longer available. Refresh and choose again.";
+      setError(detail);
+      onMessage(detail);
+      return;
+    }
+    if (!replacementOption && values.get("confirm_no_replacement") !== "on") {
+      const detail = "Confirm that buyer shopping should reopen without an active primary.";
+      setError(detail);
+      onMessage(detail);
+      return;
+    }
+    const idempotencyAction = `primary-recovery:${caseId}:${data.current_selection.id}`;
     const saved = await mutate(
       "replacement",
       () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/offer-room/selections/${data.current_selection?.id}/replace-primary`, {
@@ -694,7 +735,8 @@ export function DispositionOfferRoom({
         body: JSON.stringify({
           idempotency_key: pendingIdempotencyKey(idempotencyAction, "replacement"),
           expected_lock_version: data.current_selection?.lock_version,
-          replacement_offer_id: values.get("replacement_offer_id"),
+          replacement_offer_id: replacementOption?.offer_id ?? null,
+          expected_replacement_offer_lock_version: replacementOption?.offer_lock_version ?? null,
           outcome_type: values.get("outcome_type"),
           cause_category: values.get("cause_category"),
           reason: values.get("replacement_reason"),
@@ -702,11 +744,14 @@ export function DispositionOfferRoom({
           evidence: {},
         }),
       }),
-      "Backup buyer activated and the replaced selection preserved.",
+      replacementOption
+        ? "Replacement buyer activated and the prior selection preserved."
+        : "Primary outcome recorded and buyer shopping reopened. No replacement buyer was selected.",
     );
     if (saved) {
       clearPendingIdempotencyKey(idempotencyAction);
       form.reset();
+      setReplacementOfferId("");
     }
   }
 
@@ -748,7 +793,14 @@ export function DispositionOfferRoom({
   }
 
   const seenBuyerIds = new Set<string>();
-  const normalizedBuyers = buyers.filter((buyer) => {
+  const normalizedBuyers = [
+    ...buyers,
+    ...(data?.offers ?? []).map((offer) => ({
+      buyer_id: offer.buyer_id,
+      buyer_name: offer.buyer_name,
+      latest_proof_document_id: offer.proof_document_id,
+    })),
+  ].filter((buyer) => {
     if (seenBuyerIds.has(buyer.buyer_id)) return false;
     seenBuyerIds.add(buyer.buyer_id);
     return true;
@@ -772,7 +824,9 @@ export function DispositionOfferRoom({
   const backupOfferIds = new Set(currentBackups.map((item) => item.offer_id));
   const offers = [...data.offers].sort((left, right) => left.comparison_rank - right.comparison_rank);
   const selectableOffers = offers.filter((offer) => ["received", "countering", "selected", "backup"].includes(offer.status));
-  const selectionCoverageReady = new Set(selectableOffers.map((offer) => offer.buyer_id)).size >= 2;
+  const selectableReplacementOptions = data.replacement_options.filter((item) => item.eligible);
+  const backupCoverageState = data.current_selection?.backup_coverage_state
+    ?? (currentBackups.length ? "covered" : currentPrimary ? "missing" : null);
   const offersById = new Map(offers.map((offer) => [offer.id, offer]));
   const currentCoverageSlots = [currentPrimary, ...currentBackups].filter((slot) => slot !== null);
   const staleCoverageSlots = closingComplete ? [] : currentCoverageSlots.filter((slot) => {
@@ -863,10 +917,15 @@ export function DispositionOfferRoom({
     },
     {
       key: "coverage",
-      label: "Primary and backup approved",
-      detail: currentPrimary && currentBackups.length ? `${currentPrimary.buyer_name} is primary with protected backup coverage.` : "Approve one primary buyer and at least one different backup.",
+      label: currentPrimary && !currentBackups.length ? "Primary approved; backup missing" : "Primary and backup approved",
+      detail: currentPrimary && currentBackups.length
+        ? `${currentPrimary.buyer_name} is primary with protected backup coverage.`
+        : currentPrimary
+          ? `${currentPrimary.buyer_name} is approved as primary. Keep shopping for a backup without stopping the deal.`
+          : "Approve a primary buyer. A different-buyer backup is strongly recommended but not required to keep working.",
       href: "#buyer-coverage",
-      resolved: closingComplete || Boolean(currentPrimary && currentBackups.length && !staleCoverageSlots.length && !liveCoverageBlockers.length),
+      resolved: closingComplete || Boolean(currentPrimary && !staleCoverageSlots.length),
+      warning: !closingComplete && Boolean(currentPrimary && (!currentBackups.length || liveCoverageBlockers.length)),
     },
     {
       key: "agreement",
@@ -883,11 +942,11 @@ export function DispositionOfferRoom({
       detail: closingComplete
         ? "Canonical funding preserved the deposit receipt, waiver, or explicit zero used at close."
         : depositWaived
-        ? "A manager-approved waiver is recorded. Stonegate keeps this as an open warning instead of treating cash as received."
+        ? "An approved waiver is recorded. Stonegate keeps this as an open warning instead of treating cash as received."
         : depositDecisionResolved
           ? depositRequired ? "The current buyer offer has a recorded receipt and support note." : "The approved offer requires no earnest-money deposit."
           : !depositKnown
-            ? "Revise the approved offer to an explicit zero or record a manager-approved canonical waiver."
+            ? "Revise the approved offer to an explicit zero or record an authorized canonical waiver."
             : "Record the current buyer's deposit receipt and support note.",
       href: "#closing-protection-heading",
       resolved: closingComplete || depositDecisionResolved,
@@ -910,7 +969,7 @@ export function DispositionOfferRoom({
   ];
 
   return (
-    <div className={styles.workspace} id="offer-room">
+    <div className={styles.workspace} id="offer-room" tabIndex={-1}>
       {error ? <div className={styles.error} ref={statusRef} role="alert" tabIndex={-1}><span>{error}</span><button disabled={loading || busyAction !== null} onClick={() => void load()} type="button"><RefreshCw aria-hidden="true" size={13} />Refresh Offer Room</button></div> : null}
       {success ? <p aria-live="polite" className={styles.success} role="status">{success}</p> : null}
 
@@ -918,7 +977,7 @@ export function DispositionOfferRoom({
         <div>
           <span className={styles.eyebrow}><Trophy aria-hidden="true" size={15} />House disposition - Offer Room and closing protection</span>
           <h4>Choose the strongest executable buyer</h4>
-          <p>A higher price can still be a weaker executable offer. Compare the saved terms, proof, reliability, and risk evidence before a human approves primary and backup coverage.</p>
+          <p>A higher price can still be a weaker executable offer. Compare saved terms, proof, reliability, and risk evidence; missing proof, floor, match, or backup coverage stays visible without disabling the human choice.</p>
         </div>
         <div className={styles.heroStats}>
           <div><strong>{offers.length}</strong><span>Offers compared</span></div>
@@ -930,7 +989,7 @@ export function DispositionOfferRoom({
       {attention || overdue.length ? (
         <div className={styles.attentionStrip} role="alert">
           <AlertTriangle aria-hidden="true" size={18} />
-          <div><strong>{attention?.title ?? attentionCheckpoint?.label ?? "Missed deadline requires action"}</strong><p>{attention?.message ?? `${overdue[0]?.label} is overdue. Confirm completion or activate a ranked backup.`}</p></div>
+          <div><strong>{attention?.title ?? attentionCheckpoint?.label ?? "Missed deadline requires action"}</strong><p>{attention?.message ?? `${overdue[0]?.label} is overdue. Confirm completion, choose any viable recorded replacement, or record the primary outcome and reopen shopping.`}</p></div>
           <button className={styles.secondaryButton} disabled={busyAction !== null || !canEditDeals} onClick={() => void scanDeadlines()} type="button"><RefreshCw aria-hidden="true" size={14} />Refresh deadlines</button>
         </div>
       ) : null}
@@ -946,42 +1005,44 @@ export function DispositionOfferRoom({
           {offers.length ? <div className={styles.comparisonViewport}>{offers.map((offer) => <OfferCard backupOfferIds={backupOfferIds} currency={data.currency} key={offer.id} offer={offer} primaryOfferId={currentPrimary?.offer_id ?? null} />)}</div> : <div className={styles.empty}><BadgeDollarSign aria-hidden="true" size={26} /><strong>No buyer offers recorded</strong><p>Record an interested buyer&apos;s complete terms below to start the comparison.</p></div>}
         </section>
 
-        <aside className={styles.selectionCard} id="buyer-coverage">
-          <span>Current coverage</span>
-          <h5>Human-approved primary and backups</h5>
+        <aside className={styles.selectionCard} id="buyer-selection" tabIndex={-1}>
+          <span id="buyer-coverage">Current coverage</span>
+          <h5>Human-approved buyer coverage</h5>
           <p>Coverage remains visible until a completed close or a documented replacement.</p>
           <div className={styles.coverageSlots}>
             <div className={styles.coverageSlot}><span>Primary buyer</span><strong>{currentPrimary?.buyer_name ?? "Not selected"}</strong><small className={!currentPrimary ? styles.coverageEmpty : undefined}>{currentPrimary ? `${money(currentPrimary.amount_cents, data.currency)} - ${labelize(currentPrimary.readiness_status)}` : "Human approval required"}</small></div>
-            <div className={styles.coverageSlot}><span>Backup coverage</span><strong>{currentBackups.length ? currentBackups.map((item) => item.buyer_name).join(", ") : "None"}</strong><small className={!currentBackups.length ? styles.coverageEmpty : undefined}>{currentBackups.length ? `${currentBackups.filter((item) => item.readiness_status === "ready").length} of ${currentBackups.length} ready` : "Add a viable backup"}</small></div>
+            <div className={styles.coverageSlot}><span>Backup coverage</span><strong>{currentBackups.length ? currentBackups.map((item) => item.buyer_name).join(", ") : "Missing"}</strong><small className={!currentBackups.length ? styles.coverageEmpty : undefined}>{currentBackups.length ? `${currentBackups.filter((item) => item.readiness_status === "ready").length} of ${currentBackups.length} ready` : "Warning only - keep shopping for a fallback"}</small></div>
           </div>
+          {backupCoverageState === "missing" ? <p className={styles.coverageWarning} role="status"><AlertTriangle aria-hidden="true" size={14} />The deal has an approved primary but no immediate backup. This does not stop work; keep the warning visible until another buyer is approved.</p> : null}
           {data.current_selection?.reason ? <p className={styles.selectionReason}>{data.current_selection.reason}</p> : null}
-          {staleCoverageSlots.length ? <p className={styles.permissionNote}>Coverage approval is stale because current offer terms changed for {staleCoverageSlots.map((slot) => slot.buyer_name).join(", ")}. Review the live comparison and reapprove coverage below—even when keeping the same primary and backup.</p> : null}
-          {liveCoverageBlockers.length ? <p className={styles.permissionNote}>Live coverage blockers: {liveCoverageBlockers.join("; ")}</p> : null}
+          {staleCoverageSlots.length ? <p className={styles.permissionNote}>Selection approval is stale because current offer terms changed for {staleCoverageSlots.map((slot) => slot.buyer_name).join(", ")}. Review the live comparison and reapprove below—even when keeping the same buyer choices.</p> : null}
+          {liveCoverageBlockers.length ? <p className={styles.permissionNote}>Live selection warnings: {liveCoverageBlockers.join("; ")}</p> : null}
 
-          <form aria-label={data.current_selection ? "Approve a new buyer coverage version" : "Approve primary and backup buyer coverage"} key={data.current_selection ? `${data.current_selection.id}-${data.current_selection.lock_version}` : "initial-coverage"} onSubmit={approveSelection}>
-            {data.current_selection ? <p className={styles.permissionNote}>This approves a new coverage version after reviewing current terms. You may keep the same primary and backup or replace either one. Earlier selections remain in history.</p> : null}
-            <label><span>Primary offer</span><select defaultValue={currentPrimary?.offer_id ?? ""} disabled={!selectionCoverageReady || !canViewPrivateEconomics || !canApproveBuyerSelection} name="primary_offer_id" required><option value="">Select primary</option>{selectableOffers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name} - {money(offer.amount_cents, data.currency)}</option>)}</select></label>
-            <label><span>Backup offer</span><select defaultValue={currentBackups[0]?.offer_id ?? ""} disabled={!selectionCoverageReady || !canViewPrivateEconomics || !canApproveBuyerSelection} name="backup_offer_id" required><option value="">Select a different backup</option>{selectableOffers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name} - {money(offer.amount_cents, data.currency)}</option>)}</select></label>
-            <label><span>{data.current_selection ? "Coverage revision reason" : "Selection reason"}</span><textarea minLength={10} name="selection_reason" placeholder={data.current_selection ? "Explain why this new primary and backup coverage version is required." : "Explain price, proof, deposit, timing, reliability, and material tradeoffs."} required rows={4} /></label>
-            <label><span>Advanced readiness exception (optional)</span><textarea minLength={10} name="eligibility_override_reason" placeholder="Explain the controlled POF, match, or timing exception." rows={3} /><small>Use only for a documented readiness exception. The approved minimum price cannot be overridden.</small></label>
+          <form aria-label={data.current_selection ? "Approve a new buyer coverage version" : "Approve buyer coverage"} key={data.current_selection ? `${data.current_selection.id}-${data.current_selection.lock_version}` : "initial-coverage"} onSubmit={approveSelection}>
+            {data.current_selection ? <p className={styles.permissionNote}>This approves a new coverage version after reviewing current terms. You may keep the same primary, add or change a backup, or preserve a primary-only decision. Earlier selections remain in history.</p> : null}
+            <label><span>Primary offer</span><select defaultValue={currentPrimary?.offer_id ?? ""} disabled={!canViewPrivateEconomics || !canApproveBuyerSelection} name="primary_offer_id" required><option value="">Select primary</option>{selectableOffers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name} - {money(offer.amount_cents, data.currency)}</option>)}</select></label>
+            <label><span>Backup offer (recommended)</span><select defaultValue={currentBackups[0]?.offer_id ?? ""} disabled={!canViewPrivateEconomics || !canApproveBuyerSelection} name="backup_offer_id"><option value="">Continue without a backup</option>{selectableOffers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name} - {money(offer.amount_cents, data.currency)}</option>)}</select></label>
+            <label><span>{data.current_selection ? "Selection revision reason" : "Selection reason"}</span><textarea minLength={10} name="selection_reason" placeholder={data.current_selection ? "Explain why this new buyer-selection version is appropriate." : "Explain price, proof, deposit, timing, reliability, and material tradeoffs."} required rows={4} /></label>
+            <label><span>Selection warning note (optional)</span><textarea minLength={10} name="eligibility_override_reason" placeholder="Add context about price, proof, match, timing, or another visible warning." rows={3} /><small>Warnings inform the decision without disabling selection. The normal selection reason remains the audited decision context.</small></label>
             <p className={styles.permissionNote}>Unselected viable offers stay available for negotiation or later backup replacement.</p>
             {!canViewPrivateEconomics ? <p className={styles.permissionNote}>Offer comparison is visible, but your role cannot approve a buyer against Stonegate&apos;s private floor.</p> : null}
-            {canViewPrivateEconomics && !canApproveBuyerSelection ? <p className={styles.permissionNote}>Comparison access only. A selection approver must choose the primary and backup buyers.</p> : null}
-            {!selectionCoverageReady ? <p className={styles.permissionNote}>At least two viable offers from different buyers are required for protected primary and backup coverage.</p> : null}
-            <button className={styles.button} disabled={busyAction !== null || !canEditDeals || !canViewPrivateEconomics || !canApproveBuyerSelection || !selectionCoverageReady} type="submit"><UserCheck aria-hidden="true" size={14} />{canApproveBuyerSelection ? data.current_selection ? staleCoverageSlots.length ? "Reapprove changed coverage" : "Approve new coverage version" : "Approve primary and backup" : "Approval permission required"}</button>
+            {canViewPrivateEconomics && !canApproveBuyerSelection ? <p className={styles.permissionNote}>Comparison access only. Your current role does not include buyer-selection approval.</p> : null}
+            {new Set(selectableOffers.map((offer) => offer.buyer_id)).size < 2 ? <p className={styles.permissionNote}>Protected backup coverage is not available yet. You can approve the best current primary and keep shopping.</p> : null}
+            <button className={styles.button} disabled={busyAction !== null || !canEditDeals || !canViewPrivateEconomics || !canApproveBuyerSelection || !selectableOffers.length} type="submit"><UserCheck aria-hidden="true" size={14} />{canApproveBuyerSelection ? data.current_selection ? staleCoverageSlots.length ? "Reapprove changed selection" : "Approve new selection version" : "Approve buyer selection" : "Approval permission required"}</button>
           </form>
         </aside>
       </div>
 
       <div className={styles.operationsGrid}>
         <section aria-labelledby="closing-protection-heading" className={styles.panel} id="closing-milestones">
+          <span id="funding" tabIndex={-1} />
           <div className={styles.sectionHeading}>
             <div><span>Execution safeguards</span><h5 id="closing-protection-heading">Closing protection checklist</h5><p>Agreement, Signature, Deposit, Access, Title, buyer response, and Closing remain visible through completion.</p></div>
             <button className={styles.secondaryButton} disabled={busyAction !== null || !canEditDeals} onClick={() => void scanDeadlines()} type="button"><RefreshCw aria-hidden="true" size={14} />Scan deadlines</button>
           </div>
           <div className={styles.checkpointList}>
             {data.checkpoints.map((deadline) => <CheckpointRow busy={busyAction !== null} buyerName={deadline.offer_id ? offersById.get(deadline.offer_id)?.buyer_name ?? null : null} canApproveWaiver={canApproveBuyerSelection} canEdit={canEditDeals} checkpoint={deadline} key={deadline.id} onDecision={(item, status, note) => void completeCheckpoint(item, status, note)} />)}
-            {!data.checkpoints.length ? <div className={styles.empty}><FileCheck2 aria-hidden="true" size={24} /><strong>No closing milestones yet</strong><p>Add the agreement, signature, deposit, access, title, and closing dates after a buyer is selected.</p></div> : null}
+            {!data.checkpoints.length ? <div className={styles.empty}><FileCheck2 aria-hidden="true" size={24} /><strong>No closing milestones yet</strong><p>Add whole-deal or buyer-specific deadlines whenever they become useful. Buyer selection is not required.</p></div> : null}
           </div>
         </section>
 
@@ -992,15 +1053,16 @@ export function DispositionOfferRoom({
           </section>
 
           <section className={styles.panel}>
-            <div className={styles.sectionHeading}><div><span>Rapid recovery</span><h5>Ranked replacement options</h5></div><strong>{data.replacement_options.length} available</strong></div>
-            <div className={styles.replacementList}>{data.replacement_options.map((item) => <article className={styles.replacementItem} data-eligible={item.eligible} key={item.offer_id}><div><strong>{item.buyer_name}</strong><span>Rank {item.comparison_rank} - {percent(item.execution_score_basis_points)} execution - {percent(item.risk_score_basis_points)} risk</span></div><strong>{money(item.amount_cents, data.currency)}</strong><p>{item.blockers.length ? item.blockers.join("; ") : item.backup_rank ? `Approved backup rank ${item.backup_rank}` : "Eligible ranked offer"}</p></article>)}{!data.replacement_options.length ? <div className={styles.empty}><UsersRound aria-hidden="true" size={23} /><strong>No eligible replacement</strong><p>Keep viable backup offers current before the primary buyer misses a deadline.</p></div> : null}</div>
+            <div className={styles.sectionHeading}><div><span>Rapid recovery</span><h5>Primary outcome and next buyer</h5></div><strong>{data.replacement_options.length} recorded options</strong></div>
+            <div className={styles.replacementList}>{data.replacement_options.map((item) => <article className={styles.replacementItem} data-eligible={item.eligible} key={item.offer_id}><div><strong>{item.buyer_name}</strong><span>Rank {item.comparison_rank} - {percent(item.execution_score_basis_points)} execution - {percent(item.risk_score_basis_points)} risk</span></div><strong>{money(item.amount_cents, data.currency)}</strong><p>{!item.eligible ? `Unavailable for replacement: ${item.blockers.join("; ") || "the offer is no longer active"}` : item.blockers.length ? `Selection warnings: ${item.blockers.join("; ")}` : item.backup_rank ? `Previously approved backup rank ${item.backup_rank}` : "No current selection warnings"}</p></article>)}{!data.replacement_options.length ? <div className={styles.empty}><UsersRound aria-hidden="true" size={23} /><strong>No replacement offer recorded</strong><p>Record the primary outcome and reopen buyer shopping now; another offer is not required.</p></div> : null}</div>
             <form className={styles.formBody} onSubmit={replacePrimary}>
-              <label><span>Replacement offer</span><select disabled={!canApproveBuyerSelection || !data.replacement_options.some((item) => item.eligible)} name="replacement_offer_id" required><option value="">Select ranked backup</option>{data.replacement_options.filter((item) => item.eligible).map((item) => <option key={item.offer_id} value={item.offer_id}>{item.buyer_name} - {money(item.amount_cents, data.currency)}</option>)}</select></label>
+              <label><span>Next buyer (optional)</span><select disabled={!canApproveBuyerSelection} name="replacement_offer_id" onChange={(event) => setReplacementOfferId(event.target.value)} value={replacementOfferId}><option value="">No replacement now - record outcome and reopen shopping</option>{selectableReplacementOptions.map((item) => <option key={item.offer_id} value={item.offer_id}>{item.buyer_name} - {money(item.amount_cents, data.currency)}</option>)}</select><small>Choose any structurally available recorded offer, even when it was never a backup, or leave this empty to reopen shopping. Proof, price, match, and timing notes remain visible warnings.</small></label>
               <div className={styles.twoFields}><label><span>Primary outcome</span><select name="outcome_type"><option value="missed_deadline">Missed deadline</option><option value="withdrawal">Withdrawal</option><option value="fallout">Fallout</option><option value="retrade">Retrade</option></select></label><label><span>Cause</span><select name="cause_category"><option value="buyer">Buyer</option><option value="seller">Seller</option><option value="title">Title</option><option value="property">Property</option><option value="stonegate">Stonegate</option><option value="external">External</option></select></label></div>
-              <label><span>Replacement reason</span><textarea minLength={10} name="replacement_reason" placeholder="Record the missed obligation and why this backup is executable." required rows={3} /></label>
+              <label><span>Outcome and recovery reason</span><textarea minLength={10} name="replacement_reason" placeholder="Record what happened and why this recovery choice is appropriate." required rows={3} /></label>
               <label><span>Supporting details</span><textarea name="replacement_details" rows={2} /></label>
-              {!canApproveBuyerSelection ? <p className={styles.permissionNote}>A selection approver must activate a replacement buyer.</p> : null}
-              <button className={styles.dangerButton} disabled={busyAction !== null || !canEditDeals || !canViewPrivateEconomics || !canApproveBuyerSelection || !data.current_selection || !data.replacement_options.some((item) => item.eligible)} type="submit"><ArrowRightLeft aria-hidden="true" size={14} />{canApproveBuyerSelection ? "Activate backup buyer" : "Approval permission required"}</button>
+              {!replacementOfferId ? <label className={styles.checkLabel}><input name="confirm_no_replacement" required type="checkbox" /><span>I confirm the primary outcome should be recorded and this deal should reopen for buyer shopping with no active primary.</span></label> : null}
+              {!canApproveBuyerSelection ? <p className={styles.permissionNote}>Your current role does not include buyer-selection approval.</p> : null}
+              <button className={styles.dangerButton} disabled={busyAction !== null || !canEditDeals || !canViewPrivateEconomics || !canApproveBuyerSelection || !data.current_selection} type="submit"><ArrowRightLeft aria-hidden="true" size={14} />{canApproveBuyerSelection ? replacementOfferId ? "Activate replacement buyer" : "Record outcome and reopen shopping" : "Approval permission required"}</button>
             </form>
           </section>
         </div>
@@ -1016,7 +1078,7 @@ export function DispositionOfferRoom({
           {timelineTab === "selection" ? data.selection_history.map((item) => <article className={styles.timelineItem} key={item.id}><div><strong>{item.primary?.buyer_name ?? "Selection cleared"}</strong><span>{item.backups.length ? `Backups: ${item.backups.map((backup) => backup.buyer_name).join(", ")}` : "No backup coverage"}</span></div><time>{dateTime(item.approved_at)}</time><p>{item.reason}</p></article>) : null}
           {timelineTab === "outcomes" ? data.outcomes.map((item) => <article className={styles.timelineItem} key={item.id}><div><strong>{item.buyer_name} - {labelize(item.outcome_type)}</strong><span>{labelize(item.cause_category)} cause - {signedPercent(item.reliability_delta_basis_points)} reliability</span></div><time>{dateTime(item.occurred_at)}</time><p>{item.reason}</p>{item.details ? <small>{item.details}</small> : null}</article>) : null}
           {timelineTab === "negotiation" && !data.negotiation_history.length ? <div className={styles.empty}><History aria-hidden="true" size={22} /><strong>No negotiation events</strong><p>Record counters and material term changes without overwriting the original offer.</p></div> : null}
-          {timelineTab === "selection" && !data.selection_history.length ? <div className={styles.empty}><UserCheck aria-hidden="true" size={22} /><strong>No selection history</strong><p>A human-approved primary and backup decision will appear here.</p></div> : null}
+          {timelineTab === "selection" && !data.selection_history.length ? <div className={styles.empty}><UserCheck aria-hidden="true" size={22} /><strong>No selection history</strong><p>A human-approved primary decision, with or without backup coverage, will appear here.</p></div> : null}
           {timelineTab === "outcomes" && !data.outcomes.length ? <div className={styles.empty}><CircleDollarSign aria-hidden="true" size={22} /><strong>No buyer outcomes</strong><p>Passes, withdrawals, fallouts, retrades, and completed closes will appear here.</p></div> : null}
         </div>
       </section>
@@ -1069,14 +1131,14 @@ export function DispositionOfferRoom({
         </details>
 
         <details className={styles.form}>
-          <summary><div><span>Deadline protection</span><h5>Add closing milestone</h5><p>Create an owned deadline after buyer selection.</p></div><ChevronDown aria-hidden="true" size={17} /></summary>
+          <summary><div><span>Deadline protection</span><h5>Add closing milestone</h5><p>Create an owned whole-deal or buyer-specific deadline at any point.</p></div><ChevronDown aria-hidden="true" size={17} /></summary>
           <form className={styles.formBody} onSubmit={createCheckpoint}>
             <label><span>Milestone</span><select name="checkpoint_type"><option value="buyer_agreement">Buyer agreement</option><option value="buyer_signature">Buyer signature</option><option value="buyer_deposit">Buyer deposit</option><option value="buyer_response">Buyer response</option><option value="access">Access</option><option value="title">Title</option><option value="closing">Closing</option></select></label>
             <label><span>Label</span><input name="label" placeholder="Earnest money received" required /></label>
             <label><span>Due date and time</span><input name="due_at" required type="datetime-local" /></label>
-            <label><span>Related offer</span><select name="offer_id"><option value="">Whole deal</option>{offers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name}</option>)}</select></label>
+            <label><span>Milestone scope</span><select name="offer_id"><option value="">Whole deal (independent of buyer selection)</option>{offers.map((offer) => <option key={offer.id} value={offer.id}>{offer.buyer_name} (buyer-specific)</option>)}</select><small>Whole-deal milestones stay independent of buyer coverage. A current primary or backup milestone follows that selection; any other recorded offer can still have its own buyer-specific milestone without selecting the buyer.</small></label>
             <label><span>Notes</span><textarea name="notes" rows={3} /></label>
-            <button disabled={busyAction !== null || !canEditDeals || !data.current_selection} type="submit"><CalendarClock aria-hidden="true" size={14} />Add milestone</button>
+            <button disabled={busyAction !== null || !canEditDeals} type="submit"><CalendarClock aria-hidden="true" size={14} />Add milestone</button>
           </form>
         </details>
 

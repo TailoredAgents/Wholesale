@@ -3135,15 +3135,22 @@ export type DispositionExecutionPermission = {
 };
 
 export type DispositionExecutionCandidate = {
-  candidate_id: string;
+  candidate_id: string | null;
   buyer_id: string;
   conversation_id: string | null;
   name: string;
   company_name: string | null;
   phone: string | null;
   email: string | null;
-  rank: number;
-  score_basis_points: number;
+  ranking_status: "ranked" | "unranked";
+  rank: number | null;
+  score_basis_points: number | null;
+  decision_status: string;
+  lifecycle_stage: string;
+  decision_reason: string | null;
+  lock_version: number | null;
+  actionable: boolean;
+  action_blockers: string[];
   relationship_status: string | null;
   tier: string | null;
   temperature: string | null;
@@ -3173,10 +3180,12 @@ export type DispositionExecutionWorkspace = {
   asset_class: string;
   property_address: string;
   package_status: string;
+  package_is_preliminary?: boolean;
   package_pdf_path: string | null;
   ready: boolean;
   blockers: string[];
   remaining_candidate_count: number;
+  candidates: DispositionExecutionCandidate[];
   current_candidate: DispositionExecutionCandidate | null;
   showings: DispositionExecutionShowing[];
 };
@@ -3269,6 +3278,8 @@ export type DispositionOfferSelection = {
   lock_version: number;
   primary: DispositionOfferSelectionSlot | null;
   backups: DispositionOfferSelectionSlot[];
+  backup_coverage_state: "covered" | "missing";
+  advisory_snapshot: Record<string, unknown>;
   reason: string;
   evidence_hash: string;
   approved_by_user_id: string;
@@ -3327,6 +3338,7 @@ export type DispositionClosingCheckpoint = {
 
 export type DispositionReplacementOption = {
   offer_id: string;
+  offer_lock_version: number;
   buyer_id: string;
   buyer_name: string;
   backup_rank: number | null;
@@ -3412,6 +3424,71 @@ export type DispositionCase = {
     created_at: string;
   };
   created_at: string;
+};
+
+export type DispositionReadinessActionState =
+  | "available"
+  | "ready"
+  | "blocked"
+  | "complete"
+  | "not_applicable";
+
+export type DispositionReadinessCheckStatus =
+  | "ready"
+  | "warning"
+  | "blocked"
+  | "complete"
+  | "not_applicable";
+
+export type DispositionReadinessBlockerClass =
+  | "hard_stop"
+  | "release_gate"
+  | "warning";
+
+export type DispositionReadinessRemediation = {
+  label: string;
+  tab: string | null;
+  anchor: string | null;
+  href: string | null;
+};
+
+export type DispositionReadinessCheck = {
+  key: string;
+  label: string;
+  status: DispositionReadinessCheckStatus;
+  blocker_class: DispositionReadinessBlockerClass | null;
+  detail: string;
+  is_advisory: true;
+  remediation: DispositionReadinessRemediation | null;
+};
+
+export type DispositionReadinessAction = {
+  key: string;
+  label: string;
+  state: DispositionReadinessActionState;
+  blocker_class: DispositionReadinessBlockerClass | null;
+  detail: string;
+  is_advisory: true;
+  target_tab: string | null;
+  target_anchor: string | null;
+  href: string | null;
+  best_action_rank: number | null;
+  parallel_group: string | null;
+  checks: DispositionReadinessCheck[];
+};
+
+export type DispositionCaseReadiness = {
+  case_id: string;
+  is_advisory: true;
+  generated_at: string;
+  source_fingerprint: string;
+  owner: { user_id: string | null; label: string } | null;
+  warning_count: number;
+  completed_count: number;
+  total_count: number;
+  best_action_key: string | null;
+  parallel_action_keys: string[];
+  actions: DispositionReadinessAction[];
 };
 
 export type DispositionOverview = {
@@ -3546,6 +3623,10 @@ export type DispositionPackageShareLink = {
   package_version_number: number;
   token_hint: string;
   artifact_sha256: string;
+  package_status_at_issue?: string;
+  was_current_at_issue?: boolean;
+  is_preliminary?: boolean;
+  is_current_now?: boolean;
   lock_version: number;
   status: "active" | "expired" | "revoked" | "artifact_unavailable";
   expires_at: string;
@@ -3600,6 +3681,14 @@ export type DispositionProviderApprovedPackage = {
   is_current: boolean;
 };
 
+export type DispositionProviderAvailablePackage = {
+  package_version_id: string;
+  version_number: number;
+  source_fingerprint: string;
+  status: string;
+  is_current: boolean;
+};
+
 export type DispositionProviderManualStatus =
   | "draft"
   | "active"
@@ -3641,6 +3730,10 @@ export type DispositionProviderListingRevision = {
   public_payload: Record<string, unknown>;
   public_payload_sha256: string;
   package_source_fingerprint: string;
+  package_status?: string | null;
+  package_was_current_at_prepare?: boolean;
+  package_is_current_now?: boolean;
+  package_is_preliminary?: boolean;
   created_by_user_id: string;
   approved_by_user_id: string | null;
   approval_reason: string | null;
@@ -3709,6 +3802,7 @@ export type DispositionProviderWorkspace = {
   verification_gate: DispositionProviderVerificationGate;
   account: DispositionProviderAccount | null;
   approved_package: DispositionProviderApprovedPackage | null;
+  available_package?: DispositionProviderAvailablePackage | null;
   listing: DispositionProviderListing | null;
   revisions: DispositionProviderListingRevision[];
   source_links: DispositionProviderSourceLink[];
@@ -3772,6 +3866,19 @@ export type DispositionOutreachDelivery = {
   created_at: string;
 };
 
+export type DispositionOutreachPackageAttachment = {
+  file_name: string;
+  artifact_sha256: string;
+  package_status: string;
+  was_current_at_prepare: boolean;
+  is_preliminary: boolean;
+  recipient_label_policy: string;
+};
+
+export type DispositionOutreachSenderSnapshot = Record<string, unknown> & {
+  package_attachment?: DispositionOutreachPackageAttachment;
+};
+
 export type DispositionOutreachRevision = {
   id: string;
   campaign_id: string;
@@ -3786,7 +3893,11 @@ export type DispositionOutreachRevision = {
   approval_hash: string | null;
   package_source_fingerprint: string;
   artifact_sha256: string;
-  sender_snapshot: Record<string, unknown>;
+  package_status?: string;
+  package_was_current_at_prepare?: boolean;
+  package_is_current_now?: boolean;
+  package_is_preliminary?: boolean;
+  sender_snapshot: DispositionOutreachSenderSnapshot;
   created_by_user_id: string;
   approved_by_user_id: string | null;
   approval_reason: string | null;
@@ -3806,6 +3917,8 @@ export type DispositionOutreachWorkspace = {
   package_version_id: string | null;
   package_source_fingerprint: string | null;
   artifact_sha256: string | null;
+  package_status?: string | null;
+  package_is_preliminary?: boolean;
   hard_recipient_cap: number;
   readiness_status: "ready" | "blocked";
   blockers: string[];
@@ -3842,6 +3955,26 @@ export type DispositionDeskAction = {
   href: string;
 };
 
+export type DispositionDeskChecklistIssue = {
+  key: string;
+  label: string;
+  blocker_class: DispositionReadinessBlockerClass | null;
+  detail: string;
+  href: string | null;
+};
+
+export type DispositionDeskChecklist = {
+  warning_count: number;
+  completed_count: number;
+  total_count: number;
+  best_action_key: string | null;
+  best_action_label: string | null;
+  best_action_href?: string | null;
+  parallel_action_keys: string[];
+  parallel_actions?: DispositionDeskAction[];
+  issues?: DispositionDeskChecklistIssue[];
+};
+
 export type DispositionDeskItem = {
   key: string;
   category: DispositionDeskCategory;
@@ -3862,6 +3995,7 @@ export type DispositionDeskItem = {
   transaction_id?: string | null;
   needs_setup?: boolean;
   asset_class?: "house" | "land" | null;
+  checklist?: DispositionDeskChecklist | null;
   primary_action: DispositionDeskAction;
   secondary_action: DispositionDeskAction | null;
 };
@@ -5871,7 +6005,7 @@ type TaskQueueResponse = {
   items: SpeedToLeadTask[];
 };
 
-type BuyerListResponse = {
+export type BuyerListResponse = {
   items: BuyerListItem[];
   total: number;
   limit: number;

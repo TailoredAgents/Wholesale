@@ -114,8 +114,8 @@ class OfferNegotiationCreate(BaseModel):
 
 class OfferSelectionCreate(BaseModel):
     primary_offer_id: UUID
-    backup_offer_ids: list[UUID] = Field(min_length=1, max_length=5)
-    expected_offer_lock_versions: dict[UUID, int] = Field(min_length=2, max_length=6)
+    backup_offer_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    expected_offer_lock_versions: dict[UUID, int] = Field(min_length=1, max_length=6)
     expected_selection_lock_version: int | None = Field(default=None, ge=1)
     reason: str = Field(min_length=10, max_length=1000)
     eligibility_override_reason: str | None = Field(default=None, min_length=10, max_length=1000)
@@ -138,6 +138,7 @@ class OfferSelectionCreate(BaseModel):
 class OfferPrimaryReplacementCreate(BaseModel):
     expected_lock_version: int = Field(ge=1)
     replacement_offer_id: UUID | None = None
+    expected_replacement_offer_lock_version: int | None = Field(default=None, ge=1)
     outcome_type: Literal["withdrawal", "fallout", "retrade", "missed_deadline"]
     cause_category: Literal["buyer", "seller", "title", "property", "stonegate", "external"]
     reason: str = Field(min_length=10, max_length=1000)
@@ -259,6 +260,8 @@ class BuyerSelectionRead(BaseModel):
     approved_by_user_id: UUID
     approved_at: datetime
     replaced_at: datetime | None
+    backup_coverage_state: Literal["covered", "missing"]
+    advisory_snapshot: dict[str, Any]
 
 
 class NegotiationEventRead(BaseModel):
@@ -312,6 +315,7 @@ class ClosingCheckpointRead(BaseModel):
 
 class ReplacementOptionRead(BaseModel):
     offer_id: UUID
+    offer_lock_version: int
     buyer_id: UUID
     buyer_name: str
     backup_rank: int | None

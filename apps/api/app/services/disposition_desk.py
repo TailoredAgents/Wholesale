@@ -46,18 +46,22 @@ from app.schemas.disposition_desk import (
     DispositionDeskActionRead,
     DispositionDeskBuyerHealthRead,
     DispositionDeskCategory,
+    DispositionDeskChecklistIssueRead,
+    DispositionDeskChecklistSummaryRead,
     DispositionDeskItemRead,
     DispositionDeskMetricsRead,
+    DispositionDeskParallelActionRead,
     DispositionDeskRead,
     DispositionDeskScope,
     DispositionDeskSectionsRead,
     DispositionDeskSectionStatusRead,
     DispositionDeskSourceHealthRead,
 )
-from app.services import buyer_discovery, deals
+from app.services import buyer_discovery, deals, disposition_readiness
 from app.services.disposition_handoff import (
     HANDOFF_PENDING_BLOCKER,
     HANDOFF_SETUP_TASK_TYPE,
+    active_authorized_disposition_user,
 )
 from app.services.dispositions import _proof_is_current_verified
 from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES
@@ -113,7 +117,7 @@ def _team_scope(
             user.display_name if user else "My work",
             1,
             can_view_team,
-            None,
+            "Unassigned active disposition cases are included so setup work stays visible.",
         )
     if not can_view_team:
         raise PermissionError("Team disposition scope requires disposition manager access.")
@@ -162,11 +166,14 @@ def _team_scope(
             ).all()
         )
         member_ids.update(team.manager_user_id for team in teams if team.manager_user_id)
-    notice = "Unassigned records are excluded from this team view."
+    notice = (
+        "Unassigned active disposition cases are included; other unassigned records are "
+        "excluded."
+    )
     if not teams:
         notice = (
             "No active Dispositions team is connected, so Team currently shows only your work. "
-            "Unassigned records are excluded."
+            "Unassigned active disposition cases are included."
         )
     label = ", ".join(team.name for team in teams) if teams else "My work"
     return "team", member_ids, label, len(member_ids), True, notice
@@ -191,6 +198,53 @@ def _users(db: Session, organization_id: UUID, user_ids: set[UUID | None]) -> di
 def _owner_name(user_id: UUID | None, users: dict[UUID, User]) -> str:
     user = users.get(user_id) if user_id else None
     return user.display_name if user else "Unassigned"
+
+
+def _desk_checklist(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+) -> DispositionDeskChecklistSummaryRead | None:
+    try:
+        readiness = disposition_readiness.read_case_readiness(db, principal, case.id)
+    except ValueError:
+        return None
+    if readiness is None:
+        return None
+    action_by_key = {item.key: item for item in readiness.actions}
+    best = action_by_key.get(readiness.best_action_key) if readiness.best_action_key else None
+    issues = [
+        DispositionDeskChecklistIssueRead(
+            key=check.key,
+            label=check.label,
+            blocker_class=check.blocker_class,
+            detail=check.detail,
+            href=check.remediation.href if check.remediation else action.href,
+        )
+        for action in readiness.actions
+        for check in action.checks
+        if check.blocker_class is not None
+    ]
+    parallel_actions = [
+        DispositionDeskParallelActionRead(
+            key=action.key,
+            label=action.label,
+            href=action.href,
+        )
+        for key in readiness.parallel_action_keys
+        if (action := action_by_key.get(key)) is not None
+    ]
+    return DispositionDeskChecklistSummaryRead(
+        warning_count=readiness.warning_count,
+        completed_count=readiness.completed_count,
+        total_count=readiness.total_count,
+        best_action_key=readiness.best_action_key,
+        best_action_label=best.label if best else None,
+        best_action_href=best.href if best else None,
+        parallel_action_keys=readiness.parallel_action_keys,
+        issues=issues,
+        parallel_actions=parallel_actions,
+    )
 
 
 def _blocked_handoff_owner(
@@ -395,7 +449,19 @@ def read_desk(
             )
         ).all()
     )
-    cases = [case for case in case_rows if _scoped(case.owner_user_id, allowed_user_ids)]
+    cases = [
+        case
+        for case in case_rows
+        if (
+            active_authorized_disposition_user(
+                db,
+                principal.organization_id,
+                case.owner_user_id,
+            )
+            is None
+            or _scoped(case.owner_user_id, allowed_user_ids)
+        )
+    ]
     case_by_deal = {case.deal_id: case for case in cases}
     case_by_id = {case.id: case for case in cases}
     case_ids = {case.id for case in cases}
@@ -867,6 +933,7 @@ def read_desk(
                     label="Buyer network",
                     href="/os/buyers",
                 ),
+                checklist=_desk_checklist(db, principal, case) if case else None,
             )
         )
         warning = _coverage_warning(
@@ -1248,7 +1315,11 @@ def read_desk(
                     if proof_is_overdue
                     else "Proof of funds expires within 30 days."
                 ),
-                blocker="Current proof of funds is required." if proof_is_overdue else None,
+                blocker=(
+                    "Proof of funds is expired; refreshing it is recommended."
+                    if proof_is_overdue
+                    else None
+                ),
                 severity="danger" if proof_is_overdue else "warning",
                 buyer_id=buyer.id,
                 primary_action=DispositionDeskActionRead(

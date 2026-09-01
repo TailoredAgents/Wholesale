@@ -54,6 +54,7 @@ from app.schemas.disposition_provider import (
     ProviderManualRefresh,
     ProviderWorkspaceRead,
 )
+from app.schemas.disposition_readiness import DispositionReadinessRead
 from app.schemas.dispositions import (
     BuyerPoolConversionRequest,
     BuyerPoolDecisionUpdate,
@@ -95,6 +96,7 @@ from app.services import (
     disposition_packages,
     disposition_packet_links,
     disposition_provider,
+    disposition_readiness,
     dispositions,
 )
 from app.services.disposition_copilot import (
@@ -131,7 +133,10 @@ outreach_view_dependency = require_any_permission(
     PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
     PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
 )
-bulk_send_dependency = require_permission(PermissionKeys.SEND_BULK_COMMUNICATIONS)
+bulk_send_dependency = require_any_permission(
+    PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH,
+    PermissionKeys.SEND_BULK_COMMUNICATIONS,
+)
 send_sms_dependency = require_any_permission(
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
@@ -235,11 +240,28 @@ def read_disposition_desk(
         raise invalid(exc) from exc
 
 
+@router.get("/cases/{case_id}/readiness")
+def read_disposition_case_readiness(
+    case_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> DispositionReadinessRead:
+    try:
+        result = disposition_readiness.read_case_readiness(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
 @router.post("/cases", status_code=201)
 def open_case(
     payload: DispositionCaseCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(private_economics_edit_dependency)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
 ) -> DispositionCaseRead:
     try:
         return dispositions.create_case(db, principal, payload)
@@ -1522,8 +1544,20 @@ def release_case_campaign(
     case_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_dependency)],
+    package_version_id: Annotated[UUID | None, Query()] = None,
 ) -> DispositionCaseRead:
-    return _case_action(dispositions.release_campaign, db, principal, case_id)
+    try:
+        result = dispositions.release_campaign(
+            db,
+            principal,
+            case_id,
+            package_version_id=package_version_id,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
 
 
 @router.post("/cases/{case_id}/offers")
@@ -1559,8 +1593,9 @@ def approve_buyer_selection(
     raise HTTPException(
         status_code=410,
         detail=(
-            "Legacy buyer selection is retired. A disposition manager must approve primary "
-            "and backup coverage through the Offer Room."
+            "Legacy buyer selection is retired. An authorized Dispositions user must select "
+            "a primary buyer through the Offer Room; backup coverage is recommended, not "
+            "required."
         ),
     )
 
@@ -1595,7 +1630,7 @@ def download_package(
     except ValueError as exc:
         raise invalid(exc) from exc
     if result is None:
-        raise HTTPException(status_code=404, detail="Approved deal package not found.")
+        raise HTTPException(status_code=404, detail="Package artifact not found.")
     content, file_name = result
     return Response(
         content=content,
@@ -1637,7 +1672,10 @@ def download_accounting_export(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(private_economics_view_dependency)],
 ) -> Response:
-    content = dispositions.accounting_csv(db, principal, case_id)
+    try:
+        content = dispositions.accounting_csv(db, principal, case_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
     if content is None:
         raise HTTPException(status_code=404, detail="Approved reconciliation not found.")
     return Response(

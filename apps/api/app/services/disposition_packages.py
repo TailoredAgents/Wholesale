@@ -41,6 +41,10 @@ from app.schemas.dispositions import (
     DispositionPackageVersionRead,
     DispositionPackageWorkspaceRead,
 )
+from app.services.disposition_state import (
+    ACTIVE_DISPOSITION_CASE_STATUSES,
+    advance_disposition_milestone,
+)
 from app.services.document_storage import scan_document
 
 PACKAGE_POLICY_VERSION = "buyer_safe_v1"
@@ -1329,6 +1333,49 @@ def _version_matches_current_sources(
     )
 
 
+def package_version_is_current(
+    version: DispositionPackageVersion,
+    *,
+    current_fingerprint: str,
+) -> bool:
+    """Report source/policy/renderer freshness without making it an action gate."""
+
+    return _version_matches_current_sources(
+        version,
+        current_fingerprint=current_fingerprint,
+    )
+
+
+def package_version_currentness(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    version: DispositionPackageVersion,
+) -> bool:
+    """Return latest-and-source-fresh truth without authorizing or blocking an action."""
+
+    latest_id = db.scalar(
+        select(DispositionPackageVersion.id)
+        .where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+        )
+        .order_by(
+            DispositionPackageVersion.version_number.desc(),
+            DispositionPackageVersion.created_at.desc(),
+        )
+        .limit(1)
+    )
+    current_fingerprint = assemble_package(db, principal, case)["source_fingerprint"]
+    return bool(
+        latest_id == version.id
+        and package_version_is_current(
+            version,
+            current_fingerprint=current_fingerprint,
+        )
+    )
+
+
 def _external_artifact_metadata(
     version: DispositionPackageVersion,
 ) -> dict[str, Any] | None:
@@ -1516,7 +1563,7 @@ def build_version(
         db,
         principal,
         case_id,
-        allowed_statuses={"package_prep", "buyer_matching", "marketed"},
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if case is None:
         return None
@@ -1555,13 +1602,8 @@ def build_version(
         minimum_acceptable_cents=payload.minimum_acceptable_cents,
         desired_assignment_fee_cents=payload.desired_assignment_fee_cents,
     )
-    if case.strategy == "assignment" and int(
-        assembled["private_economics"]["minimum_acceptable_cents"]
-    ) < int(assembled["private_economics"]["contract_purchase_price_cents"]):
-        raise ValueError(
-            "Minimum acceptable price cannot be below the contract purchase price "
-            "for an assignment."
-        )
+    prepared_at = datetime.now(UTC)
+    pdf_data = _render_pdf(assembled["public_snapshot"], prepared_at, case.id)
     for prior_draft in db.scalars(
         select(DispositionPackageVersion).where(
             DispositionPackageVersion.organization_id == principal.organization_id,
@@ -1590,11 +1632,11 @@ def build_version(
         sms_summary=assembled["sms_summary"],
         approval_reason=None,
         approved_at=None,
-        pdf_file_name=None,
-        pdf_content_type=None,
-        pdf_size=None,
-        pdf_sha256=None,
-        pdf_data=None,
+        pdf_file_name=f"stonegate-deal-package-{case.id}-v{latest_number + 1}.pdf",
+        pdf_content_type="application/pdf",
+        pdf_size=len(pdf_data),
+        pdf_sha256=sha256(pdf_data).hexdigest(),
+        pdf_data=pdf_data,
     )
     db.add(version)
     case.asking_price_cents = int(assembled["private_economics"]["buyer_asking_price_cents"])
@@ -1604,12 +1646,6 @@ def build_version(
     )
     case.package_status = "draft"
     case.package_snapshot = sanitize_public_snapshot(assembled["public_snapshot"])
-    # DS5 replaces the mutable legacy package state with immutable versions.
-    # A legacy case may already be marked marketed even though it has no current
-    # package artifact; rebuilding it must reopen buyer matching so the approved
-    # version can be matched and prepared through the current workflow.
-    if case.status in {"package_prep", "marketed"}:
-        case.status = "buyer_matching"
     db.flush()
     _audit(
         db,
@@ -1667,7 +1703,7 @@ def build_external_version(
         db,
         principal,
         case_id,
-        allowed_statuses={"package_prep", "buyer_matching", "marketed"},
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if case is None:
         return None
@@ -1686,13 +1722,6 @@ def build_external_version(
             f"{expected_latest_version}; current latest is {latest_number}."
         )
     assembled = assemble_package(db, principal, case)
-    if case.strategy == "assignment" and int(
-        assembled["private_economics"]["minimum_acceptable_cents"]
-    ) < int(assembled["private_economics"]["contract_purchase_price_cents"]):
-        raise ValueError(
-            "Minimum acceptable price cannot be below the contract purchase price "
-            "for an assignment."
-        )
     scan_status = scan_document(content)
     digest = sha256(content).hexdigest()
     uploaded_at = datetime.now(UTC)
@@ -1746,8 +1775,6 @@ def build_external_version(
     db.add(version)
     case.package_status = "draft"
     case.package_snapshot = sanitize_public_snapshot(assembled["public_snapshot"])
-    if case.status in {"package_prep", "marketed"}:
-        case.status = "buyer_matching"
     db.flush()
     _audit(
         db,
@@ -1777,7 +1804,7 @@ def build_external_version(
     )
 
 
-def _render_pdf(snapshot: dict[str, Any], approved_at: datetime, case_id: UUID) -> bytes:
+def _render_pdf(snapshot: dict[str, Any], prepared_at: datetime, case_id: UUID) -> bytes:
     safe = sanitize_public_snapshot(snapshot)
     prop = _dict_section(safe, "property") or {}
     pricing = _dict_section(safe, "pricing") or {}
@@ -1799,7 +1826,7 @@ def _render_pdf(snapshot: dict[str, Any], approved_at: datetime, case_id: UUID) 
     pdf.setFont("Helvetica-Bold", 23)
     pdf.drawString(48, 716, "Investor Deal Package")
     pdf.setFont("Helvetica", 9)
-    pdf.drawString(48, 696, f"Approved {approved_at:%B %d, %Y}")
+    pdf.drawString(48, 696, f"Prepared {prepared_at:%B %d, %Y}")
     pdf.setFillColorRGB(*ink)
     pdf.setFont("Helvetica-Bold", 15)
     pdf.drawString(48, 640, str(prop.get("address") or "Address unavailable")[:78])
@@ -1874,7 +1901,10 @@ def approve_version(
     from app.services.dispositions import scoped_case_for_mutation
 
     case = scoped_case_for_mutation(
-        db, principal, case_id, allowed_statuses={"package_prep", "buyer_matching", "marketed"}
+        db,
+        principal,
+        case_id,
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if case is None:
         return None
@@ -1908,10 +1938,10 @@ def approve_version(
         .limit(1)
         .with_for_update()
     )
-    if latest is None or latest.id != version.id:
-        raise ValueError("Only the latest package version can be approved.")
-    if version.status != "draft":
-        raise ValueError("Only a draft package version can be approved.")
+    if latest is None:
+        raise ValueError("The package version history is unavailable.")
+    if version.status not in {"draft", "superseded"} or version.approved_at is not None:
+        raise ValueError("Only an unapproved package version can be approved.")
     if (
         version.policy_version != PACKAGE_POLICY_VERSION
         or version.renderer_version != PACKAGE_RENDERER_VERSION
@@ -1933,15 +1963,8 @@ def approve_version(
         minimum_acceptable_cents=int(economics["minimum_acceptable_cents"]),
         desired_assignment_fee_cents=int(economics["desired_assignment_fee_cents"]),
     )
-    if current["source_fingerprint"] != version.source_fingerprint:
-        raise ValueError(
-            "The package draft is stale because material deal evidence changed. "
-            "Build a new package version."
-        )
-    blockers = list(current["readiness"].get("blockers") or [])
-    if blockers:
-        raise ValueError("Package approval is blocked: " + "; ".join(blockers))
     now = datetime.now(UTC)
+    rendered_legacy_artifact = False
     if artifact_metadata is not None:
         if (
             artifact_metadata.get("malware_scan_status")
@@ -1966,7 +1989,36 @@ def approve_version(
             )
         pdf_data = bytes(version.pdf_data)
     else:
-        pdf_data = _render_pdf(version.public_snapshot, now, case.id)
+        existing_pdf = bytes(version.pdf_data or b"")
+        if existing_pdf:
+            if (
+                not version.pdf_file_name
+                or version.pdf_sha256 != sha256(existing_pdf).hexdigest()
+                or version.pdf_content_type != "application/pdf"
+                or version.pdf_size != len(existing_pdf)
+                or not existing_pdf.startswith(b"%PDF-")
+            ):
+                raise ValueError(
+                    "The reviewed package artifact failed its immutable integrity check. "
+                    "Build a new package version before approval."
+                )
+            pdf_data = existing_pdf
+        else:
+            if any(
+                value is not None
+                for value in (
+                    version.pdf_file_name,
+                    version.pdf_content_type,
+                    version.pdf_size,
+                    version.pdf_sha256,
+                )
+            ):
+                raise ValueError(
+                    "The reviewed package artifact is incomplete. Build a new package version "
+                    "before approval."
+                )
+            pdf_data = _render_pdf(version.public_snapshot, version.created_at, case.id)
+            rendered_legacy_artifact = True
     for prior in db.scalars(
         select(DispositionPackageVersion).where(
             DispositionPackageVersion.organization_id == principal.organization_id,
@@ -1981,15 +2033,15 @@ def approve_version(
     version.approved_by_user_id = principal.user_id
     version.approved_at = now
     version.approval_reason = payload.reason
-    if artifact_metadata is None:
+    if rendered_legacy_artifact:
         version.pdf_file_name = f"stonegate-deal-package-{case.id}-v{version.version_number}.pdf"
         version.pdf_content_type = "application/pdf"
         version.pdf_size = len(pdf_data)
         version.pdf_sha256 = sha256(pdf_data).hexdigest()
         version.pdf_data = pdf_data
-    version.readiness_snapshot = dict(current["readiness"])
-    if artifact_metadata is not None:
-        version.readiness_snapshot[EXTERNAL_ARTIFACT_METADATA_KEY] = artifact_metadata
+    # Approval attests to the immutable version that was built/uploaded. Do not
+    # replace its captured readiness with later case facts, even when a reviewer
+    # intentionally approves a source-stale package.
     version.lock_version += 1
     case.asking_price_cents = int(economics["buyer_asking_price_cents"])
     case.minimum_acceptable_cents = int(economics["minimum_acceptable_cents"])
@@ -1998,8 +2050,7 @@ def approve_version(
     case.package_snapshot = sanitize_public_snapshot(version.public_snapshot)
     case.package_approved_by_user_id = principal.user_id
     case.package_approved_at = now
-    if case.status in {"package_prep", "marketed"}:
-        case.status = "buyer_matching"
+    advance_disposition_milestone(case, "buyer_matching")
     _audit(
         db,
         principal,
@@ -2028,49 +2079,60 @@ def approve_version(
         principal,
         version,
         current_fingerprint=current["source_fingerprint"],
-        latest_version_id=version.id,
+        latest_version_id=latest.id,
     )
 
 
-def require_current_approved_version(
+def require_package_artifact(
     db: Session,
     principal: Principal,
     case: DispositionCase,
     *,
     action: str,
+    package_version_id: UUID | None = None,
 ) -> DispositionPackageVersion:
+    """Return an exact usable artifact without treating review readiness as authority."""
+
     if case.organization_id != principal.organization_id:
         raise ValueError("Disposition case does not belong to this organization.")
-    version = db.scalar(
-        select(DispositionPackageVersion)
-        .where(
-            DispositionPackageVersion.organization_id == principal.organization_id,
-            DispositionPackageVersion.disposition_case_id == case.id,
-        )
-        .order_by(DispositionPackageVersion.version_number.desc())
+    statement = select(DispositionPackageVersion).where(
+        DispositionPackageVersion.organization_id == principal.organization_id,
+        DispositionPackageVersion.disposition_case_id == case.id,
     )
-    if (
-        version is None
-        or version.status != "approved"
-        or case.package_status != "approved"
-        or version.pdf_data is None
-        or version.pdf_sha256 is None
-    ):
-        raise ValueError(f"An approved immutable disposition package is required before {action}.")
-    current = assemble_package(db, principal, case)
-    if not _version_matches_current_sources(
-        version,
-        current_fingerprint=current["source_fingerprint"],
-    ):
-        raise ValueError(
-            "The approved disposition package is stale because material deal evidence, "
-            "the package policy, or the renderer changed. Build and approve a new package "
-            f"version before {action}."
+    if package_version_id is not None:
+        statement = statement.where(DispositionPackageVersion.id == package_version_id)
+    else:
+        statement = statement.where(DispositionPackageVersion.pdf_data.is_not(None)).order_by(
+            DispositionPackageVersion.version_number.desc(),
+            DispositionPackageVersion.created_at.desc(),
         )
-    if current["readiness"].get("blockers"):
+    version = db.scalar(statement.limit(1))
+    if version is None:
         raise ValueError(
-            f"The approved disposition package is no longer release-ready before {action}: "
-            + "; ".join(current["readiness"]["blockers"])
+            f"Create or upload the exact investor package artifact needed before {action}."
+        )
+    content = bytes(version.pdf_data or b"")
+    artifact_metadata = _external_artifact_metadata(version)
+    if artifact_metadata is not None and (
+        artifact_metadata.get("malware_scan_status")
+        not in ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES
+    ):
+        raise ValueError(
+            "The selected investor package artifact has an unacceptable scan state before "
+            f"{action}."
+        )
+    if (
+        not content
+        or not version.pdf_file_name
+        or version.pdf_content_type != "application/pdf"
+        or version.pdf_size != len(content)
+        or not version.pdf_sha256
+        or version.pdf_sha256 != sha256(content).hexdigest()
+        or not content.startswith(b"%PDF-")
+    ):
+        raise ValueError(
+            f"The selected investor package artifact failed its exact hash or PDF integrity check "
+            f"before {action}."
         )
     return version
 
@@ -2081,6 +2143,14 @@ def exact_version_pdf(
     case_id: UUID,
     version_id: UUID,
 ) -> tuple[bytes, str] | None:
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == case_id,
+            DispositionCase.organization_id == principal.organization_id,
+        )
+    )
+    if case is None:
+        return None
     version = db.scalar(
         select(DispositionPackageVersion).where(
             DispositionPackageVersion.id == version_id,
@@ -2088,7 +2158,7 @@ def exact_version_pdf(
             DispositionPackageVersion.disposition_case_id == case_id,
         )
     )
-    if version is None or version.pdf_data is None or version.pdf_file_name is None:
+    if version is None:
         return None
     artifact_metadata = _external_artifact_metadata(version)
     if (
@@ -2105,15 +2175,20 @@ def exact_version_pdf(
             "Reviewing an unapproved external investor packet requires deal-edit or "
             "package-approval permission."
         )
-    if artifact_metadata is not None and (
-        artifact_metadata.get("malware_scan_status")
-        not in ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES
-    ):
-        raise ValueError(
-            "The externally uploaded package cannot be opened because its malware scan "
-            "state is not acceptable. Upload a newly scanned package."
-        )
-    return bytes(version.pdf_data), version.pdf_file_name
+    version = require_package_artifact(
+        db,
+        principal,
+        case,
+        package_version_id=version.id,
+        action="downloading this exact package version",
+    )
+    file_name = str(version.pdf_file_name)
+    if (
+        version.status != "approved"
+        or not package_version_currentness(db, principal, case, version)
+    ) and not file_name.upper().startswith("PRELIMINARY-"):
+        file_name = f"PRELIMINARY-{file_name}"
+    return bytes(version.pdf_data or b""), file_name
 
 
 def compatibility_pdf(db: Session, principal: Principal, case_id: UUID) -> tuple[bytes, str] | None:
@@ -2125,10 +2200,16 @@ def compatibility_pdf(db: Session, principal: Principal, case_id: UUID) -> tuple
     )
     if case is None:
         return None
-    version = require_current_approved_version(
-        db, principal, case, action="downloading the current package"
+    version = require_package_artifact(
+        db, principal, case, action="downloading the latest available package"
     )
-    return bytes(version.pdf_data or b""), str(version.pdf_file_name)
+    file_name = str(version.pdf_file_name)
+    if (
+        version.status != "approved"
+        or not package_version_currentness(db, principal, case, version)
+    ) and not file_name.upper().startswith("PRELIMINARY-"):
+        file_name = f"PRELIMINARY-{file_name}"
+    return bytes(version.pdf_data or b""), file_name
 
 
 def _audit(

@@ -23,6 +23,7 @@ from app.models.foundation import (
     DealDeduction,
     DealPayout,
     DealReconciliation,
+    DispositionBuyerPoolCandidate,
     DispositionCampaign,
     DispositionCampaignRecipient,
     DispositionCase,
@@ -33,6 +34,7 @@ from app.models.foundation import (
     Property,
     RevenueRecord,
     RoleCredit,
+    SuppressionRecord,
     Transaction,
     User,
 )
@@ -56,6 +58,11 @@ from app.schemas.dispositions import (
     ReconciliationRead,
 )
 from app.services.buyers import get_current_buy_box_version
+from app.services.disposition_handoff import derive_initial_disposition_economics
+from app.services.disposition_state import (
+    ACTIVE_DISPOSITION_CASE_STATUSES,
+    advance_disposition_milestone,
+)
 from app.services.document_storage import read_content, store_content
 from app.services.lead_lifecycle import (
     INACTIVE_LEAD_STAGES,
@@ -228,7 +235,18 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
 def create_case(
     db: Session, principal: Principal, payload: DispositionCaseCreate
 ) -> DispositionCaseRead:
-    require_private_economics_write(principal)
+    if PermissionKeys.EDIT_DEALS not in principal.permission_keys:
+        raise PermissionError(f"Missing permission: {PermissionKeys.EDIT_DEALS}")
+    has_private_economics_override = any(
+        value is not None
+        for value in (
+            payload.asking_price_cents,
+            payload.minimum_acceptable_cents,
+            payload.desired_assignment_fee_cents,
+        )
+    )
+    if has_private_economics_override:
+        require_private_economics_write(principal)
     transaction = db.scalar(
         select(Transaction).where(
             Transaction.id == payload.transaction_id,
@@ -256,7 +274,23 @@ def create_case(
     )
     if transaction is None or transaction.status not in {"executed", "closing", "funded"}:
         raise ValueError("An executed transaction is required.")
-    if payload.minimum_acceptable_cents > payload.asking_price_cents:
+    initial_economics = derive_initial_disposition_economics(db, transaction)
+    asking_price_cents = (
+        payload.asking_price_cents
+        if payload.asking_price_cents is not None
+        else initial_economics.asking_price_cents
+    )
+    minimum_acceptable_cents = (
+        payload.minimum_acceptable_cents
+        if payload.minimum_acceptable_cents is not None
+        else initial_economics.minimum_acceptable_cents
+    )
+    desired_assignment_fee_cents = (
+        payload.desired_assignment_fee_cents
+        if payload.desired_assignment_fee_cents is not None
+        else initial_economics.desired_assignment_fee_cents
+    )
+    if minimum_acceptable_cents > asking_price_cents:
         raise ValueError("Minimum acceptable price cannot exceed asking price.")
     if db.scalar(
         select(DispositionCase.id).where(DispositionCase.transaction_id == transaction.id)
@@ -268,17 +302,17 @@ def create_case(
             CompensationPlanVersion.status == "active",
         )
     )
-    if plan is None:
-        raise ValueError("Activate a compensation plan in Business Setup first.")
-    mode = db.scalar(
-        select(DispositionOperatingMode).where(
-            DispositionOperatingMode.compensation_plan_version_id == plan.id,
-            DispositionOperatingMode.key == payload.operating_mode_key,
-            DispositionOperatingMode.status == "available",
+    mode = (
+        db.scalar(
+            select(DispositionOperatingMode).where(
+                DispositionOperatingMode.compensation_plan_version_id == plan.id,
+                DispositionOperatingMode.key == payload.operating_mode_key,
+                DispositionOperatingMode.status == "available",
+            )
         )
+        if plan is not None
+        else None
     )
-    if mode is None:
-        raise ValueError("Select an active disposition operating mode.")
     property_record = db.get(Property, transaction.property_id)
     case = DispositionCase(
         organization_id=principal.organization_id,
@@ -287,13 +321,13 @@ def create_case(
         lead_id=transaction.lead_id,
         property_id=transaction.property_id,
         owner_user_id=principal.user_id,
-        compensation_plan_version_id=plan.id,
-        disposition_operating_mode_id=mode.id,
+        compensation_plan_version_id=plan.id if plan else None,
+        disposition_operating_mode_id=mode.id if mode else None,
         status="package_prep",
         strategy=payload.strategy,
-        asking_price_cents=payload.asking_price_cents,
-        minimum_acceptable_cents=payload.minimum_acceptable_cents,
-        desired_assignment_fee_cents=payload.desired_assignment_fee_cents,
+        asking_price_cents=asking_price_cents,
+        minimum_acceptable_cents=minimum_acceptable_cents,
+        desired_assignment_fee_cents=desired_assignment_fee_cents,
         package_status="draft",
         package_snapshot={
             "package_reference": "pending",
@@ -304,7 +338,7 @@ def create_case(
                 "property_type": property_record.property_type if property_record else None,
             },
             "opportunity": {"strategy": payload.strategy},
-            "pricing": {"buyer_asking_price_cents": payload.asking_price_cents},
+            "pricing": {"buyer_asking_price_cents": asking_price_cents},
             "due_diligence": [
                 "Buyer must independently verify property facts, access, title, and "
                 "closing capacity."
@@ -319,8 +353,10 @@ def create_case(
         notes=payload.notes,
     )
     db.add(case)
-    transaction.compensation_plan_version_id = plan.id
-    transaction.disposition_operating_mode_id = mode.id
+    if plan is not None:
+        transaction.compensation_plan_version_id = plan.id
+    if mode is not None:
+        transaction.disposition_operating_mode_id = mode.id
     db.flush()
     audit(
         db,
@@ -331,8 +367,17 @@ def create_case(
         {
             "transaction_id": str(transaction.id),
             "asset_class": normalize_asset_class(lead.asset_class),
-            "plan_id": str(plan.id),
-            "mode_id": str(mode.id),
+            "plan_id": str(plan.id) if plan else None,
+            "mode_id": str(mode.id) if mode else None,
+            "private_economics_source": (
+                "operator_override"
+                if has_private_economics_override
+                else initial_economics.source
+            ),
+            "setup_warnings": [
+                *([] if plan else ["No active compensation plan."]),
+                *([] if mode else ["No available disposition operating mode."]),
+            ],
         },
         "Disposition case opened",
     )
@@ -372,15 +417,15 @@ def approve_package(
 def generate_matches(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
+    )
     if case is None:
         return None
     require_house_case_workflow(db, case)
-    if case.package_status != "approved":
-        raise ValueError("Approve the deal package before matching buyers.")
-    from app.services.disposition_packages import require_current_approved_version
-
-    require_current_approved_version(db, principal, case, action="matching buyers")
     property_record = db.get(Property, case.property_id)
     db.execute(delete(DispositionMatch).where(DispositionMatch.disposition_case_id == case.id))
     scored: list[
@@ -518,21 +563,28 @@ def generate_matches(
 
 
 def release_campaign(
-    db: Session, principal: Principal, case_id: UUID
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    package_version_id: UUID | None = None,
 ) -> DispositionCaseRead | None:
-    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
+    )
     if case is None:
         return None
     require_house_case_workflow(db, case)
-    if case.package_status != "approved":
-        raise ValueError("Approve the deal package before releasing a campaign.")
-    from app.services.disposition_packages import require_current_approved_version
+    from app.services.disposition_packages import require_package_artifact
 
-    package_version = require_current_approved_version(
+    package_version = require_package_artifact(
         db,
         principal,
         case,
         action="preparing campaign recipients",
+        package_version_id=package_version_id,
     )
     matches = list(
         db.scalars(
@@ -540,101 +592,88 @@ def release_campaign(
             .where(
                 DispositionMatch.organization_id == principal.organization_id,
                 DispositionMatch.disposition_case_id == case.id,
-                DispositionMatch.qualification_status == "qualified",
             )
             .with_for_update()
         ).all()
     )
-    from app.services.disposition_buyer_pool import (
-        case_has_pool_decisions,
-        shortlisted_buyer_ids,
-    )
-
-    if case_has_pool_decisions(db, principal, case.id):
-        approved_buyer_ids = shortlisted_buyer_ids(db, principal, case.id)
-        matches = [match for match in matches if match.buyer_id in approved_buyer_ids]
-        if not matches:
-            raise ValueError(
-                "Shortlist at least one currently eligible Stonegate buyer before releasing "
-                "the campaign. External candidates must be approved and reviewed first."
+    case_candidates = list(
+        db.scalars(
+            select(DispositionBuyerPoolCandidate).where(
+                DispositionBuyerPoolCandidate.organization_id
+                == principal.organization_id,
+                DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+                DispositionBuyerPoolCandidate.buyer_id.is_not(None),
             )
-    buyer_ids = {match.buyer_id for match in matches}
-    buyers = (
-        {
-            buyer.id: buyer
-            for buyer in db.scalars(
-                select(Buyer)
-                .where(
-                    Buyer.organization_id == principal.organization_id,
-                    Buyer.id.in_(buyer_ids),
-                )
-                .with_for_update()
-            ).all()
-        }
-        if buyer_ids
-        else {}
+        ).all()
     )
-    eligible_matches: list[DispositionMatch] = []
-    now = datetime.now(UTC)
-    for match in matches:
-        buyer = buyers.get(match.buyer_id)
+    passed_buyer_ids = {
+        candidate.buyer_id
+        for candidate in case_candidates
+        if candidate.buyer_id is not None
+        and (
+            candidate.decision_status == "passed"
+            or candidate.lifecycle_stage == "pass"
+        )
+    }
+    buyers = {
+        buyer.id: buyer
+        for buyer in db.scalars(
+            select(Buyer)
+            .where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.archived_at.is_(None),
+                Buyer.status != "archived",
+            )
+            .with_for_update()
+        ).all()
+    }
+    buyer_ids = set(buyers) - passed_buyer_ids
+    suppressed_destinations = {
+        (suppression.channel, suppression.normalized_address)
+        for suppression in db.scalars(
+            select(SuppressionRecord).where(
+                SuppressionRecord.organization_id == principal.organization_id,
+                SuppressionRecord.status == "active",
+            )
+        ).all()
+    }
+    matches_by_buyer_id = {match.buyer_id: match for match in matches}
+    for existing_match in matches:
+        if existing_match.buyer_id not in buyers:
+            existing_match.qualification_status = "ineligible"
+            existing_match.recipient_status = "excluded"
+        elif existing_match.buyer_id in passed_buyer_ids:
+            existing_match.recipient_status = "excluded"
+    eligible_buyer_ids: set[UUID] = set()
+    destinations_by_buyer_id: dict[UUID, dict[str, str]] = {}
+    for buyer_id in buyer_ids:
+        buyer = buyers.get(buyer_id)
+        matched_record = matches_by_buyer_id.get(buyer_id)
         if (
             buyer is None
-            or buyer.status != "active"
+            or buyer.status == "do_not_contact"
             or buyer.relationship_status == "do_not_contact"
             or buyer.archived_at is not None
         ):
-            match.qualification_status = "ineligible"
-            match.recipient_status = "excluded"
+            if matched_record is not None:
+                matched_record.qualification_status = "ineligible"
+                matched_record.recipient_status = "excluded"
             continue
-        current_buy_box = get_current_buy_box_version(
-            db,
-            principal,
-            buyer.id,
-            "house",
-            require_verified=True,
-        )
-        if (
-            current_buy_box is None
-            or match.buy_box_version_id is None
-            or current_buy_box[1].id != match.buy_box_version_id
-        ):
-            match.qualification_status = "ineligible"
-            match.recipient_status = "excluded"
+        destinations = _campaign_destinations(buyer, suppressed_destinations)
+        if not destinations:
+            if matched_record is not None:
+                matched_record.qualification_status = "ineligible"
+                matched_record.recipient_status = "excluded"
             continue
-        current_proof = next(
-            (
-                document
-                for document in db.scalars(
-                    select(BuyerProofDocument).where(
-                        BuyerProofDocument.organization_id == principal.organization_id,
-                        BuyerProofDocument.buyer_id == buyer.id,
-                        BuyerProofDocument.status == "verified",
-                        BuyerProofDocument.deleted_at.is_(None),
-                    )
-                ).all()
-                if _proof_is_current_verified(document, now=now)
-                and document.verified_amount_cents is not None
-                and document.verified_amount_cents >= case.asking_price_cents
-            ),
-            None,
-        )
-        if current_proof is None:
-            match.qualification_status = "ineligible"
-            match.recipient_status = "excluded"
-            continue
-        if not buyer.email and not buyer.phone:
-            match.qualification_status = "ineligible"
-            match.recipient_status = "excluded"
-            continue
-        eligible_matches.append(match)
-    if not eligible_matches:
+        eligible_buyer_ids.add(buyer_id)
+        destinations_by_buyer_id[buyer_id] = destinations
+    if not eligible_buyer_ids:
         # Persist lifecycle invalidation so the stale match cannot be reused on a retry.
         db.commit()
         raise ValueError(
-            "No currently active qualified buyers are available for an approved campaign."
+            "No non-suppressed buyers with a usable email address or phone number are "
+            "available."
         )
-    eligible_buyer_ids = {match.buyer_id for match in eligible_matches}
     existing_campaigns = list(
         db.scalars(
             select(DispositionCampaign)
@@ -665,14 +704,16 @@ def release_campaign(
             if recipient.buyer_id is not None
         }
         if existing_buyer_ids == eligible_buyer_ids and len(existing_recipients) == len(
-            eligible_matches
+            eligible_buyer_ids
         ):
-            for match in eligible_matches:
-                match.recipient_status = "prepared_not_sent"
+            for match in matches:
+                if match.buyer_id in eligible_buyer_ids:
+                    match.recipient_status = "prepared_not_sent"
             db.commit()
             return case_read(db, case, principal)
-    for match in eligible_matches:
-        match.recipient_status = "prepared_not_sent"
+    for match in matches:
+        if match.buyer_id in eligible_buyer_ids:
+            match.recipient_status = "prepared_not_sent"
     campaign = DispositionCampaign(
         organization_id=principal.organization_id,
         disposition_case_id=case.id,
@@ -681,7 +722,7 @@ def release_campaign(
         status="prepared_not_sent",
         name=f"{address(db.get(Property, case.property_id))} buyer release",
         channel="email_sms_preparation",
-        recipient_count=len(eligible_matches),
+        recipient_count=len(eligible_buyer_ids),
         released_at=None,
     )
     db.add(campaign)
@@ -690,11 +731,9 @@ def release_campaign(
     recipient_set_fingerprint = sha256(
         ":".join(sorted(str(buyer_id) for buyer_id in eligible_buyer_ids)).encode()
     ).hexdigest()
-    for match in eligible_matches:
-        buyer = buyers[match.buyer_id]
-        destinations = {
-            key: value for key, value in (("email", buyer.email), ("phone", buyer.phone)) if value
-        }
+    for buyer_id in sorted(eligible_buyer_ids, key=str):
+        buyer = buyers[buyer_id]
+        destinations = destinations_by_buyer_id[buyer_id]
         idempotency_key = sha256(
             (
                 f"{principal.organization_id}:{case.id}:{package_version.id}:"
@@ -722,6 +761,31 @@ def release_campaign(
         )
     db.commit()
     return case_read(db, case, principal)
+
+
+def _campaign_destinations(
+    buyer: Buyer,
+    suppressed_destinations: set[tuple[str, str]],
+) -> dict[str, str]:
+    destinations: dict[str, str] = {}
+    normalized_email = buyer.normalized_email
+    if (
+        buyer.email
+        and normalized_email
+        and ("email", normalized_email) not in suppressed_destinations
+        and ("all", normalized_email) not in suppressed_destinations
+    ):
+        destinations["email"] = buyer.email
+    normalized_phone = buyer.normalized_phone
+    if (
+        buyer.phone
+        and normalized_phone
+        and ("sms", normalized_phone) not in suppressed_destinations
+        and ("phone", normalized_phone) not in suppressed_destinations
+        and ("all", normalized_phone) not in suppressed_destinations
+    ):
+        destinations["phone"] = buyer.phone
+    return destinations
 
 
 def upload_proof(
@@ -1008,7 +1072,7 @@ def create_offer(
         db,
         principal,
         case_id,
-        allowed_statuses={"package_prep", "buyer_matching", "marketed", "offers_received"},
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if case is None:
         return None
@@ -1052,7 +1116,7 @@ def create_offer(
         selected_at=None,
     )
     db.add(offer)
-    case.status = "offers_received"
+    advance_disposition_milestone(case, "offers_received")
     db.commit()
     return case_read(db, case, principal)
 
@@ -1064,7 +1128,7 @@ def add_engagement(
         db,
         principal,
         case_id,
-        allowed_statuses={"buyer_matching", "marketed", "offers_received", "buyer_selected"},
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if case is None:
         return None
@@ -1097,25 +1161,34 @@ def select_buyer(
     db: Session, principal: Principal, case_id: UUID, payload: BuyerSelection
 ) -> DispositionCaseRead | None:
     require_private_economics_access(principal)
-    case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"offers_received"})
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
+    )
     if case is None:
         return None
     primary = db.scalar(
         select(BuyerOffer).where(
-            BuyerOffer.id == payload.primary_offer_id, BuyerOffer.disposition_case_id == case.id
+            BuyerOffer.id == payload.primary_offer_id,
+            BuyerOffer.organization_id == principal.organization_id,
+            BuyerOffer.disposition_case_id == case.id,
         )
     )
     backup = (
         db.scalar(
             select(BuyerOffer).where(
-                BuyerOffer.id == payload.backup_offer_id, BuyerOffer.disposition_case_id == case.id
+                BuyerOffer.id == payload.backup_offer_id,
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.disposition_case_id == case.id,
             )
         )
         if payload.backup_offer_id
         else None
     )
-    if primary is None or primary.amount_cents < case.minimum_acceptable_cents:
-        raise ValueError("Primary offer must meet the approved minimum price.")
+    if primary is None:
+        raise ValueError("Primary offer not found for this disposition case.")
     if backup and backup.id == primary.id:
         raise ValueError("Primary and backup offers must be different.")
     proof = (
@@ -1130,13 +1203,16 @@ def select_buyer(
         if primary.proof_document_id
         else None
     )
+    selection_warnings: list[str] = []
+    if primary.amount_cents < case.minimum_acceptable_cents:
+        selection_warnings.append("Primary offer is below the current minimum.")
     if (
         proof is None
         or not _proof_is_current_verified(proof, now=datetime.now(UTC))
         or proof.verified_amount_cents is None
         or proof.verified_amount_cents < primary.amount_cents
     ):
-        raise ValueError("A current verified proof-of-funds document is required.")
+        selection_warnings.append("Current verified proof does not cover the primary offer.")
     now = datetime.now(UTC)
     primary.status = "selected"
     primary.selected_at = now
@@ -1145,17 +1221,19 @@ def select_buyer(
     for other in db.scalars(
         select(BuyerOffer).where(
             BuyerOffer.disposition_case_id == case.id,
+            BuyerOffer.organization_id == principal.organization_id,
+            BuyerOffer.status.in_(("selected", "backup")),
             BuyerOffer.id.notin_(
                 [value for value in (primary.id, backup.id if backup else None) if value]
             ),
         )
     ).all():
-        other.status = "declined"
+        other.status = "received"
     case.selected_buyer_id = primary.buyer_id
     case.backup_buyer_id = backup.buyer_id if backup else None
     case.selection_approved_by_user_id = principal.user_id
     case.selection_approved_at = now
-    case.status = "buyer_selected"
+    advance_disposition_milestone(case, "buyer_selected")
     audit(
         db,
         principal,
@@ -1165,6 +1243,11 @@ def select_buyer(
         {
             "primary_buyer_id": str(primary.buyer_id),
             "backup_buyer_id": str(backup.buyer_id) if backup else None,
+            "backup_coverage_state": "covered" if backup else "missing",
+            "advisory_warnings": [
+                *selection_warnings,
+                *([] if backup else ["No backup buyer is selected."]),
+            ],
         },
         payload.reason,
     )
@@ -1179,7 +1262,13 @@ def build_reconciliation(
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
-    transaction = db.get(Transaction, case.transaction_id)
+    _require_house_reconciliation_case(db, principal, case)
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.id == case.transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
     if transaction is None or transaction.status != "funded" or case.selected_buyer_id is None:
         raise ValueError("Funded transaction and approved buyer selection are required.")
     gross = int(
@@ -1200,12 +1289,40 @@ def build_reconciliation(
         )
         or 0
     )
-    plan = db.get(CompensationPlanVersion, case.compensation_plan_version_id)
+    if case.compensation_plan_version_id is None:
+        raise ValueError(
+            "Attach a frozen compensation plan before financial reconciliation."
+        )
+    plan = db.scalar(
+        select(CompensationPlanVersion).where(
+            CompensationPlanVersion.id == case.compensation_plan_version_id,
+            CompensationPlanVersion.organization_id == principal.organization_id,
+        )
+    )
     if plan is None:
-        raise ValueError("Frozen compensation plan is unavailable.")
+        raise ValueError("The frozen compensation plan is unavailable in this organization.")
+    if case.disposition_operating_mode_id is None:
+        raise ValueError(
+            "Attach an operating mode before financial reconciliation. Deal work may continue."
+        )
+    operating_mode = db.scalar(
+        select(DispositionOperatingMode).where(
+            DispositionOperatingMode.id == case.disposition_operating_mode_id,
+            DispositionOperatingMode.organization_id == principal.organization_id,
+            DispositionOperatingMode.compensation_plan_version_id == plan.id,
+        )
+    )
+    if operating_mode is None:
+        raise ValueError(
+            "The operating mode is unavailable or does not belong to the frozen compensation "
+            "plan."
+        )
     margin = max(gross - plan.acquisition_reserve_cents - deductions, 0)
     reconciliation = db.scalar(
-        select(DealReconciliation).where(DealReconciliation.transaction_id == transaction.id)
+        select(DealReconciliation).where(
+            DealReconciliation.organization_id == principal.organization_id,
+            DealReconciliation.transaction_id == transaction.id,
+        )
     )
     if reconciliation and reconciliation.status == "approved":
         raise ValueError("Approved reconciliation cannot be recalculated.")
@@ -1215,7 +1332,7 @@ def build_reconciliation(
             transaction_id=transaction.id,
             disposition_case_id=case.id,
             compensation_plan_version_id=plan.id,
-            disposition_operating_mode_id=case.disposition_operating_mode_id,
+            disposition_operating_mode_id=operating_mode.id,
             created_by_user_id=principal.user_id,
             approved_by_user_id=None,
             status="draft",
@@ -1330,8 +1447,12 @@ def decide_reconciliation(
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_selected"})
     if case is None:
         return None
+    _require_house_reconciliation_case(db, principal, case)
     reconciliation = db.scalar(
-        select(DealReconciliation).where(DealReconciliation.disposition_case_id == case.id)
+        select(DealReconciliation).where(
+            DealReconciliation.organization_id == principal.organization_id,
+            DealReconciliation.disposition_case_id == case.id,
+        )
     )
     if reconciliation is None or reconciliation.status != "draft":
         raise ValueError("A draft reconciliation is required.")
@@ -1393,8 +1514,10 @@ def accounting_csv(db: Session, principal: Principal, case_id: UUID) -> str | No
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    _require_house_reconciliation_case(db, principal, case)
     reconciliation = db.scalar(
         select(DealReconciliation).where(
+            DealReconciliation.organization_id == principal.organization_id,
             DealReconciliation.disposition_case_id == case.id,
             DealReconciliation.status == "approved",
         )
@@ -1421,6 +1544,21 @@ def accounting_csv(db: Session, principal: Principal, case_id: UUID) -> str | No
     return output.getvalue()
 
 
+def _require_house_reconciliation_case(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+) -> None:
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.id == case.lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+    )
+    if lead is None or normalize_asset_class(lead.asset_class) != "house":
+        raise ValueError("Financial reconciliation is currently available for House deals only.")
+
+
 def case_read(
     db: Session,
     case: DispositionCase,
@@ -1434,8 +1572,16 @@ def case_read(
     )
     property_record = db.get(Property, case.property_id)
     lead = db.get(Lead, case.lead_id)
-    plan = db.get(CompensationPlanVersion, case.compensation_plan_version_id)
-    mode = db.get(DispositionOperatingMode, case.disposition_operating_mode_id)
+    plan = (
+        db.get(CompensationPlanVersion, case.compensation_plan_version_id)
+        if case.compensation_plan_version_id is not None
+        else None
+    )
+    mode = (
+        db.get(DispositionOperatingMode, case.disposition_operating_mode_id)
+        if case.disposition_operating_mode_id is not None
+        else None
+    )
     buyers = {
         item.id: item
         for item in db.scalars(

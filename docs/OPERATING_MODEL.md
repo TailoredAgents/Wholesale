@@ -163,9 +163,12 @@ escalation path.
 
 ### 9. Disposition
 
-An approved, complete deal package enters the disposition queue. Stonegate matches qualified
-buyers, distributes approved facts, tracks engagement, schedules access, receives offers, verifies
-proof and deposit readiness, and presents a primary and backup buyer for human approval.
+An executed contract enters the Disposition Desk immediately, including when setup or package
+checklist items remain open. Stonegate shows the full asset-aware buyer pool, preserves the exact
+**Preliminary** or approved state of shared artifacts, tracks outreach and engagement, schedules
+access, records offers, and keeps proof, deposit, floor, timing, and backup findings visible. The
+authorized Disposition representative chooses and approves one primary buyer and may add backups
+when available; those findings guide work without forcing its order.
 
 ### 10. Closing And Reconciliation
 
@@ -236,10 +239,13 @@ target are protected.
 | AI-operated, human-managed | 10% | Approximately 55% |
 | AI-led, human exception oversight | 5% to 7.5% | Approximately 57.5% to 60% |
 
-The disposition mode and compensation-plan version are assigned before work begins. Stonegate does
-not decide after closing that AI performed "most" of a specific deal. A lower human share is enabled
-only after measured AI performance preserves assignment spread, response time, closing rate, buyer
-quality, and compliance.
+The disposition mode and compensation-plan version should be assigned as soon as they are known so
+credit and payout math retain a frozen basis. Missing setup remains an advisory checklist item and
+does not prevent ranking, contacting, outreach, offer work, or buyer selection. Stonegate does not
+decide after closing that AI performed "most" of a specific deal; reconciliation cannot claim a
+final compensation result until the applicable plan and actual role credits are recorded. A lower
+human share is enabled only after measured AI performance preserves assignment spread, response
+time, closing rate, buyer quality, and compliance.
 
 ### Credit And Payment Rules
 
@@ -312,13 +318,15 @@ and monitoring design.
 - Warm VA handoffs are accepted during the same shift and cannot remain without an owner.
 - Every appointment has confirmation, reminder, outcome, and next-action states.
 - Executed contracts are sent to the approved closing attorney the same business day.
-- Complete contracted deals enter disposition promptly; missing package requirements are visible
-  blockers with owners.
+- Contracted deals enter disposition immediately; missing setup or package items stay visible as
+  assigned checklist warnings and do not lock ordinary buyer work.
 - Active buyer inquiries receive an owned response task.
 - Closing reconciliation and commission approval occur only after funds and statements agree.
 
-Every active business record must have one accountable owner, one current stage, one next action,
-one due time, a last-contact timestamp, and a complete activity history.
+Every active business record should have one accountable owner, one current stage, one next action,
+one due time, a last-contact timestamp, and a complete activity history. An executed-contract
+Disposition case may exist temporarily without its owner, plan, or mode so the deal never
+disappears; those gaps remain visible until assigned and do not block otherwise authorized work.
 
 ## Performance System
 

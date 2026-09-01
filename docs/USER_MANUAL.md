@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: August 29, 2026
+Last verified against the application: September 1, 2026
 
 ## Purpose
 
@@ -29,6 +29,25 @@ identifiers for Stonegate, not a second company or workspace.
 This guide describes both available controls and controls waiting on an external provider. A
 visible button does not prove the provider is active. Read its status message before using it.
 
+### Dispositions Is An Advisory Desk
+
+The Disposition Desk is designed for an experienced operator, not as a step-by-step lock. Setup,
+package-readiness, buyer-coverage, proof, and backup items are an informational checklist. They show
+what is missing, stale, conflicting, or risky, but they do not prevent authorized staff from
+ranking or contacting buyers, logging activity, recording offers, or doing other useful disposition
+work in the order the deal requires. A deal may be shopped while its package is incomplete.
+
+Hard stops are limited to platform-integrity boundaries: organization and role access, buyer
+STOP/Do Not Contact/suppression rules, a usable destination and available sender/provider for the
+selected channel, and truthful signature, assignment, deposit, and funding evidence where those
+actions make a legal or financial claim. An exact package, outreach revision, provider handoff, or
+buyer selection still uses an explicit approval record, but the standard Disposition representative
+has those narrow approval and release permissions, including
+`dispositions:send_bulk_outreach`, and does not wait for a manager as part of the normal workflow.
+That Dispositions-only release permission is separate from the global marketing permission
+`communications:send_bulk`; neither it nor the other narrow permissions grants user
+administration, company policy, accounting, or unrelated approval authority.
+
 ## Current Release Boundary
 
 The complete internal workflow is implemented:
@@ -39,7 +58,8 @@ The complete internal workflow is implemented:
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
 - Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
 - Buyers, House disposition packages, governed owned-buyer email/SMS outreach and reply review,
-  the manual-only InvestorLift approved-package handoff and staged evidence review, buyer offers,
+  the manual-only InvestorLift exact-artifact handoff with **Preliminary** provenance when applicable
+  and staged evidence review, buyer offers,
   selection, reconciliation, and accounting export.
 - The internal double-entry accounting ledger, vendor bills, bank reconciliation, statements, CPA
   export, marketing measurement, operating policy, AI Copilots, and AI governance.
@@ -237,10 +257,12 @@ intentional.
 The Owner can see all navigation. Restricted users should see only the pages required for their
 jobs.
 
-A Disposition representative can prepare and manage supervised outreach but cannot approve or
-release it. Outreach approval requires the separate approval permission. Release, resume, and
-safe-failure retry require both outreach approval and bulk-send authority; the standard Disposition
-manager role has both.
+A standard Disposition representative can prepare, approve, release, resume, and safely retry
+governed disposition outreach. The role includes the narrow package, outreach,
+`dispositions:send_bulk_outreach`, manual provider-handoff, and buyer-selection authorities needed
+to operate the desk end to end. It does not receive global `communications:send_bulk` marketing
+authority. The separate permissions remain auditable security boundaries, but they do not create a
+routine manager wait state and do not grant unrelated administrative authority.
 
 Cold calling is also a separate staff capability. An Owner can enable **Cold calling** for a person
 in another role, such as Acquisitions or Dispositions, without changing that person's primary
@@ -453,21 +475,27 @@ hardware, but they must not share Stonegate or Clerk credentials.
 ### Dispositions
 
 1. Open **Deals**. The Disposition role opens in the **Disposition Desk** by default.
-2. Start in **Today** and work the highest-severity owned item first.
+2. Start in **Today** and use severity, deadlines, buyer interest, and your judgment to choose the
+   best next action. The displayed order is guidance, not a required sequence.
 3. Use **Active Deals**, **Buyer Follow-ups**, **Replies**, **Offers**, or **Deadlines** when focusing
    on one kind of work.
-4. Resolve the displayed blocker through the card's direct action. The action opens the canonical
-   Deal, Buyer, Inbox conversation, Task, or disposition control.
-5. For a House or Land deal, resolve the Package launch-readiness blockers and review the evidence
-   classes, buyer-visible preview, and authorized private economics. House may build a Stonegate
-   draft; Land uses the exact externally prepared PDF.
-6. Approve one exact current package version before ranking buyers or preparing recipients.
-7. Verify proof of funds and buyer criteria before recommending placement.
-8. In **Outreach**, select only the intended owned-network recipients and eligible channels, review
-   the exact rendered message, and create the immutable approval draft. A manager must approve and
-   explicitly release that exact revision.
+4. Use a card's direct action to address a checklist item when it is the most valuable work. The
+   action opens the canonical Deal, Buyer, Inbox conversation, Task, or disposition control.
+5. For a House or Land deal, review Package readiness, evidence classes, the buyer-visible preview,
+   and authorized private economics. Record missing or uncertain facts accurately. You may rank
+   buyers, call, follow up, log activity, and record offers while those checklist items remain open.
+6. Build or upload and approve an exact package when a buyer-facing artifact is useful. House may
+   build a Stonegate draft; Land uses the exact externally prepared PDF. Package completion is not a
+   prerequisite for working the buyer pool.
+7. Review proof of funds and buyer criteria before recommending placement; missing proof or weak
+   backup coverage is visible risk rather than a lock on ordinary buyer work.
+8. In **Outreach**, select only the intended owned-network recipients and permitted channels, review
+   the exact rendered message, and create the immutable approval draft. An authorized disposition
+   operator explicitly approves and releases that exact revision. The standard Disposition
+   representative has that authority and does not wait for a separate manager.
 9. Work Buyer Inbox reply-review tasks before recording interest, offers, or follow-up.
-10. Present the primary and backup buyer for human approval.
+10. Approve the primary buyer when the decision is ready. Add backup coverage when available and
+    keep any missing-backup warning visible; a backup is recommended, not required to keep working.
 
 Package approval and asset-aware buyer-pool matching support House and Land. **Prepare recipient
 pool** records `prepared_not_sent` recipients but sends no email or SMS. The separately approved
@@ -719,7 +747,7 @@ The normal deal path and its completion evidence are:
 | Negotiation | Lead record, Approvals | Current offer authority exists and each seller response is recorded |
 | Contract | Calendar Appointment, Transactions | The exact approved agreement is fully signed and the completed PDF is retained |
 | Closing coordination | Transactions | Checklist, parties, dates, title issues, documents, and funding evidence are complete |
-| Buyer placement | Dispositions, Buyers | Package is approved, offers are compared, and primary and backup selections are approved |
+| Buyer placement | Dispositions, Buyers | Readiness is visible, buyer work may begin while the package is incomplete, offers are compared, and the authorized operator approves the primary selection; backup coverage is recommended |
 | Funded deal | Transactions, Dispositions, Finance | Cleared revenue, deductions, role credits, commissions, and accounting evidence reconcile |
 
 Do not advance a record merely to make the pipeline look current. Advance it when the completion
@@ -2160,14 +2188,12 @@ next action, retires conflicting draft authority where safe, and moves the lead,
 transaction to **Under Contract / Executed** in one audited operation. This catch-up path never
 manufactures a Stonegate offer approval.
 
-The response then shows one of two Dispositions outcomes:
-
-- **Ready:** the canonical asset-aware Disposition case opened, so Stonegate takes the user to it.
-- **Needs setup:** the contract is still recorded and remains visible on the Disposition Desk with
-  its setup blockers and an urgent setup task. The form links to the transaction handoff,
-  **People & Access**, and **Finance Policy**. Resolve the missing authorized Dispositions owner,
-  active compensation plan, or available human-led operating mode; Stonegate will retry the
-  handoff.
+The response opens or safely reuses the canonical asset-aware Disposition case immediately. If an
+authorized owner, compensation plan, or operating mode has not been configured yet, the case still
+appears on the Disposition Desk as **Needs setup** with advisory evidence and corrective links to
+**People & Access** and **Finance Policy**. These setup items should be completed, but they do not
+create a blocking task, hide the case, or lock the specialist out of otherwise authorized buyer and
+offer work. Later setup fills the same case rather than creating a replacement case.
 
 Do not upload a second agreement to work around an existing active sent, approved, e-sign, or
 executed purchase-agreement workflow; reconcile that workflow first. The importer may adopt an
@@ -2231,7 +2257,8 @@ total remains the full scoped count rather than the number shown on the current 
 The buyer-network health strip summarizes active and review-needed relationships, missing or
 expiring proof, missing criteria, and unassigned buyers. Deal coverage warnings explain when a
 package is not ready, a deal lacks enough matched buyers or offers, or a selected buyer lacks backup
-coverage. An external-provider warning does not mean the owned Buyer Network is unavailable.
+coverage. These are attention signals, not workflow locks. An external-provider warning does not
+mean the owned Buyer Network or manual work is unavailable.
 
 Use **Add buyer** for a new relationship. Use **Open deal** for package, matching, follow-up, offer,
 or deadline work. Use **Open reply** for the actual buyer conversation. Refresh the page if the
@@ -2326,8 +2353,9 @@ return to review, then verify the displayed lifecycle status before making the b
 
 Imported and provider-created buyers display their available provenance. Treat that data as a lead
 for review, not as verified buyer criteria or permission. InvestorLift live synchronization and
-outreach are not active. The separate House **InvestorLift** view supports only an approved manual
-property handoff and reviewable provider evidence; it does not create or activate a buyer.
+outreach are not active. The separate House **InvestorLift** view supports only an explicitly
+approved manual property handoff from an exact artifact, preserving **Preliminary** when the package
+was unapproved or when its source facts later drift; it does not create or activate a buyer.
 Maintaining a buyer, changing status, or preparing a recipient does not send anything; only a
 separately approved and released House **Outreach** revision can contact selected buyers through
 Stonegate's Resend or Twilio configuration.
@@ -2335,7 +2363,7 @@ Stonegate's Resend or Twilio configuration.
 ### Disposition Case
 
 Open the property in **Deals**, then select **Disposition** after the seller contract is executed.
-For an existing case, the embedded tabs are:
+For an existing House case, the embedded tabs are:
 
 - **Package**
 - **Buyers**
@@ -2344,9 +2372,18 @@ For an existing case, the embedded tabs are:
 - **Offer Room**
 - **Reconciliation**
 
-If the record says disposition has not started, use **Open disposition setup**. This opens the
-specialist setup route where an authorized user creates the first case. Return to Deals afterward;
-the new case will appear in the same Deal record.
+Land cases expose **Package**, the asset-aware **Buyers** pool, and supported pre-close engagement
+work only. Land outreach, call queue, Offer Room, buyer selection/funding,
+Reconciliation/closing, InvestorLift, and generated packets are not active.
+
+New executed House and Land contracts open or reuse a case automatically even when the owner,
+compensation plan, or operating mode is not filled yet. If a legacy or exceptional record says
+disposition has not started, use **Open disposition setup** to repair or create the case. Asking
+price and internal minimum are optional on this recovery screen: Stonegate can open the case from
+the executed contract facts without exposing private economics to the operator. Authorized users
+with private-economics access may override those starting values, but missing owner, plan, mode, or
+optional economics never prevents the shell from opening. Return to Deals afterward; the case will
+appear in the same Deal record.
 
 ### Package
 
@@ -2356,9 +2393,11 @@ Land uses **Use existing PDF** until Stonegate's generated Land packet is releas
 1. At **Choose your packet path**, select **Build with Stonegate** or **Use existing PDF** for a
    House. For Land, select **Use existing PDF**. Every path creates a governed draft; none approves
    a packet or contacts a buyer.
-2. Confirm the frozen compensation plan and disposition operating mode.
-3. Review **Launch readiness**. Resolve every blocker; review warnings, unknowns, freshness,
-   conflicts, and the provided remediation link before continuing.
+2. Review the assigned owner, compensation plan, and disposition operating mode. Missing setup
+   remains on the checklist but does not prevent work in the case.
+3. Review **Launch readiness**, including warnings, unknowns, freshness, conflicts, and remediation
+   links. Use it to decide what to verify next; it is informational and does not impose a required
+   order or prevent the team from shopping an incomplete deal.
 4. Review **Classified evidence**. Stonegate separates **Verified fact**, **Seller statement**,
    **Provider signal**, **Stonegate analysis**, and **Unknown** so an unsupported claim is not
    presented as fact.
@@ -2371,26 +2410,34 @@ Land uses **Use existing PDF** until Stonegate's generated Land packet is releas
    file hash, and PDF scan state as the new immutable draft; it does not regenerate or replace that
    artifact during approval. Each path creates a new version tied to the current CRM source
    fingerprint, and a new draft supersedes an older draft.
-7. An authorized approver selects **Approve vN**, records why the version is ready, checks the
-   evidence attestation, and selects **Approve exact version**. A stale version cannot be reused;
-   rebuild and reapprove it.
-8. Use **Download approved vN PDF** or the version-history **PDF** action. Stonegate serves the exact
-   PDF saved at approval, whether Stonegate generated it or staff uploaded it; later source changes
-   do not rewrite it.
-9. **Refresh buyer ranking** and **Prepare recipient pool** require the current evidence to match
-   the approved version.
+7. When an exact buyer-facing artifact is useful, an authorized Disposition representative selects
+   **Approve vN**, records what was reviewed, checks the evidence attestation, and selects
+   **Approve exact version**. A stale version remains visible as history; create and approve a new
+   exact version before presenting that artifact as current.
+8. Use the version-history **PDF** action for the exact saved artifact. An unapproved version is
+   visibly **Preliminary**; approval does not regenerate or rewrite its bytes. If current source
+   facts later drift, the current download also receives the **Preliminary** label while returning
+   the same frozen bytes. Use **Download approved vN PDF** to retrieve the approved version, not to
+   override that live currentness warning.
+9. **Refresh buyer ranking** remains available from current case facts even when package or setup
+   checklist items are open. **Prepare recipient pool** records the recipients and exact artifact
+   selected for a governed release; it does not contact anyone.
 
 Creating either draft requires `deals:edit`; changing private economics also requires the private-
 economics permission. Reviewing or downloading an unapproved external PDF requires `deals:edit` or
 `dispositions:approve_packages`, and approval itself requires
 `dispositions:approve_packages`. A valid external PDF must be no larger than 15 MB and must have a
-**Clean** or **Not configured** scan state before approval. The normal readiness blockers, current
-source fingerprint, reason, and human attestation still apply. After approval, normal deal viewers
-may download the exact approved artifact.
+**Clean** or **Not configured** scan state before approval. Current readiness findings remain in the
+approval review, but they are advisory rather than a pass/fail gate. The current source fingerprint,
+reason, and human attestation identify exactly what the operator approved. After approval, normal
+deal viewers may download the exact approved artifact.
 
-An existing PDF replaces only the packet artifact. Saved CRM facts still govern readiness, buyer
-matching, private economics, email/SMS summaries, and secure links. Once approved, secure links use
-the exact approved uploaded PDF; governed outreach remains a House-only release.
+An existing PDF replaces only the packet artifact. Saved CRM facts still inform readiness, buyer
+matching, private economics, email/SMS summaries, and secure links. Secure links bind the exact
+saved bytes. At every access, Stonegate recomputes currentness and visibly labels the download
+**Preliminary** if the artifact was unapproved/incomplete when issued or if the package/source facts
+have since drifted. That label change never rewrites the artifact; governed outreach remains a
+House-only release.
 
 Preparation binds each recipient to that exact version and stored artifact hash. Its status is
 `prepared_not_sent`: **Prepare recipient pool** sends no email or SMS. The separate **Outreach** tab
@@ -2401,11 +2448,24 @@ residential Outreach, Offer Room, InvestorLift, and the call queue remain unavai
 
 Use Stonegate's existing Buyer CRM first:
 
-1. Select **Refresh buyer ranking** after the package is approved.
+1. Select **Refresh buyer ranking** whenever the current case facts are useful enough to start
+   matching. Missing package and readiness items stay visible beside the results.
 2. Review market, property, capacity, reliability, proof-of-funds, and evidence.
 3. Exclude ineligible or unsupported buyers.
 4. Upload and verify proof of funds when required.
 5. Record inquiries, showings, follow-up, and deposit activity.
+
+You may shop the deal before the package is complete: review the full ranked pool, choose any
+appropriate buyer, call or follow up one-to-one, and log an engagement or offer in the order the
+situation requires. A score, first-ranked result, proof warning, or checklist position never forces
+which buyer must be worked next. Communication controls still enforce Do Not Contact, STOP,
+suppression, a valid destination, and an available company channel.
+
+**Pass for this deal** records a durable, reasoned decision only for the current disposition. It
+keeps that buyer out of the current prepared outreach pool but does not change the Buyer Network
+lifecycle or create a permanent contact restriction. If the facts or operator judgment change, use
+**Undo pass** or **Shortlist**, provide the new reason, and continue working the buyer. Stonegate
+retains both decisions in the audit history.
 
 When DealMachine is connected, **External buyer intelligence** adds deal-specific House candidates
 after Stonegate ranks the owned Buyer Network for free:
@@ -2414,7 +2474,7 @@ after Stonegate ranks the owned Buyer Network for free:
 2. Start with **Best-Fit 10** and select **Preview search estimate**. The preview validates the exact
    request without consuming credits. It is an estimate; the displayed 30-credit tier ceiling is
    the binding maximum because live owner contacts can add credits. Stonegate binds the confirmation
-   to this exact preview; if the approved package, property, price, or scope changes, preview again.
+   to this exact preview; if the property, price, or scope changes, preview again.
 3. Review the matching-property count; property and owner credit estimate; dollar equivalent; tier
    ceiling; credits already used on the deal; and monthly usage.
 4. Select **Search up to 10 best-fit buyers** only when the estimate is acceptable. **Expand Nearby
@@ -2442,11 +2502,16 @@ required before routine dependence. DealMachine underwriting comps remain disabl
 
 ### Outreach
 
-Use **Outreach** only after the current House package is approved and **Prepare recipient pool** has
-created the reviewed owned-buyer pool:
+Use **Outreach** for a governed House message revision. Package and launch-readiness findings remain
+visible, but they do not prevent authorized staff from shopping the deal through the buyer pool,
+one-to-one calls, follow-up, activity, and offers:
 
-1. Read every readiness blocker. Do not work around a stale package, missing prepared campaign, or
-   missing recipient pool.
+1. Read the readiness findings and state uncertain facts truthfully. If the revision will attach or
+   link a package, select an exact usable artifact. Its revision and buyer-facing delivery remain
+   visibly **Preliminary** when that package is incomplete or unapproved. Stonegate also recomputes
+   currentness for the revision and at delivery; later source-fact drift downgrades the visible
+   state/attachment label without changing the approved message, recipients, or frozen PDF bytes.
+   A missing artifact does not lock the rest of the desk.
 2. Select the exact buyer recipients. Choose email, SMS, or both only when that contact path is
    available and appropriate. The hard limit is 25 recipient-channel deliveries per revision; email
    plus SMS to one buyer counts as two.
@@ -2459,14 +2524,16 @@ created the reviewed owned-buyer pool:
    or unsupported claims into buyer-visible copy.
 5. Create the immutable review revision, then inspect every recipient, destination, channel,
    rendered message, exclusion reason, package/PDF identity, and delivery count.
-6. An authorized approver refreshes if anything changed, records a meaningful reason, affirms the
-   attestation, and approves the exact hash-bound revision. Approval alone does not send it.
-7. The authorized releaser records a reason and explicitly releases the revision. Release checks
-   buyer status, destination, suppression, SMS permission, sender, package currency, and provider
-   readiness again before queueing.
+6. The Disposition representative refreshes if anything changed, records a meaningful reason,
+   affirms the attestation, and approves the exact hash-bound revision. Approval alone does not send
+   it, but no separate manager handoff is required.
+7. The same authorized representative may record a reason and explicitly release the revision.
+   Release rechecks organization/role access, Do Not Contact and STOP/suppression state, channel
+   permission, destination, sender, and provider availability before queueing. Checklist completion
+   and backup coverage are not release gates.
 8. Watch the per-recipient delivery states. Use **Pause** to stop unsent work, **Resume** only after
    resolving a temporary blocker, **Cancel unsent** to abandon remaining work, and **Retry failed**
-   only when the manager control says the failure is safely retryable. Never retry a
+   only when the control says the failure is safely retryable. Never retry a
    `delivery_unknown` SMS manually just to make its status move.
 9. Open the linked Buyer Inbox conversation when a reply arrives and complete the reply-review task.
    Stonegate does not automatically accept an offer, select a buyer, or treat an ambiguous reply as
@@ -2483,12 +2550,15 @@ Use the **InvestorLift** view only for a contracted **House** disposition case. 
 manual handoff; it does not connect to InvestorLift's servers and does not require an InvestorLift
 credential in Stonegate.
 
-1. Finish and approve the current House **Package** first. Resolve any stale-package warning before
-   preparing the provider handoff.
-2. Select **Prepare current package**. Stonegate freezes a deterministic public-only revision from
-   the approved package. Preparing does not publish or send anything.
-3. Review the exact payload. A user with the provider release-approval permission records a reason,
-   checks the attestation, and selects **Approve exact handoff**. Seller contact information,
+1. Choose the exact usable House **Package** artifact that will be represented by this provider
+   handoff. Open setup and readiness items remain visible but are advisory. An incomplete or
+   unapproved source is labeled **Preliminary** throughout the handoff. If source facts drift after
+   preparation, the workspace and current bundle download also switch to **Preliminary** while the
+   approved payload and package bytes remain immutable.
+2. Select **Prepare latest package**. Stonegate freezes a deterministic public-only revision from
+   that exact artifact. Preparing does not publish or send anything.
+3. Review the exact payload. The authorized Disposition representative records a reason, checks the
+   attestation, and selects **Approve exact handoff** without a routine manager wait. Seller contact information,
    contract basis, minimum acceptable amount, desired assignment fee, and private notes must not
    appear.
 4. Select **Download** on the latest approved revision. Log in to InvestorLift separately and use
@@ -2531,36 +2601,48 @@ The Offer Room is available for a contracted **House** disposition case. Open th
 4. Compare the offer cards. Review price, proof coverage and expiration, deposit strength, closing
    compatibility, contingencies, funding confidence, buyer reliability, risk flags, strengths, and
    execution score. The highest offer is not automatically the strongest executable offer.
-5. A user with buyer-selection approval chooses one primary and at least one backup from a different
-   buyer, records a decision reason, and approves the selection. Other disposition staff can record
-   and compare offers but cannot activate the choice. The system and Copilot never select a buyer.
-   Any later revision to a selected offer makes that reviewed slot stale; compare the current terms
-   and approve a new coverage version before promotion, assignment delivery, or funding.
-6. Review **Closing protection** after selection. Transaction closing and relevant title, access,
-   and closing-checklist dates are canonical and must be changed in the Deal's Transaction sections.
-   The selected buyer's deposit deadline remains tied to the offer. Add buyer-response, agreement,
-   signature, or other deal-specific milestones in the Offer Room when needed.
-   Deposit completion requires substantive evidence. Only a manager may record a documented deposit
-   waiver, and a waiver does not silently change the buyer's approved offer terms.
+5. The standard Disposition representative has buyer-selection approval and may choose a primary,
+   record a decision reason, and approve the selection without waiting for a manager. Add one or
+   more different-buyer backups when available. Missing backup coverage remains a prominent
+   warning, not a lock on selecting the primary or continuing disposition work. The system and
+   Copilot never select a buyer. Any later revision to a selected offer makes the reviewed terms
+   stale; compare the current terms and approve a new selection version before relying on them for
+   assignment delivery or funding.
+6. Use **Closing protection** whenever an owned deadline becomes useful; buyer selection is not a
+   prerequisite. A **Whole deal** milestone stays independent of buyer coverage. A milestone for a
+   recorded offer is buyer-specific, and one tied to the current primary or backup follows that
+   selection. Transaction closing and relevant title, access, and closing-checklist dates become
+   canonical selection checkpoints and must be changed in the Deal's Transaction sections. The
+   selected buyer's deposit deadline remains tied to the offer. Add buyer-response, agreement,
+   signature, or other manual milestones in any practical order.
+   Deposit completion requires substantive evidence. An authorized Disposition representative may
+   record a documented deposit waiver, and a waiver does not silently change the buyer's approved
+   offer terms.
 7. When an alert appears, review the actual source evidence. Acknowledge it to record that someone
    owns the response; acknowledgement does not complete or erase the missed deadline. Complete the
    milestone, change the canonical source, or use the governed replacement control as appropriate.
-8. If the primary buyer cannot perform, an authorized manager chooses an eligible ranked backup and
-   records the prior buyer's outcome, cause, reason, details, and evidence. The original selection,
-   checkpoints, and offer remain in history.
+8. If the primary buyer cannot perform, the authorized Disposition representative records the prior
+   buyer's outcome, cause, reason, details, and evidence. For the next buyer, choose any other viable
+   recorded offer on the case; it does not have to be a previously approved backup. Or choose **No
+   replacement now - record outcome and reopen shopping**. That option supersedes the active
+   selection, clears active buyer coverage, and returns the deal to offer shopping while preserving
+   the original selection, checkpoints, offer, and outcome in history. A live assignment obligation
+   must be truthfully reconciled before changing the selected buyer.
 9. Use **Record outcome** for a pass, withdrawal, fallout, or retrade. Choose the factual cause.
    Seller, title, property, Stonegate, and external causes do not reduce the buyer's reliability.
    Buyer-responsible failures and retrades do. Do not use a buyer cause merely because the deal did
    not close.
 10. Record the funded close in the Transaction workspace. Funding records the completed buyer close
-    automatically and exactly once. For an assignment, Stonegate requires the current approved
-    buyer selection, an assignment bound to the selected buyer and reviewed offer economics, the
-    matching assignee signer identity, executed assignment evidence, and buyer-deposit evidence or
-    a documented manager waiver before funding. If the primary buyer or terms change, create and
-    execute a new assignment version; the old agreement cannot move through later contract gates.
+    automatically and exactly once. This is a truthful financial boundary: for an assignment,
+    Stonegate requires the selected buyer, an assignment bound to that buyer and reviewed offer
+    economics, the matching assignee signer identity, executed assignment evidence, and buyer-deposit
+    evidence or a documented authorized waiver before funding. If the primary buyer or terms change,
+    create and execute a new assignment version; the old agreement cannot prove the new transaction.
 
-The Offer Room preserves viable unselected offers for replacement review. After a backup is
-promoted, qualify and approve new backup coverage if none remains. Land Offer Room, Land outreach,
+The Offer Room preserves viable unselected offers for replacement review, even when they were not
+named backups in the prior selection. After choosing a replacement, seek new backup coverage when
+practical; its absence remains visible and does not stop ordinary work. Leaving the replacement
+blank intentionally reopens shopping rather than forcing a new buyer. Land Offer Room, Land outreach,
 and InvestorLift live synchronization are not active; manually staged InvestorLift evidence never
 changes Offer Room selection.
 
@@ -2639,11 +2721,11 @@ disposition campaign cost. Unknown winning-source or agent evidence must remain 
 than being filled from current ownership or a mutable Buyer label. Land disposition intelligence is
 not active. See `DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md` for the complete boundary.
 
-**Prepare recipient pool** records which approved recipients may receive the exact approved package,
-including the observed identity and destination, as `prepared_not_sent`. It sends no messages.
-Governed delivery occurs only through a separately reviewed, approved, and released House
-**Outreach** revision. Land external-package approval and buyer matching are supported; automated
-Land outreach remains blocked.
+**Prepare recipient pool** records the operator's selected recipients, observed identity and
+destination, exact artifact hash, and the artifact's **Preliminary** or approved state as
+`prepared_not_sent`. It sends no messages. Governed delivery occurs only through a separately
+reviewed, approved, and released House **Outreach** revision. Land external-package approval and
+buyer matching are supported; automated Land outreach remains blocked.
 
 ### Reconciliation
 

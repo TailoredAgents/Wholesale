@@ -29,6 +29,8 @@ test("the canonical disposition desk is URL-backed and server-loaded", () => {
   assert.match(api, /sections: Record<DispositionDeskSectionKey, DispositionDeskSectionState>/);
   assert.match(api, /transaction_id\?: string \| null/);
   assert.match(api, /needs_setup\?: boolean/);
+  assert.match(api, /checklist\?: DispositionDeskChecklist \| null/);
+  assert.match(api, /best_action_href\?: string \| null/);
 
   for (const queryKey of ["desk", "deskPage", "scope", "dispositionTab", "view"]) {
     assert.match(page, new RegExp(`${queryKey}\\?: string`));
@@ -74,13 +76,19 @@ test("the desk exposes six operational queues with truthful scoped work context"
   assert.match(desk, />Owner</);
   assert.match(desk, />Due</);
   assert.match(desk, />Reason</);
-  assert.match(desk, />Blocker</);
+  assert.match(desk, />Checklist</);
   assert.match(desk, /item\.primary_action\.href/);
-  assert.match(desk, /item\.secondary_action\.href/);
+  assert.match(desk, /item\.secondary_action/);
   assert.match(desk, /item\.needs_setup \? "Needs setup"/);
   assert.match(desk, /executed transaction is safely recorded and visible here/);
+  assert.match(desk, /item when practical; it is advisory guidance, not a required first step/);
   assert.match(desk, /data\.buyer_network\.missing_proof/);
   assert.match(desk, /data\.coverage_warnings/);
+  assert.match(desk, /caseWorkbench\?\.best_action_href \?\? item\.primary_action\.href/);
+  assert.match(desk, /Suggested action \(optional\)/);
+  assert.match(desk, /<details className=\{styles\.cardChecklist\} open>/);
+  assert.match(desk, /All checklist issues/);
+  assert.match(desk, /Also available now/);
 });
 
 test("stale, unavailable, and truncated data remain explicit without disabling canonical work", () => {
@@ -125,7 +133,7 @@ test("buyer follow-ups can be scheduled from the existing disposition record", (
 });
 
 test("the existing deal buyer tab hosts one governed, explainable buyer pool", () => {
-  assert.match(dispositionWorkspace, /item === "buyers" \? "Buyer pool"/);
+  assert.match(dispositionWorkspace, /tab === "buyers"\) return "Buyer pool"/);
   assert.match(dispositionWorkspace, /<DispositionBuyerPool/);
   assert.match(buyerPool, /useState<DispositionBuyerPoolSource>/);
   assert.match(buyerPool, /useState<DispositionBuyerPoolStage>/);

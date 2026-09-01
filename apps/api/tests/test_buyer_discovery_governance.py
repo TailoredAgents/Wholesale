@@ -395,7 +395,7 @@ def _seed_completed_run(
     return run
 
 
-def test_ds11_requires_package_approval_and_returns_governance_summary(
+def test_ds11_treats_package_approval_as_advisory_and_returns_governance_summary(
     db_session: Session,
     api_db_override: None,
     monkeypatch: Any,
@@ -405,13 +405,33 @@ def test_ds11_requires_package_approval_and_returns_governance_summary(
     client = TestClient(app)
     case_id = _create_case(db_session, client, approve=False)
 
-    blocked = _preview(client, case_id, "best_fit", 10)
-    assert blocked.status_code == 422
-    assert "approve" in blocked.json()["detail"].lower()
-    assert provider_client.search_calls == []
+    disposition_case = db_session.get(DispositionCase, UUID(case_id))
+    assert disposition_case is not None
+    assert disposition_case.package_status == "draft"
 
-    approval = approve_disposition_package(client, case_id)
-    assert approval.status_code == 200, approval.text
+    preview = _preview(client, case_id, "best_fit", 10)
+    assert preview.status_code == 200, preview.text
+    estimate = preview.json()
+    discovery = _run(
+        client,
+        case_id,
+        "best_fit",
+        10,
+        estimate["estimated_credits"],
+        estimate["request_fingerprint"],
+    )
+    assert discovery.status_code == 201, discovery.text
+    run = discovery.json()
+    assert run["status"] == "completed"
+    assert run["result_count"] == 10
+    assert run["actual_credits"] == 25
+    assert run["search_snapshot"]["package_version_id"] is None
+    assert run["search_snapshot"]["package_status"] is None
+    assert run["search_snapshot"]["package_is_current"] is False
+    assert run["search_snapshot"]["package_is_preliminary"] is False
+    assert len(run["search_snapshot"]["package_source_fingerprint"]) == 64
+    assert provider_client.search_calls == ["best_fit"]
+
     summary = client.get(
         "/api/v1/buyers/discovery-summary",
         headers=HEADERS,
@@ -419,25 +439,27 @@ def test_ds11_requires_package_approval_and_returns_governance_summary(
     )
     assert summary.status_code == 200, summary.text
     payload = summary.json()
-    assert payload["completed_tiers"] == []
-    assert payload["unlocked_tiers"] == ["best_fit"]
-    assert payload["next_tier"] == "best_fit"
-    assert payload["cumulative_case_credits"] == 0
+    assert payload["completed_tiers"] == ["best_fit"]
+    assert payload["unlocked_tiers"] == ["best_fit", "expanded"]
+    assert payload["next_tier"] == "expanded"
+    assert payload["cumulative_case_credits"] == 25
     assert payload["cumulative_case_credit_cap"] == 250
-    assert payload["monthly_credits"] == 0
+    assert payload["monthly_credits"] == 25
     assert payload["monthly_credit_cap"] == 2000
     assert [
         (
             item["search_tier"],
             item["target_candidates"],
             item["estimated_credit_cap"],
+            item["completed"],
             item["unlocked"],
+            item["latest_run"]["id"] if item["latest_run"] else None,
         )
         for item in payload["tier_statuses"]
     ] == [
-        ("best_fit", 10, 30, True),
-        ("expanded", 20, 60, False),
-        ("regional", 40, 120, False),
+        ("best_fit", 10, 30, True, True, run["id"]),
+        ("expanded", 20, 60, False, True, None),
+        ("regional", 40, 120, False, False, None),
     ]
 
 

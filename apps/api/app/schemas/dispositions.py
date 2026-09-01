@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field, field_validator
 class DispositionCaseCreate(BaseModel):
     transaction_id: UUID
     strategy: Literal["assignment", "double_close", "novation"] = "assignment"
-    asking_price_cents: int = Field(ge=1)
-    minimum_acceptable_cents: int = Field(ge=1)
+    asking_price_cents: int | None = Field(default=None, ge=1)
+    minimum_acceptable_cents: int | None = Field(default=None, ge=1)
     desired_assignment_fee_cents: int | None = Field(default=None, ge=0)
     operating_mode_key: str = Field(default="human_led", max_length=80)
     notes: str | None = Field(default=None, max_length=2000)
@@ -332,6 +332,10 @@ class DispositionPackageShareLinkRead(BaseModel):
     package_version_number: int
     token_hint: str
     artifact_sha256: str
+    package_status_at_issue: str
+    was_current_at_issue: bool
+    is_preliminary: bool
+    is_current_now: bool
     lock_version: int
     status: Literal["active", "expired", "revoked", "artifact_unavailable"]
     expires_at: datetime

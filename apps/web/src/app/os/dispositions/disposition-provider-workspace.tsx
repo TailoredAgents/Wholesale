@@ -80,6 +80,25 @@ function latestRevisionNumber(data: DispositionProviderWorkspace) {
   return data.revisions.reduce((latest, item) => Math.max(latest, item.revision_number), 0);
 }
 
+function revisionIsPreliminary(revision: DispositionProviderListingRevision) {
+  return revision.package_is_preliminary === true
+    || (revision.package_status ?? "approved") !== "approved"
+    || revision.package_was_current_at_prepare === false
+    || revision.package_is_current_now === false;
+}
+
+function currentAtPrepareLabel(revision: DispositionProviderListingRevision) {
+  if (revision.package_was_current_at_prepare === true) return "Current at preparation";
+  if (revision.package_was_current_at_prepare === false) return "Facts had changed before preparation";
+  return "Preparation currentness not recorded";
+}
+
+function currentNowLabel(revision: DispositionProviderListingRevision) {
+  if (revision.package_is_current_now === true) return "Package and source facts are current now";
+  if (revision.package_is_current_now === false) return "Package or source facts changed since preparation";
+  return "Current package state not reported";
+}
+
 function eventSummary(event: DispositionProviderEvidence) {
   const buyer = event.buyer_name || event.buyer_email || event.buyer_phone;
   if (event.event_type === "offer") {
@@ -95,6 +114,7 @@ export function DispositionProviderWorkspace({
   caseId,
   download,
   onMessage,
+  onWorkspaceChanged,
   request,
 }: {
   canApprove: boolean;
@@ -103,6 +123,7 @@ export function DispositionProviderWorkspace({
   caseId: string;
   download: DownloadFile;
   onMessage: (message: string | null) => void;
+  onWorkspaceChanged: () => Promise<unknown> | unknown;
   request: Request;
 }) {
   const requestRef = useRef(request);
@@ -171,6 +192,11 @@ export function DispositionProviderWorkspace({
     try {
       await work();
       await load();
+      try {
+        await onWorkspaceChanged();
+      } catch {
+        // The provider mutation succeeded; aggregate readiness can be retried separately.
+      }
       setNotice(success);
       onMessage(success);
       return true;
@@ -185,7 +211,13 @@ export function DispositionProviderWorkspace({
   }
 
   const approvedRevision = useMemo(() => data ? approvalRevision(data) : null, [data]);
-  const canPrepare = Boolean(data?.eligible && data.permissions.can_prepare && canEditDeals && canManage);
+  const shoppingPackage = data?.available_package ?? data?.approved_package ?? null;
+  const shoppingPackageStatus = data?.available_package?.status ?? (data?.approved_package ? "approved" : null);
+  const shoppingIsPreliminary = Boolean(
+    shoppingPackage
+      && (shoppingPackageStatus !== "approved" || shoppingPackage.is_current === false),
+  );
+  const canPrepare = Boolean(data?.eligible && shoppingPackage && data.permissions.can_prepare && canEditDeals && canManage);
   const canApproveRevision = Boolean(data?.eligible && data.permissions.can_approve && canApprove);
   const canRecordManual = Boolean(data?.eligible && data.permissions.can_record_manual && canEditDeals && canManage);
   const canDisconnect = Boolean(data?.permissions.can_disconnect && canEditDeals && canManage);
@@ -209,7 +241,7 @@ export function DispositionProviderWorkspace({
           body: JSON.stringify({ expected_latest_revision: latestRevisionNumber(data) }),
         },
       ),
-      "A new manual handoff revision was prepared from the current approved Stonegate package.",
+      `A new manual handoff revision was prepared from the ${shoppingIsPreliminary ? "Preliminary" : "approved"} Stonegate package.`,
       canPrepare,
     );
   }
@@ -384,14 +416,14 @@ export function DispositionProviderWorkspace({
   const publishComplete = isManuallyPublished;
 
   return (
-    <section aria-label="InvestorLift manual handoff" className={styles.workspace}>
+    <section aria-label="InvestorLift manual handoff" className={styles.workspace} id="provider-handoff" tabIndex={-1}>
       {notice ? <p aria-live="polite" className={/unable|cannot|blocked|required|failed|error/i.test(notice) ? styles.error : styles.success} role="status">{notice}</p> : null}
 
       <header className={styles.hero}>
         <div>
           <span className={styles.eyebrow}><UploadCloud aria-hidden="true" size={15} />House disposition provider</span>
           <h4>{data.provider_label} handoff</h4>
-          <p>Prepare and approve the exact public Stonegate package, publish it manually, then preserve the provider record and incoming activity here.</p>
+          <p>Prepare an exact public handoff from the latest usable package while checklist work continues, publish it manually, then preserve provider activity here.</p>
         </div>
         <div className={styles.heroStatus}>
           <strong>Manual-only</strong>
@@ -406,7 +438,7 @@ export function DispositionProviderWorkspace({
           <strong>The direct InvestorLift API contract is unverified.</strong>
           <p>Stonegate does not claim a live connection and does not request provider credentials in this workspace.</p>
           <ul>
-            <li>Only the current, human-approved Stonegate public package can be released.</li>
+            <li>Every handoff preserves whether its source package was approved or Preliminary.</li>
             <li>Private Stonegate economics are never included in the provider bundle.</li>
             <li>Inquiries, engagement, and offers stay staged until a person reviews them.</li>
           </ul>
@@ -424,7 +456,7 @@ export function DispositionProviderWorkspace({
           <section className={styles.workflow}>
             <header><span>Manual publication workflow</span><h5>One governed path from Stonegate to InvestorLift</h5><p>Each step records exact evidence without depending on provider uptime.</p></header>
             <div className={styles.steps}>
-              <article data-complete={prepareComplete}><span>{prepareComplete ? <Check size={13} /> : "1"}</span><strong>Prepare</strong><p>Freeze a public revision from the current approved package.</p></article>
+              <article data-complete={prepareComplete}><span>{prepareComplete ? <Check size={13} /> : "1"}</span><strong>Prepare</strong><p>Freeze a public revision from the latest usable package.</p></article>
               <article data-complete={approveComplete}><span>{approveComplete ? <Check size={13} /> : "2"}</span><strong>Approve exact handoff</strong><p>A permitted reviewer approves the exact public payload.</p></article>
               <article data-complete={approveComplete}><span>{approveComplete ? <Check size={13} /> : "3"}</span><strong>Download</strong><p>Download the approved bundle; private economics stay in Stonegate.</p></article>
               <article data-complete={publishComplete}><span>{publishComplete ? <Check size={13} /> : "4"}</span><strong>Publish manually</strong><p>Post the approved bundle in InvestorLift and record its ID and URL.</p></article>
@@ -435,19 +467,27 @@ export function DispositionProviderWorkspace({
           <div className={styles.layout}>
             <div className={styles.column}>
               <section className={styles.panel}>
-                <header className={styles.panelHeading}><div><span>Release control</span><h5>Approved public package revisions</h5><p>Preparing a new revision never publishes or sends anything.</p></div><strong>{data.approved_package ? `Stonegate package v${data.approved_package.version_number}` : "Package required"}</strong></header>
+                <header className={styles.panelHeading}><div><span>Release control</span><h5>Public package revisions</h5><p>Preparing a new revision never publishes or sends anything.</p></div><strong>{shoppingPackage ? `Stonegate package v${shoppingPackage.version_number} - ${shoppingIsPreliminary ? "Preliminary" : "Approved"}` : "Artifact required"}</strong></header>
                 <div className={styles.panelActions}>
-                  <button className={styles.button} disabled={Boolean(busyAction) || !canPrepare || !data.approved_package?.is_current} onClick={() => void prepareRevision()} type="button">{busyAction === "prepare" ? <LoaderCircle className={styles.spin} size={14} /> : <Plus size={14} />}Prepare current package</button>
+                  <button className={styles.button} disabled={Boolean(busyAction) || !canPrepare} onClick={() => void prepareRevision()} type="button">{busyAction === "prepare" ? <LoaderCircle className={styles.spin} size={14} /> : <Plus size={14} />}Prepare latest package</button>
                   <button className={styles.secondaryButton} disabled={Boolean(busyAction)} onClick={() => void load()} type="button"><RefreshCw size={14} />Reload Stonegate state</button>
                   <button className={styles.secondaryButton} disabled={Boolean(busyAction) || !canExport} onClick={() => void download(`/api/v1/dispositions/cases/${caseId}/provider/export?format=json`, "stonegate-investorlift-handoff.json")} type="button"><Download size={14} />Export history</button>
                 </div>
-                {!data.approved_package?.is_current ? <p className={styles.permissionNote}>Approve the current Stonegate investor package before preparing a provider revision.</p> : null}
+                {!shoppingPackage ? <p className={styles.permissionNote}>Build or upload a concrete buyer-safe package artifact before preparing a provider revision.</p> : shoppingIsPreliminary ? <p className={styles.permissionNote}>This handoff will remain visibly Preliminary. Package checklist gaps do not disable preparation.</p> : null}
                 {!canPrepare ? <p className={styles.permissionNote}>Preparing revisions requires deal-edit and disposition-management access.</p> : null}
                 <div className={styles.revisionList}>
                   {data.revisions.map((revision) => (
                     <article className={styles.revisionCard} key={revision.id}>
                       <div className={styles.revisionIdentity}><span>Revision {revision.revision_number}</span><strong>{revision.is_current ? "Current handoff" : "Historical handoff"}</strong><small>Created {dateTime(revision.created_at)}</small></div>
-                      <div className={styles.revisionEvidence}><span className={styles.revisionStatus} data-status={revision.status}>{labelize(revision.status)}</span><small>Payload {revision.public_payload_sha256.slice(0, 12)}</small><small>Package {revision.package_source_fingerprint.slice(0, 12)}</small></div>
+                      <div className={styles.revisionEvidence}>
+                        <span className={styles.revisionStatus} data-status={revision.status}>{labelize(revision.status)}</span>
+                        <small>Frozen source {labelize(revision.package_status ?? "approved")}</small>
+                        <small>Current handoff label: {revisionIsPreliminary(revision) ? "Preliminary" : "Approved"}</small>
+                        <small>{currentAtPrepareLabel(revision)}</small>
+                        <small>{currentNowLabel(revision)}</small>
+                        <small>Payload {revision.public_payload_sha256.slice(0, 12)}</small>
+                        <small>Package {revision.package_source_fingerprint.slice(0, 12)}</small>
+                      </div>
                       <div className={styles.revisionDecision}>{revision.approved_at ? <><strong>Approved {dateTime(revision.approved_at)}</strong><small>{revision.approval_reason}</small></> : <><strong>Human approval required</strong><small>Review the exact public JSON below before approval.</small></>}</div>
                       <div className={styles.panelActions}>
                         {revision.status === "draft" ? <button className={styles.inlineButton} disabled={Boolean(busyAction) || !canApproveRevision} onClick={() => setApprovalRevisionId((current) => current === revision.id ? null : revision.id)} type="button"><FileCheck2 size={13} />Review</button> : null}
@@ -457,7 +497,7 @@ export function DispositionProviderWorkspace({
                       {approvalRevisionId === revision.id ? <form className={styles.form} onSubmit={(event) => void approveRevision(event, revision)}><label><span>Approval reason</span><textarea name="reason" placeholder="Why this exact public package is ready for manual publication" required /></label><label className={styles.attestation}><input name="attestation" required type="checkbox" /><span>I reviewed this exact public payload and approve it for manual publication in InvestorLift.</span></label><div className={styles.formFooter}><button className={styles.secondaryButton} onClick={() => setApprovalRevisionId(null)} type="button">Cancel</button><button disabled={Boolean(busyAction) || !canApproveRevision} type="submit">Approve exact handoff</button></div></form> : null}
                     </article>
                   ))}
-                  {!data.revisions.length ? <div className={styles.empty}><FileArchive size={24} /><h5>No provider revision prepared</h5><p>Prepare the current approved Stonegate package to begin. Nothing will be published.</p></div> : null}
+                  {!data.revisions.length ? <div className={styles.empty}><FileArchive size={24} /><h5>No provider revision prepared</h5><p>Prepare the latest usable Stonegate package to begin. Nothing will be published.</p></div> : null}
                 </div>
               </section>
 
@@ -486,6 +526,7 @@ export function DispositionProviderWorkspace({
             <div className={styles.column}>
               <section className={styles.panel}>
                 <header className={styles.panelHeading}><div><span>Manual publication record</span><h5>InvestorLift property link</h5><p>Publish the approved bundle in InvestorLift first, then copy its property ID and URL here.</p></div><strong>{isManuallyPublished ? "Recorded" : hasExternalLink ? "Update required" : "Not recorded"}</strong></header>
+                {approvedRevision && revisionIsPreliminary(approvedRevision) ? <p className={styles.permissionNote}>Current handoff label: Preliminary. Its frozen source was preliminary or the package or source facts changed. Prepare a new current revision to produce an Approved handoff; this warning does not erase the existing approval or publication history.</p> : null}
                 {hasExternalLink && !isManuallyPublished && !isDisconnected ? <p className={styles.permissionNote}>The ID and URL below belong to an earlier manual publication. Publish the newly approved revision, then confirm or replace those values to record the updated InvestorLift publication.</p> : null}
                 {data.listing && approvedRevision && !isDisconnected ? <form className={styles.form} onSubmit={(event) => void recordManualLink(event)}>
                   <label><span>InvestorLift property ID</span><input defaultValue={data.listing.external_property_id ?? ""} name="external_property_id" required /></label>

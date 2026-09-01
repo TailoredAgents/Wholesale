@@ -58,19 +58,18 @@ from app.schemas.disposition_offer_room import (
     SelectionSlotRead,
     StrategyAgreementReadinessRead,
 )
+from app.services.disposition_state import (
+    ACTIVE_DISPOSITION_CASE_STATUSES,
+    advance_disposition_milestone,
+)
 from app.services.dispositions import _proof_is_current_verified, audit, scoped_case
 from app.services.lead_lifecycle import lock_organization_lead, require_lead_not_closed_out
 
-ACTIVE_CASE_STATUSES = {
-    "package_prep",
-    "buyer_matching",
-    "marketed",
-    "offers_received",
-    "buyer_selected",
-}
+ACTIVE_CASE_STATUSES = set(ACTIVE_DISPOSITION_CASE_STATUSES)
 VIABLE_OFFER_STATUSES = {"received", "countering", "backup", "selected"}
 TERMINAL_CHECKPOINT_STATUSES = {"completed", "waived", "cancelled"}
 MANAGER_PERMISSION = PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION
+CHECKPOINT_REQUEST_FINGERPRINT_KEY = "_checkpoint_request_fingerprint"
 
 
 def _aware(value: datetime) -> datetime:
@@ -80,6 +79,94 @@ def _aware(value: datetime) -> datetime:
 def _canonical_hash(value: object) -> str:
     serialized = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _replacement_outcome_idempotency_key(client_key: str) -> str:
+    """Bind the derived outcome replay key without exceeding its 120-char column."""
+
+    return f"replacement-outcome:{sha256(client_key.encode('utf-8')).hexdigest()}"
+
+
+def _replacement_request_fingerprint(
+    case_id: UUID,
+    selection_id: UUID,
+    payload: OfferPrimaryReplacementCreate,
+) -> str:
+    return _canonical_hash(
+        {
+            "case_id": str(case_id),
+            "selection_id": str(selection_id),
+            "request": payload.model_dump(
+                mode="json",
+                exclude={"idempotency_key"},
+            ),
+            "replacement_offer_id_was_explicit": (
+                "replacement_offer_id" in payload.model_fields_set
+            ),
+        }
+    )
+
+
+def _selection_request_fingerprint(
+    case_id: UUID,
+    payload: OfferSelectionCreate,
+) -> str:
+    return _canonical_hash(
+        {
+            "case_id": str(case_id),
+            "request": payload.model_dump(
+                mode="json",
+                exclude={"idempotency_key"},
+            ),
+        }
+    )
+
+
+def _checkpoint_request_fingerprint(
+    case_id: UUID,
+    payload: ClosingCheckpointCreate,
+) -> str:
+    return _canonical_hash(
+        {
+            "case_id": str(case_id),
+            "request": payload.model_dump(
+                mode="json",
+                exclude={"idempotency_key"},
+            ),
+        }
+    )
+
+
+def _checkpoint_public_evidence(checkpoint: DispositionClosingCheckpoint) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in (checkpoint.evidence_snapshot or {}).items()
+        if key != CHECKPOINT_REQUEST_FINGERPRINT_KEY
+    }
+
+
+def _legacy_checkpoint_request_matches(
+    checkpoint: DispositionClosingCheckpoint,
+    payload: ClosingCheckpointCreate,
+) -> bool:
+    """Best-effort conflict detection for checkpoints created before fingerprints."""
+
+    return (
+        checkpoint.checkpoint_type == payload.checkpoint_type
+        and checkpoint.label == payload.label
+        and _aware(checkpoint.due_at) == _aware(payload.due_at)
+        and checkpoint.notes == payload.notes
+        and _checkpoint_public_evidence(checkpoint) == payload.evidence
+        and (
+            payload.selection_id is None
+            or checkpoint.selection_id == payload.selection_id
+        )
+        and (payload.offer_id is None or checkpoint.offer_id == payload.offer_id)
+        and (
+            payload.responsible_user_id is None
+            or checkpoint.responsible_user_id == payload.responsible_user_id
+        )
+    )
 
 
 def _normalize_identity_text(value: str | None) -> str:
@@ -240,10 +327,10 @@ def _require_no_live_assignment_obligation(
         raise ValueError(f"Withdraw or cancel the active buyer assignment request before {action}.")
 
 
-def _require_manager(principal: Principal) -> None:
+def _require_selection_authority(principal: Principal) -> None:
     if MANAGER_PERMISSION not in principal.permission_keys:
         raise PermissionError(
-            "Final buyer selection and replacement require disposition manager approval."
+            "Final buyer selection and replacement require buyer-selection approval permission."
         )
 
 
@@ -686,8 +773,7 @@ def create_offer(
         idempotency_key=payload.idempotency_key,
         change_reason=payload.change_reason,
     )
-    if case.status != "buyer_selected":
-        case.status = "offers_received"
+    advance_disposition_milestone(case, "offers_received")
     audit(
         db,
         principal,
@@ -865,7 +951,7 @@ def _validate_primary(
     offer: BuyerOffer,
     *,
     override_reason: str | None,
-) -> None:
+) -> list[str]:
     buyer = db.scalar(
         select(Buyer).where(
             Buyer.id == offer.buyer_id,
@@ -874,9 +960,9 @@ def _validate_primary(
     )
     proof = _scoped_proof(db, principal, offer.buyer_id, offer.proof_document_id)
     now = datetime.now(UTC)
-    if offer.amount_cents < case.minimum_acceptable_cents:
-        raise ValueError("Primary offer must meet Stonegate's approved minimum price.")
     issues: list[str] = []
+    if offer.amount_cents < case.minimum_acceptable_cents:
+        issues.append("offer is below Stonegate's current minimum")
     if buyer is None or buyer.status != "active" or buyer.archived_at is not None:
         issues.append("buyer is inactive or archived")
     if (
@@ -898,11 +984,11 @@ def _validate_primary(
     )
     if match is None:
         issues.append("buyer has no qualified House match for this deal")
-    if issues and not override_reason:
-        raise ValueError(
-            "Primary offer is not selection-ready: " + "; ".join(issues) + ". "
-            "A disposition manager may record an explicit eligibility override."
-        )
+    # Selection readiness is advisory. Preserve the legacy override note as context,
+    # but never use it as authorization to work the deal.
+    if issues and override_reason:
+        issues.append(f"selection note: {override_reason}")
+    return issues
 
 
 def _selection_snapshot(offer: BuyerOffer) -> dict[str, Any]:
@@ -957,7 +1043,7 @@ def _coverage_snapshot_for_org(
     if buyer is None or buyer.status != "active" or buyer.archived_at is not None:
         blockers.append("Buyer is inactive or archived.")
     if offer.amount_cents < case.minimum_acceptable_cents:
-        blockers.append("Offer is below Stonegate's approved minimum.")
+        blockers.append("Offer is below Stonegate's current internal minimum target.")
     if (
         proof is None
         or not _proof_is_current_verified(proof, now=now)
@@ -1035,8 +1121,8 @@ def load_current_assignment_authority(
     )
     if case is None:
         raise ValueError(
-            "Approve current primary and backup buyer coverage before using an assignment "
-            "agreement."
+            "Select an active primary buyer in the Offer Room before using an assignment "
+            "agreement. Backup coverage is recommended, not required."
         )
     selection = db.scalar(
         statement_for(
@@ -1169,17 +1255,6 @@ def validate_assignment_package_authority(
         "offer_economics_hash"
     ) != _canonical_hash(expected_economics):
         raise ValueError(f"The assignment economics changed before {gate}. Redraft the agreement.")
-    coverage = _coverage_snapshot_for_org(
-        db,
-        transaction.organization_id,
-        case,
-        offer,
-    )
-    if coverage["readiness_blockers"]:
-        raise ValueError(
-            f"The selected buyer is no longer assignment-ready before {gate}: "
-            + "; ".join(coverage["readiness_blockers"])
-        )
     return {
         "case": case,
         "selection": selection,
@@ -1395,7 +1470,7 @@ def build_assignment_buyer_binding(
     closing_date: datetime | None,
     inspection_period_days: int | None,
 ) -> dict[str, Any]:
-    """Build immutable assignment evidence from the live, manager-approved primary offer."""
+    """Build immutable assignment evidence from the live, authorized primary offer."""
     if selection.status != "active" or primary_slot.selection_id != selection.id:
         raise ValueError("Buyer coverage changed. Refresh the Offer Room before drafting.")
     if primary_slot.offer_id != offer.id or primary_slot.buyer_id != buyer.id:
@@ -1406,12 +1481,6 @@ def build_assignment_buyer_binding(
     if frozen_lock_version != offer.lock_version:
         raise ValueError(
             "The approved primary offer terms changed. Reapprove buyer coverage before drafting."
-        )
-    coverage = _coverage_snapshot(db, principal, case, offer)
-    if coverage["readiness_blockers"]:
-        raise ValueError(
-            "The selected buyer is no longer assignment-ready: "
-            + "; ".join(coverage["readiness_blockers"])
         )
     buyer_identity_snapshot = assignment_buyer_identity_snapshot(buyer)
     offer_economics_snapshot = assignment_offer_economics_snapshot(
@@ -1446,6 +1515,7 @@ def _create_selection_record(
     old_selection: DispositionBuyerSelection | None = None,
     approved_by_user_id: UUID | None = None,
     approved_at: datetime | None = None,
+    request_fingerprint: str | None = None,
 ) -> DispositionBuyerSelection:
     now = approved_at or datetime.now(UTC)
     approver_id = approved_by_user_id or principal.user_id
@@ -1464,6 +1534,21 @@ def _create_selection_record(
         "approved_by_user_id": str(approver_id),
         "approved_at": now.isoformat(),
     }
+    advisory_snapshot = {
+        "backup_coverage_state": "covered" if backups else "missing",
+        "warnings": [
+            *list(primary_snapshot.get("readiness_blockers", [])),
+            *(
+                []
+                if backups
+                else ["No backup buyer is selected; continue with the primary and keep shopping."]
+            ),
+        ],
+        "evaluated_at": now.isoformat(),
+    }
+    if request_fingerprint is not None:
+        advisory_snapshot["request_fingerprint"] = request_fingerprint
+    manifest["advisory_snapshot"] = advisory_snapshot
     selection = DispositionBuyerSelection(
         organization_id=principal.organization_id,
         disposition_case_id=case.id,
@@ -1474,6 +1559,7 @@ def _create_selection_record(
         idempotency_key=idempotency_key,
         reason=reason,
         evidence_hash=_canonical_hash(manifest),
+        advisory_snapshot=advisory_snapshot,
         approved_at=now,
         replaced_at=None,
     )
@@ -1512,7 +1598,7 @@ def _create_selection_record(
     case.backup_buyer_id = backups[0].buyer_id if backups else None
     case.selection_approved_by_user_id = approver_id
     case.selection_approved_at = now
-    case.status = "buyer_selected"
+    advance_disposition_milestone(case, "buyer_selected")
     return selection
 
 
@@ -1522,8 +1608,9 @@ def select_buyers(
     case_id: UUID,
     payload: OfferSelectionCreate,
 ) -> OfferRoomRead:
-    _require_manager(principal)
+    _require_selection_authority(principal)
     case, transaction = _lock_case(db, principal, case_id)
+    request_fingerprint = _selection_request_fingerprint(case.id, payload)
     existing = db.scalar(
         select(DispositionBuyerSelection).where(
             DispositionBuyerSelection.organization_id == principal.organization_id,
@@ -1532,6 +1619,51 @@ def select_buyers(
         )
     )
     if existing is not None:
+        stored_fingerprint = (existing.advisory_snapshot or {}).get(
+            "request_fingerprint"
+        )
+        if stored_fingerprint is not None:
+            if stored_fingerprint != request_fingerprint:
+                raise ValueError(
+                    "This idempotency key was already used for a different buyer "
+                    "selection request."
+                )
+        else:
+            stored_slots = list(
+                db.scalars(
+                    select(DispositionBuyerSelectionSlot)
+                    .where(
+                        DispositionBuyerSelectionSlot.organization_id
+                        == principal.organization_id,
+                        DispositionBuyerSelectionSlot.selection_id == existing.id,
+                    )
+                    .order_by(
+                        DispositionBuyerSelectionSlot.role.desc(),
+                        DispositionBuyerSelectionSlot.rank,
+                    )
+                ).all()
+            )
+            stored_primary = next(
+                (slot.offer_id for slot in stored_slots if slot.role == "primary"),
+                None,
+            )
+            stored_backups = [
+                slot.offer_id for slot in stored_slots if slot.role == "backup"
+            ]
+            expected_reason = payload.reason + (
+                f" Eligibility override: {payload.eligibility_override_reason}"
+                if payload.eligibility_override_reason
+                else ""
+            )
+            if (
+                stored_primary != payload.primary_offer_id
+                or stored_backups != payload.backup_offer_ids
+                or existing.reason != expected_reason
+            ):
+                raise ValueError(
+                    "This idempotency key was already used for a different buyer "
+                    "selection request."
+                )
         return read_workspace(db, principal, case.id)
     requested_ids = [payload.primary_offer_id, *payload.backup_offer_ids]
     current, current_slots = _current_selection_with_slots(db, principal, case.id)
@@ -1600,13 +1732,8 @@ def select_buyers(
             )
         ).all()
     }
-    if any(
-        item.buyer_id not in selected_buyers
-        or selected_buyers[item.buyer_id].status != "active"
-        or selected_buyers[item.buyer_id].archived_at is not None
-        for item in offers
-    ):
-        raise ValueError("Primary and backup coverage requires active, non-archived buyers.")
+    if any(item.buyer_id not in selected_buyers for item in offers):
+        raise ValueError("One or more selected buyers are unavailable in this organization.")
     _validate_primary(
         db,
         principal,
@@ -1638,6 +1765,7 @@ def select_buyers(
         ),
         idempotency_key=payload.idempotency_key,
         old_selection=current,
+        request_fingerprint=request_fingerprint,
     )
     if current is not None:
         _cancel_selection_checkpoints(db, current.id)
@@ -1690,8 +1818,35 @@ def replace_primary(
     selection_id: UUID,
     payload: OfferPrimaryReplacementCreate,
 ) -> OfferRoomRead:
-    _require_manager(principal)
-    case, transaction = _lock_case(db, principal, case_id, allowed_statuses={"buyer_selected"})
+    _require_selection_authority(principal)
+    case, transaction = _lock_case(db, principal, case_id)
+    outcome_idempotency_key = _replacement_outcome_idempotency_key(
+        payload.idempotency_key
+    )
+    request_fingerprint = _replacement_request_fingerprint(
+        case.id,
+        selection_id,
+        payload,
+    )
+    replayed_outcome = db.scalar(
+        select(DispositionBuyerOutcome).where(
+            DispositionBuyerOutcome.organization_id == principal.organization_id,
+            DispositionBuyerOutcome.disposition_case_id == case.id,
+            DispositionBuyerOutcome.idempotency_key == outcome_idempotency_key,
+        )
+    )
+    if replayed_outcome is not None:
+        if (
+            (replayed_outcome.evidence_snapshot or {}).get(
+                "replacement_request_fingerprint"
+            )
+            != request_fingerprint
+        ):
+            raise ValueError(
+                "This idempotency key was already used for a different primary "
+                "replacement request."
+            )
+        return read_workspace(db, principal, case.id)
     replay = db.scalar(
         select(DispositionBuyerSelection).where(
             DispositionBuyerSelection.organization_id == principal.organization_id,
@@ -1700,7 +1855,14 @@ def replace_primary(
         )
     )
     if replay is not None:
-        return read_workspace(db, principal, case.id)
+        raise ValueError(
+            "This idempotency key was already used for a different buyer "
+            "selection request."
+        )
+    if case.status != "buyer_selected":
+        raise ValueError(
+            "An active primary buyer selection is required before recording fallout."
+        )
     current, slots = _current_selection_with_slots(db, principal, case.id)
     if current is None or current.id != selection_id:
         raise ValueError("The selected buyer coverage changed. Refresh the Offer Room and retry.")
@@ -1712,44 +1874,127 @@ def replace_primary(
         transaction,
         action="replacing the approved primary buyer",
     )
-    primary_slot = next(item for item in slots if item.role == "primary")
+    primary_slot = next((item for item in slots if item.role == "primary"), None)
+    if primary_slot is None:
+        raise ValueError("The active buyer selection has no primary offer.")
     backup_slots = sorted(
         (item for item in slots if item.role == "backup"), key=lambda item: item.rank
     )
-    replacement_slot = (
-        next(
-            (item for item in backup_slots if item.offer_id == payload.replacement_offer_id),
-            None,
-        )
-        if payload.replacement_offer_id
-        else (backup_slots[0] if backup_slots else None)
+    explicit_no_replacement = (
+        "replacement_offer_id" in payload.model_fields_set
+        and payload.replacement_offer_id is None
     )
-    if replacement_slot is None:
-        raise ValueError("Choose an available ranked backup before replacing the primary buyer.")
-    offer_ids = [item.offer_id for item in slots]
+    replacement_offer_id = (
+        None
+        if explicit_no_replacement
+        else payload.replacement_offer_id
+        if payload.replacement_offer_id is not None
+        else (backup_slots[0].offer_id if backup_slots else None)
+    )
+    if explicit_no_replacement:
+        if payload.expected_replacement_offer_lock_version is not None:
+            raise ValueError(
+                "Do not provide a replacement offer lock version when reopening shopping."
+            )
+        offers = _lock_offers(db, principal, case, [item.offer_id for item in slots])
+        offer_by_id = {item.id: item for item in offers}
+        old_primary = offer_by_id[primary_slot.offer_id]
+        locked_current = db.scalar(
+            select(DispositionBuyerSelection)
+            .where(DispositionBuyerSelection.id == current.id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        assert locked_current is not None
+        _record_outcome_locked(
+            db,
+            principal,
+            case,
+            old_primary,
+            selection=locked_current,
+            outcome_type=payload.outcome_type,
+            cause_category=payload.cause_category,
+            reason=payload.reason,
+            details=payload.details,
+            evidence={
+                **payload.evidence,
+                "replacement_request_fingerprint": request_fingerprint,
+            },
+            occurred_at=datetime.now(UTC),
+            idempotency_key=outcome_idempotency_key,
+        )
+        for slot in backup_slots:
+            backup_offer = offer_by_id[slot.offer_id]
+            if backup_offer.status == "backup":
+                backup_offer.status = "received"
+        locked_current.status = "replaced"
+        locked_current.replaced_at = datetime.now(UTC)
+        locked_current.lock_version += 1
+        _cancel_selection_checkpoints(db, locked_current.id)
+        case.selected_buyer_id = None
+        case.backup_buyer_id = None
+        case.selection_approved_by_user_id = None
+        case.selection_approved_at = None
+        case.status = "offers_received"
+        audit(
+            db,
+            principal,
+            "disposition.primary_buyer_released_to_shopping",
+            "disposition_buyer_selection",
+            locked_current.id,
+            {
+                "prior_primary_offer_id": str(old_primary.id),
+                "outcome_type": payload.outcome_type,
+                "case_status": case.status,
+                "replacement_offer_id": None,
+            },
+            payload.reason,
+        )
+        db.commit()
+        return read_workspace(db, principal, case.id)
+    if replacement_offer_id is None:
+        raise ValueError("Choose a recorded offer before replacing the primary buyer.")
+    if replacement_offer_id == primary_slot.offer_id:
+        raise ValueError("Choose a different recorded offer as the replacement primary.")
+    replacement_slot = next(
+        (item for item in backup_slots if item.offer_id == replacement_offer_id),
+        None,
+    )
+    offer_ids = list(
+        dict.fromkeys([*(item.offer_id for item in slots), replacement_offer_id])
+    )
     offers = _lock_offers(db, principal, case, offer_ids)
     offer_by_id = {item.id: item for item in offers}
     old_primary = offer_by_id[primary_slot.offer_id]
-    replacement = offer_by_id[replacement_slot.offer_id]
+    replacement = offer_by_id[replacement_offer_id]
+    expected_replacement_lock = payload.expected_replacement_offer_lock_version
+    if expected_replacement_lock is None and replacement_slot is not None:
+        expected_replacement_lock = int(
+            replacement_slot.offer_snapshot.get("lock_version", 0)
+        )
+    if expected_replacement_lock is None:
+        raise ValueError(
+            "Provide the current replacement offer lock version and retry."
+        )
+    if replacement.lock_version != expected_replacement_lock:
+        raise ValueError("Replacement offer terms changed. Refresh the Offer Room and retry.")
     remaining = [
-        offer_by_id[item.offer_id] for item in backup_slots if item.offer_id != replacement.id
+        offer_by_id[item.offer_id]
+        for item in backup_slots
+        if item.offer_id != replacement.id
+        and offer_by_id[item.offer_id].buyer_id != replacement.buyer_id
+        and offer_by_id[item.offer_id].status in VIABLE_OFFER_STATUSES
     ]
-    stale_backup_ids = [
-        slot.offer_id
-        for slot in backup_slots
-        if int(slot.offer_snapshot.get("lock_version", 0))
-        != offer_by_id[slot.offer_id].lock_version
-    ]
-    if stale_backup_ids:
-        raise ValueError(
-            "Approved backup terms changed. Reapprove buyer coverage before promoting a backup."
+    if replacement.status not in VIABLE_OFFER_STATUSES:
+        raise ValueError("The chosen replacement offer is no longer viable.")
+    replacement_buyer = db.scalar(
+        select(Buyer).where(
+            Buyer.id == replacement.buyer_id,
+            Buyer.organization_id == principal.organization_id,
         )
-    if replacement.status not in VIABLE_OFFER_STATUSES or any(
-        item.status not in VIABLE_OFFER_STATUSES for item in remaining
-    ):
-        raise ValueError(
-            "Approved backup coverage is no longer viable. Reapprove coverage before replacing."
-        )
+    )
+    if replacement_buyer is None:
+        raise ValueError("The chosen replacement buyer is unavailable.")
     locked_current = db.scalar(
         select(DispositionBuyerSelection)
         .where(DispositionBuyerSelection.id == current.id)
@@ -1757,12 +2002,6 @@ def replace_primary(
         .with_for_update()
     )
     assert locked_current is not None
-    replacement_coverage = _coverage_snapshot(db, principal, case, replacement)
-    if replacement_coverage["readiness_blockers"]:
-        raise ValueError(
-            "The replacement buyer is no longer ready: "
-            + "; ".join(replacement_coverage["readiness_blockers"])
-        )
     _validate_primary(db, principal, case, replacement, override_reason=None)
     _record_outcome_locked(
         db,
@@ -1774,9 +2013,12 @@ def replace_primary(
         cause_category=payload.cause_category,
         reason=payload.reason,
         details=payload.details,
-        evidence=payload.evidence,
+        evidence={
+            **payload.evidence,
+            "replacement_request_fingerprint": request_fingerprint,
+        },
         occurred_at=datetime.now(UTC),
-        idempotency_key=f"replacement-outcome:{payload.idempotency_key}",
+        idempotency_key=outcome_idempotency_key,
     )
     new_selection = _create_selection_record(
         db,
@@ -2070,7 +2312,8 @@ def create_checkpoint(
     case_id: UUID,
     payload: ClosingCheckpointCreate,
 ) -> OfferRoomRead:
-    case, _ = _lock_case(db, principal, case_id, allowed_statuses={"buyer_selected"})
+    case, _ = _lock_case(db, principal, case_id)
+    request_fingerprint = _checkpoint_request_fingerprint(case.id, payload)
     existing = db.scalar(
         select(DispositionClosingCheckpoint).where(
             DispositionClosingCheckpoint.organization_id == principal.organization_id,
@@ -2079,17 +2322,51 @@ def create_checkpoint(
         )
     )
     if existing is not None:
+        stored_fingerprint = (existing.evidence_snapshot or {}).get(
+            CHECKPOINT_REQUEST_FINGERPRINT_KEY
+        )
+        conflicts = (
+            stored_fingerprint != request_fingerprint
+            if stored_fingerprint is not None
+            else not _legacy_checkpoint_request_matches(existing, payload)
+        )
+        if conflicts:
+            raise ValueError(
+                "This idempotency key was already used for a different closing "
+                "checkpoint request."
+            )
         return read_workspace(db, principal, case.id)
-    selection, slots = _current_selection_with_slots(db, principal, case.id)
-    if selection is None:
-        raise ValueError("Select a primary buyer before adding closing checkpoints.")
-    if payload.selection_id and payload.selection_id != selection.id:
-        raise ValueError("Checkpoint selection is no longer current.")
-    primary_slot = next(item for item in slots if item.role == "primary")
-    offer_id = payload.offer_id or primary_slot.offer_id
-    slot = next((item for item in slots if item.offer_id == offer_id), None)
-    if slot is None:
-        raise ValueError("Checkpoint offer is not part of current buyer coverage.")
+
+    selection_id: UUID | None = None
+    offer_id: UUID | None = None
+    buyer_id: UUID | None = None
+    if payload.selection_id is not None:
+        selection, slots = _current_selection_with_slots(db, principal, case.id)
+        if selection is None or payload.selection_id != selection.id:
+            raise ValueError("Checkpoint selection is no longer current.")
+        primary_slot = next((item for item in slots if item.role == "primary"), None)
+        if primary_slot is None:
+            raise ValueError("The current buyer coverage has no primary offer.")
+        selected_offer_id = payload.offer_id or primary_slot.offer_id
+        slot = next((item for item in slots if item.offer_id == selected_offer_id), None)
+        if slot is None:
+            raise ValueError("Checkpoint offer is not part of current buyer coverage.")
+        selection_id = selection.id
+        offer_id = slot.offer_id
+        buyer_id = slot.buyer_id
+    elif payload.offer_id is not None:
+        offer = db.scalar(
+            select(BuyerOffer).where(
+                BuyerOffer.id == payload.offer_id,
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.disposition_case_id == case.id,
+            )
+        )
+        if offer is None:
+            raise ValueError("Checkpoint offer is not recorded on this disposition case.")
+        offer_id = offer.id
+        buyer_id = offer.buyer_id
+
     responsible_user_id = payload.responsible_user_id or case.owner_user_id
     if responsible_user_id is not None:
         responsible_user = db.scalar(
@@ -2104,9 +2381,9 @@ def create_checkpoint(
     checkpoint = DispositionClosingCheckpoint(
         organization_id=principal.organization_id,
         disposition_case_id=case.id,
-        selection_id=selection.id,
-        offer_id=slot.offer_id,
-        buyer_id=slot.buyer_id,
+        selection_id=selection_id,
+        offer_id=offer_id,
+        buyer_id=buyer_id,
         responsible_user_id=responsible_user_id,
         created_by_user_id=principal.user_id,
         updated_by_user_id=principal.user_id,
@@ -2121,7 +2398,10 @@ def create_checkpoint(
         deadline_version=1,
         completed_at=None,
         notes=payload.notes,
-        evidence_snapshot=payload.evidence,
+        evidence_snapshot={
+            **payload.evidence,
+            CHECKPOINT_REQUEST_FINGERPRINT_KEY: request_fingerprint,
+        },
     )
     db.add(checkpoint)
     db.commit()
@@ -2270,7 +2550,7 @@ def update_checkpoint(
     checkpoint_id: UUID,
     payload: ClosingCheckpointUpdate,
 ) -> OfferRoomRead:
-    case, _ = _lock_case(db, principal, case_id, allowed_statuses={"buyer_selected"})
+    case, _ = _lock_case(db, principal, case_id)
     candidate = db.scalar(
         select(DispositionClosingCheckpoint).where(
             DispositionClosingCheckpoint.id == checkpoint_id,
@@ -2345,17 +2625,44 @@ def update_checkpoint(
         raise LookupError("Closing checkpoint not found.")
     if checkpoint.lock_version != payload.expected_lock_version:
         raise ValueError("Checkpoint changed. Refresh the Offer Room and retry.")
-    active_selection = db.scalar(
-        select(DispositionBuyerSelection).where(
-            DispositionBuyerSelection.organization_id == principal.organization_id,
-            DispositionBuyerSelection.disposition_case_id == case.id,
-            DispositionBuyerSelection.status == "active",
+    if checkpoint.selection_id is not None:
+        active_selection = db.scalar(
+            select(DispositionBuyerSelection).where(
+                DispositionBuyerSelection.organization_id == principal.organization_id,
+                DispositionBuyerSelection.disposition_case_id == case.id,
+                DispositionBuyerSelection.status == "active",
+            )
         )
-    )
-    if active_selection is None or checkpoint.selection_id != active_selection.id:
-        raise ValueError(
-            "This checkpoint belongs to superseded buyer coverage and cannot be changed."
+        if active_selection is None or checkpoint.selection_id != active_selection.id:
+            raise ValueError(
+                "This checkpoint belongs to superseded buyer coverage and cannot be changed."
+            )
+        covered_slot = db.scalar(
+            select(DispositionBuyerSelectionSlot).where(
+                DispositionBuyerSelectionSlot.organization_id
+                == principal.organization_id,
+                DispositionBuyerSelectionSlot.disposition_case_id == case.id,
+                DispositionBuyerSelectionSlot.selection_id == active_selection.id,
+                DispositionBuyerSelectionSlot.offer_id == checkpoint.offer_id,
+                DispositionBuyerSelectionSlot.buyer_id == checkpoint.buyer_id,
+            )
         )
+        if covered_slot is None:
+            raise ValueError(
+                "This checkpoint offer is no longer part of current buyer coverage."
+            )
+    elif checkpoint.canonical_source != "offer_room":
+        raise ValueError("The canonical checkpoint is missing its buyer-selection binding.")
+    elif checkpoint.offer_id is not None:
+        recorded_offer = db.scalar(
+            select(BuyerOffer.id).where(
+                BuyerOffer.id == checkpoint.offer_id,
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.disposition_case_id == case.id,
+            )
+        )
+        if recorded_offer is None:
+            raise ValueError("The checkpoint's recorded buyer offer is no longer available.")
     if checkpoint.status in TERMINAL_CHECKPOINT_STATUSES:
         raise ValueError(
             "Completed, waived, or cancelled checkpoints are immutable. Create a corrective "
@@ -2383,7 +2690,7 @@ def update_checkpoint(
                 "10 non-whitespace characters."
             )
         if payload.status == "waived":
-            _require_manager(principal)
+            _require_selection_authority(principal)
     prior_due = checkpoint.due_at
     if (
         checkpoint.canonical_source == "buyer_offer"
@@ -2414,7 +2721,17 @@ def update_checkpoint(
     if payload.notes is not None:
         checkpoint.notes = payload.notes
     if payload.evidence is not None:
-        checkpoint.evidence_snapshot = payload.evidence
+        fingerprint = (checkpoint.evidence_snapshot or {}).get(
+            CHECKPOINT_REQUEST_FINGERPRINT_KEY
+        )
+        checkpoint.evidence_snapshot = {
+            **payload.evidence,
+            **(
+                {CHECKPOINT_REQUEST_FINGERPRINT_KEY: fingerprint}
+                if fingerprint is not None
+                else {}
+            ),
+        }
     if canonical_offer is not None and payload.status == "completed":
         canonical_offer.deposit_received_at = checkpoint.completed_at
     checkpoint.updated_by_user_id = principal.user_id
@@ -2499,7 +2816,7 @@ def scan_case_deadlines(
     principal: Principal,
     case_id: UUID,
 ) -> OfferRoomRead:
-    case, transaction = _lock_case(db, principal, case_id, allowed_statuses={"buyer_selected"})
+    case, transaction = _lock_case(db, principal, case_id)
     selection, slots = _current_selection_with_slots(db, principal, case.id)
     if selection is not None:
         primary_slot = next(item for item in slots if item.role == "primary")
@@ -2619,7 +2936,7 @@ def acknowledge_alert(
     *,
     reason: str,
 ) -> OfferRoomRead:
-    case, _ = _lock_case(db, principal, case_id, allowed_statuses={"buyer_selected"})
+    case, _ = _lock_case(db, principal, case_id)
     alert = db.scalar(
         select(DispositionDeadlineAlert)
         .where(
@@ -2803,7 +3120,7 @@ def record_funded_transaction_buyer_outcome(
             or case.selection_approved_at is None
         ):
             raise ValueError(
-                "An active manager-approved Offer Room buyer selection is required before funding."
+                "An active authorized Offer Room buyer selection is required before funding."
             )
         selected_buyer_ids = {
             buyer_id
@@ -2929,15 +3246,14 @@ def record_funded_transaction_buyer_outcome(
         raise ValueError(
             "The approved primary offer terms changed. Reapprove buyer coverage before funding."
         )
-    buyer = _scoped_buyer(db, principal, primary.buyer_id)
-    if buyer is None or buyer.status != "active":
-        raise ValueError("The approved primary buyer is inactive or archived.")
-    live_coverage = _coverage_snapshot(db, principal, case, primary)
-    if live_coverage["readiness_blockers"]:
-        raise ValueError(
-            "The approved primary buyer is no longer funding-ready: "
-            + "; ".join(live_coverage["readiness_blockers"])
+    buyer = db.scalar(
+        select(Buyer).where(
+            Buyer.id == primary.buyer_id,
+            Buyer.organization_id == principal.organization_id,
         )
+    )
+    if buyer is None:
+        raise ValueError("The selected primary buyer is unavailable in this organization.")
 
     if case.strategy == "assignment":
         packages = list(
@@ -3145,7 +3461,7 @@ def record_funded_transaction_buyer_outcome(
     ):
         raise ValueError(
             "The primary buyer's earnest money is unknown. Revise the approved offer to an "
-            "explicit zero or record a manager-approved canonical deposit waiver before funding."
+            "explicit zero or record an authorized canonical deposit waiver before funding."
         )
     if primary.earnest_money_cents is not None and primary.earnest_money_cents > 0 and (
         deposit_checkpoint is None
@@ -3419,7 +3735,8 @@ def _selection_read(
             else:
                 if live_offer.lock_version != int(item.offer_snapshot.get("lock_version", 0)):
                     blockers.append(
-                        "Offer terms changed after approval; manager reapproval is required."
+                        "Offer terms changed after approval; buyer-selection reapproval "
+                        "is required."
                     )
                 if live_offer.status != expected_status and not completed_primary:
                     blockers.append(
@@ -3452,6 +3769,19 @@ def _selection_read(
         approved_by_user_id=selection.approved_by_user_id,
         approved_at=selection.approved_at,
         replaced_at=selection.replaced_at,
+        backup_coverage_state=(
+            "covered" if any(item.role == "backup" for item in reads) else "missing"
+        ),
+        advisory_snapshot=selection.advisory_snapshot or {
+            "backup_coverage_state": (
+                "covered" if any(item.role == "backup" for item in reads) else "missing"
+            ),
+            "warnings": (
+                []
+                if any(item.role == "backup" for item in reads)
+                else ["No backup buyer is selected; continue with the primary and keep shopping."]
+            ),
+        },
     )
 
 
@@ -3763,7 +4093,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
             and int(approved_slot.offer_snapshot.get("lock_version", 0)) != offer.lock_version
         ):
             replacement_blockers.append(
-                "Approved backup terms changed; manager reapproval is required."
+                "Backup offer terms changed; review the current terms before replacement."
             )
         replacement_evaluated.append(
             (offer, risk, flags, strengths, score, list(dict.fromkeys(replacement_blockers)))
@@ -3771,6 +4101,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
     replacement_options = [
         ReplacementOptionRead(
             offer_id=offer.id,
+            offer_lock_version=offer.lock_version,
             buyer_id=offer.buyer_id,
             buyer_name=buyers[offer.buyer_id].name,
             backup_rank=backup_rank_by_offer.get(offer.id),
@@ -3778,7 +4109,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
             amount_cents=offer.amount_cents,
             execution_score_basis_points=score,
             risk_score_basis_points=risk,
-            eligible=not blockers and offer.status in VIABLE_OFFER_STATUSES,
+            eligible=offer.status in VIABLE_OFFER_STATUSES,
             blockers=blockers,
         )
         for offer, risk, _, _, score, blockers in sorted(
@@ -3788,7 +4119,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
                 rank_by_id.get(item[0].id, 999),
             ),
         )
-        if offer.id in backup_rank_by_offer
+        if active_primary_slot is None or offer.id != active_primary_slot.offer_id
     ]
     return OfferRoomRead(
         case_id=case.id,
@@ -3850,7 +4181,7 @@ def read_workspace(db: Session, principal: Principal, case_id: UUID) -> OfferRoo
                 responsible_user_id=item.responsible_user_id,
                 completed_at=item.completed_at,
                 notes=item.notes,
-                evidence=item.evidence_snapshot,
+                evidence=_checkpoint_public_evidence(item),
                 is_overdue=(
                     item.status not in TERMINAL_CHECKPOINT_STATUSES and _aware(item.due_at) < now
                 ),

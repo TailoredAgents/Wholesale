@@ -3,7 +3,7 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -12,6 +12,7 @@ from app.models.foundation import (
     AuditEvent,
     Buyer,
     ConsentRecord,
+    DispositionBuyerPoolEntry,
     DispositionCampaign,
     DispositionCase,
     DispositionOutreachDelivery,
@@ -116,6 +117,211 @@ def prepare_outreach_case(
     db.add(alias)
     db.commit()
     return case_id, campaign, alias
+
+
+def test_unranked_pass_after_approval_blocks_queue_until_explicit_clear(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    case_id, campaign, alias = prepare_outreach_case(db_session, client)
+    pool = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert pool.status_code == 200, pool.text
+    candidate = next(item for item in pool.json()["entries"] if item["buyer_id"])
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/outreach",
+        headers=HEADERS,
+    ).json()
+    recipient_id = workspace["prepared_recipients"][0]["id"]
+
+    def create_and_approve() -> dict[str, object]:
+        drafted = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/outreach/drafts",
+            headers=HEADERS,
+            json={
+                "campaign_id": str(campaign.id),
+                "recipients": [
+                    {"campaign_recipient_id": recipient_id, "channels": ["email"]}
+                ],
+                "email_sender_alias_id": str(alias.id),
+                "email_subject": "Opportunity at {property_address}",
+                "email_body": "Hi {buyer_name}, review {package_reference}.",
+            },
+        )
+        assert drafted.status_code == 201, drafted.text
+        approved = client.post(
+            f"/api/v1/dispositions/campaigns/{campaign.id}/outreach/"
+            f"{drafted.json()['id']}/approve",
+            headers=HEADERS,
+            json={
+                "expected_lock_version": drafted.json()["lock_version"],
+                "expected_approval_hash": drafted.json()["approval_hash"],
+                "attestation": True,
+                "reason": "Reviewed the exact governed recipient and artifact.",
+            },
+        )
+        assert approved.status_code == 200, approved.text
+        return approved.json()
+
+    approved = create_and_approve()
+    db_session.execute(
+        delete(DispositionBuyerPoolEntry).where(
+            DispositionBuyerPoolEntry.buyer_pool_run_id == UUID(pool.json()["run"]["id"]),
+            DispositionBuyerPoolEntry.buyer_pool_candidate_id
+            == UUID(candidate["candidate_id"]),
+        )
+    )
+    db_session.commit()
+    passed = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/outcomes",
+        headers=HEADERS,
+        json={
+            "buyer_id": candidate["buyer_id"],
+            "outcome": "not_interested",
+            "notes": "The buyer explicitly declined this opportunity.",
+            "idempotency_key": "unranked-pass-after-approval-001",
+        },
+    )
+    assert passed.status_code == 200, passed.text
+    passed_candidate = next(
+        item for item in passed.json()["candidates"] if item["buyer_id"] == candidate["buyer_id"]
+    )
+    assert passed_candidate["ranking_status"] == "unranked"
+    assert passed_candidate["actionable"] is False
+    simulation_settings = get_settings().model_copy(
+        update={
+            "communication_provider_mode": "simulate",
+            "disposition_outreach_physical_postal_address": TEST_OUTREACH_POSTAL_ADDRESS,
+        }
+    )
+    monkeypatch.setattr(
+        "app.services.disposition_outreach.get_settings",
+        lambda: simulation_settings,
+    )
+    blocked = client.post(
+        f"/api/v1/dispositions/campaigns/{campaign.id}/outreach/"
+        f"{approved['id']}/release",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": approved["lock_version"],
+            "reason": "Release must recheck the current operator Pass.",
+        },
+    )
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["status"] == "completed_with_failures"
+    assert blocked.json()["deliveries"][0]["status"] == "ineligible"
+    assert "explicitly passed" in blocked.json()["deliveries"][0][
+        "exclusion_reason"
+    ].lower()
+
+    cleared = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/candidates/"
+        f"{candidate['candidate_id']}",
+        headers=HEADERS,
+        json={
+            "expected_version": passed_candidate["lock_version"],
+            "decision_status": "undecided",
+            "reason": "The buyer re-engaged, so the rep cleared the prior Pass.",
+        },
+    )
+    assert cleared.status_code == 200, cleared.text
+    replacement = create_and_approve()
+    released = client.post(
+        f"/api/v1/dispositions/campaigns/{campaign.id}/outreach/"
+        f"{replacement['id']}/release",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": replacement["lock_version"],
+            "reason": "Release the newly reviewed revision after the Pass was cleared.",
+        },
+    )
+    assert released.status_code == 200, released.text
+    assert released.json()["status"] == "queued"
+
+
+def test_buyer_status_do_not_contact_blocks_governed_queue(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    case_id, campaign, alias = prepare_outreach_case(db_session, client)
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/outreach",
+        headers=HEADERS,
+    ).json()
+    drafted = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/outreach/drafts",
+        headers=HEADERS,
+        json={
+            "campaign_id": str(campaign.id),
+            "recipients": [
+                {
+                    "campaign_recipient_id": workspace["prepared_recipients"][0]["id"],
+                    "channels": ["email"],
+                }
+            ],
+            "email_sender_alias_id": str(alias.id),
+            "email_subject": "Opportunity at {property_address}",
+            "email_body": "Hi {buyer_name}, review {package_reference}.",
+        },
+    )
+    assert drafted.status_code == 201, drafted.text
+    approved = client.post(
+        f"/api/v1/dispositions/campaigns/{campaign.id}/outreach/"
+        f"{drafted.json()['id']}/approve",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": drafted.json()["lock_version"],
+            "expected_approval_hash": drafted.json()["approval_hash"],
+            "attestation": True,
+            "reason": "Reviewed the exact governed recipient and artifact.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    delivery = db_session.scalar(
+        select(DispositionOutreachDelivery).where(
+            DispositionOutreachDelivery.outreach_revision_id
+            == UUID(drafted.json()["id"])
+        )
+    )
+    assert delivery is not None
+    buyer = db_session.get(Buyer, delivery.buyer_id)
+    assert buyer is not None
+    buyer.status = "do_not_contact"
+    db_session.commit()
+    simulation_settings = get_settings().model_copy(
+        update={
+            "communication_provider_mode": "simulate",
+            "disposition_outreach_physical_postal_address": (
+                TEST_OUTREACH_POSTAL_ADDRESS
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "app.services.disposition_outreach.get_settings",
+        lambda: simulation_settings,
+    )
+
+    blocked = client.post(
+        f"/api/v1/dispositions/campaigns/{campaign.id}/outreach/"
+        f"{approved.json()['id']}/release",
+        headers=HEADERS,
+        json={
+            "expected_lock_version": approved.json()["lock_version"],
+            "reason": "Release must recheck both buyer DNC controls.",
+        },
+    )
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["status"] == "completed_with_failures"
+    assert blocked.json()["deliveries"][0]["status"] == "opted_out"
+    assert "do not contact" in blocked.json()["deliveries"][0][
+        "exclusion_reason"
+    ].lower()
 
 
 def test_governed_outreach_draft_approval_release_and_cancel(

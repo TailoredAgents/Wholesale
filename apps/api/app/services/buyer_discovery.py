@@ -40,6 +40,7 @@ from app.schemas.buyers import (
     BuyerDiscoverySummaryRead,
     BuyerDiscoveryTierStatusRead,
 )
+from app.services import disposition_packages
 from app.services.buyers import (
     normalize_company,
     normalize_email,
@@ -47,7 +48,6 @@ from app.services.buyers import (
     normalize_source_key,
     normalize_text,
 )
-from app.services.disposition_packages import require_current_approved_version
 from app.services.inbox import ensure_buyer_conversation
 
 
@@ -66,8 +66,10 @@ class DiscoveryContext:
     property_record: Property
     search_tier: BuyerDiscoverySearchTier
     policy: DiscoveryTierPolicy
-    package_version_id: UUID
+    package_version_id: UUID | None
     package_source_fingerprint: str
+    package_status: str | None
+    package_is_current: bool
     requested_candidates: int
     provider_request: dict[str, Any]
     scope_description: str
@@ -466,8 +468,19 @@ def discover_buyers(
             "search_tier": context.search_tier,
             "target_candidates": context.policy.target_candidates,
             "scope": context.scope_description,
-            "approved_package_version_id": str(context.package_version_id),
-            "approved_package_source_fingerprint": context.package_source_fingerprint,
+            "package_version_id": (
+                str(context.package_version_id) if context.package_version_id else None
+            ),
+            "package_source_fingerprint": context.package_source_fingerprint,
+            "package_status": context.package_status,
+            "package_is_current": context.package_is_current,
+            "package_is_preliminary": bool(
+                context.package_version_id is not None
+                and (
+                    context.package_status != "approved"
+                    or not context.package_is_current
+                )
+            ),
         },
         provider_request=context.provider_request,
         result_count=0,
@@ -1047,7 +1060,6 @@ def _prepared_discovery_context(
             "disposition_case_id": str(context.case.id),
             "search_tier": context.search_tier,
             "provider_request": context.provider_request,
-            "approved_package_source_fingerprint": context.package_source_fingerprint,
         }
     )
     return replace(context, request_fingerprint=fingerprint)
@@ -1070,12 +1082,6 @@ def _discovery_context(
     if case is None:
         raise ValueError("Disposition case not found.")
     require_house_discovery_workflow(db, case)
-    package = require_current_approved_version(
-        db,
-        principal,
-        case,
-        action="spending DealMachine buyer-discovery credits",
-    )
     property_record = db.scalar(
         select(Property).where(
             Property.id == case.property_id,
@@ -1084,6 +1090,21 @@ def _discovery_context(
     )
     if property_record is None:
         raise ValueError("The disposition case has no property record.")
+    try:
+        package = disposition_packages.require_package_artifact(
+            db,
+            principal,
+            case,
+            action="recording optional buyer-discovery package provenance",
+        )
+    except ValueError:
+        package = None
+    package_is_current = bool(
+        package is not None
+        and disposition_packages.package_version_currentness(
+            db, principal, case, package
+        )
+    )
     postal_code = (property_record.postal_code or "").strip()[:5]
     if not re.fullmatch(r"\d{5}", postal_code):
         raise ValueError("A five-digit property ZIP code is required for buyer discovery.")
@@ -1097,13 +1118,28 @@ def _discovery_context(
         policy,
         settings,
     )
+    facts_fingerprint = _canonical_hash(
+        {
+            "disposition_case_id": str(case.id),
+            "property_id": str(property_record.id),
+            "property_updated_at": property_record.updated_at,
+            "asking_price_cents": case.asking_price_cents,
+            "minimum_acceptable_cents": case.minimum_acceptable_cents,
+            "package_version_id": str(package.id) if package else None,
+            "package_source_fingerprint": package.source_fingerprint if package else None,
+        }
+    )
     return DiscoveryContext(
         case=case,
         property_record=property_record,
         search_tier=tier,
         policy=policy,
-        package_version_id=package.id,
-        package_source_fingerprint=package.source_fingerprint,
+        package_version_id=package.id if package else None,
+        package_source_fingerprint=(
+            package.source_fingerprint if package else facts_fingerprint
+        ),
+        package_status=package.status if package else None,
+        package_is_current=package_is_current,
         requested_candidates=payload.max_candidates,
         provider_request=provider_request,
         scope_description=scope_description,

@@ -5,7 +5,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.rbac import ALL_PERMISSION_KEYS, PERMISSIONS, ROLES, PermissionKeys
+from app.domain.rbac import (
+    ALL_PERMISSION_KEYS,
+    DISPOSITION_KEYS,
+    PERMISSIONS,
+    ROLES,
+    PermissionKeys,
+)
 from app.main import app
 from app.models.foundation import (
     Organization,
@@ -111,12 +117,19 @@ def test_disposition_outreach_permissions_are_explicitly_scoped_by_role() -> Non
     representative = role_permissions["disposition_rep"]
 
     assert PermissionKeys.MANAGE_DISPOSITION_OUTREACH in representative
-    assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH not in representative
+    assert PermissionKeys.APPROVE_DISPOSITION_PACKAGES in representative
+    assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH in representative
+    assert PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION in representative
+    assert PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH in representative
     assert PermissionKeys.SEND_BULK_COMMUNICATIONS not in representative
 
     assert PermissionKeys.MANAGE_DISPOSITION_OUTREACH in manager
     assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH in manager
-    assert PermissionKeys.SEND_BULK_COMMUNICATIONS in manager
+    assert PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH in manager
+    assert representative == set(DISPOSITION_KEYS)
+    assert len(DISPOSITION_KEYS) == len(set(DISPOSITION_KEYS))
+    assert manager == representative | {PermissionKeys.EXPORT_BUYERS}
+    assert PermissionKeys.MANAGE_API_CREDENTIALS not in representative
 
 
 def test_disposition_outreach_permissions_are_bootstrap_discoverable() -> None:
@@ -125,6 +138,8 @@ def test_disposition_outreach_permissions_are_bootstrap_discoverable() -> None:
     assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH in permission_keys
     assert PermissionKeys.MANAGE_DISPOSITION_OUTREACH in ALL_PERMISSION_KEYS
     assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH in ALL_PERMISSION_KEYS
+    assert PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH in permission_keys
+    assert PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH in ALL_PERMISSION_KEYS
 
 
 @pytest.mark.parametrize(
@@ -265,3 +280,46 @@ def test_outreach_mutations_require_buyer_visibility_before_returning_revision_d
         assert response.status_code == 403, response.text
         assert response.json()["detail"] == "Missing permission: buyers:view"
         assert "deliveries" not in response.text
+
+
+@pytest.mark.parametrize("action", ["release", "resume", "retry-failed"])
+def test_bulk_control_routes_accept_narrow_or_legacy_authority_only(
+    action: str,
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    common = {
+        PermissionKeys.VIEW_DEALS,
+        PermissionKeys.VIEW_BUYERS,
+        PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+    }
+    narrow_headers = _headers_for_permissions(
+        db_session,
+        email=f"narrow-{action}@example.com",
+        permission_keys=common | {PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH},
+    )
+    legacy_headers = _headers_for_permissions(
+        db_session,
+        email=f"legacy-{action}@example.com",
+        permission_keys=common | {PermissionKeys.SEND_BULK_COMMUNICATIONS},
+    )
+    missing_headers = _headers_for_permissions(
+        db_session,
+        email=f"missing-{action}@example.com",
+        permission_keys=common,
+    )
+    url = (
+        f"/api/v1/dispositions/campaigns/{uuid4()}/outreach/{uuid4()}/{action}"
+    )
+    payload = {"expected_lock_version": 1, "reason": "RBAC route authority test"}
+
+    narrow = client.post(url, headers=narrow_headers, json=payload)
+    legacy = client.post(url, headers=legacy_headers, json=payload)
+    missing = client.post(url, headers=missing_headers, json=payload)
+
+    assert narrow.status_code == 404, narrow.text
+    assert legacy.status_code == 404, legacy.text
+    assert missing.status_code == 403, missing.text
+    assert PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH in missing.json()["detail"]
+    assert PermissionKeys.SEND_BULK_COMMUNICATIONS in missing.json()["detail"]

@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.domain.rbac import PERMISSIONS, ROLES
+from app.domain.rbac import PERMISSIONS, ROLES, PermissionKeys
 from app.models.foundation import (
     AuditEvent,
     Organization,
@@ -136,7 +136,35 @@ def ensure_role_permissions(
                     )
                 )
                 existing_pairs.add(pair)
+    _reconcile_builtin_role_permissions(
+        db,
+        organization,
+        permissions_by_key=permissions_by_key,
+        roles_by_key=roles_by_key,
+    )
     db.flush()
+
+
+def _reconcile_builtin_role_permissions(
+    db: Session,
+    organization: Organization,
+    *,
+    permissions_by_key: dict[str, Permission],
+    roles_by_key: dict[str, Role],
+) -> None:
+    """Remove superseded authority from one built-in role without touching custom roles."""
+
+    manager_role = roles_by_key.get("disposition_manager")
+    legacy_bulk = permissions_by_key.get(PermissionKeys.SEND_BULK_COMMUNICATIONS)
+    if manager_role is None or legacy_bulk is None:
+        return
+    db.execute(
+        delete(RolePermission).where(
+            RolePermission.organization_id == organization.id,
+            RolePermission.role_id == manager_role.id,
+            RolePermission.permission_id == legacy_bulk.id,
+        )
+    )
 
 
 def ensure_admin_user(

@@ -505,7 +505,21 @@
 }
 
 .coverageEmpty {
-  color: var(--danger) !important;
+  color: #795400 !important;
+}
+
+.coverageWarning {
+  margin: 0;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  border: 1px solid #e6c38e;
+  background: #fff8e8;
+  color: #795400;
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .selectionReason {
@@ -938,6 +952,11 @@
 
 .replacementItem p {
   grid-column: 1 / -1;
+}
+
+.replacementItem[data-eligible="false"] {
+  border-color: #dfb8ae;
+  background: #fff8f5;
 }
 
 .timelineTabs {

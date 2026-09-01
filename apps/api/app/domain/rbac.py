@@ -58,6 +58,7 @@ class PermissionKeys:
     MANAGE_DISPOSITION_OUTREACH = "dispositions:manage_outreach"
     APPROVE_DISPOSITION_OUTREACH = "dispositions:approve_outreach"
     APPROVE_DISPOSITION_BUYER_SELECTION = "dispositions:approve_buyer_selection"
+    SEND_DISPOSITION_BULK_OUTREACH = "dispositions:send_bulk_outreach"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
     MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
     MANAGE_OPERATING_MODEL = "operating_model:manage"
@@ -119,6 +120,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         PermissionKeys.SEND_BULK_COMMUNICATIONS,
         "Send bulk communications",
         "Send approved bulk campaigns.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH,
+        "Send Dispositions bulk outreach",
+        "Release approved buyer outreach from the Dispositions workbench.",
     ),
     PermissionDefinition(
         PermissionKeys.ACCESS_RECORDINGS,
@@ -361,6 +367,10 @@ DISPOSITION_KEYS = (
     PermissionKeys.PLACE_CALLS,
     PermissionKeys.ACCESS_RECORDINGS,
     PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
+    PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
+    PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+    PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION,
+    PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH,
 )
 
 ROLES: tuple[RoleDefinition, ...] = (
@@ -441,10 +451,6 @@ ROLES: tuple[RoleDefinition, ...] = (
         (
             *DISPOSITION_KEYS,
             PermissionKeys.EXPORT_BUYERS,
-            PermissionKeys.APPROVE_DISPOSITION_PACKAGES,
-            PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
-            PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION,
-            PermissionKeys.SEND_BULK_COMMUNICATIONS,
         ),
     ),
     RoleDefinition("disposition_rep", "Disposition representative", DISPOSITION_KEYS),

@@ -57,7 +57,7 @@ def download_shared_investor_package(
             detail="Too many investor package requests. Please wait before trying again.",
         )
     try:
-        content, file_name = read_shared_package(
+        content, file_name, is_preliminary, artifact_sha256 = read_shared_package(
             db,
             token,
             client_address=get_ip_address(request),
@@ -68,12 +68,19 @@ def download_shared_investor_package(
             status_code=status.HTTP_410_GONE if exc.gone else status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    visible_file_name = file_name
+    if is_preliminary and not file_name.upper().startswith("PRELIMINARY-"):
+        visible_file_name = f"PRELIMINARY-{file_name}"
     return Response(
         content=content,
         media_type="application/pdf",
         headers={
             "Cache-Control": "private, no-store, max-age=0",
-            "Content-Disposition": f'inline; filename="{file_name}"',
+            "Content-Disposition": f'inline; filename="{visible_file_name}"',
+            "X-Stonegate-Package-Status": (
+                "preliminary" if is_preliminary else "current-approved"
+            ),
+            "X-Stonegate-Artifact-SHA256": artifact_sha256,
             "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff",
             "X-Robots-Tag": "noindex, nofollow, noarchive",

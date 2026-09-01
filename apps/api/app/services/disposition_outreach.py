@@ -40,7 +40,12 @@ from app.schemas.disposition_outreach import (
 )
 from app.services.buyers import normalize_email
 from app.services.communication_compliance import evaluate_sms_eligibility, format_e164
-from app.services.disposition_packages import require_current_approved_version
+from app.services.disposition_buyer_pool import buyer_is_persistently_passed
+from app.services.disposition_packages import (
+    package_version_currentness,
+    require_package_artifact,
+)
+from app.services.disposition_state import advance_disposition_milestone
 from app.services.inbox import ensure_buyer_conversation
 
 HARD_RECIPIENT_CAP = 25
@@ -79,7 +84,7 @@ def read_workspace(
     blockers: list[str] = []
     package: DispositionPackageVersion | None = None
     try:
-        package = require_current_approved_version(
+        package = require_package_artifact(
             db,
             principal,
             case,
@@ -87,6 +92,10 @@ def read_workspace(
         )
     except ValueError as exc:
         blockers.append(str(exc))
+    package_is_current = bool(
+        package is not None
+        and package_version_currentness(db, principal, case, package)
+    )
 
     campaign = (
         db.scalar(
@@ -103,7 +112,7 @@ def read_workspace(
     )
     recipients = _prepared_recipients(db, principal, campaign) if campaign else []
     if package is not None and campaign is None:
-        blockers.append("Prepare the approved buyer recipient pool before drafting outreach.")
+        blockers.append("Prepare the buyer recipient pool before drafting outreach.")
     elif campaign is not None and not recipients:
         blockers.append("The prepared campaign has no buyer recipients.")
 
@@ -123,6 +132,11 @@ def read_workspace(
         package_version_id=package.id if package else None,
         package_source_fingerprint=package.source_fingerprint if package else None,
         artifact_sha256=package.pdf_sha256 if package else None,
+        package_status=package.status if package else None,
+        package_is_preliminary=bool(
+            package is not None
+            and (package.status != "approved" or not package_is_current)
+        ),
         hard_recipient_cap=HARD_RECIPIENT_CAP,
         readiness_status="blocked" if blockers else "ready",
         blockers=blockers,
@@ -145,25 +159,26 @@ def create_draft(
     case = _scoped_house_case(db, principal, case_id, lock=True)
     if case is None:
         return None
-    package = require_current_approved_version(
-        db,
-        principal,
-        case,
-        action="drafting buyer outreach",
-    )
     campaign = db.scalar(
         select(DispositionCampaign)
         .where(
             DispositionCampaign.id == payload.campaign_id,
             DispositionCampaign.organization_id == principal.organization_id,
             DispositionCampaign.disposition_case_id == case.id,
-            DispositionCampaign.package_version_id == package.id,
             DispositionCampaign.status == "prepared_not_sent",
         )
         .with_for_update()
     )
     if campaign is None:
-        raise ValueError("Select the current prepared campaign for this approved package.")
+        raise ValueError("Select a prepared campaign for this case.")
+    package = require_package_artifact(
+        db,
+        principal,
+        case,
+        package_version_id=campaign.package_version_id,
+        action="drafting buyer outreach",
+    )
+    package_was_current = package_version_currentness(db, principal, case, package)
 
     selection_ids = [item.campaign_recipient_id for item in payload.recipients]
     if len(set(selection_ids)) != len(selection_ids):
@@ -212,6 +227,23 @@ def create_draft(
         payload.sms_voice_line_id if "sms" in channels else None,
     )
     sender_snapshot = _sender_snapshot(email_alias, sms_line)
+    package_is_preliminary = package.status != "approved" or not package_was_current
+    if email_alias is not None:
+        attachment_name = package.pdf_file_name or "property-package.pdf"
+        # Recipient attachments use a conservative immutable label. Case facts can
+        # change after approval but before an asynchronous provider send; always
+        # labeling the exact snapshot Preliminary keeps retries/hash bindings stable
+        # without ever overstating freshness.
+        if not attachment_name.upper().startswith("PRELIMINARY-"):
+            attachment_name = f"PRELIMINARY-{attachment_name}"
+        sender_snapshot["package_attachment"] = {
+            "file_name": attachment_name,
+            "artifact_sha256": str(package.pdf_sha256),
+            "package_status": package.status,
+            "was_current_at_prepare": package_was_current,
+            "is_preliminary": package_is_preliminary,
+            "recipient_label_policy": "conservative_preliminary_v1",
+        }
     property_address = _public_property_address(package)
 
     _validate_template(payload.email_subject, field_name="email subject")
@@ -262,6 +294,8 @@ def create_draft(
         approval_hash=None,
         package_source_fingerprint=package.source_fingerprint,
         artifact_sha256=str(package.pdf_sha256),
+        package_status_at_prepare=package.status,
+        package_was_current_at_prepare=package_was_current,
         email_sender_alias_id=email_alias.id if email_alias else None,
         sms_voice_line_id=sms_line.id if sms_line else None,
         sender_snapshot=sender_snapshot,
@@ -347,7 +381,7 @@ def approve_revision(
         raise ValueError("Only a revision awaiting review can be approved.")
     if revision.lock_version != payload.expected_lock_version:
         raise ValueError("This outreach revision changed. Refresh before approving it.")
-    _require_revision_package_current(db, principal, revision, action="approving outreach")
+    _require_revision_package_artifact(db, principal, revision, action="approving outreach")
     deliveries = _revision_deliveries(db, revision.id)
     calculated_manifest = _recipient_manifest_hash(deliveries)
     calculated_approval = _approval_hash(revision, deliveries)
@@ -960,9 +994,7 @@ def _preflight_snapshot(permanent: list[str], transient: list[str]) -> dict[str,
 
 def _buyer_relationship_blockers(buyer: Buyer) -> list[str]:
     blockers: list[str] = []
-    if buyer.status != "active":
-        blockers.append("The buyer is not active.")
-    if buyer.relationship_status == "do_not_contact":
+    if buyer.status == "do_not_contact" or buyer.relationship_status == "do_not_contact":
         blockers.append("The buyer relationship is marked do not contact.")
     if buyer.archived_at is not None:
         blockers.append("The buyer record is archived.")
@@ -994,6 +1026,16 @@ def _queue_after_dynamic_preflight(
         )
         if buyer is None:
             latest = _preflight_snapshot(["The buyer record is unavailable."], [])
+        elif buyer_is_persistently_passed(
+            db,
+            organization_id=principal.organization_id,
+            disposition_case_id=revision.disposition_case_id,
+            buyer_id=buyer.id,
+        ):
+            latest = _preflight_snapshot(
+                ["The buyer is explicitly passed for this deal."],
+                [],
+            )
         elif delivery.channel == "email":
             alias = _selected_email_alias_for_revision(db, principal, revision)
             latest = _email_preflight(
@@ -1093,8 +1135,7 @@ def _mark_first_live_release(
     )
     if case is None:
         raise ValueError("The disposition case is unavailable.")
-    if case.status == "buyer_matching":
-        case.status = "marketed"
+    advance_disposition_milestone(case, "marketed")
 
 
 def _selected_email_alias_for_revision(
@@ -1146,7 +1187,7 @@ def _selected_sms_line_for_revision(
     return line
 
 
-def _require_revision_package_current(
+def _require_revision_package_artifact(
     db: Session,
     principal: Principal,
     revision: DispositionOutreachRevision,
@@ -1156,14 +1197,20 @@ def _require_revision_package_current(
     case = _scoped_house_case(db, principal, revision.disposition_case_id)
     if case is None:
         raise ValueError("Disposition case not found.")
-    package = require_current_approved_version(db, principal, case, action=action)
+    package = require_package_artifact(
+        db,
+        principal,
+        case,
+        package_version_id=revision.package_version_id,
+        action=action,
+    )
     if (
         package.id != revision.package_version_id
         or package.source_fingerprint != revision.package_source_fingerprint
         or package.pdf_sha256 != revision.artifact_sha256
     ):
         raise ValueError(
-            "The approved package changed. Create and approve a new outreach revision."
+            "The exact package artifact bound to this outreach revision changed."
         )
     return package
 
@@ -1175,7 +1222,7 @@ def _require_approval_integrity(
     *,
     action: str,
 ) -> None:
-    _require_revision_package_current(db, principal, revision, action=action)
+    _require_revision_package_artifact(db, principal, revision, action=action)
     require_stored_approval_integrity(db, revision)
 
 
@@ -1274,21 +1321,28 @@ def _approval_hash(
     revision: DispositionOutreachRevision,
     deliveries: list[DispositionOutreachDelivery],
 ) -> str:
-    return _canonical_hash(
-        {
-            "organization_id": str(revision.organization_id),
-            "campaign_id": str(revision.disposition_campaign_id),
-            "case_id": str(revision.disposition_case_id),
-            "package_version_id": str(revision.package_version_id),
-            "revision_number": revision.revision_number,
-            "mode": revision.mode,
-            "recipient_cap": revision.recipient_cap,
-            "package_source_fingerprint": revision.package_source_fingerprint,
-            "artifact_sha256": revision.artifact_sha256,
-            "sender_snapshot": revision.sender_snapshot,
-            "recipient_manifest": _recipient_manifest(deliveries),
-        }
-    )
+    snapshot = {
+        "organization_id": str(revision.organization_id),
+        "campaign_id": str(revision.disposition_campaign_id),
+        "case_id": str(revision.disposition_case_id),
+        "package_version_id": str(revision.package_version_id),
+        "revision_number": revision.revision_number,
+        "mode": revision.mode,
+        "recipient_cap": revision.recipient_cap,
+        "package_source_fingerprint": revision.package_source_fingerprint,
+        "artifact_sha256": revision.artifact_sha256,
+        "sender_snapshot": revision.sender_snapshot,
+        "recipient_manifest": _recipient_manifest(deliveries),
+    }
+    # Revisions created before migration 0123 were necessarily approved-package
+    # snapshots and their signed approval manifest did not contain this field.
+    if revision.package_status_at_prepare is not None:
+        snapshot["package_status_at_prepare"] = revision.package_status_at_prepare
+    if revision.package_was_current_at_prepare is not None:
+        snapshot["package_was_current_at_prepare"] = (
+            revision.package_was_current_at_prepare
+        )
+    return _canonical_hash(snapshot)
 
 
 def _canonical_hash(value: object) -> str:
@@ -1323,6 +1377,34 @@ def _revision_read(
 ) -> DispositionOutreachRevisionRead:
     deliveries = _revision_deliveries(db, revision.id)
     counts = Counter(item.status for item in deliveries)
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == revision.disposition_case_id,
+            DispositionCase.organization_id == revision.organization_id,
+        )
+    )
+    package = db.scalar(
+        select(DispositionPackageVersion).where(
+            DispositionPackageVersion.id == revision.package_version_id,
+            DispositionPackageVersion.organization_id == revision.organization_id,
+            DispositionPackageVersion.disposition_case_id == revision.disposition_case_id,
+        )
+    )
+    package_is_current_now = bool(
+        case is not None
+        and package is not None
+        and package_version_currentness(
+            db,
+            Principal(
+                user_id=revision.created_by_user_id,
+                organization_id=revision.organization_id,
+                email="outreach-currentness@internal.invalid",
+                permission_keys=frozenset(),
+            ),
+            case,
+            package,
+        )
+    )
     return DispositionOutreachRevisionRead(
         id=revision.id,
         campaign_id=revision.disposition_campaign_id,
@@ -1337,6 +1419,18 @@ def _revision_read(
         approval_hash=revision.approval_hash,
         package_source_fingerprint=revision.package_source_fingerprint,
         artifact_sha256=revision.artifact_sha256,
+        package_status=revision.package_status_at_prepare or "approved",
+        package_was_current_at_prepare=(
+            revision.package_was_current_at_prepare
+            if revision.package_was_current_at_prepare is not None
+            else True
+        ),
+        package_is_current_now=package_is_current_now,
+        package_is_preliminary=(
+            (revision.package_status_at_prepare or "approved") != "approved"
+            or revision.package_was_current_at_prepare is False
+            or not package_is_current_now
+        ),
         sender_snapshot=revision.sender_snapshot,
         created_by_user_id=revision.created_by_user_id,
         approved_by_user_id=revision.approved_by_user_id,

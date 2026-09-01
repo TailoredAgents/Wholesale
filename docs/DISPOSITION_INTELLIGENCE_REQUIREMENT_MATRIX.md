@@ -117,8 +117,9 @@ The following DS10 roadmap items remain explicitly pending:
 5. A frozen market dimension for historical reporting.
 6. Canonical showing definitions across owned-network and provider workflows.
 7. Production sample thresholds for comparing human-led and AI-assisted outcomes.
-8. Land disposition intelligence, which remains blocked until the Land disposition workflow is
-   implemented and accepted.
+8. Land disposition intelligence, which remains unavailable until a separate Land-safe reporting
+   aggregation is designed and accepted. The shared Land case, external-package, and Buyer-pool
+   controls do not by themselves activate DS10 reporting.
 
 ## Repository Acceptance
 

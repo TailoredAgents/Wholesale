@@ -22,6 +22,32 @@ class DispositionDeskActionRead(BaseModel):
     href: str
 
 
+class DispositionDeskChecklistIssueRead(BaseModel):
+    key: str
+    label: str
+    blocker_class: Literal["hard_stop", "release_gate", "warning"]
+    detail: str
+    href: str
+
+
+class DispositionDeskParallelActionRead(BaseModel):
+    key: str
+    label: str
+    href: str
+
+
+class DispositionDeskChecklistSummaryRead(BaseModel):
+    warning_count: int
+    completed_count: int
+    total_count: int
+    best_action_key: str | None
+    best_action_label: str | None
+    best_action_href: str | None
+    parallel_action_keys: list[str]
+    issues: list[DispositionDeskChecklistIssueRead]
+    parallel_actions: list[DispositionDeskParallelActionRead]
+
+
 class DispositionDeskItemRead(BaseModel):
     key: str
     category: DispositionDeskCategory
@@ -44,6 +70,7 @@ class DispositionDeskItemRead(BaseModel):
     asset_class: Literal["house", "land"] | None = None
     primary_action: DispositionDeskActionRead
     secondary_action: DispositionDeskActionRead | None = None
+    checklist: DispositionDeskChecklistSummaryRead | None = None
 
 
 class DispositionDeskBuyerHealthRead(BaseModel):

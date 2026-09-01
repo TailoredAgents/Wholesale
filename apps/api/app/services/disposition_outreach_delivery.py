@@ -9,6 +9,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 from twilio.base.exceptions import TwilioRestException  # type: ignore[import-untyped]
 
+from app.core.auth import Principal
 from app.core.config import Settings
 from app.integrations.communications import (
     OutboundMessageRequest,
@@ -43,9 +44,12 @@ from app.models.foundation import (
     Task,
     VoiceLine,
 )
+from app.services import disposition_packages
 from app.services.communication_compliance import evaluate_sms_eligibility, format_e164
 from app.services.communication_participants import record_email_participants
+from app.services.disposition_buyer_pool import buyer_is_persistently_passed
 from app.services.disposition_outreach import require_stored_approval_integrity
+from app.services.disposition_state import ACTIVE_DISPOSITION_CASE_STATUSES
 from app.services.email import get_email_delivery_provider
 from app.services.inbox import ensure_buyer_conversation, update_conversation_activity
 
@@ -564,30 +568,20 @@ def _live_preflight(
         or prepared.disposition_campaign_id != delivery.disposition_campaign_id
     ):
         raise DeliveryPreflightError("The approved campaign source record is unavailable.")
-    if case.status not in {"buyer_matching", "marketed", "offers_received"}:
+    if case.status not in ACTIVE_DISPOSITION_CASE_STATUSES:
         raise DeliveryPreflightError(
-            "The disposition case is no longer in an outreach-eligible stage.",
+            "The disposition case is terminal and can no longer send outreach.",
             status="cancelled",
         )
-    latest_package = db.scalar(
-        select(DispositionPackageVersion)
-        .where(
-            DispositionPackageVersion.organization_id == delivery.organization_id,
-            DispositionPackageVersion.disposition_case_id == case.id,
-        )
-        .order_by(DispositionPackageVersion.version_number.desc())
-    )
+    package_content = bytes(package.pdf_data or b"")
     if (
-        case.package_status != "approved"
-        or package.status != "approved"
-        or latest_package is None
-        or latest_package.id != package.id
-        or package.source_fingerprint != revision.package_source_fingerprint
+        package.source_fingerprint != revision.package_source_fingerprint
         or package.pdf_sha256 != revision.artifact_sha256
-        or package.pdf_data is None
+        or not package_content
+        or sha256(package_content).hexdigest() != revision.artifact_sha256
     ):
         raise DeliveryPreflightError(
-            "The disposition package changed after outreach approval. Build a new revision."
+            "The exact disposition package artifact bound to outreach failed integrity checks."
         )
     if (
         prepared.buyer_id != delivery.buyer_id
@@ -600,11 +594,20 @@ def _live_preflight(
     if (
         buyer is None
         or buyer.organization_id != delivery.organization_id
-        or buyer.status != "active"
+        or buyer.status == "do_not_contact"
         or buyer.relationship_status == "do_not_contact"
         or buyer.archived_at is not None
     ):
         raise DeliveryPreflightError("This buyer is no longer eligible for outreach.")
+    if buyer_is_persistently_passed(
+        db,
+        organization_id=delivery.organization_id,
+        disposition_case_id=delivery.disposition_case_id,
+        buyer_id=buyer.id,
+    ):
+        raise DeliveryPreflightError(
+            "This buyer is explicitly passed for this deal."
+        )
     conversation = ensure_buyer_conversation(
         db,
         buyer,
@@ -838,13 +841,16 @@ def _provider_request_hash(
             or package.pdf_data is None
             or not package.pdf_file_name
         ):
-            raise DeliveryPreflightError("The approved email artifact is unavailable.")
+            raise DeliveryPreflightError("The selected email artifact is unavailable.")
         attachment = bytes(package.pdf_data)
         attachment_sha256 = sha256(attachment).hexdigest()
         if not package.pdf_sha256 or attachment_sha256 != package.pdf_sha256:
             raise DeliveryPreflightError(
-                "The approved package attachment changed before provider submission."
+                "The exact selected package attachment changed before provider submission."
             )
+        attachment_file_name = _frozen_attachment_file_name(
+            db, delivery, revision, package
+        )
         common.update(
             {
                 "provider": "resend",
@@ -852,7 +858,7 @@ def _provider_request_hash(
                 "sender_email": alias.email_address,
                 "subject": delivery.subject or "Property opportunity",
                 "attachment": {
-                    "file_name": package.pdf_file_name,
+                    "file_name": attachment_file_name,
                     "content_type": package.pdf_content_type or "application/pdf",
                     "byte_length": len(attachment),
                     "sha256": attachment_sha256,
@@ -882,6 +888,64 @@ def _provider_request_hash(
     return sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _frozen_attachment_file_name(
+    db: Session,
+    delivery: DispositionOutreachDelivery,
+    revision: DispositionOutreachRevision,
+    package: DispositionPackageVersion,
+) -> str:
+    """Return the immutable recipient-facing label captured for human approval."""
+
+    snapshot = (revision.sender_snapshot or {}).get("package_attachment")
+    if isinstance(snapshot, dict):
+        file_name = str(snapshot.get("file_name") or "").strip()
+        if not file_name:
+            raise DeliveryPreflightError(
+                "The selected package attachment filename is unavailable."
+            )
+        if snapshot.get("artifact_sha256") != revision.artifact_sha256:
+            raise DeliveryPreflightError(
+                "The selected package attachment label no longer matches its artifact."
+            )
+        base_file_name = file_name
+    else:
+        # Legacy revisions were limited to approved/current artifacts and captured no
+        # special label. Preserve their original attachment name and approval envelope.
+        return str(package.pdf_file_name)
+
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == revision.disposition_case_id,
+            DispositionCase.organization_id == revision.organization_id,
+        )
+    )
+    is_current_now = bool(
+        case is not None
+        and disposition_packages.package_version_currentness(
+            db,
+            Principal(
+                user_id=revision.created_by_user_id,
+                organization_id=revision.organization_id,
+                email="outreach-delivery-currentness@internal.invalid",
+                permission_keys=frozenset(),
+            ),
+            case,
+            package,
+        )
+    )
+    eligibility = dict(delivery.eligibility_snapshot or {})
+    eligibility["package_is_current_at_provider_preflight"] = is_current_now
+    frozen_delivery_name = eligibility.get("provider_attachment_file_name")
+    if isinstance(frozen_delivery_name, str) and frozen_delivery_name.strip():
+        delivery.eligibility_snapshot = eligibility
+        return frozen_delivery_name
+    if not is_current_now and not base_file_name.upper().startswith("PRELIMINARY-"):
+        base_file_name = f"PRELIMINARY-{base_file_name}"
+    eligibility["provider_attachment_file_name"] = base_file_name
+    delivery.eligibility_snapshot = eligibility
+    return base_file_name
+
+
 def _send_email(
     db: Session,
     settings: Settings,
@@ -894,7 +958,7 @@ def _send_email(
     alias = db.get(EmailSenderAlias, revision.email_sender_alias_id)
     package = db.get(DispositionPackageVersion, delivery.package_version_id)
     if alias is None or package is None or package.pdf_data is None or not package.pdf_file_name:
-        raise DeliveryPreflightError("The approved email artifact is unavailable.")
+        raise DeliveryPreflightError("The selected email artifact is unavailable.")
     provider = get_email_delivery_provider(
         db,
         None,
@@ -915,7 +979,7 @@ def _send_email(
             idempotency_key=delivery.idempotency_key,
             attachments=[
                 (
-                    package.pdf_file_name,
+                    _frozen_attachment_file_name(db, delivery, revision, package),
                     package.pdf_content_type or "application/pdf",
                     bytes(package.pdf_data),
                 )

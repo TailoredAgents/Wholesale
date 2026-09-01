@@ -136,7 +136,6 @@ export function DispositionBuyerPool({
   onLegacyReload,
   onMessage,
   onUploadProof,
-  packageApproved,
   parentBusy,
   request,
 }: {
@@ -148,7 +147,6 @@ export function DispositionBuyerPool({
   onLegacyReload: () => Promise<void>;
   onMessage: (message: string | null) => void;
   onUploadProof: (event: FormEvent<HTMLFormElement>, buyerId: string) => Promise<void>;
-  packageApproved: boolean;
   parentBusy: boolean;
   request: Requester;
 }) {
@@ -264,7 +262,7 @@ export function DispositionBuyerPool({
   }, [caseId]);
 
   async function previewExternalBuyerCost(searchTier: BuyerDiscoverySearchTier) {
-    if (!canEditBuyers || !canEditDeals || !packageApproved) return;
+    if (!canEditBuyers || !canEditDeals) return;
     const tier = DISCOVERY_TIERS.find((item) => item.value === searchTier);
     if (!tier || !discoverySummary?.unlocked_tiers.includes(searchTier)) return;
     setActiveDiscoveryRequest({ action: "preview", tier: searchTier });
@@ -302,7 +300,6 @@ export function DispositionBuyerPool({
       !tier ||
       !canEditBuyers ||
       !canEditDeals ||
-      !packageApproved ||
       !discoverySummary?.unlocked_tiers.includes(searchTier) ||
       !estimate?.enough_credits ||
       estimate.search_tier !== searchTier
@@ -475,7 +472,7 @@ export function DispositionBuyerPool({
   const discoveryCreditRate = discoverySummary?.approximate_cost_per_credit_usd ?? 0.0075;
 
   return (
-    <div className={styles.buyerTab}>
+    <div className={styles.buyerTab} id="buyer-pool" tabIndex={-1}>
       <section className={styles.discoveryPanel}>
         <header>
           <div>
@@ -578,14 +575,14 @@ export function DispositionBuyerPool({
                 ) : null}
                 <div className={styles.discoveryActions}>
                   <button
-                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !packageApproved || !provider?.live_search_enabled}
+                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !provider?.live_search_enabled}
                     onClick={() => void previewExternalBuyerCost(tier.value)}
                     type="button"
                   >
                     <SearchCheck size={15} />{activeAction === "preview" ? "Checking cost…" : "Preview search estimate"}
                   </button>
                   <button
-                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !packageApproved || !tierEstimate?.enough_credits}
+                    disabled={busy || !available || completed || !canEditBuyers || !canEditDeals || !tierEstimate?.enough_credits}
                     onClick={() => void discoverExternalBuyers(tier.value)}
                     type="button"
                   >
@@ -596,7 +593,7 @@ export function DispositionBuyerPool({
             );
           })}
         </div>
-        {!packageApproved ? <p className={styles.discoveryEstimate}>Approve the investor package before spending provider credits on a deal-specific buyer search.</p> : null}
+        <p className={styles.discoveryEstimate}>Package, proof-of-funds, and match-readiness gaps remain visible warnings while you shop. Provider availability, credits, tier order, and your permissions still control paid searches.</p>
         <footer>
           <span>External results remain staged</span>
           <span>Human review and approval required</span>
@@ -838,7 +835,7 @@ export function DispositionBuyerPool({
                   <p className={styles.verified}><ShieldCheck size={14} />Verified evidence attached{match.proof_expires_at ? ` · expires ${new Date(match.proof_expires_at).toLocaleDateString()}` : ""}</p>
                 )}
               </article>
-            )) : <p className={styles.emptyRow}>Approve the package, then generate buyer matches.</p>}
+            )) : <p className={styles.emptyRow}>No ranked buyers yet. Refresh matching or continue reviewing the owned network and staged candidates.</p>}
           </div>
         </section>
         {activityPanel}

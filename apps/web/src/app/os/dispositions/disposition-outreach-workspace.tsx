@@ -25,6 +25,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DispositionOutreachChannel,
   DispositionOutreachDelivery,
+  DispositionOutreachPackageAttachment,
+  DispositionOutreachRevision,
   DispositionOutreachWorkspace,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
@@ -36,10 +38,10 @@ type Selection = Record<string, DispositionOutreachChannel[]>;
 const defaultSubject = "Investor opportunity: {property_address}";
 const defaultEmail = `Hi {buyer_name},
 
-Stonegate has an investor opportunity at {property_address}. Review the attached approved package and reply if you would like to discuss it.
+Stonegate has an investor opportunity at {property_address}. Review the property package and reply if you would like to discuss it.
 
 Package reference: {package_reference}`;
-const defaultSms = "Hi {buyer_name}, Stonegate has an investor opportunity at {property_address}. Reply if you would like the approved package. Ref {package_reference}. Reply STOP to opt out.";
+const defaultSms = "Hi {buyer_name}, Stonegate has an investor opportunity at {property_address}. Reply if you would like the property package. Ref {package_reference}. Reply STOP to opt out.";
 
 const activeStatuses = new Set(["queued", "sending", "paused", "provider_degraded"]);
 
@@ -56,6 +58,38 @@ function channelLabel(channel: DispositionOutreachChannel) {
 
 function shortHash(value: string | null) {
   return value ? `${value.slice(0, 12)}...${value.slice(-8)}` : "Not generated";
+}
+
+function revisionIsPreliminary(revision: DispositionOutreachRevision) {
+  return revision.package_is_preliminary === true
+    || (revision.package_status ?? "approved") !== "approved"
+    || revision.package_was_current_at_prepare === false
+    || revision.package_is_current_now === false;
+}
+
+function currentAtPrepareLabel(revision: DispositionOutreachRevision) {
+  if (revision.package_was_current_at_prepare === true) return "Current at preparation";
+  if (revision.package_was_current_at_prepare === false) return "Facts had changed before preparation";
+  return "Preparation currentness not recorded";
+}
+
+function currentNowLabel(revision: DispositionOutreachRevision) {
+  if (revision.package_is_current_now === true) return "Package and source facts are current now";
+  if (revision.package_is_current_now === false) return "Package or source facts changed since preparation";
+  return "Current package state not reported";
+}
+
+function packageAttachment(revision: DispositionOutreachRevision) {
+  return revision.sender_snapshot.package_attachment ?? null;
+}
+
+function usesConservativeAttachmentLabel(attachment: DispositionOutreachPackageAttachment) {
+  return attachment.recipient_label_policy === "conservative_preliminary_v1"
+    || attachment.file_name.toUpperCase().startsWith("PRELIMINARY-");
+}
+
+function attachmentIsPreliminary(attachment: DispositionOutreachPackageAttachment) {
+  return attachment.is_preliminary || usesConservativeAttachmentLabel(attachment);
 }
 
 function statusTone(status: string) {
@@ -106,6 +140,7 @@ export function DispositionOutreachWorkspace({
   canSendBulk,
   caseId,
   onMessage,
+  onWorkspaceChanged,
   request,
 }: {
   canApprove: boolean;
@@ -113,6 +148,7 @@ export function DispositionOutreachWorkspace({
   canSendBulk: boolean;
   caseId: string;
   onMessage: (message: string | null) => void;
+  onWorkspaceChanged: () => Promise<unknown> | unknown;
   request: Request;
 }) {
   const [workspace, setWorkspace] = useState<DispositionOutreachWorkspace | null>(null);
@@ -185,6 +221,11 @@ export function DispositionOutreachWorkspace({
     try {
       await operation();
       await load();
+      try {
+        await onWorkspaceChanged();
+      } catch {
+        // The outreach mutation succeeded; aggregate readiness can be retried separately.
+      }
       onMessage(success);
       return true;
     } catch (mutationError) {
@@ -217,7 +258,7 @@ export function DispositionOutreachWorkspace({
 
   async function createDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workspace?.campaign_id || !canManage) return;
+    if (!workspace?.campaign_id || !workspace.package_version_id || !workspace.artifact_sha256 || !canManage) return;
     const recipients = Object.entries(selection)
       .filter(([, channels]) => channels.length)
       .map(([campaignRecipientId, channels]) => ({ campaign_recipient_id: campaignRecipientId, channels }));
@@ -293,8 +334,9 @@ export function DispositionOutreachWorkspace({
   }
 
   const canDraft = canManage
-    && workspace.readiness_status === "ready"
     && Boolean(workspace.campaign_id)
+    && Boolean(workspace.package_version_id)
+    && Boolean(workspace.artifact_sha256)
     && selectedDeliveryCount > 0
     && selectedDeliveryCount <= cap
     && (!usesEmail || Boolean(emailSenderId && emailSubject.trim() && emailBody.trim()))
@@ -302,19 +344,22 @@ export function DispositionOutreachWorkspace({
     && !(latest && activeStatuses.has(latest.status));
   const canApproveLatest = canApprove && Boolean(latest?.approval_hash) && ["draft", "review_required"].includes(latest?.status ?? "") && approvalReason.trim().length >= 3 && attested;
   const controlReady = controlReason.trim().length >= 3;
+  const preliminary = workspace.package_is_preliminary
+    ?? workspace.package_status !== "approved";
+  const latestAttachment = latest ? packageAttachment(latest) : null;
 
   return (
-    <div className={styles.workspace}>
+    <div className={styles.workspace} id="campaigns" tabIndex={-1}>
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
 
       <header className={styles.hero}>
         <div>
           <span><ShieldCheck aria-hidden="true" size={16} />Supervised buyer outreach</span>
-          <h4>Review once. Send the exact approved revision.</h4>
-          <p>Stonegate freezes the package, recipients, destinations, senders, and rendered copy before live release.</p>
+          <h4>Review once. Send the exact package revision.</h4>
+          <p>Prepare recipients and exact copy while checklist work continues. Stonegate preserves whether the source package is approved or Preliminary.</p>
         </div>
         <div className={styles.heroStatus} data-status={workspace.readiness_status}>
-          <strong>{labelize(workspace.readiness_status)}</strong>
+          <strong>{preliminary ? "Preliminary" : "Ready"}</strong>
           <span>{workspace.prepared_recipients.length} prepared buyers</span>
           <small>Hard cap {workspace.hard_recipient_cap} deliveries</small>
         </div>
@@ -323,14 +368,14 @@ export function DispositionOutreachWorkspace({
       <section aria-labelledby="outreach-readiness" className={styles.panel}>
         <div className={styles.panelHeading}>
           <div><span>Preflight</span><h5 id="outreach-readiness">Release readiness</h5></div>
-          <strong>{workspace.blockers.length ? `${workspace.blockers.length} blocked` : "Ready to draft"}</strong>
+          <strong>{workspace.blockers.length ? `${workspace.blockers.length} advisory items` : "Ready to draft"}</strong>
         </div>
         <div className={styles.readinessGrid}>
-          <p data-ready={Boolean(workspace.package_version_id)}>{workspace.package_version_id ? <CheckCircle2 aria-hidden="true" size={15} /> : <XCircle aria-hidden="true" size={15} />}Current approved package</p>
+          <p data-ready={Boolean(workspace.package_version_id && workspace.artifact_sha256)}>{workspace.package_version_id && workspace.artifact_sha256 ? <CheckCircle2 aria-hidden="true" size={15} /> : <XCircle aria-hidden="true" size={15} />}Concrete package artifact</p>
           <p data-ready={Boolean(workspace.campaign_id)}>{workspace.campaign_id ? <CheckCircle2 aria-hidden="true" size={15} /> : <XCircle aria-hidden="true" size={15} />}Prepared recipient pool</p>
           <p data-ready={workspace.available_senders.length > 0}>{workspace.available_senders.length ? <CheckCircle2 aria-hidden="true" size={15} /> : <XCircle aria-hidden="true" size={15} />}Company sender controls</p>
         </div>
-        {workspace.blockers.length ? <div className={styles.blockers}>{workspace.blockers.map((item) => <p key={item}><AlertTriangle aria-hidden="true" size={14} />{item}</p>)}</div> : null}
+        {workspace.blockers.length ? <div className={styles.blockers}>{workspace.blockers.map((item) => <p key={item}><AlertTriangle aria-hidden="true" size={14} />{item}</p>)}<p><AlertTriangle aria-hidden="true" size={14} />Checklist gaps do not stop drafting or shopping. Missing artifacts, destinations, sender capability, channel permission, or role authority still do.</p></div> : null}
       </section>
 
       <form className={styles.draftPanel} onSubmit={createDraft}>
@@ -353,7 +398,7 @@ export function DispositionOutreachWorkspace({
               </div>
             </article>
           ))}
-          {!workspace.prepared_recipients.length ? <p className={styles.empty}>Prepare a qualified recipient pool from the Package tab before drafting outreach.</p> : null}
+          {!workspace.prepared_recipients.length ? <p className={styles.empty}>Prepare a recipient pool from the Package tab. Qualification and proof gaps remain visible warnings rather than hiding buyers.</p> : null}
         </div>
 
         <div className={styles.copyGrid}>
@@ -370,6 +415,7 @@ export function DispositionOutreachWorkspace({
           </section>
         </div>
         <p className={styles.templateHelp}>Allowed placeholders: {`{buyer_name}`}, {`{company_name}`}, {`{property_address}`}, and {`{package_reference}`}. Private seller economics are never available here.</p>
+        {preliminary ? <p className={styles.permissionNote}>This revision permanently records Preliminary source provenance. After package approval, prepare a new revision to record Approved provenance.</p> : null}
         <button className={styles.primaryButton} disabled={!canDraft || busyAction !== null} type="submit">{busyAction === "draft" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <FileLock2 aria-hidden="true" size={15} />}Create immutable draft</button>
       </form>
 
@@ -383,9 +429,16 @@ export function DispositionOutreachWorkspace({
             <dl className={styles.integrityFacts}>
               <div><dt>Approval hash</dt><dd title={latest.approval_hash ?? undefined}>{shortHash(latest.approval_hash)}</dd></div>
               <div><dt>Recipient manifest</dt><dd title={latest.recipient_manifest_hash}>{shortHash(latest.recipient_manifest_hash)}</dd></div>
-              <div><dt>Approved PDF</dt><dd title={latest.artifact_sha256}>{shortHash(latest.artifact_sha256)}</dd></div>
+              <div><dt>Package PDF</dt><dd title={latest.artifact_sha256}>{shortHash(latest.artifact_sha256)}</dd></div>
               <div><dt>Mode</dt><dd>{labelize(latest.mode)}</dd></div>
+              <div><dt>Frozen package status</dt><dd>{labelize(latest.package_status ?? "approved")}</dd></div>
+              <div><dt>Revision label</dt><dd>{revisionIsPreliminary(latest) ? "Preliminary" : "Approved"}</dd></div>
+              <div><dt>At preparation</dt><dd>{currentAtPrepareLabel(latest)}</dd></div>
+              <div><dt>Current now</dt><dd>{currentNowLabel(latest)}</dd></div>
+              <div><dt>Recipient attachment</dt><dd>{latestAttachment?.file_name ?? "No email attachment"}</dd></div>
+              <div><dt>Attachment label</dt><dd>{latestAttachment ? attachmentIsPreliminary(latestAttachment) ? "Preliminary" : labelize(latestAttachment.package_status) : "Not applicable"}</dd></div>
             </dl>
+            {latestAttachment && usesConservativeAttachmentLabel(latestAttachment) ? <p className={styles.permissionNote}>Recipient policy: Conservative Preliminary. The exact email attachment remains named <strong>{latestAttachment.file_name}</strong>, even when its frozen source was approved and current at preparation, so fact changes before asynchronous delivery cannot make the recipient copy overstate freshness.</p> : null}
             <div className={styles.messagePreviews}>
               {latest.deliveries.map((delivery) => (
                 <article key={delivery.id}>
@@ -401,10 +454,10 @@ export function DispositionOutreachWorkspace({
           {["draft", "review_required"].includes(latest.status) ? (
             <form className={styles.approvalPanel} onSubmit={approve}>
               <div className={styles.panelHeading}><div><span>Step 3 - Human approval</span><h5>Approve this exact revision</h5></div><ShieldCheck aria-hidden="true" size={18} /></div>
-              <label className={styles.attestation}><input checked={attested} disabled={!canApprove} onChange={(event) => setAttested(event.target.checked)} type="checkbox" /><span>I reviewed every recipient, destination, sender, rendered message, and the approved package fingerprint shown above.</span></label>
+              <label className={styles.attestation}><input checked={attested} disabled={!canApprove} onChange={(event) => setAttested(event.target.checked)} type="checkbox" /><span>I reviewed every recipient, destination, sender, rendered message, recipient attachment filename, package status, and exact package fingerprint shown above.</span></label>
               <label><span>Approval reason</span><textarea disabled={!canApprove} maxLength={2000} onChange={(event) => setApprovalReason(event.target.value)} placeholder="Why this exact outreach revision is approved" rows={3} value={approvalReason} /></label>
               <button className={styles.primaryButton} disabled={!canApproveLatest || busyAction !== null} type="submit">{busyAction === "approve" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <Check aria-hidden="true" size={15} />}Approve exact revision</button>
-              {!canApprove ? <p className={styles.permissionNote}>A disposition manager must approve live buyer outreach.</p> : null}
+              {!canApprove ? <p className={styles.permissionNote}>Your current role does not include outreach approval.</p> : null}
             </form>
           ) : null}
 
@@ -421,7 +474,7 @@ export function DispositionOutreachWorkspace({
                 {["completed_with_failures", "provider_degraded", "paused"].includes(latest.status) ? <button disabled={!canApprove || !canSendBulk || !controlReady || busyAction !== null} onClick={() => void control("retry-failed", "Safely retryable deliveries returned to the supervised queue.")} type="button"><RotateCcw aria-hidden="true" size={14} />Retry safe failures</button> : null}
                 <button disabled={busyAction !== null} onClick={() => void load()} type="button"><RefreshCw aria-hidden="true" size={14} />Refresh status</button>
               </div>
-              {canApprove && !canSendBulk ? <p className={styles.permissionNote}>Live release, resume, and retry also require the bulk-communications permission.</p> : null}
+              {canApprove && !canSendBulk ? <p className={styles.permissionNote}>Live release, resume, and retry also require the Disposition bulk-release permission.</p> : null}
             </section>
           ) : null}
 
@@ -436,7 +489,10 @@ export function DispositionOutreachWorkspace({
 
           <section aria-labelledby="revision-history" className={styles.panel}>
             <div className={styles.panelHeading}><div><span>Immutable audit trail</span><h5 id="revision-history">Revision history</h5></div><strong>{workspace.revisions.length}</strong></div>
-            <div className={styles.revisionList}>{workspace.revisions.map((revision) => <article key={revision.id}><div><strong>Revision {revision.revision_number}</strong><span className={styles.status} data-tone={statusTone(revision.status)}>{labelize(revision.status)}</span></div><span>Created {dateTime(revision.created_at)}</span><small>Approval {shortHash(revision.approval_hash)} - {revision.deliveries.length} deliveries</small></article>)}</div>
+            <div className={styles.revisionList}>{workspace.revisions.map((revision) => {
+              const attachment = packageAttachment(revision);
+              return <article key={revision.id}><div><strong>Revision {revision.revision_number}</strong><span className={styles.status} data-tone={statusTone(revision.status)}>{labelize(revision.status)}</span></div><span>Created {dateTime(revision.created_at)}</span><small>Frozen package {labelize(revision.package_status ?? "approved")} - {revisionIsPreliminary(revision) ? "Preliminary" : "Approved"} revision</small><small>{currentAtPrepareLabel(revision)} - {currentNowLabel(revision)}</small>{attachment ? <small>Recipient attachment {attachment.file_name} - {usesConservativeAttachmentLabel(attachment) ? "Conservative Preliminary policy" : attachmentIsPreliminary(attachment) ? "Preliminary label" : `${labelize(attachment.package_status)} source label`}</small> : <small>No email attachment recorded</small>}<small>Approval {shortHash(revision.approval_hash)} - {revision.deliveries.length} deliveries</small></article>;
+            })}</div>
           </section>
         </>
       ) : null}

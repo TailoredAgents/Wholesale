@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DispositionCallOutcome = Literal[
     "interested",
@@ -32,18 +32,25 @@ class DispositionExecutionPermissionRead(BaseModel):
 
 
 class DispositionExecutionCandidateRead(BaseModel):
-    candidate_id: UUID
+    candidate_id: UUID | None
     buyer_id: UUID
     conversation_id: UUID | None
     name: str
     company_name: str | None
     phone: str | None
     email: str | None
-    rank: int
-    score_basis_points: int
+    ranking_status: Literal["ranked", "unranked"]
+    rank: int | None
+    score_basis_points: int | None
     relationship_status: str | None
     tier: str | None
     temperature: str | None
+    decision_status: str
+    lifecycle_stage: str
+    decision_reason: str | None
+    lock_version: int | None
+    actionable: bool
+    action_blockers: list[str]
     score_explanation: list[str]
     recent_purchase_reference: str | None
     sms: DispositionExecutionPermissionRead
@@ -70,43 +77,46 @@ class DispositionExecutionWorkspaceRead(BaseModel):
     asset_class: str
     property_address: str
     package_status: str
+    package_is_preliminary: bool
     package_pdf_path: str | None
     ready: bool
     blockers: list[str]
     remaining_candidate_count: int
     current_candidate: DispositionExecutionCandidateRead | None
+    candidates: list[DispositionExecutionCandidateRead]
     showings: list[DispositionShowingRead]
 
 
-class DispositionExecutionSmsCreate(BaseModel):
+class _DispositionExecutionBuyerReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    candidate_id: UUID
+    candidate_id: UUID | None = None
+    buyer_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def require_buyer_reference(self) -> "_DispositionExecutionBuyerReference":
+        if self.candidate_id is None and self.buyer_id is None:
+            raise ValueError("Provide a ranked candidate or canonical buyer reference.")
+        return self
+
+
+class DispositionExecutionSmsCreate(_DispositionExecutionBuyerReference):
     body: str = Field(min_length=1, max_length=1600)
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 
-class DispositionExecutionCallCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: UUID
+class DispositionExecutionCallCreate(_DispositionExecutionBuyerReference):
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 
-class DispositionExecutionOutcomeCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: UUID
+class DispositionExecutionOutcomeCreate(_DispositionExecutionBuyerReference):
     outcome: DispositionCallOutcome
     notes: str | None = Field(default=None, max_length=1000)
     follow_up_at: datetime | None = None
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 
-class DispositionShowingCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: UUID
+class DispositionShowingCreate(_DispositionExecutionBuyerReference):
     scheduled_at: datetime
     access_status: ShowingAccessStatus = "pending"
     notes: str | None = Field(default=None, max_length=1000)

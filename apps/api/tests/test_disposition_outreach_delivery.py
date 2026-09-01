@@ -6,12 +6,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import worker
 from app.core.auth import principal_for_user
 from app.core.config import Settings
+from app.integrations.email_delivery import EmailDeliveryRequest, EmailDeliveryResult
 from app.integrations.resend_email import ResendEmailError
 from app.main import app
 from app.models.foundation import (
@@ -22,8 +23,10 @@ from app.models.foundation import (
     ConsentRecord,
     Conversation,
     ConversationContextLink,
+    DispositionBuyerPoolEntry,
     DispositionCampaign,
     DispositionCampaignRecipient,
+    DispositionCase,
     DispositionOutreachDelivery,
     DispositionOutreachRevision,
     DispositionPackageVersion,
@@ -31,6 +34,7 @@ from app.models.foundation import (
     EmailSenderAlias,
     SuppressionRecord,
     Task,
+    Transaction,
     User,
     VoiceLine,
 )
@@ -546,6 +550,175 @@ def test_retryable_failure_completes_with_failures_until_explicit_retry(
     assert retried is not None and retried.status == "queued"
     assert delivery.status == "queued"
     assert delivery.next_attempt_at is not None
+
+
+def test_email_attachment_label_stays_preliminary_and_hash_stable_after_facts_drift(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _approve_and_release_email(db_session, TestClient(app))
+    revision = db_session.get(DispositionOutreachRevision, context.revision_id)
+    delivery = db_session.get(DispositionOutreachDelivery, context.delivery_id)
+    assert revision is not None and delivery is not None
+    package = db_session.get(DispositionPackageVersion, revision.package_version_id)
+    assert package is not None and package.pdf_data is not None
+    attachment_snapshot = revision.sender_snapshot["package_attachment"]
+    assert revision.package_status_at_prepare == "approved"
+    assert revision.package_was_current_at_prepare is True
+    assert attachment_snapshot["package_status"] == "approved"
+    assert attachment_snapshot["was_current_at_prepare"] is True
+    assert (
+        attachment_snapshot["recipient_label_policy"]
+        == "conservative_preliminary_v1"
+    )
+    assert attachment_snapshot["file_name"].startswith("PRELIMINARY-")
+    original_request_hash = disposition_outreach_delivery._provider_request_hash(
+        db_session,
+        delivery,
+        revision,
+    )
+    original_bytes = bytes(package.pdf_data)
+
+    disposition_case = db_session.get(DispositionCase, delivery.disposition_case_id)
+    assert disposition_case is not None
+    transaction = db_session.get(Transaction, disposition_case.transaction_id)
+    assert transaction is not None
+    transaction.purchase_price_cents += 1
+    db_session.commit()
+
+    class CaptureEmailProvider:
+        provider_name = "simulated"
+
+        def __init__(self) -> None:
+            self.requests: list[EmailDeliveryRequest] = []
+
+        def send(self, request: EmailDeliveryRequest) -> EmailDeliveryResult:
+            self.requests.append(request)
+            return EmailDeliveryResult(
+                provider="simulated",
+                provider_message_id="sim-preliminary-after-drift",
+                provider_thread_id="thread-preliminary-after-drift",
+                rfc_message_id="<preliminary-after-drift@example.test>",
+                raw_payload={"status": "sent"},
+            )
+
+        def retrieve_sent_message(self, _provider_message_id: str) -> None:
+            return None
+
+    provider = CaptureEmailProvider()
+    monkeypatch.setattr(
+        disposition_outreach_delivery,
+        "get_email_delivery_provider",
+        lambda *_args, **_kwargs: provider,
+    )
+    processed = disposition_outreach_delivery.process_next_disposition_outreach_delivery(
+        db_session,
+        _simulation_settings(),
+    )
+    assert processed == context.delivery_id
+    assert len(provider.requests) == 1
+    request = provider.requests[0]
+    assert request.attachments[0][0].startswith("PRELIMINARY-")
+    assert request.attachments[0][2] == original_bytes
+    db_session.refresh(delivery)
+    dispatch = db_session.get(CommunicationDispatch, delivery.communication_dispatch_id)
+    assert dispatch is not None
+    db_session.refresh(dispatch)
+    assert dispatch.request_body_hash == original_request_hash
+    assert delivery.eligibility_snapshot[
+        "package_is_current_at_provider_preflight"
+    ] is False
+
+
+def test_worker_rechecks_durable_unranked_pass_before_provider_submission(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    context = _approve_and_release_email(db_session, client)
+    pool = client.post(
+        f"/api/v1/dispositions/cases/{context.campaign.disposition_case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert pool.status_code == 200, pool.text
+    candidate = next(item for item in pool.json()["entries"] if item["buyer_id"])
+    db_session.execute(
+        delete(DispositionBuyerPoolEntry).where(
+            DispositionBuyerPoolEntry.buyer_pool_run_id == UUID(pool.json()["run"]["id"]),
+            DispositionBuyerPoolEntry.buyer_pool_candidate_id
+            == UUID(candidate["candidate_id"]),
+        )
+    )
+    db_session.commit()
+    passed = client.post(
+        f"/api/v1/dispositions/cases/{context.campaign.disposition_case_id}/"
+        "execution/outcomes",
+        headers=HEADERS,
+        json={
+            "buyer_id": candidate["buyer_id"],
+            "outcome": "not_interested",
+            "notes": "Buyer explicitly declined after the campaign queued.",
+            "idempotency_key": "unranked-pass-after-queue-001",
+        },
+    )
+    assert passed.status_code == 200, passed.text
+    provider_calls = 0
+
+    def record_provider_call(*_args: object, **_kwargs: object) -> None:
+        nonlocal provider_calls
+        provider_calls += 1
+
+    monkeypatch.setattr(
+        disposition_outreach_delivery,
+        "_send_email",
+        record_provider_call,
+    )
+    processed = disposition_outreach_delivery.process_next_disposition_outreach_delivery(
+        db_session,
+        _simulation_settings(),
+    )
+    assert processed == context.delivery_id
+    assert provider_calls == 0
+    delivery = db_session.get(DispositionOutreachDelivery, context.delivery_id)
+    assert delivery is not None
+    assert delivery.status == "ineligible"
+    assert "explicitly passed" in (delivery.error_message or "").lower()
+
+
+def test_worker_rechecks_buyer_status_do_not_contact_before_provider_submission(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _approve_and_release_email(db_session, TestClient(app))
+    delivery = db_session.get(DispositionOutreachDelivery, context.delivery_id)
+    assert delivery is not None
+    buyer = db_session.get(Buyer, delivery.buyer_id)
+    assert buyer is not None
+    buyer.status = "do_not_contact"
+    db_session.commit()
+    provider_calls = 0
+
+    def record_provider_call(*_args: object, **_kwargs: object) -> None:
+        nonlocal provider_calls
+        provider_calls += 1
+
+    monkeypatch.setattr(
+        disposition_outreach_delivery,
+        "_send_email",
+        record_provider_call,
+    )
+    processed = disposition_outreach_delivery.process_next_disposition_outreach_delivery(
+        db_session,
+        _simulation_settings(),
+    )
+    assert processed == context.delivery_id
+    assert provider_calls == 0
+    db_session.refresh(delivery)
+    assert delivery.status == "ineligible"
+    assert "no longer eligible" in (delivery.error_message or "").lower()
 
 
 @pytest.mark.parametrize(

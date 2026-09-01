@@ -218,7 +218,24 @@
 .workFacts dt { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .workFacts dd { margin: 0; overflow-wrap: anywhere; font-size: 9px; line-height: 1.45; }
 .setupNotice { margin: 0; padding: 9px 11px; border: 1px solid #e7d1a5; background: #fff9e9; color: #795400; font-size: 10px; line-height: 1.5; }
-.workActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cardChecklist { border: 1px solid var(--line-soft); background: var(--surface-soft); }
+.cardChecklist > summary { min-height: 44px; padding: 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--brand-strong); cursor: pointer; font-size: 9px; font-weight: 800; }
+.cardChecklist > summary strong { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: #fff1c9; color: #795400; }
+.cardChecklist > div { display: grid; border-top: 1px solid var(--line-soft); }
+.cardChecklist article { min-height: 52px; padding: 8px 10px; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; border-bottom: 1px solid var(--line-soft); }
+.cardChecklist article:last-child { border-bottom: 0; }
+.cardChecklist article > svg { margin-top: 1px; color: #9a6a09; }
+.cardChecklist article[data-tone="hard_stop"] > svg { color: var(--danger); }
+.cardChecklist article > div { min-width: 0; display: grid; gap: 3px; }
+.cardChecklist article strong { font-size: 9px; }
+.cardChecklist article span { color: var(--muted); overflow-wrap: anywhere; font-size: 9px; line-height: 1.4; }
+.cardChecklist article a { min-height: 36px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); color: var(--brand-strong); text-decoration: none; font-size: 9px; font-weight: 800; }
+.cardChecklist > div > p { min-height: 48px; margin: 0; padding: 10px; display: flex; align-items: center; gap: 7px; color: var(--brand-strong); font-size: 9px; }
+.workActions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.bestActionGroup, .parallelActionGroup { display: grid; gap: 4px; }
+.bestActionGroup > span, .parallelActionGroup > span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.parallelActionGroup > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.moreActions { align-self: center; color: var(--muted); font-size: 8px; }
 
 .sideRail { min-width: 0; display: grid; gap: 14px; }
 .networkPanel dl { margin: 0; padding: 4px 13px; }
@@ -278,7 +295,10 @@
   .quickActions a { flex: 1 1 calc(50% - 4px); }
   .quickActions .quickPrimary { flex-basis: 100%; }
   .workCard { padding: 11px; }
+  .workActions, .bestActionGroup, .parallelActionGroup, .parallelActionGroup > div { width: 100%; }
   .workActions a { width: 100%; }
+  .cardChecklist article { grid-template-columns: 16px minmax(0, 1fr); }
+  .cardChecklist article a { grid-column: 2; width: 100%; justify-content: center; }
   .sectionHeader { align-items: flex-start; }
   .sectionLimitNotice { align-items: flex-start; flex-direction: column; }
   .sectionLimitNotice > div { width: 100%; }

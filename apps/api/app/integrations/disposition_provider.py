@@ -40,7 +40,10 @@ class DispositionProviderAdapter(Protocol):
         self,
         *,
         package_version: int,
-        package_approved_at: str,
+        package_status: str,
+        package_was_current_at_prepare: bool,
+        package_preliminary: bool,
+        package_snapshot_at: str,
         package_snapshot: dict[str, Any],
     ) -> dict[str, Any]: ...
 
@@ -66,7 +69,7 @@ class ManualInvestorLiftAdapter:
             live_transport_enabled=False,
             credential_required=False,
             supported_manual_capabilities=(
-                "approved_package_export",
+                "exact_package_export",
                 "manual_listing_link",
                 "manual_status_refresh",
                 "staged_inquiry_evidence",
@@ -93,16 +96,22 @@ class ManualInvestorLiftAdapter:
         self,
         *,
         package_version: int,
-        package_approved_at: str,
+        package_status: str,
+        package_was_current_at_prepare: bool,
+        package_preliminary: bool,
+        package_snapshot_at: str,
         package_snapshot: dict[str, Any],
     ) -> dict[str, Any]:
         return {
-            "schema_version": "stonegate.disposition_provider.v1",
+            "schema_version": "stonegate.disposition_provider.v2",
             "provider": "investorlift",
             "handoff_mode": "manual",
-            "approved_package": {
+            "package": {
                 "version": package_version,
-                "approved_at": package_approved_at,
+                "status_at_prepare": package_status,
+                "was_current_at_prepare": package_was_current_at_prepare,
+                "snapshot_at_prepare": package_snapshot_at,
+                "preliminary_at_prepare": package_preliminary,
             },
             "listing": package_snapshot,
         }
@@ -110,7 +119,7 @@ class ManualInvestorLiftAdapter:
     def publish(self, _payload: dict[str, Any]) -> None:
         raise ProviderTransportUnavailableError(
             "InvestorLift live publication is unavailable until its direct API contract "
-            "is verified in writing. Download the approved manual handoff bundle instead."
+            "is verified in writing. Download the governed manual handoff bundle instead."
         )
 
 

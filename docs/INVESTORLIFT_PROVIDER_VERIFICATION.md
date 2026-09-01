@@ -97,9 +97,10 @@ do not paste credentials into the evidence:
 
 Live transport may be implemented and enabled only after the written evidence above is reviewed and
 the provider-specific adapter passes bounded acceptance tests. Until then, use the guided manual
-handoff: approve the current Stonegate package, copy or export its public-only bundle, publish it in
-InvestorLift manually, save the resulting property ID and HTTPS URL in Stonegate, and reconcile
-provider activity as review-required manual signals.
+handoff: choose one exact usable Stonegate package, retain **Preliminary** visibly when it is not
+approved/current, approve the exact public-only handoff revision, copy or export its bundle, publish
+it in InvestorLift manually, save the resulting property ID and HTTPS URL in Stonegate, and
+reconcile provider activity as review-required manual signals.
 
 ## Official References
 

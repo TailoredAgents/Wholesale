@@ -76,6 +76,14 @@ class ProviderApprovedPackageRead(BaseModel):
     is_current: bool
 
 
+class ProviderAvailablePackageRead(BaseModel):
+    package_version_id: UUID
+    version_number: int
+    source_fingerprint: str
+    status: str
+    is_current: bool
+
+
 class ProviderListingRead(BaseModel):
     id: UUID
     provider_account_id: UUID
@@ -108,6 +116,10 @@ class ProviderListingRevisionRead(BaseModel):
     public_payload: dict[str, Any]
     public_payload_sha256: str
     package_source_fingerprint: str
+    package_status: str | None
+    package_was_current_at_prepare: bool
+    package_is_current_now: bool
+    package_is_preliminary: bool
     created_by_user_id: UUID
     approved_by_user_id: UUID | None
     approval_reason: str | None
@@ -175,6 +187,7 @@ class ProviderWorkspaceRead(BaseModel):
     permissions: ProviderPermissionRead
     verification_gate: ProviderVerificationGateRead
     account: ProviderAccountRead | None
+    available_package: ProviderAvailablePackageRead | None
     approved_package: ProviderApprovedPackageRead | None
     listing: ProviderListingRead | None
     revisions: list[ProviderListingRevisionRead]
@@ -186,6 +199,7 @@ class ProviderWorkspaceRead(BaseModel):
 
 class ProviderListingRevisionCreate(BaseModel):
     expected_latest_revision: int = Field(ge=0)
+    package_version_id: UUID | None = None
 
 
 class ProviderListingRevisionApproval(BaseModel):

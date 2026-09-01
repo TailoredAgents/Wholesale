@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -20,8 +20,6 @@ from app.models.foundation import (
     Conversation,
     ConversationContextLink,
     DispositionBuyerPoolCandidate,
-    DispositionBuyerPoolEntry,
-    DispositionBuyerPoolRun,
     DispositionCase,
     Lead,
     Property,
@@ -38,24 +36,23 @@ from app.schemas.disposition_execution import (
     DispositionShowingCreate,
     DispositionShowingRead,
     DispositionShowingUpdate,
+    ShowingAccessStatus,
+    ShowingStatus,
 )
 from app.schemas.inbox import SmsSendRead, SmsSendRequest
 from app.schemas.voice import VoiceCallIntentCreate, VoiceCallIntentRead
-from app.services import disposition_buyer_pool, dispositions
+from app.services import buyers as buyer_service
+from app.services import disposition_buyer_pool, disposition_packages, dispositions
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
 )
+from app.services.disposition_state import ACTIVE_DISPOSITION_CASE_STATUSES
 from app.services.inbox import ensure_buyer_conversation
 from app.services.messaging import send_conversation_sms
 from app.services.voice import create_call_intent, start_forwarded_call
 
-EXECUTION_CASE_STATUSES = {
-    "buyer_matching",
-    "marketed",
-    "offers_received",
-    "buyer_selected",
-}
+EXECUTION_CASE_STATUSES = set(ACTIVE_DISPOSITION_CASE_STATUSES)
 CALL_OUTCOME_STAGE = {
     "interested": "interested",
     "showing_scheduled": "showing",
@@ -76,6 +73,7 @@ VALID_ACCESS_STATUSES = {
     "shared_privately",
     "not_required",
 }
+BUYER_DO_NOT_CONTACT_BLOCKER = "This buyer is marked do not contact."
 
 
 def read_workspace(
@@ -95,49 +93,118 @@ def read_workspace(
     blockers: list[str] = []
     if asset_class != "house":
         blockers.append("The dispositions call queue is currently available for house deals only.")
-    if case.package_status != "approved":
-        blockers.append("Approve the investor package before beginning one-to-one buyer calls.")
     if case.status not in EXECUTION_CASE_STATUSES:
         blockers.append("Move the deal into buyer placement before beginning buyer calls.")
 
-    pool = disposition_buyer_pool.read_buyer_pool(
-        db,
-        principal,
-        case.id,
-        page=1,
-        page_size=100,
-    )
-    if pool is None:
-        raise ValueError("The disposition buyer pool is unavailable.")
-    if pool.run is None:
-        blockers.append("Generate the ranked buyer pool before starting the call queue.")
-
-    handled_candidate_ids, deferred_candidate_ids = _candidate_queue_state(db, case)
-    available_entries = [
-        item
-        for item in pool.entries
-        if item.buyer_id is not None
-        and item.candidate_id not in handled_candidate_ids
-        and item.candidate_id not in deferred_candidate_ids
-        and item.decision_status != "passed"
-        and item.lifecycle_stage not in {"pass", "selected", "backup", "fallout"}
-    ]
-    if (
-        not available_entries
-        and pool.entries
-        and any(item.buyer_id is None for item in pool.entries)
-    ):
-        blockers.append(
-            "The remaining ranked records must be approved into the Buyer Network before contact."
+    package = None
+    try:
+        package = disposition_packages.require_package_artifact(
+            db,
+            principal,
+            case,
+            action="opening the one-to-one buyer workbench",
         )
-    if not available_entries and deferred_candidate_ids:
-        blockers.append("The remaining buyers are waiting for their scheduled follow-up time.")
-    elif not available_entries and pool.run is not None:
-        blockers.append("No unworked canonical buyers remain in the current ranked pool.")
+    except ValueError:
+        # Package readiness is advisory. Calls may still proceed without an attachment.
+        package = None
+    package_is_current = bool(
+        package is not None
+        and disposition_packages.package_version_currentness(db, principal, case, package)
+    )
 
+    try:
+        pool = disposition_buyer_pool.read_buyer_pool(
+            db,
+            principal,
+            case.id,
+            page=1,
+            page_size=100,
+            include_all=True,
+        )
+    except ValueError:
+        # Ranking is optional context. A failed or unreadable run must never make
+        # the canonical Buyer Network unavailable for one-to-one work.
+        pool = None
+    ranked_entries_by_buyer = {
+        entry.buyer_id: entry
+        for entry in (pool.entries if pool is not None else [])
+        if entry.buyer_id is not None
+    }
+    buyers = list(
+        db.scalars(
+            select(Buyer).where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.archived_at.is_(None),
+                Buyer.status != "archived",
+            )
+        ).all()
+    )
+    buyer_ids = {buyer.id for buyer in buyers}
+    case_candidates = (
+        list(
+            db.scalars(
+                select(DispositionBuyerPoolCandidate).where(
+                    DispositionBuyerPoolCandidate.organization_id
+                    == principal.organization_id,
+                    DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+                    DispositionBuyerPoolCandidate.buyer_id.in_(buyer_ids),
+                )
+            ).all()
+        )
+        if buyer_ids
+        else []
+    )
+    candidate_by_buyer = {
+        candidate.buyer_id: candidate
+        for candidate in case_candidates
+        if candidate.buyer_id is not None
+    }
+    visible_buyers = list(buyers)
+    visible_buyers.sort(
+        key=lambda buyer: (
+            0 if buyer.id in ranked_entries_by_buyer else 1,
+            (
+                ranked_entries_by_buyer[buyer.id].rank
+                if buyer.id in ranked_entries_by_buyer
+                else 0
+            ),
+            buyer.name.casefold(),
+            str(buyer.id),
+        )
+    )
+    handled_buyer_ids, deferred_buyer_ids = _candidate_queue_state(db, case)
+    available_buyers = [
+        buyer
+        for buyer in visible_buyers
+        if buyer.id not in handled_buyer_ids
+        and buyer.id not in deferred_buyer_ids
+        and not _candidate_is_passed(candidate_by_buyer.get(buyer.id))
+        and not _buyer_is_do_not_contact(buyer)
+        and (
+            candidate_by_buyer.get(buyer.id) is None
+            or candidate_by_buyer[buyer.id].lifecycle_stage
+            not in {"selected", "backup", "fallout"}
+        )
+    ]
+    candidates = (
+        [
+            _candidate_read(
+                db,
+                principal,
+                property_record,
+                buyer,
+                candidate_by_buyer.get(buyer.id),
+                ranked_entries_by_buyer.get(buyer.id),
+            )
+            for buyer in visible_buyers
+        ]
+        if asset_class == "house"
+        else []
+    )
+    candidate_read_by_buyer = {item.buyer_id: item for item in candidates}
     current = (
-        _candidate_read(db, principal, case, property_record, available_entries[0])
-        if available_entries and asset_class == "house"
+        candidate_read_by_buyer.get(available_buyers[0].id)
+        if asset_class == "house" and available_buyers
         else None
     )
     return DispositionExecutionWorkspaceRead(
@@ -145,16 +212,21 @@ def read_workspace(
         deal_id=case.deal_id,
         asset_class=asset_class,
         property_address=_property_address(property_record),
-        package_status=case.package_status,
+        package_status=package.status if package is not None else case.package_status,
+        package_is_preliminary=bool(
+            package is not None
+            and (package.status != "approved" or not package_is_current)
+        ),
         package_pdf_path=(
-            f"/api/v1/dispositions/cases/{case.id}/package.pdf"
-            if case.package_status == "approved"
+            f"/api/v1/dispositions/cases/{case.id}/package/versions/{package.id}/package.pdf"
+            if package is not None
             else None
         ),
-        ready=not blockers and current is not None,
+        ready=not blockers and bool(available_buyers),
         blockers=blockers,
-        remaining_candidate_count=len(available_entries),
+        remaining_candidate_count=len(available_buyers),
         current_candidate=current,
+        candidates=candidates,
         showings=_showing_reads(db, case),
     )
 
@@ -165,7 +237,32 @@ def send_pre_call_sms(
     case_id: UUID,
     payload: DispositionExecutionSmsCreate,
 ) -> SmsSendRead:
-    case, candidate, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
+    case = _mutable_house_case(db, principal, case_id)
+    referenced_buyer_id = _referenced_buyer_id(
+        db,
+        principal,
+        case,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
+    request_fingerprint = _request_fingerprint(
+        payload,
+        buyer_id=referenced_buyer_id,
+    )
+    existing = _engagement_by_idempotency(
+        db,
+        principal,
+        case,
+        payload.idempotency_key,
+        request_fingerprint=request_fingerprint,
+    )
+    case, candidate, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
     conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
     db.commit()
     result = send_conversation_sms(
@@ -177,6 +274,8 @@ def send_pre_call_sms(
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
+    if existing is not None:
+        return result
     _log_engagement(
         db,
         principal,
@@ -186,9 +285,25 @@ def send_pre_call_sms(
         engagement_type="sms",
         status="sent",
         notes="One-to-one pre-call SMS sent from the disposition execution queue.",
-        metadata={"communication_id": str(result.communication_id)},
+        idempotency_key=payload.idempotency_key,
+        metadata={
+            "communication_id": str(result.communication_id),
+            "request_fingerprint": request_fingerprint,
+        },
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        replay = _engagement_by_idempotency(
+            db,
+            principal,
+            case,
+            payload.idempotency_key,
+            request_fingerprint=request_fingerprint,
+        )
+        if replay is None:
+            raise
     return result
 
 
@@ -198,7 +313,13 @@ def start_candidate_call(
     case_id: UUID,
     payload: DispositionExecutionCallCreate,
 ) -> VoiceCallIntentRead:
-    _, _, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
+    _, _, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
     conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
     result = create_call_intent(
         db,
@@ -227,7 +348,13 @@ def start_candidate_forwarded_call(
     cellphone bridge fallback.
     """
 
-    _, _, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
+    _, _, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
     conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
     result = start_forwarded_call(
         db,
@@ -247,8 +374,18 @@ def record_call_outcome(
     case_id: UUID,
     payload: DispositionExecutionOutcomeCreate,
 ) -> DispositionExecutionWorkspaceRead:
-    case, candidate, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
-    request_fingerprint = _request_fingerprint(payload)
+    case = _mutable_house_case(db, principal, case_id)
+    referenced_buyer_id = _referenced_buyer_id(
+        db,
+        principal,
+        case,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
+    request_fingerprint = _request_fingerprint(
+        payload,
+        buyer_id=referenced_buyer_id,
+    )
     existing = _engagement_by_idempotency(
         db,
         principal,
@@ -261,10 +398,17 @@ def record_call_outcome(
         if result is None:
             raise ValueError("The disposition case is unavailable.")
         return result
+    case, candidate, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
     now = datetime.now(UTC)
     if payload.outcome == "callback":
         _require_future_time(payload.follow_up_at, now=now, label="callback follow-up")
-    _complete_prior_follow_up_task(db, principal, case, candidate, now=now)
+    _complete_prior_follow_up_task(db, principal, case, buyer, now=now)
     previous = {
         "decision_status": candidate.decision_status,
         "lifecycle_stage": candidate.lifecycle_stage,
@@ -280,6 +424,13 @@ def record_call_outcome(
     candidate.lock_version += 1
     candidate.decision_updated_by_user_id = principal.user_id
     candidate.decision_updated_at = datetime.now(UTC)
+    if payload.outcome == "do_not_contact":
+        buyer_service.mark_buyer_do_not_contact(
+            db,
+            principal,
+            buyer,
+            reason=payload.notes or "Buyer requested do-not-contact during disposition outreach.",
+        )
     follow_up_task = _call_follow_up_task(
         db,
         case,
@@ -390,8 +541,14 @@ def create_showing(
     case_id: UUID,
     payload: DispositionShowingCreate,
 ) -> DispositionExecutionWorkspaceRead:
-    case, candidate, buyer = _candidate_for_action(db, principal, case_id, payload.candidate_id)
-    request_fingerprint = _request_fingerprint(payload)
+    case, candidate, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
+    request_fingerprint = _request_fingerprint(payload, buyer_id=buyer.id)
     existing = _engagement_by_idempotency(
         db,
         principal,
@@ -594,8 +751,6 @@ def _mutable_house_case(
     if case is None:
         raise ValueError("Disposition case not found.")
     dispositions.require_house_case_workflow(db, case)
-    if case.package_status != "approved":
-        raise ValueError("Approve the investor package before contacting buyers.")
     return case
 
 
@@ -603,63 +758,168 @@ def _candidate_for_action(
     db: Session,
     principal: Principal,
     case_id: UUID,
-    candidate_id: UUID,
+    *,
+    candidate_id: UUID | None,
+    buyer_id: UUID | None,
 ) -> tuple[DispositionCase, DispositionBuyerPoolCandidate, Buyer]:
     case = _mutable_house_case(db, principal, case_id)
-    latest_run_id = db.scalar(
-        select(DispositionBuyerPoolRun.id)
-        .where(
-            DispositionBuyerPoolRun.organization_id == principal.organization_id,
-            DispositionBuyerPoolRun.disposition_case_id == case.id,
-            DispositionBuyerPoolRun.status == "completed",
+    candidate = None
+    if candidate_id is not None:
+        candidate = db.scalar(
+            select(DispositionBuyerPoolCandidate)
+            .where(
+                DispositionBuyerPoolCandidate.id == candidate_id,
+                DispositionBuyerPoolCandidate.organization_id
+                == principal.organization_id,
+                DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+            )
+            .with_for_update()
         )
-        .order_by(
-            DispositionBuyerPoolRun.version_number.desc(),
-            DispositionBuyerPoolRun.created_at.desc(),
-        )
-        .limit(1)
-    )
-    candidate = db.scalar(
-        select(DispositionBuyerPoolCandidate)
-        .join(
-            DispositionBuyerPoolEntry,
-            DispositionBuyerPoolEntry.buyer_pool_candidate_id
-            == DispositionBuyerPoolCandidate.id,
-        )
-        .where(
-            DispositionBuyerPoolCandidate.id == candidate_id,
-            DispositionBuyerPoolCandidate.organization_id == principal.organization_id,
-            DispositionBuyerPoolCandidate.disposition_case_id == case.id,
-            DispositionBuyerPoolEntry.buyer_pool_run_id == latest_run_id,
-        )
-        .with_for_update()
-    )
-    if candidate is None:
-        raise ValueError("The ranked buyer candidate is stale or unavailable.")
-    if candidate.buyer_id is None:
-        raise ValueError("Approve this candidate into the Buyer Network before contact.")
+        if candidate is None:
+            raise ValueError("The buyer candidate is stale or unavailable for this deal.")
+        if candidate.buyer_id is None:
+            raise ValueError("Approve this candidate into the Buyer Network before contact.")
+        if buyer_id is not None and candidate.buyer_id != buyer_id:
+            raise ValueError(
+                "The candidate and canonical buyer references do not match. Refresh and retry."
+            )
+        buyer_id = candidate.buyer_id
+    if buyer_id is None:
+        raise ValueError("Provide a ranked candidate or canonical buyer reference.")
     buyer = db.scalar(
         select(Buyer).where(
-            Buyer.id == candidate.buyer_id,
+            Buyer.id == buyer_id,
             Buyer.organization_id == principal.organization_id,
             Buyer.archived_at.is_(None),
+            Buyer.status != "archived",
         )
     )
     if buyer is None:
         raise ValueError("The canonical buyer record is unavailable.")
+    if candidate is None:
+        candidate = _ensure_case_candidate(db, principal, case, buyer)
+    if _buyer_is_do_not_contact(buyer):
+        raise ValueError(BUYER_DO_NOT_CONTACT_BLOCKER)
+    if _candidate_is_passed(candidate):
+        raise ValueError(
+            "This buyer is explicitly passed. Clear the buyer-pool decision before contact."
+        )
     return case, candidate, buyer
+
+
+def _referenced_buyer_id(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    *,
+    candidate_id: UUID | None,
+    buyer_id: UUID | None,
+) -> UUID:
+    if candidate_id is None:
+        if buyer_id is None:
+            raise ValueError("Provide a ranked candidate or canonical buyer reference.")
+        return buyer_id
+    candidate_buyer_id = db.scalar(
+        select(DispositionBuyerPoolCandidate.buyer_id).where(
+            DispositionBuyerPoolCandidate.id == candidate_id,
+            DispositionBuyerPoolCandidate.organization_id == principal.organization_id,
+            DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+        )
+    )
+    if candidate_buyer_id is None:
+        raise ValueError("The buyer candidate is stale or unavailable for this deal.")
+    if buyer_id is not None and buyer_id != candidate_buyer_id:
+        raise ValueError(
+            "The candidate and canonical buyer references do not match. Refresh and retry."
+        )
+    return candidate_buyer_id
+
+
+def _ensure_case_candidate(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    buyer: Buyer,
+) -> DispositionBuyerPoolCandidate:
+    candidate = _case_candidate(db, principal, case, buyer, lock=True)
+    if candidate is not None:
+        return candidate
+    candidate = DispositionBuyerPoolCandidate(
+        organization_id=principal.organization_id,
+        disposition_case_id=case.id,
+        identity_key=f"buyer:{buyer.id}",
+        source_type="internal",
+        buyer_id=buyer.id,
+        latest_discovery_candidate_id=None,
+        provider=None,
+        external_key=None,
+        display_name=buyer.name,
+        company_name=buyer.company_name,
+        email=buyer.email,
+        phone=buyer.phone,
+        provenance_snapshot={
+            "buyer_id": str(buyer.id),
+            "buyer_source": {
+                "source_key": buyer.source_key,
+                "source_detail": buyer.source_detail,
+                "source_external_key": buyer.source_external_key,
+            },
+            "execution_source": "buyer_network",
+        },
+        overlap_status="none",
+        possible_buyer_id=None,
+        overlap_evidence={"merged_external_candidate_ids": []},
+        decision_status="undecided",
+        lifecycle_stage="discovered",
+        decision_reason=None,
+        lock_version=1,
+    )
+    try:
+        with db.begin_nested():
+            db.add(candidate)
+            db.flush()
+    except IntegrityError:
+        winner = _case_candidate(db, principal, case, buyer, lock=True)
+        if winner is None:
+            raise
+        return winner
+    return candidate
+
+
+def _case_candidate(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    buyer: Buyer,
+    *,
+    lock: bool,
+) -> DispositionBuyerPoolCandidate | None:
+    statement = (
+        select(DispositionBuyerPoolCandidate)
+        .where(
+            DispositionBuyerPoolCandidate.organization_id == principal.organization_id,
+            DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+            DispositionBuyerPoolCandidate.buyer_id == buyer.id,
+        )
+    )
+    return db.scalar(statement.with_for_update() if lock else statement)
 
 
 def _candidate_read(
     db: Session,
     principal: Principal,
-    case: DispositionCase,
     property_record: Property,
-    entry: Any,
+    buyer: Buyer,
+    candidate: DispositionBuyerPoolCandidate | None,
+    entry: Any | None,
 ) -> DispositionExecutionCandidateRead:
-    buyer = db.get(Buyer, entry.buyer_id)
-    if buyer is None:
-        raise ValueError("The canonical buyer record is unavailable.")
+    action_blockers: list[str] = []
+    if _candidate_is_passed(candidate):
+        action_blockers.append(
+            "This buyer is explicitly passed. Clear the buyer-pool decision before contact."
+        )
+    if _buyer_is_do_not_contact(buyer):
+        action_blockers.append(BUYER_DO_NOT_CONTACT_BLOCKER)
     conversation = _buyer_conversation(db, principal, buyer.id)
     contact = db.get(Contact, conversation.contact_id) if conversation is not None else None
     if contact is not None:
@@ -686,21 +946,31 @@ def _candidate_read(
             allowed=False,
             blockers=["The canonical buyer conversation is unavailable."],
         )
-    reference = _purchase_reference(entry.supporting_evidence)
+    if _buyer_is_do_not_contact(buyer):
+        sms_read = _blocked_permission_read(sms_read, BUYER_DO_NOT_CONTACT_BLOCKER)
+        voice_read = _blocked_permission_read(voice_read, BUYER_DO_NOT_CONTACT_BLOCKER)
+    reference = _purchase_reference(entry.supporting_evidence) if entry is not None else None
     return DispositionExecutionCandidateRead(
-        candidate_id=entry.candidate_id,
+        candidate_id=candidate.id if candidate is not None else None,
         buyer_id=buyer.id,
         conversation_id=conversation.id if conversation is not None else None,
         name=buyer.name,
         company_name=buyer.company_name,
         phone=buyer.phone,
         email=buyer.email,
-        rank=int(entry.rank),
-        score_basis_points=entry.score_basis_points,
+        ranking_status="ranked" if entry is not None else "unranked",
+        rank=int(entry.rank) if entry is not None else None,
+        score_basis_points=entry.score_basis_points if entry is not None else None,
         relationship_status=buyer.relationship_status,
         tier=buyer.tier,
         temperature=buyer.temperature,
-        score_explanation=entry.score_explanation,
+        decision_status=candidate.decision_status if candidate is not None else "undecided",
+        lifecycle_stage=candidate.lifecycle_stage if candidate is not None else "discovered",
+        decision_reason=candidate.decision_reason if candidate is not None else None,
+        lock_version=candidate.lock_version if candidate is not None else None,
+        actionable=not action_blockers,
+        action_blockers=action_blockers,
+        score_explanation=entry.score_explanation if entry is not None else [],
         recent_purchase_reference=reference,
         sms=sms_read,
         voice=voice_read,
@@ -710,6 +980,34 @@ def _candidate_read(
             reference,
             sender_name=_sender_name(db, principal.user_id),
         ),
+    )
+
+
+def _candidate_is_passed(candidate: DispositionBuyerPoolCandidate | None) -> bool:
+    return bool(
+        candidate is not None
+        and (
+            candidate.decision_status == "passed"
+            or candidate.lifecycle_stage == "pass"
+        )
+    )
+
+
+def _buyer_is_do_not_contact(buyer: Buyer) -> bool:
+    return (
+        buyer.status == "do_not_contact"
+        or buyer.relationship_status == "do_not_contact"
+    )
+
+
+def _blocked_permission_read(
+    permission: DispositionExecutionPermissionRead,
+    blocker: str,
+) -> DispositionExecutionPermissionRead:
+    return DispositionExecutionPermissionRead(
+        status=permission.status,
+        allowed=False,
+        blockers=list(dict.fromkeys([*permission.blockers, blocker])),
     )
 
 
@@ -750,31 +1048,26 @@ def _candidate_queue_state(
             .order_by(BuyerEngagement.occurred_at.asc(), BuyerEngagement.created_at.asc())
         ).all()
     )
-    latest_by_candidate: dict[UUID, BuyerEngagement] = {}
+    latest_by_buyer: dict[UUID, BuyerEngagement] = {}
     for engagement in engagements:
-        value = (engagement.engagement_metadata or {}).get("candidate_id")
-        try:
-            if value:
-                latest_by_candidate[UUID(str(value))] = engagement
-        except ValueError:
-            continue
+        latest_by_buyer[engagement.buyer_id] = engagement
     now = datetime.now(UTC)
-    for candidate_id, engagement in latest_by_candidate.items():
+    for buyer_id, engagement in latest_by_buyer.items():
         if engagement.status not in {"callback", "no_answer", "voicemail"}:
-            handled.add(candidate_id)
+            handled.add(buyer_id)
             continue
         task = _engagement_follow_up_task(db, engagement)
         if task is not None:
             if task.status == "open" and task.due_at is not None:
-                due_at = _aware_utc(task.due_at)
-                if due_at > now:
-                    deferred.add(candidate_id)
+                task_due_at = _aware_utc(task.due_at)
+                if task_due_at > now:
+                    deferred.add(buyer_id)
             continue
-        due_at = _metadata_datetime(
+        metadata_due_at = _metadata_datetime(
             (engagement.engagement_metadata or {}).get("follow_up_at")
         )
-        if due_at is None or due_at > now:
-            deferred.add(candidate_id)
+        if metadata_due_at is None or metadata_due_at > now:
+            deferred.add(buyer_id)
     return handled, deferred
 
 
@@ -782,7 +1075,7 @@ def _complete_prior_follow_up_task(
     db: Session,
     principal: Principal,
     case: DispositionCase,
-    candidate: DispositionBuyerPoolCandidate,
+    buyer: Buyer,
     *,
     now: datetime,
 ) -> None:
@@ -791,14 +1084,12 @@ def _complete_prior_follow_up_task(
         .where(
             BuyerEngagement.organization_id == principal.organization_id,
             BuyerEngagement.disposition_case_id == case.id,
+            BuyerEngagement.buyer_id == buyer.id,
             BuyerEngagement.engagement_type == "call",
         )
         .order_by(BuyerEngagement.occurred_at.desc(), BuyerEngagement.created_at.desc())
     ).all()
     for engagement in engagements:
-        metadata = engagement.engagement_metadata or {}
-        if metadata.get("candidate_id") != str(candidate.id):
-            continue
         task = _engagement_follow_up_task(db, engagement)
         if task is not None and task.status == "open":
             task.status = "completed"
@@ -870,6 +1161,7 @@ def _log_engagement(
         idempotency_key=idempotency_key,
         engagement_metadata={
             "candidate_id": str(candidate.id),
+            "buyer_id": str(buyer.id),
             **(metadata or {}),
         },
     )
@@ -903,9 +1195,19 @@ def _engagement_by_idempotency(
 
 
 def _request_fingerprint(
-    payload: DispositionExecutionOutcomeCreate | DispositionShowingCreate,
+    payload: (
+        DispositionExecutionSmsCreate
+        | DispositionExecutionOutcomeCreate
+        | DispositionShowingCreate
+    ),
+    *,
+    buyer_id: UUID,
 ) -> str:
-    canonical = payload.model_dump(mode="json", exclude={"idempotency_key"})
+    canonical = payload.model_dump(
+        mode="json",
+        exclude={"idempotency_key", "candidate_id", "buyer_id"},
+    )
+    canonical["buyer_id"] = str(buyer_id)
     encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256(encoded).hexdigest()
 
@@ -969,7 +1271,12 @@ def _showing_reads(db: Session, case: DispositionCase) -> list[DispositionShowin
     buyer_ids = {item.buyer_id for item in showings}
     buyers = {
         buyer.id: buyer
-        for buyer in db.scalars(select(Buyer).where(Buyer.id.in_(buyer_ids))).all()
+        for buyer in db.scalars(
+            select(Buyer).where(
+                Buyer.id.in_(buyer_ids),
+                Buyer.organization_id == case.organization_id,
+            )
+        ).all()
     } if buyer_ids else {}
     result: list[DispositionShowingRead] = []
     for showing in showings:
@@ -998,8 +1305,8 @@ def _showing_reads(db: Session, case: DispositionCase) -> list[DispositionShowin
                     if showing.buyer_id in buyers
                     else "Buyer"
                 ),
-                status=status,
-                access_status=access_status,
+                status=cast(ShowingStatus, status),
+                access_status=cast(ShowingAccessStatus, access_status),
                 scheduled_at=showing.scheduled_at,
                 completed_at=showing.completed_at,
                 follow_up_task_id=follow_up_task_id,

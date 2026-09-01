@@ -47,6 +47,7 @@ from app.services.buyers import (
     normalize_phone,
     normalize_source_key,
 )
+from app.services.disposition_state import ACTIVE_DISPOSITION_CASE_STATUSES
 from app.services.land_comparable_evidence import land_use_group
 
 MATCHER_VERSION = "stonegate_buyer_pool_v2"
@@ -68,6 +69,33 @@ LAND_MATCH_FACT_KEYS = {
 }
 
 
+def buyer_is_persistently_passed(
+    db: Session,
+    *,
+    organization_id: UUID,
+    disposition_case_id: UUID,
+    buyer_id: UUID,
+) -> bool:
+    """Honor a deal-specific Pass until an operator explicitly clears it."""
+
+    return (
+        db.scalar(
+            select(DispositionBuyerPoolCandidate.id)
+            .where(
+                DispositionBuyerPoolCandidate.organization_id == organization_id,
+                DispositionBuyerPoolCandidate.disposition_case_id == disposition_case_id,
+                DispositionBuyerPoolCandidate.buyer_id == buyer_id,
+                or_(
+                    DispositionBuyerPoolCandidate.decision_status == "passed",
+                    DispositionBuyerPoolCandidate.lifecycle_stage == "pass",
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def generate_buyer_pool_run(
     db: Session,
     principal: Principal,
@@ -84,9 +112,6 @@ def generate_buyer_pool_run(
     )
     if case is None:
         raise ValueError("Disposition case not found.")
-    if case.package_status != "approved":
-        raise ValueError("Approve the deal package before matching buyers.")
-
     lead = db.get(Lead, case.lead_id)
     property_record = db.get(Property, case.property_id)
     if lead is None or property_record is None:
@@ -284,7 +309,6 @@ def refresh_buyer_pool(
 ) -> bool:
     """Refresh the shared buyer pool without routing Land through legacy House matching."""
     from app.services import dispositions
-    from app.services.disposition_packages import require_current_approved_version
 
     case = dispositions.scoped_case(db, principal, case_id)
     if case is None:
@@ -299,18 +323,10 @@ def refresh_buyer_pool(
         db,
         principal,
         case_id,
-        allowed_statuses={"buyer_matching"},
+        allowed_statuses=set(ACTIVE_DISPOSITION_CASE_STATUSES),
     )
     if locked_case is None:
         return False
-    if locked_case.package_status != "approved":
-        raise ValueError("Approve the deal package before matching buyers.")
-    require_current_approved_version(
-        db,
-        principal,
-        locked_case,
-        action="matching Land buyers",
-    )
     generate_buyer_pool_run(
         db,
         principal,
@@ -330,6 +346,7 @@ def read_buyer_pool(
     search: str = "",
     page: int = 1,
     page_size: int = 50,
+    include_all: bool = False,
 ) -> BuyerPoolRead | None:
     case = db.scalar(
         select(DispositionCase).where(
@@ -419,7 +436,7 @@ def read_buyer_pool(
 
     total = len(filtered)
     start = (page - 1) * page_size
-    selected = filtered[start : start + page_size]
+    selected = filtered if include_all else filtered[start : start + page_size]
     purchase_evidence = _purchase_evidence_by_candidate(
         db,
         principal,
@@ -431,7 +448,7 @@ def read_buyer_pool(
         run=_run_read(run),
         total=total,
         page=page,
-        page_size=page_size,
+        page_size=max(total, 1) if include_all else page_size,
         entries=[
             _entry_read(
                 db,
@@ -497,7 +514,11 @@ def update_candidate_decision(
     )
     if candidate is None:
         raise ValueError("Buyer-pool candidate not found.")
-    _require_latest_run_candidate(db, principal, case_id, candidate.id)
+    clearing_existing_pass = payload.decision_status == "undecided" and (
+        candidate.decision_status == "passed" or candidate.lifecycle_stage == "pass"
+    )
+    if not clearing_existing_pass:
+        _require_latest_run_candidate(db, principal, case_id, candidate.id)
     if candidate.lock_version != payload.expected_version:
         raise ValueError(
             "This buyer-pool decision changed in another session. Refresh and try again."
@@ -738,8 +759,8 @@ def convert_external_candidate(
         candidate.buyer_id = buyer.id
         candidate.source_type = "internal"
         # Approval into the canonical network must not erase a human shortlist.
-        # The current external entry remains review-required, so release stays
-        # blocked until a refreshed run proves this buyer is currently eligible.
+        # A refreshed run can improve ranking context, but shortlist/readiness
+        # state is advisory and is not outreach-release authority.
         candidate.decision_status = "shortlisted" if preserve_shortlist else "undecided"
         candidate.lifecycle_stage = "shortlisted" if preserve_shortlist else "needs_review"
         candidate.decision_reason = payload.reason

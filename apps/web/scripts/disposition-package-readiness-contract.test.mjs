@@ -46,18 +46,33 @@ test("externally prepared packet PDFs remain exact governed package versions", (
   assert.match(packageWorkspace, /externalArtifactScanIssue/);
   assert.match(packageWorkspace, /latestArtifactScanIssue/);
   assert.match(packageWorkspace, /PDF scan:/);
-  assert.match(packageWorkspace, /hasApprovalBlockers/);
+  assert.doesNotMatch(packageWorkspace, /hasApprovalBlockers/);
+  assert.match(packageWorkspace, /shoppingArtifactIssue/);
+  assert.match(packageWorkspace, /shoppingArtifactAvailable/);
 });
 
 test("Land cases use exact external packets and hide residential-only disposition tools", () => {
   assert.match(api, /asset_class: "house" \| "land"/);
   assert.match(dispositionWorkspace, /selected\.asset_class === "land"/);
   assert.match(dispositionWorkspace, /houseOnlyTabs/);
-  assert.match(dispositionWorkspace, /Land uses the same Package, Buyer pool, and closing record/);
+  assert.match(dispositionWorkspace, /"provider", "reconciliation"/);
+  assert.match(dispositionWorkspace, /Land uses Package and Buyer pool in this release/);
+  assert.match(dispositionWorkspace, /buyer selection, funding, closing protection, reconciliation/);
+  assert.doesNotMatch(dispositionWorkspace, /Land uses the same Package, Buyer pool, and closing record/);
   assert.match(dispositionWorkspace, /assetClass=\{selected\.asset_class\}/);
   assert.match(packageWorkspace, /assetClass === "land"/);
   assert.match(packageWorkspace, /Upload the completed Land investor packet/);
-  assert.match(packageWorkspace, /use the Buyer pool tab for asset-aware matching/);
+  assert.match(packageWorkspace, /Buyer pool is available now for asset-aware matching, independently of package approval/);
+  assert.doesNotMatch(packageWorkspace, /Approve the exact uploaded Land packet, then use the Buyer pool/);
+});
+
+test("share-link history describes any source drift without inventing a newer package", () => {
+  assert.match(packageWorkspace, /link\.is_preliminary === true \|\| link\.is_current_now === false/);
+  assert.match(packageWorkspace, /shareLinkIsPreliminary\(issued\)/);
+  assert.match(packageWorkspace, /shareLinkIsPreliminary\(issuedLink\)/);
+  assert.match(packageWorkspace, /shareLinkIsPreliminary\(link\)/);
+  assert.match(packageWorkspace, /package or source facts changed since issue/);
+  assert.doesNotMatch(packageWorkspace, /newer package available/);
 });
 
 test("package starts with equal Stonegate-build and exact-PDF choices", () => {
@@ -100,28 +115,36 @@ test("private economics stay visibly and structurally separated", () => {
   assert.match(setup, /Internal target only/);
   assert.match(api, /can_view_private_economics: boolean/);
   assert.match(setupPage, /canViewPrivateEconomics=\{dispositionResult\.dispositions\.can_view_private_economics\}/);
-  assert.match(setup, /if \(!canViewPrivateEconomics\)/);
-  assert.match(setup, /Private deal economics are restricted/);
+  assert.doesNotMatch(setup, /if \(!canViewPrivateEconomics\)/);
+  assert.match(setup, /canViewPrivateEconomics \? \{/);
+  assert.match(setup, /Private economics stay hidden for your role/);
+  assert.match(setup, /contract-derived starting point/);
+  assert.doesNotMatch(setup, /name="asking_price"[^>]*required/);
+  assert.doesNotMatch(setup, /name="minimum_price"[^>]*required/);
 });
 
-test("approval and release controls are accessible and version-gated", () => {
+test("approval is version-governed while shopping and preparation remain advisory", () => {
   assert.match(packageWorkspace, /<dialog aria-labelledby="approve-package-title"/);
   assert.match(packageWorkspace, /onCancel=/);
   assert.match(packageWorkspace, /approvalReasonRef\.current\?\.focus/);
   assert.match(packageWorkspace, /checklistRef\.current\?\.focus/);
   assert.match(packageWorkspace, /data\.can_approve/);
-  assert.match(packageWorkspace, /!latestVersion\?\.is_current/);
+  assert.doesNotMatch(packageWorkspace, /!latestVersion\?\.is_current/);
   assert.doesNotMatch(packageWorkspace, /readiness\?\.status === "stale"/);
-  assert.match(packageWorkspace, /Draft - approval required/);
-  assert.match(packageWorkspace, /disabled=\{!currentApprovedVersion\}/);
+  assert.match(packageWorkspace, /shoppingVersion = currentApprovedVersion \? approvedVersion : latestVersion/);
+  assert.match(packageWorkspace, /Preliminary - checklist incomplete/);
+  assert.doesNotMatch(packageWorkspace, /disabled=\{!currentApprovedVersion\}/);
   assert.match(packageWorkspace, /Prepare recipient pool/);
   assert.doesNotMatch(packageWorkspace, /Approve simulated release/);
   assert.match(packageWorkspace, /currentApprovedVersion/);
   assert.match(packageWorkspace, /version\.pdf_file_name \|\| version\.pdf_sha256/);
   assert.match(packageWorkspace, /version\.status === "approved" \|\| canEditDeals \|\| data\.can_approve/);
   assert.match(packageWorkspace, /Draft PDF restricted/);
-  assert.match(packageWorkspace, /Buyer ranking and recipient preparation require/);
+  assert.match(packageWorkspace, /Ranking and recipient preparation stay available while checklist work continues/);
+  assert.match(packageWorkspace, /disabled=\{!canEditDeals \|\| busyAction !== null\}[\s\S]*Refresh buyer ranking/);
+  assert.match(packageWorkspace, /disabled=\{!canEditDeals \|\| busyAction !== null\}[\s\S]*Prepare recipient pool/);
   assert.match(packageWorkspace, /No buyer communication is sent/);
+  assert.match(packageWorkspace, /Review or approve it when useful; shopping and outreach may continue with its Preliminary label/);
   assert.match(packageStyles, /min-height: 44px/);
   assert.match(packageStyles, /@media \(max-width: 520px\)/);
   assert.match(packageStyles, /@media \(prefers-reduced-motion: reduce\)/);

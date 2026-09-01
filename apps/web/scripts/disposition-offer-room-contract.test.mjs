@@ -14,7 +14,7 @@ const transaction = readFileSync(resolve(appRoot, "os/transactions/transaction-w
 
 test("DS7 replaces the basic offer list with one canonical Offer Room", () => {
   assert.match(disposition, /<DispositionOfferRoom/);
-  assert.match(disposition, /item === "offers" \? "Offer Room"/);
+  assert.match(disposition, /tab === "offers"\) return "Offer Room"/);
   assert.doesNotMatch(disposition, /<h4>Buyer offers<\/h4>/);
   assert.match(deals, /"offers"/);
   assert.match(api, /export type DispositionOfferRoomWorkspace/);
@@ -55,28 +55,50 @@ test("normalized offers compare execution terms and explain risk evidence", () =
   assert.match(room, /Blank revision fields keep their saved values/);
 });
 
-test("selection and replacement remain reason-required human actions", () => {
-  assert.match(room, /Human-approved primary/);
+test("selection and replacement remain reason-required human actions with advisory warnings", () => {
+  assert.match(room, /Human-approved buyer coverage/);
   assert.match(room, /Primary offer/);
   assert.match(room, /Backup offer/);
   assert.match(room, /selection_reason/);
-  assert.match(room, /Activate backup buyer/);
+  assert.match(room, /Activate replacement buyer/);
   assert.match(room, /replacement_reason/);
   assert.match(room, /Primary and backup coverage must use offers from different buyers/);
   assert.match(room, /Unselected viable offers stay available/);
   assert.match(room, /eligibility_override_reason/);
-  assert.match(room, /approved minimum price cannot be overridden/);
-  assert.match(room, /Approve new coverage version/);
+  assert.match(room, /Warnings inform the decision without disabling selection/);
+  assert.doesNotMatch(room, /approved minimum price cannot be overridden/i);
+  assert.match(room, /Approve new selection version/);
   assert.match(room, /Earlier selections remain in history/);
-  assert.match(room, /Coverage approval is stale/);
-  assert.match(room, /Live coverage blockers/);
-  assert.match(room, /Reapprove changed coverage/);
-  assert.match(room, /keep the same primary and backup/);
+  assert.match(room, /Selection approval is stale/);
+  assert.match(room, /Live selection warnings/);
+  assert.match(room, /Reapprove changed selection/);
+  assert.match(room, /keep the same primary, add or change a backup, or preserve a primary-only decision/);
   assert.match(room, /expected_offer_lock_versions/);
   assert.match(room, /expected_selection_lock_version/);
   assert.match(room, /canViewPrivateEconomics/);
   assert.match(room, /canEditDeals/);
   assert.match(room, /canApproveBuyerSelection/);
+  assert.match(room, /backup_offer_ids: backupOfferIds/);
+  assert.match(room, /const backupOfferIds = backupOffer \? \[backupOffer\.id\] : \[\]/);
+  assert.match(room, /Missing backup coverage remains visible as a warning/);
+  assert.doesNotMatch(room, /acknowledge_no_backup|acknowledge no backup/i);
+  assert.match(room, /selectableReplacementOptions = data\.replacement_options\.filter\(\(item\) => item\.eligible\)/);
+  assert.match(room, /selectableReplacementOptions\.map\(\(item\) => <option/);
+  assert.match(api, /offer_lock_version: number/);
+  assert.match(room, /expected_replacement_offer_lock_version: replacementOption\?\.offer_lock_version \?\? null/);
+  assert.match(room, /even when it was never a backup/);
+  const replacementFlow = room.slice(room.indexOf("async function replacePrimary"), room.indexOf("async function recordOutcome"));
+  assert.match(replacementFlow, /replacementOption = selectedReplacementOfferId[\s\S]*data\.replacement_options\.find/);
+  assert.doesNotMatch(replacementFlow, /currentBackups|backup_rank/);
+  assert.match(replacementFlow, /Replacement buyer activated and the prior selection preserved/);
+  assert.match(replacementFlow, /replacement_offer_id: replacementOption\?\.offer_id \?\? null/);
+  assert.match(replacementFlow, /expected_replacement_offer_lock_version: replacementOption\?\.offer_lock_version \?\? null/);
+  assert.match(replacementFlow, /Primary outcome recorded and buyer shopping reopened\. No replacement buyer was selected/);
+  assert.match(room, /No replacement now - record outcome and reopen shopping/);
+  assert.match(room, /confirm_no_replacement/);
+  assert.match(room, /another offer is not required/);
+  assert.match(room, /Record outcome and reopen shopping/);
+  assert.doesNotMatch(room, /!data\.current_selection \|\| !selectableReplacementOptions\.length/);
   assert.match(dealsPage, /dispositions:approve_buyer_selection/);
   assert.doesNotMatch(room, /auto.?select/i);
 });
@@ -94,13 +116,15 @@ test("closing protection keeps checklist, deadlines, alerts, and outcomes operat
     "Negotiation history",
   ]) assert.match(room, new RegExp(label));
   assert.match(room, /isCheckpointOverdue\(deadline\)/);
+  assert.match(room, /choose any viable recorded replacement, or record the primary outcome and reopen shopping/);
+  assert.doesNotMatch(room, /activate a ranked backup/);
   assert.match(room, /Complete milestone/);
   assert.match(room, /Record deposit/);
   assert.match(room, /Waive deposit/);
   assert.match(room, /minLength=\{10\}/);
   assert.match(room, /evidenceNote\.trim\(\)\.length >= 10/);
   assert.match(room, /canApproveWaiver/);
-  assert.match(room, /Manager approval is required to waive a deposit/);
+  assert.match(room, /current role does not include deposit-waiver approval/);
   assert.match(room, /confirmation_note/);
   assert.match(room, /decision: status === "completed" \? "received" : "waived"/);
   assert.match(room, /data-status="waived"|status === "waived"/);
@@ -118,6 +142,24 @@ test("closing protection keeps checklist, deadlines, alerts, and outcomes operat
   assert.match(room, /status: "completed"/);
   assert.match(room, /cause_category/);
   assert.match(room, /evidence: \{\}/);
+  assert.match(room, /Whole deal \(independent of buyer selection\)/);
+  assert.match(room, /buyer-specific deadline at any point/);
+  assert.match(room, /Buyer selection is not required/);
+  assert.match(room, /deadline\.buyer_name \?\? buyerName \?\? "Whole deal"/);
+  const milestoneFlow = room.slice(
+    room.indexOf("async function createCheckpoint"),
+    room.indexOf("async function completeCheckpoint"),
+  );
+  assert.match(milestoneFlow, /const relatedOfferId/);
+  assert.match(milestoneFlow, /currentSelectionOfferIds\.has\(relatedOfferId\)/);
+  assert.match(milestoneFlow, /selection_id: bindsToCurrentSelection/);
+  const milestoneForm = room.slice(
+    room.indexOf("<h5>Add closing milestone</h5>"),
+    room.indexOf("<h5>Record outcome</h5>"),
+  );
+  assert.match(milestoneForm, /Whole-deal milestones stay independent of buyer coverage/);
+  assert.match(milestoneForm, /any other recorded offer can still have its own buyer-specific milestone/);
+  assert.doesNotMatch(milestoneForm, /!data\.current_selection/);
 });
 
 test("the Offer Room gives Alex one evidence-backed buyer-to-closing path", () => {

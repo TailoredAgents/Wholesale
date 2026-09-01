@@ -16,8 +16,8 @@ test("DS6 outreach lives between the canonical buyer pool and offers tabs", () =
   assert.match(deals, /"package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
   assert.match(disposition, /\["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"\]/);
   assert.match(disposition, /<DispositionOutreachWorkspace/);
-  assert.match(disposition, /item === "buyers" \? "Buyer pool"/);
-  assert.match(disposition, /item === "offers" \? "Offer Room"/);
+  assert.match(disposition, /tab === "buyers"\) return "Buyer pool"/);
+  assert.match(disposition, /tab === "offers"\) return "Offer Room"/);
   assert.match(disposition, /aria-label="Disposition deal sections"/);
 });
 
@@ -32,12 +32,53 @@ test("workspace enforces supervised preparation, exact approval, and a hard cap"
   assert.match(outreach, /Approve exact revision/);
   assert.match(outreach, /I reviewed every recipient, destination, sender, rendered message/);
   assert.match(outreach, /Private seller economics are never available here/);
+  assert.match(outreach, /workspace\.package_is_preliminary/);
+  assert.match(outreach, /workspace\.package_status !== "approved"/);
+  assert.match(outreach, /Checklist gaps do not stop drafting or shopping/);
+  assert.match(outreach, /This revision permanently records Preliminary source provenance/);
+  assert.match(outreach, /<dt>Package PDF<\/dt>/);
+  assert.match(outreach, /property package/);
+  assert.doesNotMatch(outreach, /approved package and reply|Approved PDF/);
+});
+
+test("exact preview and history separate frozen package provenance from current facts", () => {
+  assert.match(api, /package_was_current_at_prepare\?: boolean/);
+  assert.match(api, /package_is_current_now\?: boolean/);
+  assert.match(outreach, /revision\.package_is_preliminary === true/);
+  assert.match(outreach, /revision\.package_was_current_at_prepare === false/);
+  assert.match(outreach, /revision\.package_is_current_now === false/);
+  assert.match(outreach, /<dt>Frozen package status<\/dt>/);
+  assert.match(outreach, /<dt>Revision label<\/dt><dd>\{revisionIsPreliminary\(latest\)/);
+  assert.equal((outreach.match(/<dt>Revision label<\/dt>/g) ?? []).length, 1);
+  assert.match(outreach, /<dt>At preparation<\/dt><dd>\{currentAtPrepareLabel\(latest\)/);
+  assert.match(outreach, /<dt>Current now<\/dt><dd>\{currentNowLabel\(latest\)/);
+  assert.match(outreach, /Frozen package \{labelize\(revision\.package_status \?\? "approved"\)\}/);
+  assert.match(outreach, /\{currentAtPrepareLabel\(revision\)\} - \{currentNowLabel\(revision\)\}/);
+  assert.match(outreach, /Package or source facts changed since preparation/);
+});
+
+test("recipient attachment history preserves the conservative Preliminary delivery label", () => {
+  assert.match(api, /export type DispositionOutreachPackageAttachment/);
+  assert.match(api, /recipient_label_policy: string/);
+  assert.match(api, /package_attachment\?: DispositionOutreachPackageAttachment/);
+  assert.match(api, /sender_snapshot: DispositionOutreachSenderSnapshot/);
+  assert.match(outreach, /attachment\.recipient_label_policy === "conservative_preliminary_v1"/);
+  assert.match(outreach, /attachment\.file_name\.toUpperCase\(\)\.startsWith\("PRELIMINARY-"\)/);
+  assert.match(outreach, /attachment\.is_preliminary \|\| usesConservativeAttachmentLabel\(attachment\)/);
+  assert.match(outreach, /<dt>Recipient attachment<\/dt>/);
+  assert.match(outreach, /<dt>Attachment label<\/dt>/);
+  assert.match(outreach, /Recipient policy: Conservative Preliminary/);
+  assert.match(outreach, /even when its frozen source was approved and current at preparation/);
+  assert.match(outreach, /Recipient attachment \{attachment\.file_name\} - \{usesConservativeAttachmentLabel\(attachment\) \? "Conservative Preliminary policy"/);
+  assert.doesNotMatch(outreach, /Approved attachment/i);
 });
 
 test("live controls require scoped outreach and bulk communication permissions", () => {
   assert.match(page, /dispositions:manage_outreach/);
   assert.match(page, /dispositions:approve_outreach/);
+  assert.match(page, /dispositions:send_bulk_outreach/);
   assert.match(page, /communications:send_bulk/);
+  assert.match(page, /permissions\.includes\("dispositions:send_bulk_outreach"\)[\s\S]*\|\| profile\?\.permissions\.includes\("communications:send_bulk"\)/);
   assert.match(outreach, /!canApprove \|\| !canSendBulk/);
   for (const label of [
     "Release approved outreach",
@@ -47,7 +88,7 @@ test("live controls require scoped outreach and bulk communication permissions",
     "Retry safe failures",
     "Refresh status",
   ]) assert.match(outreach, new RegExp(label));
-  assert.match(outreach, /bulk-communications permission/);
+  assert.match(outreach, /Disposition bulk-release permission/);
 });
 
 test("buyer and outreach authority both gate the tab, forced URL, and workspace mount", () => {

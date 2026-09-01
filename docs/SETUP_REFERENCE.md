@@ -526,8 +526,9 @@ Test each approved alias:
 17. one inbound message whose validated route survives a later attachment/provider failure
 18. automatic and manual denial of a standard-visibility destination for a restricted alias
 19. one controlled House disposition email using an active approved alias, the exact approved
-    outreach copy, and the frozen investor PDF; confirm provider state and the buyer's reply in the
-    same Buyer Inbox conversation without a duplicate send
+    outreach copy, and its exact frozen investor PDF; confirm the revision retains the package's
+    **Preliminary** or approved state, provider state, and the buyer's reply in the same Buyer Inbox
+    conversation without a duplicate send
 
 These checks do not complete external mailbox acceptance by themselves. Confirm real sender/reply
 behavior and either activate malware scanning or approve a documented limited safe-attachment
@@ -676,12 +677,14 @@ Communications** configure:
 3. The inbound Resend and Twilio webhook routes already documented above so delivery changes,
    opt-outs, and replies can reconcile.
 
-The House Outreach workspace remains blocked until the current approved package and frozen PDF,
-prepared recipient pool, selected sender, and recipient paths are available. Email/SMS selection is
-still subject to current buyer status, destination, suppression, and SMS permission at draft,
-release, and delivery time. The implementation hard-caps each revision at 25 recipient-channel
-deliveries. It does not enable InvestorLift or Land outreach and it does not place private economics
-in the message template.
+The House Outreach workspace remains available while setup, readiness, package-approval, proof, or
+backup checklist items are open. A package-backed revision still binds one exact usable frozen PDF
+and records whether that artifact was **Preliminary** or approved; approval is not a prerequisite
+for preparing or releasing the revision. The operator explicitly chooses the recipient paths and
+sender. Release and delivery continue to enforce organization/role access, destination and sender
+availability, STOP/Do Not Contact/suppression state, channel permission, and provider availability.
+The implementation hard-caps each revision at 25 recipient-channel deliveries. It does not enable
+InvestorLift or Land outreach and it does not place private economics in the message template.
 
 Repository and automated tests do not establish provider acceptance. Before broad use, complete the
 controlled email/SMS acceptance above with authorized test recipients, confirm pause and

@@ -117,6 +117,89 @@ def test_bootstrap_refreshes_roles_for_legacy_organizations(db_session: Session)
     assert restored_count == 3
 
 
+def test_bootstrap_replaces_only_builtin_manager_global_bulk_authority(
+    db_session: Session,
+) -> None:
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Legacy Dispositions Roles",
+        admin_email="legacy-dispositions-owner@example.com",
+        admin_name="Legacy Dispositions Owner",
+    )
+    roles = {
+        role.key: role
+        for role in db_session.scalars(
+            select(Role).where(Role.organization_id == foundation.organization.id)
+        ).all()
+    }
+    permissions = {
+        permission.key: permission
+        for permission in db_session.scalars(
+            select(Permission).where(
+                Permission.key.in_(
+                    {
+                        PermissionKeys.SEND_BULK_COMMUNICATIONS,
+                        PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH,
+                    }
+                )
+            )
+        ).all()
+    }
+    manager = roles["disposition_manager"]
+    marketing = roles["marketing_manager"]
+    global_bulk = permissions[PermissionKeys.SEND_BULK_COMMUNICATIONS]
+    narrow_bulk = permissions[PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH]
+    custom_role = Role(
+        organization_id=foundation.organization.id,
+        key="custom_disposition_partner",
+        name="Custom disposition partner",
+    )
+    db_session.add(custom_role)
+    db_session.flush()
+    db_session.execute(
+        delete(RolePermission).where(
+            RolePermission.organization_id == foundation.organization.id,
+            RolePermission.role_id == manager.id,
+            RolePermission.permission_id == narrow_bulk.id,
+        )
+    )
+    db_session.add_all(
+        [
+            RolePermission(
+                organization_id=foundation.organization.id,
+                role_id=manager.id,
+                permission_id=global_bulk.id,
+            ),
+            RolePermission(
+                organization_id=foundation.organization.id,
+                role_id=custom_role.id,
+                permission_id=global_bulk.id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    bootstrap_foundation(
+        db_session,
+        organization_name="Legacy Dispositions Roles",
+        admin_email="legacy-dispositions-owner@example.com",
+        admin_name="Legacy Dispositions Owner",
+    )
+
+    permission_pairs = {
+        (role_id, permission_id)
+        for role_id, permission_id in db_session.execute(
+            select(RolePermission.role_id, RolePermission.permission_id).where(
+                RolePermission.organization_id == foundation.organization.id
+            )
+        ).all()
+    }
+    assert (manager.id, global_bulk.id) not in permission_pairs
+    assert (manager.id, narrow_bulk.id) in permission_pairs
+    assert (custom_role.id, global_bulk.id) in permission_pairs
+    assert (marketing.id, global_bulk.id) in permission_pairs
+
+
 def test_executed_contract_catchup_permission_is_narrowly_assigned() -> None:
     role_permissions = {role.key: set(role.permission_keys) for role in ROLES}
 

@@ -5964,6 +5964,7 @@ class DispositionBuyerSelection(UuidPrimaryKeyMixin, TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     reason: Mapped[str] = mapped_column(String(1000), nullable=False)
     evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    advisory_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -6162,12 +6163,14 @@ class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     deal_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("deals.id"))
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"))
-    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
-    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("compensation_plan_versions.id")
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
     )
-    disposition_operating_mode_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("disposition_operating_modes.id")
+    compensation_plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id"), nullable=True
+    )
+    disposition_operating_mode_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_operating_modes.id"), nullable=True
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     strategy: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -6309,6 +6312,8 @@ class DispositionPackageShareLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
     token_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     token_hint: Mapped[str] = mapped_column(String(12), nullable=False)
     artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_status_at_issue: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    was_current_at_issue: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     lock_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
@@ -6494,6 +6499,8 @@ class DispositionProviderListingRevision(UuidPrimaryKeyMixin, TimestampMixin, Ba
     public_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     public_payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     package_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_status_at_prepare: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    package_was_current_at_prepare: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     approval_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -7138,6 +7145,8 @@ class DispositionOutreachRevision(UuidPrimaryKeyMixin, TimestampMixin, Base):
     approval_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     package_source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     artifact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_status_at_prepare: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    package_was_current_at_prepare: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     email_sender_alias_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("email_sender_aliases.id", ondelete="SET NULL"), nullable=True
     )

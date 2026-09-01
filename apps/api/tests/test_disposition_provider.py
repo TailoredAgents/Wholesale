@@ -17,10 +17,12 @@ from app.models.foundation import (
     Buyer,
     BuyerOffer,
     DispositionBuyerSelection,
+    DispositionCase,
     DispositionPackageVersion,
     DispositionProviderEvidence,
     DispositionProviderSourceLink,
     DispositionProviderSyncRun,
+    Transaction,
 )
 from app.services.bootstrap import bootstrap_foundation
 from tests.test_dispositions import (
@@ -41,21 +43,28 @@ def test_investorlift_adapter_is_manual_only_and_refuses_unverified_transport() 
     assert capabilities.api_contract_verified is False
     assert capabilities.live_transport_enabled is False
     assert capabilities.credential_required is False
-    assert "approved_package_export" in capabilities.supported_manual_capabilities
+    assert "exact_package_export" in capabilities.supported_manual_capabilities
     assert "property_publish_api" in capabilities.unverified_capabilities
     assert capabilities.blockers
 
     payload = adapter.build_public_listing_payload(
         package_version=3,
-        package_approved_at="2026-08-28T12:00:00+00:00",
+        package_status="draft",
+        package_was_current_at_prepare=False,
+        package_preliminary=True,
+        package_snapshot_at="2026-08-28T12:00:00+00:00",
         package_snapshot={"property": {"city": "Atlanta", "state": "GA"}},
     )
     assert payload == adapter.build_public_listing_payload(
         package_version=3,
-        package_approved_at="2026-08-28T12:00:00+00:00",
+        package_status="draft",
+        package_was_current_at_prepare=False,
+        package_preliminary=True,
+        package_snapshot_at="2026-08-28T12:00:00+00:00",
         package_snapshot={"property": {"city": "Atlanta", "state": "GA"}},
     )
     assert payload["handoff_mode"] == "manual"
+    assert payload["package"]["preliminary_at_prepare"] is True
 
     with pytest.raises(ProviderTransportUnavailableError, match="direct API contract"):
         adapter.publish(payload)
@@ -220,7 +229,7 @@ def test_provider_release_requires_current_approved_package_and_is_public_only(
         json={"expected_latest_revision": 0},
     )
     assert blocked.status_code == 422
-    assert "approved" in blocked.json()["detail"].lower()
+    assert "artifact" in blocked.json()["detail"].lower()
 
     approved_package = approve_disposition_package(client, case_id)
     assert approved_package.status_code == 200, approved_package.text
@@ -300,6 +309,55 @@ def test_provider_release_requires_current_approved_package_and_is_public_only(
     ]
     assert bundle_payload["public_payload"] == released_revision["public_payload"]
     assert all(value not in bundle.text for value in private_values.values())
+
+
+def test_provider_bundle_reports_stale_after_prepare_as_preliminary_without_mutating_payload(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    case_id = create_approved_disposition_case(client, transaction_id)
+    prepared = _prepare_provider_revision(client, case_id)
+    approved = _approve_provider_revision(client, case_id, prepared)
+    revision = approved["revisions"][0]
+    assert revision["package_status"] == "approved"
+    assert revision["package_was_current_at_prepare"] is True
+    assert revision["package_is_current_now"] is True
+    assert revision["package_is_preliminary"] is False
+    frozen_payload = revision["public_payload"]
+    assert frozen_payload["package"]["status_at_prepare"] == "approved"
+    assert frozen_payload["package"]["was_current_at_prepare"] is True
+    assert frozen_payload["package"]["preliminary_at_prepare"] is False
+
+    disposition_case = db_session.get(DispositionCase, UUID(case_id))
+    assert disposition_case is not None
+    transaction = db_session.get(Transaction, disposition_case.transaction_id)
+    assert transaction is not None
+    transaction.purchase_price_cents += 1
+    db_session.commit()
+
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/provider",
+        headers=HEADERS,
+    )
+    assert workspace.status_code == 200, workspace.text
+    stale_revision = workspace.json()["revisions"][0]
+    assert stale_revision["public_payload"] == frozen_payload
+    assert stale_revision["package_was_current_at_prepare"] is True
+    assert stale_revision["package_is_current_now"] is False
+    assert stale_revision["package_is_preliminary"] is True
+    bundle = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/provider/listing-revisions/"
+        f"{revision['id']}/bundle",
+        headers=HEADERS,
+    )
+    assert bundle.status_code == 200, bundle.text
+    assert "PRELIMINARY-" in bundle.headers["content-disposition"]
+    assert bundle.json()["manifest"]["package_was_current_at_prepare"] is True
+    assert bundle.json()["manifest"]["package_is_current_now"] is False
+    assert bundle.json()["manifest"]["package_is_preliminary"] is True
+    assert bundle.json()["public_payload"] == frozen_payload
 
 
 def test_manual_link_and_external_event_replays_are_idempotent_and_conflicts_are_rejected(
@@ -382,7 +440,7 @@ def test_manual_link_and_external_event_replays_are_idempotent_and_conflicts_are
     assert "private field" in private_metadata.json()["detail"].lower()
 
 
-def test_new_provider_revision_supersedes_every_prior_release_and_blocks_stale_actions(
+def test_new_provider_revision_supersedes_prior_release_but_preserves_exact_exports(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -432,8 +490,12 @@ def test_new_provider_revision_supersedes_every_prior_release_and_blocks_stale_a
         ),
         headers=HEADERS,
     )
-    assert stale_bundle.status_code == 422
-    assert "approval" in stale_bundle.json()["detail"].lower()
+    assert stale_bundle.status_code == 200, stale_bundle.text
+    assert (
+        stale_bundle.json()["manifest"]["listing_revision_id"]
+        == first_revision["id"]
+    )
+    assert stale_bundle.json()["public_payload"] == first_revision["public_payload"]
 
     stale_link = client.post(
         f"/api/v1/dispositions/cases/{case_id}/provider/manual-link",
@@ -447,8 +509,11 @@ def test_new_provider_revision_supersedes_every_prior_release_and_blocks_stale_a
             "note": "A superseded release must not be linked.",
         },
     )
-    assert stale_link.status_code == 422
-    assert "approved" in stale_link.json()["detail"].lower()
+    assert stale_link.status_code == 201, stale_link.text
+    assert (
+        stale_link.json()["source_links"][0]["listing_revision_id"]
+        == first_revision["id"]
+    )
 
     second_approved = _approve_provider_revision(client, case_id, second_draft)
     current_revision = second_approved["revisions"][0]
@@ -560,10 +625,10 @@ def test_provider_routes_enforce_scoped_rbac_and_tenant_isolation(
         json={
             "expected_lock_version": rep_revision["lock_version"],
             "attestation": True,
-            "reason": "A representative cannot approve the exact release.",
+            "reason": "The Dispositions representative reviewed the exact release.",
         },
     )
-    assert representative_approval.status_code == 403
+    assert representative_approval.status_code == 200, representative_approval.text
 
     other = bootstrap_foundation(
         db_session,

@@ -16,6 +16,7 @@ from app.integrations.disposition_provider import get_disposition_provider_adapt
 from app.models.foundation import (
     AuditEvent,
     DispositionCase,
+    DispositionPackageVersion,
     DispositionProviderAccount,
     DispositionProviderEvidence,
     DispositionProviderListing,
@@ -27,6 +28,7 @@ from app.models.foundation import (
 from app.schemas.disposition_provider import (
     ProviderAccountRead,
     ProviderApprovedPackageRead,
+    ProviderAvailablePackageRead,
     ProviderDisconnectRequest,
     ProviderEvidenceRead,
     ProviderListingRead,
@@ -84,6 +86,35 @@ def _canonical_json(payload: Any) -> str:
 
 def _canonical_hash(payload: Any) -> str:
     return sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _revision_truth_snapshot_matches(
+    revision: DispositionProviderListingRevision,
+) -> bool:
+    if revision.public_payload_sha256 != _canonical_hash(revision.public_payload):
+        return False
+    if revision.package_was_current_at_prepare is None:
+        # Legacy revisions were prepared only from a current approved package.
+        return True
+    package_snapshot = revision.public_payload.get("package")
+    if not isinstance(package_snapshot, dict):
+        return False
+    expected_status = revision.package_status_at_prepare or "approved"
+    expected_preliminary = (
+        expected_status != "approved" or not revision.package_was_current_at_prepare
+    )
+    if "status_at_prepare" in package_snapshot:
+        return (
+            package_snapshot.get("status_at_prepare") == expected_status
+            and package_snapshot.get("was_current_at_prepare")
+            is revision.package_was_current_at_prepare
+            and package_snapshot.get("preliminary_at_prepare") is expected_preliminary
+        )
+    # Transitional 0123 payloads used unsuffixed names; retain compatibility.
+    return (
+        package_snapshot.get("status") == expected_status
+        and package_snapshot.get("preliminary") is expected_preliminary
+    )
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -325,8 +356,14 @@ def _revision_read(
     revision: DispositionProviderListingRevision,
     *,
     latest_id: UUID | None,
-    package_is_current: bool,
+    package_is_current_now: bool,
 ) -> ProviderListingRevisionRead:
+    package_status = revision.package_status_at_prepare or "approved"
+    package_was_current = (
+        revision.package_was_current_at_prepare
+        if revision.package_was_current_at_prepare is not None
+        else True
+    )
     return ProviderListingRevisionRead(
         id=revision.id,
         listing_id=revision.listing_id,
@@ -337,6 +374,14 @@ def _revision_read(
         public_payload=revision.public_payload,
         public_payload_sha256=revision.public_payload_sha256,
         package_source_fingerprint=revision.package_source_fingerprint,
+        package_status=package_status,
+        package_was_current_at_prepare=package_was_current,
+        package_is_current_now=package_is_current_now,
+        package_is_preliminary=(
+            package_status != "approved"
+            or not package_was_current
+            or not package_is_current_now
+        ),
         created_by_user_id=revision.created_by_user_id,
         approved_by_user_id=revision.approved_by_user_id,
         approval_reason=revision.approval_reason,
@@ -344,9 +389,29 @@ def _revision_read(
         created_at=revision.created_at,
         is_current=bool(
             revision.id == latest_id
-            and package_is_current
             and revision.status in {"draft", "approved"}
         ),
+    )
+
+
+def _revision_package_is_current_now(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    revision: DispositionProviderListingRevision,
+) -> bool:
+    package = db.scalar(
+        select(DispositionPackageVersion).where(
+            DispositionPackageVersion.id == revision.package_version_id,
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+        )
+    )
+    return bool(
+        package is not None
+        and disposition_packages.package_version_currentness(
+            db, principal, case, package
+        )
     )
 
 
@@ -515,19 +580,68 @@ def read_workspace(
     revisions = _revisions(db, principal, listing.id) if listing else []
     source_links = _source_links(db, principal, listing.id) if listing else []
     staged = _provider_evidence(db, principal, listing.id) if listing else []
-    package_workspace = disposition_packages.read_workspace(db, principal, case.id)
-    approved_package = package_workspace.approved_version if package_workspace else None
+    latest_package = db.scalar(
+        select(DispositionPackageVersion)
+        .where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+        )
+        .order_by(
+            DispositionPackageVersion.version_number.desc(),
+            DispositionPackageVersion.created_at.desc(),
+        )
+        .limit(1)
+    )
+    try:
+        available_package = disposition_packages.require_package_artifact(
+            db,
+            principal,
+            case,
+            action="preparing a provider handoff",
+        )
+    except ValueError:
+        available_package = None
+    approved_package = db.scalar(
+        select(DispositionPackageVersion)
+        .where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+            DispositionPackageVersion.status == "approved",
+            DispositionPackageVersion.pdf_data.is_not(None),
+        )
+        .order_by(
+            DispositionPackageVersion.version_number.desc(),
+            DispositionPackageVersion.created_at.desc(),
+        )
+        .limit(1)
+    )
     package_is_current = bool(
-        package_workspace
-        and package_workspace.approved_package_is_current
-        and approved_package
+        approved_package
+        and latest_package
+        and approved_package.id == latest_package.id
+        and disposition_packages.package_version_currentness(
+            db,
+            principal,
+            case,
+            approved_package,
+        )
+    )
+    available_package_is_current = bool(
+        available_package
+        and latest_package
+        and available_package.id == latest_package.id
+        and disposition_packages.package_version_currentness(
+            db,
+            principal,
+            case,
+            available_package,
+        )
     )
     latest_id = revisions[0].id if revisions else None
     warnings: list[str] = []
-    if not package_is_current:
+    if available_package is None:
         warnings.append(
-            "A current approved Stonegate package is required before preparing or publishing "
-            "a provider listing."
+            "No usable package artifact is available to attach to a provider handoff yet."
         )
     if listing and listing.status == "disconnected":
         warnings.append(
@@ -537,12 +651,15 @@ def read_workspace(
     if (
         listing
         and listing.package_source_fingerprint
-        and package_workspace
-        and listing.package_source_fingerprint != package_workspace.current_source_fingerprint
+        and available_package
+        and (
+            listing.package_source_fingerprint != available_package.source_fingerprint
+            or not available_package_is_current
+        )
     ):
         warnings.append(
-            "The provider handoff is stale because the underlying Stonegate package evidence "
-            "changed. Prepare and approve a new listing revision before republishing."
+            "The provider handoff uses a different package snapshot than the latest usable "
+            "artifact. That is allowed; verify the intended exact version before publishing."
         )
     permissions = principal.permission_keys
     can_edit = (
@@ -578,6 +695,17 @@ def read_workspace(
             unverified_capabilities=list(caps.unverified_capabilities),
         ),
         account=_account_read(account) if account else None,
+        available_package=(
+            ProviderAvailablePackageRead(
+                package_version_id=available_package.id,
+                version_number=available_package.version_number,
+                source_fingerprint=available_package.source_fingerprint,
+                status=available_package.status,
+                is_current=available_package_is_current,
+            )
+            if available_package
+            else None
+        ),
         approved_package=(
             ProviderApprovedPackageRead(
                 package_version_id=approved_package.id,
@@ -594,11 +722,8 @@ def read_workspace(
             _revision_read(
                 item,
                 latest_id=latest_id,
-                package_is_current=bool(
-                    package_is_current
-                    and approved_package
-                    and item.package_version_id == approved_package.id
-                    and item.package_source_fingerprint == approved_package.source_fingerprint
+                package_is_current_now=_revision_package_is_current_now(
+                    db, principal, case, item
                 ),
             )
             for item in revisions
@@ -623,11 +748,12 @@ def create_listing_revision(
     if case is None:
         return None
     _require_house(db, principal, case)
-    package = disposition_packages.require_current_approved_version(
+    package = disposition_packages.require_package_artifact(
         db,
         principal,
         case,
         action="preparing an InvestorLift handoff",
+        package_version_id=payload.package_version_id,
     )
     account = cast(DispositionProviderAccount, _account(db, principal, create=True))
     listing = _listing(db, principal, case.id, account.id, for_update=True)
@@ -664,10 +790,21 @@ def create_listing_revision(
             f"{payload.expected_latest_revision}; current latest is {latest_number}."
         )
     safe_snapshot = disposition_packages.sanitize_public_snapshot(package.public_snapshot)
+    package_was_current = disposition_packages.package_version_currentness(
+        db,
+        principal,
+        case,
+        package,
+    )
     adapter = get_disposition_provider_adapter(PROVIDER_KEY)
     public_payload = adapter.build_public_listing_payload(
         package_version=package.version_number,
-        package_approved_at=_as_utc(cast(datetime, package.approved_at)).isoformat(),
+        package_status=package.status,
+        package_was_current_at_prepare=package_was_current,
+        package_preliminary=package.status != "approved" or not package_was_current,
+        package_snapshot_at=_as_utc(
+            package.approved_at or package.created_at
+        ).isoformat(),
         package_snapshot=safe_snapshot,
     )
     public_hash = _canonical_hash(public_payload)
@@ -693,6 +830,8 @@ def create_listing_revision(
         public_payload=public_payload,
         public_payload_sha256=public_hash,
         package_source_fingerprint=package.source_fingerprint,
+        package_status_at_prepare=package.status,
+        package_was_current_at_prepare=package_was_current,
         approval_reason=None,
         approved_at=None,
     )
@@ -750,12 +889,6 @@ def approve_listing_revision(
     if case is None:
         return None
     _require_house(db, principal, case)
-    package = disposition_packages.require_current_approved_version(
-        db,
-        principal,
-        case,
-        action="approving an InvestorLift release",
-    )
     revision = db.scalar(
         select(DispositionProviderListingRevision)
         .where(
@@ -767,6 +900,13 @@ def approve_listing_revision(
     )
     if revision is None:
         return None
+    package = disposition_packages.require_package_artifact(
+        db,
+        principal,
+        case,
+        action="approving an InvestorLift release",
+        package_version_id=revision.package_version_id,
+    )
     listing = db.scalar(
         select(DispositionProviderListing)
         .where(
@@ -799,11 +939,11 @@ def approve_listing_revision(
     if (
         revision.package_version_id != package.id
         or revision.package_source_fingerprint != package.source_fingerprint
-        or revision.public_payload_sha256 != _canonical_hash(revision.public_payload)
+        or not _revision_truth_snapshot_matches(revision)
     ):
         raise ValueError(
-            "The provider handoff is stale or its payload hash does not match. Prepare a new "
-            "listing revision."
+            "The provider handoff package fingerprint or payload hash does not match the "
+            "prepared exact snapshot."
         )
     now = datetime.now(UTC)
     for prior in db.scalars(
@@ -873,12 +1013,6 @@ def listing_bundle(
     if case is None:
         return None
     _require_house(db, principal, case)
-    package = disposition_packages.require_current_approved_version(
-        db,
-        principal,
-        case,
-        action="downloading an InvestorLift handoff bundle",
-    )
     revision = db.scalar(
         select(DispositionProviderListingRevision).where(
             DispositionProviderListingRevision.id == revision_id,
@@ -888,28 +1022,32 @@ def listing_bundle(
     )
     if revision is None:
         return None
-    if revision.status != "approved" or revision.approved_at is None:
-        raise ValueError("Exact release approval is required before downloading this bundle.")
-    latest = db.scalar(
-        select(DispositionProviderListingRevision)
-        .where(
-            DispositionProviderListingRevision.organization_id == principal.organization_id,
-            DispositionProviderListingRevision.listing_id == revision.listing_id,
-        )
-        .order_by(DispositionProviderListingRevision.revision_number.desc())
-        .limit(1)
+    package = disposition_packages.require_package_artifact(
+        db,
+        principal,
+        case,
+        action="downloading an InvestorLift handoff bundle",
+        package_version_id=revision.package_version_id,
     )
-    if latest is None or latest.id != revision.id:
-        raise ValueError("Only the latest approved provider listing bundle can be downloaded.")
+    if revision.approved_at is None or revision.approved_by_user_id is None:
+        raise ValueError("Exact release approval is required before downloading this bundle.")
     if (
         revision.package_version_id != package.id
         or revision.package_source_fingerprint != package.source_fingerprint
-        or revision.public_payload_sha256 != _canonical_hash(revision.public_payload)
+        or not _revision_truth_snapshot_matches(revision)
     ):
         raise ValueError(
-            "This provider bundle is stale or its payload hash does not match. Prepare and "
-            "approve a new listing revision."
+            "This provider bundle no longer matches its exact package fingerprint or payload "
+            "hash."
         )
+    package_is_current_now = disposition_packages.package_version_currentness(
+        db, principal, case, package
+    )
+    package_is_preliminary = (
+        (revision.package_status_at_prepare or "approved") != "approved"
+        or revision.package_was_current_at_prepare is False
+        or not package_is_current_now
+    )
     bundle = {
         "manifest": {
             "provider": PROVIDER_KEY,
@@ -917,6 +1055,14 @@ def listing_bundle(
             "listing_revision_id": str(revision.id),
             "listing_revision_number": revision.revision_number,
             "package_version_id": str(package.id),
+            "package_status_at_prepare": revision.package_status_at_prepare or "approved",
+            "package_was_current_at_prepare": (
+                revision.package_was_current_at_prepare
+                if revision.package_was_current_at_prepare is not None
+                else True
+            ),
+            "package_is_current_now": package_is_current_now,
+            "package_is_preliminary": package_is_preliminary,
             "package_source_fingerprint": revision.package_source_fingerprint,
             "public_payload_sha256": revision.public_payload_sha256,
             "release_approved_at": _as_utc(revision.approved_at).isoformat(),
@@ -924,7 +1070,11 @@ def listing_bundle(
         "public_payload": revision.public_payload,
     }
     data = json.dumps(bundle, indent=2, sort_keys=True, default=_json_default).encode("utf-8")
-    return data, f"stonegate-investorlift-handoff-{case.id}-r{revision.revision_number}.json"
+    prefix = "PRELIMINARY-" if package_is_preliminary else ""
+    return (
+        data,
+        f"{prefix}stonegate-investorlift-handoff-{case.id}-r{revision.revision_number}.json",
+    )
 
 
 def _source_link_idempotency_key(
@@ -964,6 +1114,31 @@ def _record_source_link(
     operation: str,
 ) -> DispositionProviderSourceLink:
     now = datetime.now(UTC)
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == revision.disposition_case_id,
+            DispositionCase.organization_id == principal.organization_id,
+        )
+    )
+    package = db.scalar(
+        select(DispositionPackageVersion).where(
+            DispositionPackageVersion.id == revision.package_version_id,
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == revision.disposition_case_id,
+        )
+    )
+    package_is_current_now = bool(
+        case is not None
+        and package is not None
+        and disposition_packages.package_version_currentness(
+            db, principal, case, package
+        )
+    )
+    package_is_preliminary = (
+        (revision.package_status_at_prepare or "approved") != "approved"
+        or revision.package_was_current_at_prepare is False
+        or not package_is_current_now
+    )
     source_snapshot = {
         "provider": PROVIDER_KEY,
         "external_property_id": external_property_id,
@@ -971,6 +1146,8 @@ def _record_source_link(
         "provider_status": provider_status,
         "listing_revision_id": str(revision.id),
         "public_payload_sha256": revision.public_payload_sha256,
+        "package_is_current_now": package_is_current_now,
+        "package_is_preliminary": package_is_preliminary,
         "observed_at": now.isoformat(),
     }
     source_hash = _canonical_hash(source_snapshot)
@@ -1021,12 +1198,6 @@ def record_manual_link(
     if case is None:
         return None
     _require_house(db, principal, case)
-    package = disposition_packages.require_current_approved_version(
-        db,
-        principal,
-        case,
-        action="recording an InvestorLift publication",
-    )
     account = cast(DispositionProviderAccount, _account(db, principal, create=True))
     listing = _listing(db, principal, case.id, account.id, for_update=True)
     if listing is None:
@@ -1043,19 +1214,19 @@ def record_manual_link(
             DispositionProviderListingRevision.listing_id == listing.id,
         )
     )
-    if revision is None or revision.status != "approved":
+    if (
+        revision is None
+        or revision.approved_at is None
+        or revision.approved_by_user_id is None
+    ):
         raise ValueError("An exact approved provider listing revision is required.")
-    latest_revision = db.scalar(
-        select(DispositionProviderListingRevision)
-        .where(
-            DispositionProviderListingRevision.organization_id == principal.organization_id,
-            DispositionProviderListingRevision.listing_id == listing.id,
-        )
-        .order_by(DispositionProviderListingRevision.revision_number.desc())
-        .limit(1)
+    package = disposition_packages.require_package_artifact(
+        db,
+        principal,
+        case,
+        action="recording an InvestorLift publication",
+        package_version_id=revision.package_version_id,
     )
-    if latest_revision is None or latest_revision.id != revision.id:
-        raise ValueError("Only the latest approved provider listing revision can be published.")
     external_url = _provider_url(payload.external_url)
     stable_idempotency_key = _source_link_idempotency_key(
         listing_id=listing.id,
@@ -1082,9 +1253,12 @@ def record_manual_link(
     if (
         revision.package_version_id != package.id
         or revision.package_source_fingerprint != package.source_fingerprint
-        or revision.public_payload_sha256 != _canonical_hash(revision.public_payload)
+        or not _revision_truth_snapshot_matches(revision)
     ):
-        raise ValueError("The approved provider listing is stale. Prepare a new revision.")
+        raise ValueError(
+            "The approved provider listing no longer matches its exact prepared package or "
+            "payload hash."
+        )
     link = _record_source_link(
         db,
         principal,
@@ -1501,7 +1675,9 @@ def export_case(
             _revision_read(
                 item,
                 latest_id=revisions[0].id if revisions else None,
-                package_is_current=False,
+                package_is_current_now=_revision_package_is_current_now(
+                    db, principal, case, item
+                ),
             ).model_dump(mode="json")
             for item in revisions
         ],

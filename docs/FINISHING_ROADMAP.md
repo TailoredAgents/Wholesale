@@ -307,7 +307,7 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - non-sending prepared-recipient campaign evidence plus a separate immutable, exact-message House
   outreach revision, approval, delivery, and reply-review loop for selected owned-network buyers
 - DS8 provider-neutral/manual InvestorLift foundation: immutable public-only listing revisions tied
-  to the current approved package, exact release approval and bundle download, manual property-link
+  to one exact usable package and its **Preliminary** or approved state, exact release approval and bundle download, manual property-link
   and status reconciliation, replay-safe staged inquiry/engagement/offer evidence, JSON/CSV export,
   and history-preserving disconnect
 - DS10 read-only House disposition management intelligence derived from canonical milestone,
@@ -339,9 +339,9 @@ establish production-provider acceptance.
 3. Run one owner-approved, capped House revision with controlled recipients. Verify exact package,
    recipients, channels, messages, suppression/permission exclusions, provider state, Buyer Inbox
    reply review, pause/cancel behavior, and no duplicate delivery before broader use.
-4. Run one controlled manual InvestorLift handoff. Verify the exact current approved package,
-   public-only bundle, external property ID/HTTPS URL recording, staged evidence review, export, and
-   history-preserving disconnect behavior.
+4. Run one controlled manual InvestorLift handoff. Verify the exact package artifact and its
+   **Preliminary** or approved state, public-only bundle, external property ID/HTTPS URL recording,
+   staged evidence review, export, and history-preserving disconnect behavior.
 5. Obtain the written direct-provider contract and pass every gate in
    `INVESTORLIFT_PROVIDER_VERIFICATION.md` before implementing or enabling live transport.
 6. Confirm **Prepare recipient pool** itself sends no email or SMS and cannot be mistaken for an
@@ -368,7 +368,8 @@ establish production-provider acceptance.
 - Provider candidates do not overwrite trusted buyer records.
 - One approved package reaches a controlled audience.
 - Replies and offers attach to the correct case.
-- Proof and buyer-selection approval cannot be bypassed.
+- Proof gaps remain visible without blocking ordinary work, and buyer selection retains an explicit
+  authorized approval record.
 - Reconciliation produces the expected revenue, deductions, compensation, and margin.
 - Staff can tell the difference between prepared-recipient evidence and an actual Outreach delivery.
 - The DS9 pilot has zero authority violations and unsupported citations, complete trace attribution,
