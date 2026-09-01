@@ -283,7 +283,7 @@ def _create_additional_case(db: Session, client: TestClient) -> DispositionCase:
                 "property_type": "single_family",
             },
             "source": "referral",
-            "stage_key": "offer_ready",
+            "stage_key": "qualified",
         },
     )
     assert lead_response.status_code == 201, lead_response.text

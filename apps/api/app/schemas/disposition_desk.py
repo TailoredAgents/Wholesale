@@ -41,6 +41,7 @@ class DispositionDeskItemRead(BaseModel):
     offer_id: UUID | None = None
     disposition_case_id: UUID | None = None
     needs_setup: bool = False
+    asset_class: Literal["house", "land"] | None = None
     primary_action: DispositionDeskActionRead
     secondary_action: DispositionDeskActionRead | None = None
 

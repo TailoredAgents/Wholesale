@@ -593,6 +593,7 @@ def _mutable_house_case(
     )
     if case is None:
         raise ValueError("Disposition case not found.")
+    dispositions.require_house_case_workflow(db, case)
     if case.package_status != "approved":
         raise ValueError("Approve the investor package before contacting buyers.")
     return case

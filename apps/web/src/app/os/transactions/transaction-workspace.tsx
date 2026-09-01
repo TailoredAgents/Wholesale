@@ -56,10 +56,12 @@ const CHECKLIST_EVIDENCE_ITEM_KEYS = new Set([
 ]);
 
 export function TransactionWorkspace({
+  assetClass = "house",
   initialData,
   initialTab = "closing",
   initialTransactionId,
 }: {
+  assetClass?: "house" | "land";
   initialData: TransactionOverview;
   initialTab?: Tab;
   initialTransactionId?: string;
@@ -493,7 +495,7 @@ export function TransactionWorkspace({
                 <section className={styles.integrationStrip}>
                   <div><span>Private storage</span><strong>{f4Status?.storage_configured ? labelize(f4Status.storage_provider) : "Setup required"}</strong></div>
                   <div><span>Document scan</span><strong>{f4Status?.malware_scanner === "clamav" ? "ClamAV" : "Not connected"}</strong></div>
-                  <div><span>E-signature</span><strong>{f4Status?.esign_configured ? `${labelize(f4Status.esign_provider)}${f4Status.esign_test_mode ? " test" : ""}` : "Setup required"}</strong></div>
+                  {assetClass === "house" ? <div><span>E-signature</span><strong>{f4Status?.esign_configured ? `${labelize(f4Status.esign_provider)}${f4Status.esign_test_mode ? " test" : ""}` : "Setup required"}</strong></div> : <div><span>Contract source</span><strong>External signed PDF</strong></div>}
                 </section>
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Version control</span><h4>Contract packages</h4></div></div>
@@ -520,7 +522,7 @@ export function TransactionWorkspace({
                   <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {labelize(envelope.delivery_mode)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small><div className={styles.inlineActions}>{envelope.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/resume-draft`, { method: "POST" }))} type="button"><PenLine size={14} />Resume saved draft</button> : null}{["creating_draft", "draft_creation_uncertain"].includes(envelope.status) ? <><button disabled={busy} onClick={() => void recoverSignWellDraft(envelope.id)} type="button">Attach verified draft</button><button disabled={busy} onClick={() => void abandonSignWellIntent(envelope.id)} type="button">Abandon empty intent</button></> : null}{!["draft", "completed", "declined", "expired", "cancelled", "error"].includes(envelope.status) && !envelope.provider_document_id.startsWith("intent-") ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</div></article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>
                 </section>
               </div>
-              <div className={styles.rightStack}>
+              {assetClass === "house" ? <div className={styles.rightStack}>
                 <section className={styles.form}>
                   <div className={styles.sectionTitle}><div><span>Provider connection</span><h4>SignWell</h4></div><FileCheck2 size={18} /></div>
                   <dl className={styles.facts}>
@@ -533,7 +535,10 @@ export function TransactionWorkspace({
                 </section>
                 <form className={styles.form} onSubmit={(event) => void sendForSignature(event)}><div className={styles.sectionTitle}><div><span>Signature delivery</span><h4>Send agreement</h4></div><PenLine size={18} /></div><label><span>Approved package</span><select name="package_id" onChange={(event) => setSignaturePackageId(event.target.value || null)} required><option value="">Select package</option>{detail.contract_packages.filter((item) => item.status === "approved").map((item) => <option key={item.id} value={item.id}>{labelize(item.document_type)} · version {item.version_number}</option>)}</select></label><label><span>{primarySignerRole}</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.name ?? detail.seller_name : signaturePackage?.assignee_name ?? ""} key={`signer-name-${signaturePackageId ?? primarySignerRole}`} name="signer_name" readOnly={signatureDocumentType === "assignment_contract"} required /></label><label><span>{primarySignerRole} email</span><input defaultValue={primarySignerRole === "Seller" ? sellerParty?.email ?? "" : signaturePackage?.assignee_email ?? ""} key={`signer-email-${signaturePackageId ?? primarySignerRole}`} name="signer_email" readOnly={signatureDocumentType === "assignment_contract"} required type="email" /></label><input name="placeholder_name" type="hidden" value={primarySignerRole} />{signatureDocumentType !== "assignment_contract" ? <><label><span>Second {primarySignerRole.toLowerCase()}</span><input name="signer_name_2" placeholder="Optional" /></label><label><span>Second {primarySignerRole.toLowerCase()} email</span><input name="signer_email_2" placeholder="Optional" type="email" /></label><input name="placeholder_name_2" type="hidden" value={`${primarySignerRole} 2`} /></> : <small>The assignee is frozen from the approved Offer Room buyer selection. Change buyer coverage there before creating a different assignment.</small>}<label><span>Email subject</span><input defaultValue={`Stonegate agreement for ${detail.property_address}`} name="subject" required /></label><label><span>Message</span><textarea defaultValue="Please review and sign the attached agreement." name="message" rows={3} /></label><small>Stonegate creates the completed PDF and adds your company signer automatically.</small><button disabled={busy || !f4Status?.esign_configured || (signatureDocumentType === "assignment_contract" && (!signaturePackage?.assignee_name || !signaturePackage.assignee_email))} type="submit"><PenLine size={16} />Send for signature</button></form>
                 <form className={styles.form} onSubmit={(event) => void draftContract(event)}><div className={styles.sectionTitle}><div><span>New version</span><h4>Draft agreement</h4></div></div><label><span>Document</span><select name="document_type"><option value="purchase_agreement">Purchase agreement</option><option value="assignment_contract">Assignment agreement</option><option value="addendum">Contract addendum</option></select></label><label><span>Seller</span><input defaultValue={detail.seller_name} name="seller_name" required /></label><label><span>Buyer entity</span><input name="buyer_entity_name" placeholder="Stonegate purchasing entity" required /></label><div className={styles.twoFields}><label><span>Purchase price</span><input defaultValue={detail.purchase_price_cents / 100} min="1" name="purchase_price" required type="number" /></label><label><span>Earnest money</span><input defaultValue={(detail.earnest_money_cents ?? 0) / 100} min="0" name="earnest_money" type="number" /></label></div><div className={styles.twoFields}><label><span>Closing date</span><input defaultValue={detail.closing_date?.slice(0, 10)} name="closing_date" type="date" /></label><label><span>Inspection days</span><input defaultValue={detail.inspection_period_days ?? ""} min="0" name="inspection_period_days" type="number" /></label></div><label><span>Special terms</span><textarea name="special_terms" rows={3} /></label><small>Stonegate will generate the signing PDF from these approved terms.</small><button disabled={busy} type="submit"><Plus size={16} />Create version</button></form>
-              </div>
+              </div> : <aside className={styles.form}>
+                <div className={styles.sectionTitle}><div><span>Land contract record</span><h4>External agreement controls</h4></div><FileCheck2 size={18} /></div>
+                <p>Stonegate preserves the imported signed Land agreement, documents, parties, dates, and closing work here. Generated Land templates and e-sign remain unavailable until the dedicated legal workflow is released.</p>
+              </aside>}
             </div> : null}
 
             {tab === "documents" ? <div className={styles.sectionGrid}>

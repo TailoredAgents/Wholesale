@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.domain.assets import require_house_workflow
+from app.domain.assets import normalize_asset_class, property_identity_label, require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AuditEvent,
@@ -110,7 +110,6 @@ def scoped_case_for_mutation(
     if lead is None:
         raise ValueError("The disposition lead is no longer available.")
     require_lead_not_closed_out(lead)
-    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
     case = db.scalar(
         select(DispositionCase)
         .where(
@@ -176,7 +175,7 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
         .where(
             Transaction.organization_id == principal.organization_id,
             Transaction.status.in_(("executed", "closing", "funded")),
-            Lead.asset_class == "house",
+            Lead.asset_class.in_(("house", "land")),
             Lead.archived_at.is_(None),
             Lead.stage_key.not_in(INACTIVE_LEAD_STAGES),
         )
@@ -188,9 +187,11 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
             continue
         contact = db.get(Contact, transaction.contact_id)
         property_record = db.get(Property, transaction.property_id)
+        lead = db.get(Lead, transaction.lead_id)
         eligible.append(
             EligibleTransactionRead(
                 id=transaction.id,
+                asset_class=normalize_asset_class(lead.asset_class if lead else None),
                 seller_name=contact.legal_name if contact else "Unknown seller",
                 property_address=address(property_record),
                 purchase_price_cents=(
@@ -255,7 +256,6 @@ def create_case(
     )
     if transaction is None or transaction.status not in {"executed", "closing", "funded"}:
         raise ValueError("An executed transaction is required.")
-    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
     if payload.minimum_acceptable_cents > payload.asking_price_cents:
         raise ValueError("Minimum acceptable price cannot exceed asking price.")
     if db.scalar(
@@ -297,8 +297,10 @@ def create_case(
         package_status="draft",
         package_snapshot={
             "package_reference": "pending",
+            "asset_class": normalize_asset_class(lead.asset_class),
             "property": {
                 "address": address(property_record),
+                "asset_class": normalize_asset_class(lead.asset_class),
                 "property_type": property_record.property_type if property_record else None,
             },
             "opportunity": {"strategy": payload.strategy},
@@ -326,7 +328,12 @@ def create_case(
         "disposition.case_create",
         "disposition_case",
         case.id,
-        {"transaction_id": str(transaction.id), "plan_id": str(plan.id), "mode_id": str(mode.id)},
+        {
+            "transaction_id": str(transaction.id),
+            "asset_class": normalize_asset_class(lead.asset_class),
+            "plan_id": str(plan.id),
+            "mode_id": str(mode.id),
+        },
         "Disposition case opened",
     )
     db.commit()
@@ -368,6 +375,7 @@ def generate_matches(
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before matching buyers.")
     from app.services.disposition_packages import require_current_approved_version
@@ -515,6 +523,7 @@ def release_campaign(
     case = scoped_case_for_mutation(db, principal, case_id, allowed_statuses={"buyer_matching"})
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before releasing a campaign.")
     from app.services.disposition_packages import require_current_approved_version
@@ -1424,6 +1433,7 @@ def case_read(
         select(Contact).join(Lead, Lead.contact_id == Contact.id).where(Lead.id == case.lead_id)
     )
     property_record = db.get(Property, case.property_id)
+    lead = db.get(Lead, case.lead_id)
     plan = db.get(CompensationPlanVersion, case.compensation_plan_version_id)
     mode = db.get(DispositionOperatingMode, case.disposition_operating_mode_id)
     buyers = {
@@ -1470,6 +1480,7 @@ def case_read(
         id=case.id,
         transaction_id=case.transaction_id,
         lead_id=case.lead_id,
+        asset_class=normalize_asset_class(lead.asset_class if lead else None),
         seller_name=contact.legal_name if contact else "Unknown seller",
         property_address=address(property_record),
         property_type=property_record.property_type if property_record else None,
@@ -1621,11 +1632,16 @@ def proof_read(item: BuyerProofDocument) -> ProofDocumentRead:
 
 
 def address(item: Property | None) -> str:
-    return (
-        f"{item.street_address}, {item.city}, {item.state} {item.postal_code}"
-        if item
-        else "Unknown property"
-    )
+    if item is None:
+        return "Unknown property"
+    return property_identity_label(
+        street_address=item.street_address,
+        city=item.city,
+        state=item.state,
+        postal_code=item.postal_code,
+        parcel_id=item.parcel_id,
+        county=item.county,
+    ) or "Unknown property"
 
 
 def aware(value: datetime) -> datetime:

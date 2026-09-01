@@ -33,5 +33,7 @@ and buyer criteria behind a disabled-by-default release flag.
   available.
 - Land automated research is screening evidence and cannot prove buildability.
 - Land cannot call the residential ARV/repair engine.
-- Contract execution remains blocked until an approved Land-specific legal template is active.
+- Stonegate-generated and e-signed Land contract execution remains blocked until an approved
+  Land-specific legal template is active. Recording an agreement already executed elsewhere is a
+  separate evidence-import path and does not cross that boundary.
 - The release flag can stop unfinished Land automation without deleting durable records.

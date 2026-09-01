@@ -50,7 +50,7 @@ test("House and Land buy boxes are distinct, typed, and version-safe", () => {
   assert.match(buyBoxForm, /\/buy-boxes\/\$\{asset\}/);
   assert.match(buyBoxForm, /response\.status === 409/);
   assert.doesNotMatch(buyBoxForm, /preferred.margin/i);
-  assert.match(buyBoxForm, /Automated Land deal matching begins in DS4/i);
+  assert.match(buyBoxForm, /Land criteria are used by the asset-aware buyer pool/i);
 });
 
 test("buyer lifecycle controls remain explicit and audited by API", () => {

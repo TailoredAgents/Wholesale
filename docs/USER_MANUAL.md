@@ -103,12 +103,13 @@ Current Land pilot controls include:
   while those consequential offer fields are withheld.
 - Separate House and Land snapshot caches so one workflow cannot reuse the other workflow's
   evidence.
-- A hard safety boundary around residential valuation and execution. Land leads cannot create or
-  approve House ARV/comps, repair estimates, offer authority, residential field inspections,
-  acquisitions-copilot output, valuation PDFs, residential transactions, House contract packages,
-  e-signatures, or residential buyer disposition. The CRM shows Land-specific holding screens
-  instead. Legacy House versions and execution records remain readable/cancellable audit history,
-  but cannot advance as Land work.
+- A hard safety boundary around residential generation and automation. Land leads cannot create or
+  approve House ARV/comps, repair estimates, residential offer authority, residential field
+  inspections, acquisitions-copilot output, House valuation PDFs, Stonegate-generated Land
+  agreements, or e-signatures. Land can still record an outside offer, import the exact agreement
+  signed elsewhere, coordinate the resulting transaction, open Dispositions, approve an exact
+  external investor packet, and run asset-aware buyer-pool matching. Residential outreach, Offer
+  Room, InvestorLift, and Disposition Copilot remain unavailable for Land.
 
 `LAND_WORKFLOW_ENABLED` is `false` by default. A disabled Land research message means the lead is
 safe in the CRM and the residential valuation path was intentionally skipped. Managers can verify
@@ -457,8 +458,9 @@ hardware, but they must not share Stonegate or Clerk credentials.
    on one kind of work.
 4. Resolve the displayed blocker through the card's direct action. The action opens the canonical
    Deal, Buyer, Inbox conversation, Task, or disposition control.
-5. For a House deal, resolve the Package launch-readiness blockers and review the evidence classes,
-   buyer-visible preview, and authorized private economics before building a draft.
+5. For a House or Land deal, resolve the Package launch-readiness blockers and review the evidence
+   classes, buyer-visible preview, and authorized private economics. House may build a Stonegate
+   draft; Land uses the exact externally prepared PDF.
 6. Approve one exact current package version before ranking buyers or preparing recipients.
 7. Verify proof of funds and buyer criteria before recommending placement.
 8. In **Outreach**, select only the intended owned-network recipients and eligible channels, review
@@ -467,9 +469,9 @@ hardware, but they must not share Stonegate or Clerk credentials.
 9. Work Buyer Inbox reply-review tasks before recording interest, offers, or follow-up.
 10. Present the primary and backup buyer for human approval.
 
-The current package and outreach workflow is House-only. **Prepare recipient pool** records
-`prepared_not_sent` recipients but sends no email or SMS. Only the separately approved **Outreach**
-revision can queue a message. Do not use this workflow for Land.
+Package approval and asset-aware buyer-pool matching support House and Land. **Prepare recipient
+pool** records `prepared_not_sent` recipients but sends no email or SMS. The separately approved
+**Outreach** revision, Offer Room, and provider handoff remain House-only.
 
 ### Finance And Accounting
 
@@ -1684,16 +1686,17 @@ workflow while leaving the saved stage unchanged until its real-world event is r
 
 - **Offer** opens a choice between **Stonegate Valuation & Offer** and **Record an outside offer**.
   The first choice opens the governed offer decision. The second records an offer already presented
-  outside Stonegate and is available for House leads with `leads:edit`.
-- **Under Contract** opens **Record the signed agreement** for an eligible House lead when the user
+  outside Stonegate and is available for House and Land leads with `leads:edit`.
+- **Under Contract** opens **Record the signed agreement** for an eligible House or Land lead when the user
   has `contracts:record_executed` or the legacy-compatible `contracts:modify` permission. The stage
   changes only after the exact fully executed PDF and contract facts save successfully.
 
 The seller record's **Change pipeline stage** control uses the same choices. The signed-contract
 catch-up form also appears in **Contract & Deal**, and in a selected **Deals > Contract** record so
 a Transaction Coordinator can use it without general Leads access. Under-contract cards remain
-locked on the board so an active deal cannot be moved out of sync. Staff without `leads:edit` can
-view and select pipeline cards but cannot drag them or use the pipeline stage selector.
+locked on the board so an active deal cannot be moved out of sync. Ordinary movement requires
+`leads:edit`; a contract-authorized coordinator can still choose or drag to Under Contract to open
+the signed-agreement action.
 
 For an existing negotiation, **Continue negotiation** or **Negotiate** opens the seller's
 **Valuation & Offer** negotiation ledger at `?tab=valuation#negotiation-governance`; it does not
@@ -2024,7 +2027,7 @@ reusing stale approval.
 
 ### Record An Offer Presented Outside Stonegate
 
-Use this House catch-up path when the team already presented an offer by phone, in person, text,
+Use this House or Land catch-up path when the team already presented an offer by phone, in person, text,
 email, or video meeting. From the Pipeline, choose or drag to **Offer**, then select **Record an
 outside offer**. The same choice is available from the seller record's **Change pipeline stage**
 control. This records the real event without inventing an internal offer-plan approval.
@@ -2040,7 +2043,7 @@ control. This records the real event without inventing an internal offer-plan ap
 **Offer Presented**, unless it was already Negotiating, in which case Stonegate does not move it
 backward. A verbal acceptance remains **Offer Presented** until the fully executed purchase
 agreement is recorded. The request is rejected if the lead changed after the form opened, the event
-time is in the future, the lead is already Under Contract, or the lead is Land. This action requires
+time is in the future, or the lead is already Under Contract. This action requires
 `leads:edit`; it does not require offer-approval permission. The amount, timing, method, outcome,
 optional seller response, optional notes, stage change, activity, and audit event remain together.
 
@@ -2123,7 +2126,7 @@ If the purchase agreement was already fully executed outside Stonegate, do not r
 approval or pretend the external document was a Stonegate-generated package. Start the same action
 from any entry point available to your role:
 
-- Drag or choose **Under Contract** in the House Pipeline.
+- Drag or choose **Under Contract** in the House or Land Pipeline.
 - Use **Change pipeline stage** or **Contract & Deal > Record an already-signed contract** on the
   seller record.
 - Open the selected property in **Deals**, choose **Contract**, and use **Record an already-signed
@@ -2159,7 +2162,7 @@ manufactures a Stonegate offer approval.
 
 The response then shows one of two Dispositions outcomes:
 
-- **Ready:** the canonical House Disposition case opened, so Stonegate takes the user to it.
+- **Ready:** the canonical asset-aware Disposition case opened, so Stonegate takes the user to it.
 - **Needs setup:** the contract is still recorded and remains visible on the Disposition Desk with
   its setup blockers and an urgent setup task. The form links to the transaction handoff,
   **People & Access**, and **Finance Policy**. Resolve the missing authorized Dispositions owner,
@@ -2167,8 +2170,9 @@ The response then shows one of two Dispositions outcomes:
   handoff.
 
 Do not upload a second agreement to work around an existing active sent, approved, e-sign, or
-executed purchase-agreement workflow; reconcile that workflow first. Land agreements remain outside
-this House-only catch-up and Dispositions path.
+executed purchase-agreement workflow; reconcile that workflow first. The importer may adopt an
+already executed Land agreement as historical evidence, but Stonegate-generated Land templates and
+e-sign remain unavailable until their dedicated legal workflow is released.
 
 ### Closing
 
@@ -2346,10 +2350,12 @@ the new case will appear in the same Deal record.
 
 ### Package
 
-The current Package workspace is for contracted **House** deals only:
+The Package workspace supports contracted House and Land deals. House can use either packet path;
+Land uses **Use existing PDF** until Stonegate's generated Land packet is released:
 
-1. At **Choose your packet path**, select **Build with Stonegate** or **Use existing PDF**. Both
-   paths create a governed draft; neither approves a packet or contacts a buyer.
+1. At **Choose your packet path**, select **Build with Stonegate** or **Use existing PDF** for a
+   House. For Land, select **Use existing PDF**. Every path creates a governed draft; none approves
+   a packet or contacts a buyer.
 2. Confirm the frozen compensation plan and disposition operating mode.
 3. Review **Launch readiness**. Resolve every blocker; review warnings, unknowns, freshness,
    conflicts, and the provided remediation link before continuing.
@@ -2359,8 +2365,8 @@ The current Package workspace is for contracted **House** deals only:
 5. Compare the buyer-visible preview with the permission-gated private economics. Purchase basis,
    minimum acceptable amount, desired assignment fee, approval authority, and private notes must
    never be copied into the public preview, summaries, or investor PDF.
-6. Under **Build with Stonegate**, select **Build draft** or **Rebuild draft** to create a PDF from
-   the current saved evidence. Under **Use existing PDF**, upload the completed investor-packet PDF
+6. For a House, **Build with Stonegate** can create a PDF from the current saved evidence. Under
+   **Use existing PDF**, upload the completed House or Land investor-packet PDF
    and optionally record who prepared it and when. Stonegate preserves the exact uploaded bytes,
    file hash, and PDF scan state as the new immutable draft; it does not regenerate or replace that
    artifact during approval. Each path creates a new version tied to the current CRM source
@@ -2383,13 +2389,13 @@ source fingerprint, reason, and human attestation still apply. After approval, n
 may download the exact approved artifact.
 
 An existing PDF replaces only the packet artifact. Saved CRM facts still govern readiness, buyer
-matching, private economics, email/SMS summaries, secure links, and outreach controls. Once
-approved, secure links and governed outreach use the exact approved uploaded PDF.
+matching, private economics, email/SMS summaries, and secure links. Once approved, secure links use
+the exact approved uploaded PDF; governed outreach remains a House-only release.
 
 Preparation binds each recipient to that exact version and stored artifact hash. Its status is
 `prepared_not_sent`: **Prepare recipient pool** sends no email or SMS. The separate **Outreach** tab
-uses this reviewed pool for governed House delivery. Land package readiness and outreach remain
-blocked.
+uses this reviewed pool for governed House delivery. Land uses the asset-aware Buyer pool, while
+residential Outreach, Offer Room, InvestorLift, and the call queue remain unavailable.
 
 ### Buyers
 
@@ -2636,7 +2642,8 @@ not active. See `DISPOSITION_INTELLIGENCE_REQUIREMENT_MATRIX.md` for the complet
 **Prepare recipient pool** records which approved recipients may receive the exact approved package,
 including the observed identity and destination, as `prepared_not_sent`. It sends no messages.
 Governed delivery occurs only through a separately reviewed, approved, and released House
-**Outreach** revision. Land package release and outreach remain blocked.
+**Outreach** revision. Land external-package approval and buyer matching are supported; automated
+Land outreach remains blocked.
 
 ### Reconciliation
 

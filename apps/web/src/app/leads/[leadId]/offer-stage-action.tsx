@@ -98,6 +98,10 @@ export function OfferStageAction({
     () => process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com",
     [],
   );
+  const stonegateOfferHref =
+    assetClass === "land"
+      ? `/os/leads/${leadId}?tab=valuation`
+      : `/os/leads/${leadId}?tab=valuation#offer-decision`;
 
   async function submitOutsideOffer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,35 +156,30 @@ export function OfferStageAction({
       <div className={styles.offerWorkflowOptions}>
         <Link
           className={styles.offerWorkflowOption}
-          href={`/os/leads/${leadId}?tab=valuation#offer-decision`}
+          href={stonegateOfferHref}
         >
-          <strong>Stonegate Valuation &amp; Offer</strong>
+          <strong>
+            {assetClass === "land" ? "Review Land valuation" : "Stonegate Valuation & Offer"}
+          </strong>
           <span>
             {assetClass === "land"
-              ? "Open the Land valuation workspace and prepare the offer in Stonegate."
+              ? "Review parcel evidence and value guidance. Use Record an outside offer for an offer already presented."
               : "Review valuation, request offer authority, and manage the governed offer plan."}
           </span>
         </Link>
-        {assetClass === "house" ? (
-          <button
-            aria-expanded={choice === "outside"}
-            className={styles.offerWorkflowOption}
-            onClick={() => {
-              setChoice("outside");
-              setStatus("idle");
-              setMessage(null);
-            }}
-            type="button"
-          >
-            <strong>Record an outside offer</strong>
-            <span>Capture an offer already presented by phone, text, email, video, or in person.</span>
-          </button>
-        ) : (
-          <div className={styles.offerWorkflowOption} data-disabled="true">
-            <strong>Outside-offer catch-up</strong>
-            <span>House leads are supported in this release. Use the Land valuation workflow for Land offers.</span>
-          </div>
-        )}
+        <button
+          aria-expanded={choice === "outside"}
+          className={styles.offerWorkflowOption}
+          onClick={() => {
+            setChoice("outside");
+            setStatus("idle");
+            setMessage(null);
+          }}
+          type="button"
+        >
+          <strong>Record an outside offer</strong>
+          <span>Capture an offer already presented by phone, text, email, video, or in person.</span>
+        </button>
       </div>
 
       {choice === "outside" ? (

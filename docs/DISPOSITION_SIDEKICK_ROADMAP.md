@@ -2,6 +2,13 @@
 
 Last updated: August 30, 2026
 
+> **September 1 CRM parity follow-up:** House and Land now share the evidence-backed external
+> signed-contract handoff, Disposition case, exact external investor-packet approval, and
+> asset-aware buyer-pool refresh. Older phase-history statements below that describe Land matching
+> or package readiness as future work apply to those earlier phases. Generated Land packets,
+> residential outreach, Offer Room, InvestorLift, and Disposition Copilot remain unavailable for
+> Land.
+
 > **Current status: DS0-DS8 complete; the DS9 repository implementation is complete but its
 > measured pilot is NOT MET; the DS10 derived House management dashboard is implemented; live
 > InvestorLift transport and expanded DS10 attribution/cost controls remain pending; DS11's

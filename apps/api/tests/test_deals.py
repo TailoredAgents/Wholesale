@@ -26,7 +26,7 @@ def create_transaction(client: TestClient) -> tuple[str, str]:
                 "property_type": "single_family",
             },
             "source": "referral",
-            "stage_key": "offer_ready",
+            "stage_key": "qualified",
         },
     )
     transaction = client.post(
@@ -64,6 +64,7 @@ def test_unified_deal_overview_and_detail(
     item = payload["items"][0]
     assert item["id"] == deal_id
     assert item["transaction_id"] == transaction_id
+    assert item["asset_class"] == "house"
     assert item["seller_name"] == "Unified Deal Seller"
     assert item["contract_status"] == "preparing"
     assert item["closing_status"] == "waiting_for_contract"

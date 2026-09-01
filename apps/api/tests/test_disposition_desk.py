@@ -16,6 +16,8 @@ from app.models.foundation import (
     CompensationPlanVersion,
     Conversation,
     ConversationContextLink,
+    Lead,
+    Property,
     Role,
     RoleAssignment,
     Task,
@@ -33,6 +35,7 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_desk import read_desk
 from app.services.disposition_handoff import (
     HANDOFF_SETUP_TASK_TYPE,
+    ensure_disposition_case_for_executed_transaction,
     ensure_house_disposition_case_for_executed_transaction,
 )
 from tests.test_dispositions import (
@@ -157,21 +160,34 @@ def test_disposition_desk_empty_read_model(
     assert payload["source_health"]["external_provider_status"] == "not_configured"
 
 
-def test_disposition_desk_keeps_setup_blocked_executed_house_visible(
+def test_disposition_desk_keeps_setup_blocked_parcel_only_land_visible(
     db_session: Session,
     api_db_override: None,
 ) -> None:
     client = TestClient(app)
     _, transaction_id, _ = setup_case_foundation(db_session, client)
     transaction = db_session.get(Transaction, UUID(transaction_id))
+    lead = db_session.get(Lead, transaction.lead_id) if transaction is not None else None
+    property_record = (
+        db_session.get(Property, transaction.property_id) if transaction is not None else None
+    )
     plan = db_session.scalar(select(CompensationPlanVersion))
     assert transaction is not None
+    assert lead is not None
+    assert property_record is not None
     assert plan is not None
+    lead.asset_class = "land"
+    property_record.street_address = ""
+    property_record.city = ""
+    property_record.postal_code = ""
+    property_record.county = "Bibb"
+    property_record.parcel_id = "LAND-DESK-100"
+    property_record.property_type = "vacant_land"
     transaction.contract_executed_at = datetime.now(UTC)
     plan.status = "retired"
     db_session.commit()
 
-    created = ensure_house_disposition_case_for_executed_transaction(
+    created = ensure_disposition_case_for_executed_transaction(
         db_session,
         transaction,
     )
@@ -188,6 +204,9 @@ def test_disposition_desk_keeps_setup_blocked_executed_house_visible(
     assert intake["transaction_id"] == transaction_id
     assert intake["disposition_case_id"] is None
     assert intake["needs_setup"] is True
+    assert intake["asset_class"] == "land"
+    assert intake["title"] == "APN LAND-DESK-100, Bibb, GA"
+    assert intake["reason"] == "Executed Land contract is waiting for Dispositions setup."
     assert intake["blocker"] == "No active compensation plan."
     assert intake["primary_action"] == {
         "label": "Resolve setup",

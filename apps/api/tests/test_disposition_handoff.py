@@ -27,6 +27,7 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.disposition_handoff import (
     HANDOFF_SETUP_TASK_TYPE,
     PACKAGE_READY_ALERT_SOURCE_TYPE,
+    ensure_disposition_case_for_executed_transaction,
     ensure_house_disposition_case_for_executed_transaction,
     process_next_disposition_handoff_recovery,
     process_next_disposition_package_alert_recovery,
@@ -256,20 +257,33 @@ def test_executed_house_auto_creates_one_case_for_dispositions_owner(
     assert audits[0].new_value["private_economics_source"] == "executed_transaction"
 
 
-def test_land_transaction_does_not_enter_house_dispositions(db_session: Session) -> None:
-    transaction, _, _ = setup_executed_house_transaction(db_session)
+def test_executed_land_transaction_enters_shared_dispositions(db_session: Session) -> None:
+    transaction, _, property_record = setup_executed_house_transaction(db_session)
     lead = db_session.get(Lead, transaction.lead_id)
     assert lead is not None
     lead.asset_class = "land"
+    property_record.street_address = ""
+    property_record.city = ""
+    property_record.postal_code = ""
+    property_record.county = "Bartow"
+    property_record.parcel_id = "LAND-APN-42"
+    property_record.property_type = "vacant_land"
     db_session.commit()
 
-    created = ensure_house_disposition_case_for_executed_transaction(db_session, transaction)
+    created = ensure_disposition_case_for_executed_transaction(db_session, transaction)
     db_session.commit()
     recovered = process_next_disposition_handoff_recovery(db_session, get_settings())
 
-    assert created is None
+    assert created is not None
     assert recovered is None
-    assert db_session.scalar(select(func.count()).select_from(DispositionCase)) == 0
+    assert created.package_snapshot["asset_class"] == "land"
+    assert created.package_snapshot["property"] == {
+        "address": "APN LAND-APN-42, Bartow, GA",
+        "property_type": "vacant_land",
+        "county": "Bartow",
+        "parcel_id": "LAND-APN-42",
+    }
+    assert db_session.scalar(select(func.count()).select_from(DispositionCase)) == 1
 
 
 def test_roleless_dispositions_team_manager_is_not_selected(
@@ -361,20 +375,23 @@ def test_non_human_led_mode_does_not_auto_create_disposition_case(
     assert setup_task.responsible_user_id is not None
 
 
-def test_worker_recovers_handoff_after_temporary_configuration_block(
+def test_worker_recovers_land_handoff_after_temporary_configuration_block(
     db_session: Session,
 ) -> None:
     transaction, _, _ = setup_executed_house_transaction(db_session)
+    lead = db_session.get(Lead, transaction.lead_id)
     mode = db_session.scalar(
         select(DispositionOperatingMode).where(
             DispositionOperatingMode.organization_id == transaction.organization_id
         )
     )
+    assert lead is not None
     assert mode is not None
+    lead.asset_class = "land"
     mode.key = "ai_assisted"
     db_session.commit()
 
-    assert ensure_house_disposition_case_for_executed_transaction(db_session, transaction) is None
+    assert ensure_disposition_case_for_executed_transaction(db_session, transaction) is None
     db_session.commit()
     blocked = db_session.scalar(
         select(AuditEvent).where(
@@ -405,6 +422,7 @@ def test_worker_recovers_handoff_after_temporary_configuration_block(
         select(DispositionCase).where(DispositionCase.transaction_id == transaction.id)
     )
     assert recovered is not None
+    assert recovered.package_snapshot["asset_class"] == "land"
     db_session.refresh(setup_task)
     assert setup_task.status == "completed"
     assert setup_task.outcome == "disposition_case_opened"
@@ -609,11 +627,14 @@ def test_worker_recovers_package_alert_after_owner_opts_in(
     assert alert.recipient_user_id == disposition_owner.id
 
 
-def test_queued_package_alert_rechecks_owner_opt_in_before_delivery(
+def test_queued_land_package_alert_rechecks_owner_opt_in_before_delivery(
     db_session: Session,
 ) -> None:
     transaction, disposition_owner, _ = setup_executed_house_transaction(db_session)
-    disposition_case = ensure_house_disposition_case_for_executed_transaction(
+    lead = db_session.get(Lead, transaction.lead_id)
+    assert lead is not None
+    lead.asset_class = "land"
+    disposition_case = ensure_disposition_case_for_executed_transaction(
         db_session,
         transaction,
     )
@@ -849,7 +870,7 @@ def test_stale_queued_owner_is_canceled_and_recovery_targets_current_owner(
     assert current_alert.recipient_phone == "+16785550777"
 
 
-def test_package_alert_recovery_requires_explicit_failure_and_active_house_deal(
+def test_package_alert_recovery_requires_explicit_failure_and_active_supported_deal(
     db_session: Session,
 ) -> None:
     transaction, disposition_owner, _ = setup_executed_house_transaction(db_session)
@@ -917,16 +938,6 @@ def test_package_alert_recovery_requires_explicit_failure_and_active_house_deal(
 
     deal.stage_key = "under_contract"
     lead.asset_class = "land"
-    db_session.commit()
-    assert (
-        process_next_disposition_package_alert_recovery(
-            db_session,
-            get_settings(),
-        )
-        is None
-    )
-
-    lead.asset_class = "house"
     db_session.commit()
     assert (
         process_next_disposition_package_alert_recovery(

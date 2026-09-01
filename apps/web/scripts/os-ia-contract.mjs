@@ -757,6 +757,7 @@ export const permissionInventory = [
   "offers:approve",
   "contracts:send",
   "contracts:modify",
+  "contracts:record_executed",
   "buyers:export",
   "communications:send_bulk",
   "communications:access_recordings",

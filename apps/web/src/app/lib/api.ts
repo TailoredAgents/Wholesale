@@ -3382,6 +3382,7 @@ export type DispositionCase = {
   id: string;
   transaction_id: string;
   lead_id: string;
+  asset_class: "house" | "land";
   seller_name: string;
   property_address: string;
   property_type: string | null;
@@ -3416,7 +3417,7 @@ export type DispositionCase = {
 export type DispositionOverview = {
   can_view_private_economics: boolean;
   metrics: { active_cases: number; packages_pending: number; buyer_selected: number; reconciliation_pending: number; below_margin_target: number };
-  eligible_transactions: Array<{ id: string; seller_name: string; property_address: string; purchase_price_cents: number | null; assignment_fee_cents: number | null }>;
+  eligible_transactions: Array<{ id: string; asset_class: "house" | "land"; seller_name: string; property_address: string; purchase_price_cents: number | null; assignment_fee_cents: number | null }>;
   cases: DispositionCase[];
 };
 
@@ -3461,6 +3462,7 @@ export type DispositionPackageReadiness = {
 };
 
 export type DispositionPackagePublicSnapshot = Record<string, unknown> & {
+  asset_class?: "house" | "land";
   property_address?: string;
   property_type?: string | null;
   asking_price_cents?: number | null;
@@ -3859,6 +3861,7 @@ export type DispositionDeskItem = {
   disposition_case_id: string | null;
   transaction_id?: string | null;
   needs_setup?: boolean;
+  asset_class?: "house" | "land" | null;
   primary_action: DispositionDeskAction;
   secondary_action: DispositionDeskAction | null;
 };
@@ -5904,6 +5907,7 @@ export type TransactionQueueItem = {
 export type DealQueueItem = {
   id: string;
   lead_id: string;
+  asset_class: "house" | "land";
   transaction_id: string;
   disposition_case_id: string | null;
   seller_name: string;

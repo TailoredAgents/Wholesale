@@ -8,6 +8,10 @@
 
 **Not authorization for:** Offer issuance, contract execution, closing, or Land disposition
 
+**September 1 follow-up:** This playbook still does not grant that authority, but Stonegate now has
+separate evidence-backed catch-up actions for an outside Land offer, an already-signed Land
+agreement, an exact external investor packet, and asset-aware buyer-pool review.
+
 ## Purpose
 
 Stonegate uses one CRM for House and Land opportunities, but it does not use one generic workflow.
@@ -138,7 +142,9 @@ Managers should sample Land records weekly and verify:
 - Provider screening is not presented as seller confirmation or official proof.
 - Open questions, conflicts, next actions, and due dates are visible.
 - In-person appointments are used selectively rather than as a default qualification gate.
-- House ARV, repair, contract, and disposition tools remain blocked for Land.
+- House ARV, repair, generated/e-signed contract, and residential outreach tools remain blocked for
+  Land. External signed-contract evidence and the asset-aware Disposition package/Buyer pool are
+  available through their separate governed workflows.
 - KPIs are segmented by House/Land, source, campaign, and lead temperature before staff are compared.
 
 ## Activation Boundary

@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import ASSET_CLASSES, property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AuditEvent,
@@ -230,13 +231,26 @@ def _blocked_handoff_reasons(
     return [HANDOFF_PENDING_BLOCKER]
 
 
-def _property_address(property_record: Property) -> str:
-    city_state_zip = " ".join(
-        value for value in (property_record.state, property_record.postal_code) if value
-    )
-    locality = ", ".join(value for value in (property_record.city, city_state_zip) if value)
+def _asset_class(value: str | None) -> Literal["house", "land"] | None:
+    if value == "house":
+        return "house"
+    if value == "land":
+        return "land"
+    return None
+
+
+def _property_address(property_record: Property | None) -> str:
+    if property_record is None:
+        return "Address unavailable"
     return (
-        ", ".join(value for value in (property_record.street_address, locality) if value)
+        property_identity_label(
+            street_address=property_record.street_address,
+            city=property_record.city,
+            state=property_record.state,
+            postal_code=property_record.postal_code,
+            parcel_id=property_record.parcel_id,
+            county=property_record.county,
+        )
         or "Address unavailable"
     )
 
@@ -422,7 +436,7 @@ def read_desk(
                 ),
                 Transaction.status.in_(("executed", "closing")),
                 Transaction.contract_executed_at.is_not(None),
-                Lead.asset_class == "house",
+                Lead.asset_class.in_(tuple(sorted(ASSET_CLASSES))),
                 Lead.archived_at.is_(None),
                 ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
                 ~Deal.stage_key.in_(tuple(INACTIVE_DEAL_STAGES)),
@@ -769,7 +783,7 @@ def read_desk(
     for (
         setup_transaction,
         setup_deal,
-        _setup_lead,
+        setup_lead,
         setup_contact,
         setup_property,
         setup_existing_case,
@@ -790,7 +804,10 @@ def read_desk(
                     if setup_task is not None
                     else setup_transaction.contract_executed_at
                 ),
-                reason="Executed House contract is waiting for Dispositions setup.",
+                reason=(
+                    f"Executed {setup_lead.asset_class.title()} contract is waiting for "
+                    "Dispositions setup."
+                ),
                 blocker=" ".join(setup_blockers),
                 severity="danger",
                 deal_id=setup_deal.id,
@@ -800,6 +817,7 @@ def read_desk(
                     setup_existing_case.id if setup_existing_case is not None else None
                 ),
                 needs_setup=True,
+                asset_class=_asset_class(setup_lead.asset_class),
                 primary_action=DispositionDeskActionRead(
                     label="Resolve setup",
                     href=f"/os/dispositions?transaction={setup_transaction.id}",
@@ -812,6 +830,8 @@ def read_desk(
         )
     for item in active_records:
         case = case_by_deal.get(item.id)
+        case_lead = db.get(Lead, case.lead_id) if case is not None else None
+        case_property = db.get(Property, case.property_id) if case is not None else None
         blocker = next(
             (value.label for value in item.blockers if value.domain == "disposition"),
             None,
@@ -820,7 +840,7 @@ def read_desk(
             DispositionDeskItemRead(
                 key=f"deal:{item.id}",
                 category="active_deals",
-                title=item.property_address,
+                title=_property_address(case_property) if case_property else item.property_address,
                 context=(
                     f"{item.seller_name} | {item.buyer_match_count} matches | "
                     f"{item.buyer_offer_count} offers"
@@ -834,6 +854,7 @@ def read_desk(
                 deal_id=item.id,
                 transaction_id=item.transaction_id,
                 disposition_case_id=case.id if case else None,
+                asset_class=_asset_class(case_lead.asset_class) if case_lead else None,
                 primary_action=DispositionDeskActionRead(
                     label="Open deal" if case else "Open disposition",
                     href=(

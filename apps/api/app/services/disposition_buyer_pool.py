@@ -23,6 +23,7 @@ from app.models.foundation import (
     DispositionBuyerPoolEntry,
     DispositionBuyerPoolRun,
     DispositionCase,
+    LandValuationAnalysis,
     Lead,
     Property,
     PropertyIntelligenceSnapshot,
@@ -46,10 +47,25 @@ from app.services.buyers import (
     normalize_phone,
     normalize_source_key,
 )
+from app.services.land_comparable_evidence import land_use_group
 
-MATCHER_VERSION = "stonegate_buyer_pool_v1"
-SCORE_POLICY_VERSION = "buyer_pool_score_v1"
+MATCHER_VERSION = "stonegate_buyer_pool_v2"
+SCORE_POLICY_VERSION = "buyer_pool_score_v2"
 REVIEWABLE_PROOF_SCAN_STATUSES = {"clean", "not_configured"}
+LAND_MATCH_FACT_KEYS = {
+    "flood_zone",
+    "flood_zone_description",
+    "land_use",
+    "lot_size",
+    "lot_size_acres",
+    "sewer",
+    "terrain",
+    "utilities",
+    "water",
+    "wetlands",
+    "wetlands_status",
+    "zoning",
+}
 
 
 def generate_buyer_pool_run(
@@ -87,6 +103,11 @@ def generate_buyer_pool_run(
     )
     version_number = int(latest_version or 0) + 1
     now = datetime.now(UTC)
+    land_subject = (
+        _land_subject_snapshot(db, principal, case, property_record, now=now)
+        if asset_class == "land"
+        else None
+    )
     subject_snapshot = {
         "case_id": str(case.id),
         "lead_id": str(case.lead_id),
@@ -104,6 +125,8 @@ def generate_buyer_pool_run(
             "property_type": property_record.property_type,
         },
     }
+    if land_subject is not None:
+        subject_snapshot["land_subject"] = land_subject
     fingerprint = _fingerprint(subject_snapshot)
     run = DispositionBuyerPoolRun(
         organization_id=principal.organization_id,
@@ -166,6 +189,7 @@ def generate_buyer_pool_run(
             asset_class,
             buyer,
             external_by_buyer.get(buyer.id, []),
+            land_subject=land_subject,
             now=now,
         )
         evaluations.append((candidate, evaluation))
@@ -251,6 +275,49 @@ def generate_buyer_pool_run(
         db.commit()
         db.refresh(run)
     return run
+
+
+def refresh_buyer_pool(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+) -> bool:
+    """Refresh the shared buyer pool without routing Land through legacy House matching."""
+    from app.services import dispositions
+    from app.services.disposition_packages import require_current_approved_version
+
+    case = dispositions.scoped_case(db, principal, case_id)
+    if case is None:
+        return False
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("The disposition lead is no longer available.")
+    if (lead.asset_class or "house").strip().lower() == "house":
+        return dispositions.generate_matches(db, principal, case_id) is not None
+
+    locked_case = dispositions.scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses={"buyer_matching"},
+    )
+    if locked_case is None:
+        return False
+    if locked_case.package_status != "approved":
+        raise ValueError("Approve the deal package before matching buyers.")
+    require_current_approved_version(
+        db,
+        principal,
+        locked_case,
+        action="matching Land buyers",
+    )
+    generate_buyer_pool_run(
+        db,
+        principal,
+        case_id,
+        locked_case=locked_case,
+    )
+    return True
 
 
 def read_buyer_pool(
@@ -1002,6 +1069,7 @@ def _evaluate_internal_buyer(
     buyer: Buyer,
     merged_external: list[BuyerDiscoveryCandidate],
     *,
+    land_subject: dict[str, Any] | None,
     now: datetime,
 ) -> dict[str, Any]:
     buy_box_result = get_current_buy_box_version(
@@ -1014,7 +1082,12 @@ def _evaluate_internal_buyer(
     )
     market_ok = _market_match(criteria, property_record)
     price_ok = _price_match(criteria, case.asking_price_cents)
-    asset_ok = _asset_match(criteria, property_record, asset_class)
+    asset_ok, asset_review_reasons, asset_checks = _asset_match(
+        criteria,
+        property_record,
+        asset_class,
+        land_subject=land_subject,
+    )
     strategy_ok = _strategy_match(criteria, case.strategy)
     funding_methods = criteria.get("funding_methods") if criteria else None
     funding_ok = bool(isinstance(funding_methods, list) and funding_methods)
@@ -1066,7 +1139,10 @@ def _evaluate_internal_buyer(
     if verified_buy_box and not price_ok:
         disqualifiers.append("The deal price is outside the verified buy box.")
     if verified_buy_box and not asset_ok:
-        disqualifiers.append("The property does not meet the verified asset criteria.")
+        disqualifiers.extend(
+            asset_review_reasons
+            or ["The property does not meet the verified asset criteria."]
+        )
     if verified_buy_box and not strategy_ok:
         disqualifiers.append("The deal strategy is outside the verified buy box.")
     if not proof_ok:
@@ -1084,6 +1160,11 @@ def _evaluate_internal_buyer(
         f"Reliability contributes {components['reliability']} of 750 points.",
         _criterion_sentence("Relationship", relationship_ok, 500),
     ]
+    explanation.extend(
+        f"Land asset review: {reason}"
+        for reason in asset_review_reasons
+        if asset_class == "land"
+    )
     supporting = [
         {
             "type": "buy_box_version",
@@ -1150,6 +1231,8 @@ def _evaluate_internal_buyer(
                 proof.expires_at.isoformat() if proof and proof.expires_at else None
             ),
             "proof": proof_snapshot,
+            "asset_checks": asset_checks,
+            "land_subject": land_subject,
             "merged_provider_candidates": [
                 _discovery_provenance(value) for value in merged_external
             ],
@@ -1801,20 +1884,445 @@ def _geography_match(entry: dict[object, object], property_record: Property) -> 
     return False
 
 
+def _land_subject_snapshot(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    property_record: Property,
+    *,
+    now: datetime,
+) -> dict[str, Any]:
+    property_snapshot = db.scalar(
+        select(PropertyIntelligenceSnapshot)
+        .where(
+            PropertyIntelligenceSnapshot.organization_id == principal.organization_id,
+            PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.research_profile.like("land%"),
+            PropertyIntelligenceSnapshot.is_current.is_(True),
+        )
+        .order_by(
+            PropertyIntelligenceSnapshot.version_number.desc(),
+            PropertyIntelligenceSnapshot.captured_at.desc(),
+        )
+        .limit(1)
+    )
+    valuation = db.scalar(
+        select(LandValuationAnalysis)
+        .where(
+            LandValuationAnalysis.organization_id == principal.organization_id,
+            LandValuationAnalysis.lead_id == case.lead_id,
+            LandValuationAnalysis.property_id == property_record.id,
+        )
+        .order_by(
+            LandValuationAnalysis.version_number.desc(),
+            LandValuationAnalysis.created_at.desc(),
+        )
+        .limit(1)
+    )
+    snapshot_fresh = bool(
+        property_snapshot
+        and _aware(property_snapshot.expires_at) > now
+        and property_snapshot.status in {"ready", "partial"}
+    )
+    conflict_fields = sorted(
+        {
+            _normalized_key(conflict.get("field"))
+            for conflict in (property_snapshot.conflicts if property_snapshot else [])
+            if isinstance(conflict, dict) and conflict.get("field")
+        }
+    )
+    property_evidence = (
+        {
+            "id": str(property_snapshot.id),
+            "version_number": property_snapshot.version_number,
+            "research_profile": property_snapshot.research_profile,
+            "status": property_snapshot.status,
+            "is_current": property_snapshot.is_current,
+            "is_fresh": snapshot_fresh,
+            "captured_at": property_snapshot.captured_at.isoformat(),
+            "expires_at": property_snapshot.expires_at.isoformat(),
+            "conflict_fields": conflict_fields,
+            "facts": {
+                key: property_snapshot.facts[key]
+                for key in sorted(LAND_MATCH_FACT_KEYS)
+                if key in property_snapshot.facts
+            },
+        }
+        if property_snapshot
+        else None
+    )
+    valuation_uses_current_snapshot = bool(
+        valuation
+        and property_snapshot
+        and valuation.property_snapshot_id == property_snapshot.id
+        and snapshot_fresh
+        and valuation.status == "ready"
+        and valuation.guidance_status == "available"
+        and not valuation.review_reasons
+        and not valuation.guidance_blockers
+    )
+    valuation_subject = dict(valuation.subject_snapshot or {}) if valuation else {}
+    valuation_evidence = (
+        {
+            "id": str(valuation.id),
+            "version_number": valuation.version_number,
+            "property_snapshot_id": str(valuation.property_snapshot_id),
+            "status": valuation.status,
+            "guidance_status": valuation.guidance_status,
+            "uses_current_fresh_property_snapshot": valuation_uses_current_snapshot,
+            "subject_acres": valuation.subject_acres_ten_thousandths / 10_000,
+            "acreage_source": valuation_subject.get("acreage_source"),
+            "acreage_evidence_reference": valuation_subject.get(
+                "acreage_evidence_reference"
+            ),
+            "land_use": valuation_subject.get("land_use"),
+            "land_use_source": valuation_subject.get("land_use_source"),
+            "land_use_evidence_reference": valuation_subject.get(
+                "land_use_evidence_reference"
+            ),
+            "access_evidence_status": valuation.access_evidence_status,
+            "access_evidence_reference": valuation_subject.get(
+                "access_evidence_reference"
+            ),
+            "review_reasons": list(valuation.review_reasons or []),
+            "guidance_blockers": list(valuation.guidance_blockers or []),
+            "updated_at": valuation.updated_at.isoformat(),
+        }
+        if valuation
+        else None
+    )
+    return {
+        "identity": {
+            "parcel_id": property_record.parcel_id,
+            "normalized_parcel_key": property_record.normalized_parcel_key,
+            "county": property_record.county,
+            "state": property_record.state,
+        },
+        "property_intelligence": property_evidence,
+        "valuation": valuation_evidence,
+    }
+
+
 def _asset_match(
     criteria: dict[str, object] | None,
     property_record: Property,
     asset_class: str,
-) -> bool:
+    *,
+    land_subject: dict[str, Any] | None,
+) -> tuple[bool, list[str], dict[str, Any]]:
     if criteria is None or criteria.get("asset_class") != asset_class:
-        return False
+        return False, [], {"asset_class": {"status": "mismatch"}}
     if asset_class == "land":
-        return True
+        return _land_asset_match(criteria, land_subject)
     requested = criteria.get("property_types")
     if not isinstance(requested, list) or not requested:
-        return False
+        return False, [], {"property_type": {"status": "review_required"}}
     subject = _normalized_key(property_record.property_type)
-    return bool(subject and subject in {_normalized_key(value) for value in requested})
+    matched = bool(subject and subject in {_normalized_key(value) for value in requested})
+    return (
+        matched,
+        [],
+        {
+            "property_type": {
+                "status": "matched" if matched else "mismatch",
+                "observed": subject or None,
+                "expected": requested,
+            }
+        },
+    )
+
+
+def _land_asset_match(
+    criteria: dict[str, object],
+    land_subject: dict[str, Any] | None,
+) -> tuple[bool, list[str], dict[str, Any]]:
+    reasons: list[str] = []
+    checks: dict[str, Any] = {}
+
+    def matched(key: str, *, observed: object = None, expected: object = None) -> None:
+        checks[key] = {"status": "matched", "observed": observed, "expected": expected}
+
+    def not_applicable(key: str) -> None:
+        checks[key] = {"status": "not_applicable", "observed": None, "expected": None}
+
+    def review(
+        key: str,
+        reason: str,
+        *,
+        observed: object = None,
+        expected: object = None,
+        status: str = "review_required",
+    ) -> None:
+        reasons.append(reason)
+        checks[key] = {"status": status, "observed": observed, "expected": expected}
+
+    minimum_acres = _safe_number(criteria.get("min_acres"))
+    maximum_acres = _safe_number(criteria.get("max_acres"))
+    observed_acres = _land_acres(land_subject)
+    if minimum_acres is None and maximum_acres is None:
+        not_applicable("acreage")
+    elif observed_acres is None:
+        review(
+            "acreage",
+            (
+                "Current frozen Land acreage evidence is unavailable; review the buyer's "
+                "acreage range."
+            ),
+            expected={"minimum": minimum_acres, "maximum": maximum_acres},
+        )
+    elif (minimum_acres is not None and observed_acres < minimum_acres) or (
+        maximum_acres is not None and observed_acres > maximum_acres
+    ):
+        review(
+            "acreage",
+            "The subject acreage is outside the verified Land buy-box range.",
+            observed=observed_acres,
+            expected={"minimum": minimum_acres, "maximum": maximum_acres},
+            status="mismatch",
+        )
+    else:
+        matched(
+            "acreage",
+            observed=observed_acres,
+            expected={"minimum": minimum_acres, "maximum": maximum_acres},
+        )
+
+    requested_uses = _normalized_values(criteria.get("intended_uses"))
+    observed_use = _land_use(land_subject)
+    if not requested_uses:
+        not_applicable("intended_use")
+    elif observed_use == "unknown":
+        review(
+            "intended_use",
+            "Current frozen Land-use evidence cannot confirm the buyer's intended-use criteria.",
+            expected=sorted(requested_uses),
+        )
+    elif observed_use not in requested_uses:
+        review(
+            "intended_use",
+            "The subject Land-use evidence does not match the verified intended-use criteria.",
+            observed=observed_use,
+            expected=sorted(requested_uses),
+            status="mismatch",
+        )
+    else:
+        matched("intended_use", observed=observed_use, expected=sorted(requested_uses))
+
+    requested_zoning = _normalized_values(criteria.get("zoning_codes"))
+    observed_zoning = _land_fact_value(land_subject, "zoning")
+    observed_zoning_values = _normalized_values(observed_zoning)
+    if not requested_zoning:
+        not_applicable("zoning")
+    elif not observed_zoning_values:
+        review(
+            "zoning",
+            "Current frozen zoning evidence is unavailable; review the verified zoning criteria.",
+            expected=sorted(requested_zoning),
+        )
+    elif requested_zoning.isdisjoint(observed_zoning_values):
+        review(
+            "zoning",
+            "The subject zoning does not match the verified Land buy box.",
+            observed=sorted(observed_zoning_values),
+            expected=sorted(requested_zoning),
+            status="mismatch",
+        )
+    else:
+        matched(
+            "zoning",
+            observed=sorted(observed_zoning_values),
+            expected=sorted(requested_zoning),
+        )
+
+    requested_access = _normalized_values(criteria.get("access_preferences"))
+    access_status = _land_access_status(land_subject)
+    if not requested_access:
+        not_applicable("access")
+    elif access_status == "verified" and "legal_access" in requested_access:
+        matched("access", observed="verified_legal_access", expected=sorted(requested_access))
+    else:
+        review(
+            "access",
+            (
+                "Verified legal-access evidence is unavailable for the selected Land access "
+                "preferences. Road-surface preferences require human review."
+            ),
+            observed=access_status,
+            expected=sorted(requested_access),
+        )
+
+    requested_utilities = _normalized_values(criteria.get("utility_preferences"))
+    observed_utilities = _land_utilities(land_subject)
+    if not requested_utilities:
+        not_applicable("utilities")
+    elif requested_utilities.intersection(observed_utilities):
+        matched(
+            "utilities",
+            observed=sorted(observed_utilities),
+            expected=sorted(requested_utilities),
+        )
+    else:
+        review(
+            "utilities",
+            "Current structured Land utility evidence cannot confirm the buyer's preferences.",
+            observed=sorted(observed_utilities),
+            expected=sorted(requested_utilities),
+        )
+
+    requested_terrain = _normalized_values(criteria.get("terrain_preferences"))
+    if requested_terrain:
+        review(
+            "terrain",
+            (
+                "Terrain preferences require human review because no canonical verified "
+                "terrain fact is available."
+            ),
+            observed=_land_fact_value(land_subject, "terrain"),
+            expected=sorted(requested_terrain),
+        )
+    else:
+        not_applicable("terrain")
+
+    flood_tolerance = _normalized_key(criteria.get("flood_zone_tolerance"))
+    if flood_tolerance == "accepted":
+        matched(
+            "flood_zone",
+            observed=_land_fact_value(land_subject, "flood_zone"),
+            expected="accepted",
+        )
+    else:
+        review(
+            "flood_zone",
+            (
+                "Flood-zone tolerance requires human review; provider screening is not official "
+                "flood-zone proof."
+            ),
+            observed=_land_fact_value(land_subject, "flood_zone"),
+            expected=flood_tolerance or "review",
+        )
+
+    wetlands_tolerance = _normalized_key(criteria.get("wetlands_tolerance"))
+    if wetlands_tolerance == "accepted":
+        matched(
+            "wetlands",
+            observed=_land_fact_value(land_subject, "wetlands_status")
+            or _land_fact_value(land_subject, "wetlands"),
+            expected="accepted",
+        )
+    else:
+        review(
+            "wetlands",
+            (
+                "Wetlands tolerance requires human review because no official wetlands "
+                "evidence is available."
+            ),
+            observed=_land_fact_value(land_subject, "wetlands_status")
+            or _land_fact_value(land_subject, "wetlands"),
+            expected=wetlands_tolerance or "review",
+        )
+
+    exclusions = criteria.get("exclusions")
+    if isinstance(exclusions, list) and exclusions:
+        review(
+            "exclusions",
+            "Free-text Land buy-box exclusions require human review.",
+            expected=exclusions,
+        )
+    else:
+        not_applicable("exclusions")
+    return not reasons, reasons, checks
+
+
+def _land_acres(land_subject: dict[str, Any] | None) -> float | None:
+    valuation = _land_evidence_section(land_subject, "valuation")
+    if valuation and valuation.get("uses_current_fresh_property_snapshot") is True:
+        acres = _safe_number(valuation.get("subject_acres"))
+        if acres is not None and acres > 0:
+            return acres
+    acres = _safe_number(_land_fact_value(land_subject, "lot_size_acres"))
+    if acres is not None and acres > 0:
+        return acres
+    lot_size = _land_fact_record(land_subject, "lot_size")
+    square_feet = _safe_number(lot_size.get("value")) if lot_size else None
+    if square_feet is not None and square_feet > 0 and (
+        _normalized_key(lot_size.get("unit")) == "square_feet"
+    ):
+        return round(square_feet / 43_560, 4)
+    return None
+
+
+def _land_use(land_subject: dict[str, Any] | None) -> str:
+    valuation = _land_evidence_section(land_subject, "valuation")
+    if valuation and valuation.get("uses_current_fresh_property_snapshot") is True:
+        value = valuation.get("land_use")
+        if value:
+            return land_use_group(str(value))
+    return land_use_group(str(_land_fact_value(land_subject, "land_use") or ""))
+
+
+def _land_access_status(land_subject: dict[str, Any] | None) -> str:
+    valuation = _land_evidence_section(land_subject, "valuation")
+    if valuation and valuation.get("uses_current_fresh_property_snapshot") is True:
+        return _normalized_key(valuation.get("access_evidence_status")) or "unknown"
+    return "unknown"
+
+
+def _land_utilities(land_subject: dict[str, Any] | None) -> set[str]:
+    observed: set[str] = set()
+    water = _normalized_text(_land_fact_value(land_subject, "water"))
+    sewer = _normalized_text(_land_fact_value(land_subject, "sewer"))
+    if "well" in water:
+        observed.add("well")
+    elif any(token in water for token in ("public", "municipal", "city")):
+        observed.add("public_water")
+    if "septic" in sewer:
+        observed.add("septic")
+    elif any(token in sewer for token in ("public", "municipal", "city")):
+        observed.add("public_sewer")
+    return observed
+
+
+def _land_fact_value(land_subject: dict[str, Any] | None, key: str) -> object | None:
+    record = _land_fact_record(land_subject, key)
+    return record.get("value") if record else None
+
+
+def _land_fact_record(
+    land_subject: dict[str, Any] | None, key: str
+) -> dict[str, Any] | None:
+    property_evidence = _land_evidence_section(land_subject, "property_intelligence")
+    if not property_evidence or property_evidence.get("is_fresh") is not True:
+        return None
+    conflict_fields = property_evidence.get("conflict_fields")
+    if isinstance(conflict_fields, list) and _normalized_key(key) in {
+        _normalized_key(value) for value in conflict_fields
+    }:
+        return None
+    facts = property_evidence.get("facts")
+    if not isinstance(facts, dict):
+        return None
+    record = facts.get(key)
+    if isinstance(record, dict):
+        return record
+    return {"value": record} if record is not None else None
+
+
+def _land_evidence_section(
+    land_subject: dict[str, Any] | None, key: str
+) -> dict[str, Any] | None:
+    if not isinstance(land_subject, dict):
+        return None
+    value = land_subject.get(key)
+    return value if isinstance(value, dict) else None
+
+
+def _normalized_values(value: object) -> set[str]:
+    if isinstance(value, str):
+        normalized = _normalized_key(value)
+        return {normalized} if normalized else set()
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {_normalized_key(item) for item in value if _normalized_key(item)}
 
 
 def _strategy_match(criteria: dict[str, object] | None, strategy: str) -> bool:

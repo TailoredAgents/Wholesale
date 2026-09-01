@@ -124,6 +124,7 @@ class ExecutedContractImportRead(BaseModel):
     contract_package_id: UUID
     document_id: UUID
     lead_id: UUID
+    asset_class: Literal["house", "land"]
     lead_stage: str
     transaction_status: str
     disposition_case_id: UUID | None

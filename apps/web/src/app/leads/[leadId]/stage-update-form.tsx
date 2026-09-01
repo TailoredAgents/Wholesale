@@ -44,6 +44,7 @@ type Status = "idle" | "saving" | "saved" | "error";
 
 export function StageUpdateForm({
   assetClass,
+  canEditLead,
   canImportExecutedContract,
   canRecordOutsideOffer,
   hasExecutedTransaction,
@@ -52,6 +53,7 @@ export function StageUpdateForm({
   sellerName,
 }: {
   assetClass: "house" | "land";
+  canEditLead: boolean;
   canImportExecutedContract: boolean;
   canRecordOutsideOffer: boolean;
   hasExecutedTransaction: boolean;
@@ -77,7 +79,13 @@ export function StageUpdateForm({
   }
 
   const canUseExecutedContractShortcut =
-    assetClass === "house" && canImportExecutedContract && !hasExecutedTransaction;
+    canImportExecutedContract && !hasExecutedTransaction;
+  const canUseAnyStageAction =
+    canEditLead || canRecordOutsideOffer || canUseExecutedContractShortcut;
+
+  if (!canUseAnyStageAction) {
+    return <p>You do not have access to update this lead or record offer and contract evidence.</p>;
+  }
 
   function cancelExecutedContractImport() {
     setSelectedStage(currentStage);
@@ -107,6 +115,10 @@ export function StageUpdateForm({
       // import below creates the transaction evidence and advances the stage atomically.
       setSelectedStage("under_contract");
       setStatus("idle");
+      return;
+    }
+    if (!canEditLead) {
+      setStatus("error");
       return;
     }
     setStatus("saving");
@@ -166,11 +178,18 @@ export function StageUpdateForm({
           {lifecycleStageLabels[currentStage] ? (
             <option disabled value={currentStage}>{lifecycleStageLabels[currentStage]}</option>
           ) : null}
-          {stages.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          {!canEditLead && !offerWorkflowStageLabels[currentStage] && !lifecycleStageLabels[currentStage] ? (
+            <option disabled value={currentStage}>
+              {currentStage.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}
             </option>
-          ))}
+          ) : null}
+          {canEditLead
+            ? stages.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))
+            : null}
           {canRecordOutsideOffer ? (
             <option value="offer_action">Offer - choose workflow</option>
           ) : null}
@@ -179,7 +198,7 @@ export function StageUpdateForm({
           ) : null}
         </select>
       </label>
-        {!["offer_action", "under_contract"].includes(selectedStage) ? (
+        {canEditLead && !["offer_action", "under_contract"].includes(selectedStage) ? (
           <>
             <label>
               <span>Reason</span>
@@ -195,6 +214,8 @@ export function StageUpdateForm({
             </button>
             {status !== "idle" ? <p className={styles[status]}>{status}</p> : null}
           </>
+        ) : !["offer_action", "under_contract"].includes(selectedStage) ? (
+          <p>Select an available evidence-backed action.</p>
         ) : null}
       </form>
       {selectedStage === "offer_action" && canRecordOutsideOffer ? (

@@ -119,7 +119,7 @@ export function DispositionSetupWorkspace({
     <section className={styles.setupLayout}>
       <form className={`${styles.openForm} ${styles.setupForm}`} onSubmit={submit}>
         <div className={styles.formTitle}><Plus aria-hidden="true" size={15} /><strong>Contracted property</strong></div>
-        <label><span>Transaction</span><select defaultValue={selectedTransactionId} name="transaction_id" required>{eligibleTransactions.map((item) => <option key={item.id} value={item.id}>{item.property_address} - {item.seller_name}</option>)}</select></label>
+        <label><span>Transaction</span><select defaultValue={selectedTransactionId} name="transaction_id" required>{eligibleTransactions.map((item) => <option key={item.id} value={item.id}>{item.asset_class === "land" ? "Land" : "House"} - {item.property_address} - {item.seller_name}</option>)}</select></label>
         <label><span>Disposition strategy</span><select name="strategy"><option value="assignment">Assignment</option><option value="double_close">Double close</option><option value="novation">Novation</option></select></label>
         <label><span>Investor asking price</span><input name="asking_price" inputMode="decimal" required /></label>
         <label><span>Approved minimum</span><input name="minimum_price" inputMode="decimal" required /></label>

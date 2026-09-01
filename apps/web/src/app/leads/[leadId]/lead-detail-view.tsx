@@ -339,6 +339,7 @@ function InternalNotesPanel({ lead }: { lead: LeadDetail }) {
 
 function OverviewTab({
   activeAppointment,
+  canEditLead,
   canImportExecutedContract,
   canManagePhonePermission,
   canManageSmsPermission,
@@ -346,6 +347,7 @@ function OverviewTab({
   lead,
 }: {
   activeAppointment: LeadDetail["appointments"][number] | undefined;
+  canEditLead: boolean;
   canImportExecutedContract: boolean;
   canManagePhonePermission: boolean;
   canManageSmsPermission: boolean;
@@ -382,6 +384,7 @@ function OverviewTab({
           <ActionDisclosure label="Change pipeline stage">
             <StageUpdateForm
               assetClass={lead.asset_class}
+              canEditLead={canEditLead}
               canImportExecutedContract={canImportExecutedContract}
               canRecordOutsideOffer={canRecordOutsideOffer}
               currentStage={lead.stage_key}
@@ -662,27 +665,6 @@ function DealTab({
   canImportExecutedContract: boolean;
   lead: LeadDetail;
 }) {
-  if (lead.asset_class === "land") {
-    return (
-      <div className={styles.tabGrid}>
-        <section className={styles.sectionPanel}>
-          <SectionHeader title="Land contract and deal workflow" meta="Intentionally blocked" />
-          <div className={styles.sectionBody}>
-            <p className={styles.emptyState}>
-              Stonegate will not open a residential transaction, create a House purchase package,
-              send a House agreement for signature, or start residential buyer disposition for a
-              Land lead. This workspace will unlock only after a counsel-approved Georgia Land
-              agreement, parcel diligence checklist, Land valuation and Land buyer package are
-              implemented and verified.
-            </p>
-            <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=property`}>
-              Continue Land research <ArrowRight size={14} />
-            </Link>
-          </div>
-        </section>
-      </div>
-    );
-  }
   return (
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
@@ -692,7 +674,7 @@ function DealTab({
             meta={countLabel(lead.transactions.length, "record")}
           />
           <div className={styles.recordList}>
-            {lead.transactions.length === 0 ? <p className={styles.emptyState}>No transaction opened.</p> : null}
+            {lead.transactions.length === 0 ? <p className={styles.emptyState}>No transaction recorded.</p> : null}
             {lead.transactions.map((transaction) => (
               <article key={transaction.id}>
                 <div className={styles.recordTitle}><strong>{labelize(transaction.contract_type)}</strong><span>{labelize(transaction.status)}</span></div>
@@ -712,9 +694,19 @@ function DealTab({
               </article>
             ))}
           </div>
-          <ActionDisclosure label="Open transaction">
-            <TransactionForm leadId={lead.id} />
-          </ActionDisclosure>
+          {lead.asset_class === "house" ? (
+            <ActionDisclosure label="Open transaction">
+              <TransactionForm leadId={lead.id} />
+            </ActionDisclosure>
+          ) : (
+            <div className={styles.sectionBody}>
+              <p className={styles.emptyState}>
+                Stonegate-generated Land agreements and e-signing remain unavailable until an
+                approved Land contract template is released. You can still record the exact
+                agreement signed outside Stonegate and coordinate its transaction here.
+              </p>
+            </div>
+          )}
           {canImportExecutedContract && !lead.transactions.some((item) => item.status === "executed") ? (
             <ActionDisclosure label="Record an already-signed contract">
               <ExecutedContractImportForm leadId={lead.id} sellerName={lead.seller_name} />
@@ -723,25 +715,40 @@ function DealTab({
         </section>
       </div>
       <aside className={styles.sideColumn}>
-        <section className={styles.sectionPanel}>
-          <SectionHeader title="Buyer offers" meta={`${lead.buyer_offers.length} received`} />
-          <div className={styles.recordList}>
-            {lead.buyer_offers.length === 0 ? <p className={styles.emptyState}>No buyer offers recorded.</p> : null}
-            {lead.buyer_offers.map((offer) => (
-              <article key={offer.id}>
-                <div className={styles.recordTitle}><strong>{offer.buyer_name}</strong><span>{labelize(offer.status)}</span></div>
-                <dl className={styles.compactFacts}>
-                  <div><dt>Offer</dt><dd>{formatMoney(offer.amount_cents)}</dd></div>
-                  <div><dt>Financing</dt><dd>{labelize(offer.financing_type)}</dd></div>
-                  <div><dt>POF</dt><dd>{offer.proof_of_funds_received ? "Received" : "Missing"}</dd></div>
-                </dl>
-              </article>
-            ))}
-          </div>
-          <ActionDisclosure label="Record buyer offer">
-            <BuyerOfferForm buyers={buyers} leadId={lead.id} />
-          </ActionDisclosure>
-        </section>
+        {lead.asset_class === "house" ? (
+          <section className={styles.sectionPanel}>
+            <SectionHeader title="Buyer offers" meta={`${lead.buyer_offers.length} received`} />
+            <div className={styles.recordList}>
+              {lead.buyer_offers.length === 0 ? <p className={styles.emptyState}>No buyer offers recorded.</p> : null}
+              {lead.buyer_offers.map((offer) => (
+                <article key={offer.id}>
+                  <div className={styles.recordTitle}><strong>{offer.buyer_name}</strong><span>{labelize(offer.status)}</span></div>
+                  <dl className={styles.compactFacts}>
+                    <div><dt>Offer</dt><dd>{formatMoney(offer.amount_cents)}</dd></div>
+                    <div><dt>Financing</dt><dd>{labelize(offer.financing_type)}</dd></div>
+                    <div><dt>POF</dt><dd>{offer.proof_of_funds_received ? "Received" : "Missing"}</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            <ActionDisclosure label="Record buyer offer">
+              <BuyerOfferForm buyers={buyers} leadId={lead.id} />
+            </ActionDisclosure>
+          </section>
+        ) : (
+          <section className={styles.sectionPanel}>
+            <SectionHeader title="Land package and signing" meta="External evidence only" />
+            <div className={styles.sectionBody}>
+              <p className={styles.emptyState}>
+                Generated Land contract packages, Stonegate e-signing, and residential buyer
+                controls are not enabled. Use the signed-contract importer for completed agreements.
+              </p>
+              <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=valuation`}>
+                Review Land valuation <ArrowRight size={14} />
+              </Link>
+            </div>
+          </section>
+        )}
       </aside>
     </div>
   );
@@ -934,23 +941,13 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
           {lead.transactions.map((transaction) => (
             <article key={transaction.id}>
               <div className={styles.recordTitle}>
-                <strong>
-                  {lead.asset_class === "land"
-                    ? `Legacy residential ${labelize(transaction.contract_type)}`
-                    : labelize(transaction.contract_type)}
-                </strong>
-                <span>{lead.asset_class === "land" ? "Incompatible with Land" : labelize(transaction.status)}</span>
+                <strong>{labelize(transaction.contract_type)}</strong>
+                <span>{labelize(transaction.status)}</span>
               </div>
-              <p>
-                {lead.asset_class === "land"
-                  ? "Retained for audit after reclassification; residential execution is locked."
-                  : transaction.title_company ?? "Title company not assigned"}
-              </p>
-              {lead.asset_class === "house" ? (
-                <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
-                  Open contracts and closing files
-                </Link>
-              ) : null}
+              <p>{transaction.title_company ?? "Title company not assigned"}</p>
+              <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
+                Open contract evidence and closing files
+              </Link>
             </article>
           ))}
           {!lead.underwriting_versions.length && !lead.transactions.length ? (
@@ -964,7 +961,7 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
           <div className={styles.sectionBody}>
             <p className={styles.emptyState}>
               {lead.asset_class === "land"
-                ? "Land valuation reports and contract packages remain unavailable until their dedicated workflows are verified. Legacy House files are audit history only."
+                ? "Land valuation evidence is managed in Land Valuation. Signed external agreements and closing files are managed in Contract & Deal and transaction coordination; generated Land agreements and e-signing remain unavailable."
                 : "Investor and client PDFs are generated in Valuation & Offer. Contracts, signatures, title files, and closing documents are managed in the transaction workspace."}
             </p>
           </div>
@@ -1309,11 +1306,12 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
       (profile?.permissions.includes("communications:place_assigned_calls") &&
         lead.assigned_user_id === profile.user_id),
   );
+  const canEditLead = Boolean(profile?.permissions.includes("leads:edit"));
   const canImportExecutedContract = Boolean(
     profile?.permissions.includes("contracts:record_executed") ||
       profile?.permissions.includes("contracts:modify"),
   );
-  const canRecordOutsideOffer = Boolean(profile?.permissions.includes("leads:edit"));
+  const canRecordOutsideOffer = canEditLead;
   const lastContact = lead.communications[0]?.occurred_at ?? null;
   const addressOnlyLead = isAddressOnlyLead(lead);
   const tabHref = (tab: LeadTab, options?: { editLead?: boolean }) => {
@@ -1462,6 +1460,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
             {activeTab === "summary" ? (
               <OverviewTab
                 activeAppointment={activeAppointment}
+                canEditLead={canEditLead}
                 canImportExecutedContract={canImportExecutedContract}
                 canManagePhonePermission={canManagePhonePermission}
                 canManageSmsPermission={canManageSmsPermission}

@@ -113,13 +113,13 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
   }
   if (status === "Offer prep") {
     if (lead.asset_class === "land") {
-      return { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" };
+      return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare Land offer" };
     }
     return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
   }
   if (status === "Negotiation") {
     if (lead.asset_class === "land") {
-      return { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" };
+      return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Continue Land offer" };
     }
     return { href: `/os/leads/${lead.id}?tab=valuation#negotiation-governance`, label: "Continue negotiation" };
   }
@@ -131,6 +131,8 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
 
 function LeadBoardCard({
   canEditLead,
+  canImportExecutedContract,
+  canRecordOutsideOffer,
   isPending,
   isSelected,
   lead,
@@ -138,6 +140,8 @@ function LeadBoardCard({
   tasks,
 }: {
   canEditLead: boolean;
+  canImportExecutedContract: boolean;
+  canRecordOutsideOffer: boolean;
   isPending: boolean;
   isSelected: boolean;
   lead: LeadListItem;
@@ -147,7 +151,9 @@ function LeadBoardCard({
   const operatingStatus = getLeadOperatingStatus(lead, tasks);
   const needsReview = needsQualifiedSellerReview(lead.id, tasks);
   const action = nextAction(lead, tasks);
-  const canMoveLead = canEditLead && getPipelineStage(lead.stage_key)?.key !== "under_contract";
+  const canMoveLead =
+    (canEditLead || canImportExecutedContract || canRecordOutsideOffer) &&
+    getPipelineStage(lead.stage_key)?.key !== "under_contract";
   const { attributes, isDragging, listeners, setNodeRef } = useDraggable({
     id: `lead:${lead.id}`,
     data: { leadId: lead.id },
@@ -565,20 +571,20 @@ export function LeadsWorkspace({
       targetStage.key === "under_contract" &&
       getPipelineStage(lead.stage_key)?.key !== "under_contract"
     ) {
-      if (lead.asset_class !== "house") {
-        return "This signed-contract shortcut currently supports House leads. Use the Land Contract workflow for land.";
-      }
       if (!canImportExecutedContract) {
         return "Recording an executed contract requires executed-contract recording access.";
       }
       return null;
+    }
+    if (!canEditLead) {
+      return "Moving to this stage requires Lead editing access.";
     }
     return pipelineStageMoveBlockReason(lead, targetStage);
   }
 
   async function moveLeadToStage(leadId: string, targetStage: PipelineStage) {
     const lead = workingLeads.find((item) => item.id === leadId);
-    if (!lead || !canEditLead || pendingLeadIdsRef.current.has(leadId)) return;
+    if (!lead || pendingLeadIdsRef.current.has(leadId)) return;
 
     const currentPipelineStage = getPipelineStage(lead.stage_key);
     if (currentPipelineStage?.key === targetStage.key) {
@@ -610,6 +616,8 @@ export function LeadsWorkspace({
       setStageNotice(null);
       return;
     }
+
+    if (!canEditLead) return;
 
     const previousStageKey = lead.stage_key;
     pendingLeadIdsRef.current.add(leadId);
@@ -915,7 +923,7 @@ export function LeadsWorkspace({
                   return (
                     <LeadBoardColumn
                       blockedReason={dropBlockedReason}
-                      disabled={!canEditLead}
+                      disabled={!canEditLead && !canImportExecutedContract && !canRecordOutsideOffer}
                       key={pipelineStage.key}
                       leadCount={stageLeads.length}
                       stage={pipelineStage}
@@ -923,6 +931,8 @@ export function LeadsWorkspace({
                       {stageLeads.map((lead) => (
                         <LeadBoardCard
                           canEditLead={canEditLead}
+                          canImportExecutedContract={canImportExecutedContract}
+                          canRecordOutsideOffer={canRecordOutsideOffer}
                           isPending={pendingLeadIds.has(lead.id)}
                           isSelected={selectedLead?.id === lead.id}
                           key={lead.id}
@@ -959,7 +969,7 @@ export function LeadsWorkspace({
                     <p>VA-qualified lead imported; confirm the call evidence.</p>
                   </div>
                 ) : null}
-                {canEditLead ? (
+                {canEditLead || canImportExecutedContract || canRecordOutsideOffer ? (
                   <label className={styles.moveControl}>
                     <span>Move to stage</span>
                     <select

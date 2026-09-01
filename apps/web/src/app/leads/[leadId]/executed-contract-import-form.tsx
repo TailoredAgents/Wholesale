@@ -14,6 +14,7 @@ export type ExecutedContractImportResponse = {
   contract_package_id: string;
   document_id: string;
   lead_id: string;
+  asset_class: "house" | "land";
   lead_stage: string;
   transaction_status: string;
   disposition_case_id: string | null;

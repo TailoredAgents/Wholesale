@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import normalize_asset_class, property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AuditEvent,
@@ -20,6 +21,7 @@ from app.models.foundation import (
     DispositionPackageVersion,
     FieldInspection,
     FieldInspectionPhoto,
+    LandValuationAnalysis,
     Lead,
     Property,
     PropertyIntelligenceSnapshot,
@@ -65,6 +67,7 @@ PUBLIC_PACKAGE_KEYS = {
     "evidence_summary",
 }
 PUBLIC_PACKAGE_SCALAR_KEYS = {
+    "asset_class",
     "headline",
     "description",
     "disclaimer",
@@ -72,13 +75,27 @@ PUBLIC_PACKAGE_SCALAR_KEYS = {
 }
 PUBLIC_PACKAGE_LIST_KEYS = {"highlights", "unknowns", "due_diligence"}
 PUBLIC_PACKAGE_NESTED_KEYS = {
-    "property": {"address", "property_type", "county", "parcel_id"},
+    "property": {
+        "address",
+        "asset_class",
+        "property_type",
+        "county",
+        "parcel_id",
+        "acres",
+        "lot_count",
+        "access_evidence_status",
+    },
     "opportunity": {"strategy"},
     "pricing": {"buyer_asking_price_cents"},
     "valuation": {
         "arv_low_cents",
         "arv_high_cents",
         "estimated_value_cents",
+        "supported_value_low_cents",
+        "supported_value_cents",
+        "supported_value_high_cents",
+        "quick_sale_low_cents",
+        "quick_sale_high_cents",
         "source_label",
     },
     "repairs": {"total_cents", "scope_item_count", "source_label"},
@@ -181,13 +198,17 @@ def _dict_section(payload: dict[str, Any], key: str) -> dict[str, Any] | None:
 def _address(property_record: Property | None) -> str:
     if property_record is None:
         return "Address unavailable"
-    parts = [
-        property_record.street_address.strip(),
-        property_record.city.strip(),
-        property_record.state.strip(),
-        property_record.postal_code.strip(),
-    ]
-    return ", ".join(part for part in parts if part)
+    return (
+        property_identity_label(
+            street_address=property_record.street_address,
+            city=property_record.city,
+            state=property_record.state,
+            postal_code=property_record.postal_code,
+            parcel_id=property_record.parcel_id,
+            county=property_record.county,
+        )
+        or "Property identity unavailable"
+    )
 
 
 def _freshness(expires_at: datetime | None) -> str:
@@ -305,6 +326,8 @@ def assemble_package(
         or transaction.deal_id != case.deal_id
     ):
         raise ValueError("Disposition case transaction identity is inconsistent.")
+    asset_class = normalize_asset_class(lead.asset_class)
+    is_land = asset_class == "land"
 
     ask = asking_price_cents if asking_price_cents is not None else case.asking_price_cents
     floor = (
@@ -349,6 +372,22 @@ def assemble_package(
             UnderwritingMarketAnalysis.property_id == case.property_id,
         )
         .order_by(UnderwritingMarketAnalysis.created_at.desc())
+    )
+    land_valuation = (
+        db.scalar(
+            select(LandValuationAnalysis)
+            .where(
+                LandValuationAnalysis.organization_id == principal.organization_id,
+                LandValuationAnalysis.lead_id == case.lead_id,
+                LandValuationAnalysis.property_id == case.property_id,
+            )
+            .order_by(
+                LandValuationAnalysis.version_number.desc(),
+                LandValuationAnalysis.created_at.desc(),
+            )
+        )
+        if is_land
+        else None
     )
     repair = db.scalar(
         select(RepairEstimate)
@@ -466,38 +505,74 @@ def assemble_package(
         value and value.strip().lower() not in {"unknown", "n/a", "none"}
         for value in address_values
     )
-    if not address_ready:
-        blockers.append("The property address is incomplete or unusable.")
-    elif property_record.address_validation_status not in {
+    parcel_ready = bool(
+        is_land
+        and str(property_record.parcel_id or "").strip()
+        and str(property_record.county or "").strip()
+        and len(str(property_record.state or "").strip()) == 2
+    )
+    identity_ready = address_ready or parcel_ready
+    validation_metadata = (
+        property_record.address_validation_metadata
+        if isinstance(property_record.address_validation_metadata, dict)
+        else {}
+    )
+    identity_validation_recorded = property_record.address_validation_status in {
         "validated",
         "provider_confirmed",
         "confirmed",
         "verified",
-    }:
+    }
+    provider_parcel_signal = bool(
+        identity_validation_recorded
+        and str(property_record.address_validation_provider or "").strip()
+        and property_record.address_validated_at is not None
+        and validation_metadata.get("lookup_mode") == "parcel"
+    )
+    if parcel_ready and not address_ready:
+        identity_classification = (
+            "provider_signal" if provider_parcel_signal else "seller_statement"
+        )
+    else:
+        identity_classification = (
+            "verified_fact" if identity_validation_recorded else "seller_statement"
+        )
+    identity_warning = bool(
+        address_ready
+        and property_record.address_validation_status
+        not in {
+            "validated",
+            "provider_confirmed",
+            "confirmed",
+            "verified",
+        }
+    )
+    if not identity_ready:
+        blockers.append(
+            "Land requires either a usable property address or a parcel ID with county and state."
+            if is_land
+            else "The property address is incomplete or unusable."
+        )
+    elif identity_warning:
         warnings.append("The address has not been provider-confirmed.")
     checks.append(
         _check(
             "property_identity",
             "Property identity",
-            "blocked" if not address_ready else "ready" if not warnings else "warning",
+            "blocked" if not identity_ready else "warning" if identity_warning else "ready",
             _address(property_record),
             "Stonegate property record",
             property_record.address_validated_at or property_record.updated_at,
             None
-            if address_ready
+            if identity_ready
             else {"label": "Review property", "href": f"/os/leads/{case.lead_id}?tab=property"},
         )
     )
     evidence.append(
         _evidence(
-            key="property_address",
-            label="Property address",
-            classification=(
-                "verified_fact"
-                if property_record.address_validation_status
-                in {"validated", "provider_confirmed", "confirmed", "verified"}
-                else "seller_statement"
-            ),
+            key="property_identity",
+            label="Property identity",
+            classification=identity_classification,
             value=_address(property_record),
             entity_type="property",
             entity_id=property_record.id,
@@ -627,7 +702,94 @@ def assemble_package(
         )
 
     valuation_values = None
-    if underwriting:
+    if land_valuation:
+        valuation_values = {
+            "supported_value_low_cents": land_valuation.supported_value_low_cents,
+            "supported_value_cents": land_valuation.supported_value_cents,
+            "supported_value_high_cents": land_valuation.supported_value_high_cents,
+            "quick_sale_low_cents": land_valuation.quick_sale_low_cents,
+            "quick_sale_high_cents": land_valuation.quick_sale_high_cents,
+            "source_label": "Stonegate Land valuation",
+        }
+        valuation_issues: list[str] = []
+        if land_valuation.supported_value_cents is None:
+            valuation_issues.append("it does not establish a supported value yet")
+        if land_valuation.status != "ready":
+            valuation_issues.append(f"its analysis status is {land_valuation.status}")
+        if land_valuation.review_reasons:
+            valuation_issues.append("human review reasons remain unresolved")
+        if land_valuation.guidance_status != "available":
+            valuation_issues.append(f"offer guidance is {land_valuation.guidance_status}")
+        if land_valuation.guidance_blockers:
+            valuation_issues.append("offer-guidance blockers remain unresolved")
+        valuation_ready = not valuation_issues
+        if valuation_issues:
+            warnings.append(
+                "The saved Land valuation is not ready: " + "; ".join(valuation_issues) + "."
+            )
+        evidence.append(
+            _evidence(
+                key="valuation",
+                label="Stonegate Land valuation",
+                classification="stonegate_analysis",
+                value={
+                    **valuation_values,
+                    "status": land_valuation.status,
+                    "guidance_status": land_valuation.guidance_status,
+                    "selected_comp_count": land_valuation.selected_comp_count,
+                    "confidence_score": land_valuation.confidence_score,
+                    "review_reasons": list(land_valuation.review_reasons or []),
+                    "guidance_blockers": list(land_valuation.guidance_blockers or []),
+                },
+                entity_type="land_valuation_analysis",
+                entity_id=land_valuation.id,
+                captured_at=land_valuation.updated_at,
+            )
+        )
+        checks.append(
+            _check(
+                "valuation",
+                "Land valuation evidence",
+                "ready" if valuation_ready else "warning",
+                (
+                    f"Land valuation v{land_valuation.version_number} is saved with "
+                    f"{land_valuation.selected_comp_count} selected comparable sale(s)."
+                    if valuation_ready
+                    else "Land valuation review is incomplete: " + "; ".join(valuation_issues) + "."
+                ),
+                "Stonegate Land valuation",
+                land_valuation.updated_at,
+                {"label": "Open Land valuation", "href": f"/os/leads/{case.lead_id}?tab=valuation"},
+            )
+        )
+    elif is_land:
+        warnings.append("Land valuation evidence is not available.")
+        unknowns.append("Land valuation")
+        evidence.append(
+            _evidence(
+                key="valuation",
+                label="Land valuation evidence",
+                classification="unknown",
+                value=None,
+                entity_type="property",
+                entity_id=case.property_id,
+                captured_at=None,
+            )
+        )
+        checks.append(
+            _check(
+                "valuation",
+                "Land valuation evidence",
+                "warning",
+                "No saved Land valuation evidence is available.",
+                "Stonegate Land valuation",
+                remediation={
+                    "label": "Run Land valuation",
+                    "href": f"/os/leads/{case.lead_id}?tab=valuation",
+                },
+            )
+        )
+    elif underwriting:
         valuation_values = {
             "arv_low_cents": underwriting.arv_low_cents,
             "arv_high_cents": underwriting.arv_high_cents,
@@ -715,7 +877,29 @@ def assemble_package(
         )
 
     repair_values = None
-    if repair:
+    if is_land:
+        evidence.append(
+            _evidence(
+                key="repairs",
+                label="Residential repair estimate",
+                classification="verified_fact",
+                value="Not applicable to a Land opportunity",
+                entity_type="property",
+                entity_id=case.property_id,
+                captured_at=property_record.updated_at,
+            )
+        )
+        checks.append(
+            _check(
+                "repairs",
+                "Residential repair evidence",
+                "ready",
+                "Not applicable to the Land workflow.",
+                "Stonegate asset workflow",
+                property_record.updated_at,
+            )
+        )
+    elif repair:
         repair_values = {
             "total_cents": repair.total_cents,
             "scope_item_count": len(repair.scope_items or []),
@@ -892,14 +1076,21 @@ def assemble_package(
         item
         for item in (
             f"{property_record.property_type} property" if property_record.property_type else None,
+            (
+                f"{land_valuation.subject_acres_ten_thousandths / 10_000:g} acres"
+                if land_valuation
+                else None
+            ),
             f"Buyer asking price ${ask / 100:,.0f}",
             "Stonegate valuation evidence saved" if valuation_values else None,
             f"{len(photos)} inspection photo(s) saved" if photos else None,
         )
         if item
     ]
+    property_label = _address(property_record)
     public_snapshot = {
-        "headline": f"Investment opportunity at {_address(property_record)}",
+        "asset_class": asset_class,
+        "headline": f"Investment opportunity at {property_label}",
         "description": (
             "A Stonegate evidence-backed property opportunity prepared for qualified buyers."
         ),
@@ -911,10 +1102,18 @@ def assemble_package(
         ),
         "package_reference": str(case.id),
         "property": {
-            "address": _address(property_record),
+            "address": property_label,
+            "asset_class": asset_class,
             "property_type": property_record.property_type,
             "county": property_record.county,
             "parcel_id": property_record.parcel_id,
+            "acres": (
+                land_valuation.subject_acres_ten_thousandths / 10_000 if land_valuation else None
+            ),
+            "lot_count": land_valuation.subject_lot_count if land_valuation else None,
+            "access_evidence_status": (
+                land_valuation.access_evidence_status if land_valuation else None
+            ),
         },
         "opportunity": {"strategy": case.strategy},
         "pricing": {"buyer_asking_price_cents": ask},
@@ -944,7 +1143,6 @@ def assemble_package(
         },
     }
     readiness = _readiness(blockers=blockers, warnings=warnings, unknowns=unknowns, checks=checks)
-    property_label = _address(property_record)
     email_summary = (
         f"Investment opportunity: {property_label}. Buyer asking price: ${ask / 100:,.0f}. "
         "Review the attached evidence-backed package and independently verify all facts."
@@ -954,7 +1152,8 @@ def assemble_package(
         "Reply for the evidence-backed package. Buyer due diligence required."
     )[:1000]
     material_sources = {
-        "case": {"id": case.id, "strategy": case.strategy},
+        "case": {"id": case.id, "strategy": case.strategy, "asset_class": asset_class},
+        "lead": {"id": lead.id, "asset_class": asset_class},
         "transaction": {
             "id": transaction.id,
             "status": transaction.status,
@@ -1009,6 +1208,29 @@ def assemble_package(
                 "selected_comps": market_analysis.selected_comps,
             }
             if market_analysis and underwriting is None
+            else None
+        ),
+        "land_valuation": (
+            {
+                "id": land_valuation.id,
+                "version": land_valuation.version_number,
+                "status": land_valuation.status,
+                "guidance_status": land_valuation.guidance_status,
+                "access_evidence_status": land_valuation.access_evidence_status,
+                "subject_acres_ten_thousandths": (land_valuation.subject_acres_ten_thousandths),
+                "subject_lot_count": land_valuation.subject_lot_count,
+                "supported_value_low_cents": land_valuation.supported_value_low_cents,
+                "supported_value_cents": land_valuation.supported_value_cents,
+                "supported_value_high_cents": land_valuation.supported_value_high_cents,
+                "quick_sale_low_cents": land_valuation.quick_sale_low_cents,
+                "quick_sale_high_cents": land_valuation.quick_sale_high_cents,
+                "selected_comp_count": land_valuation.selected_comp_count,
+                "confidence_score": land_valuation.confidence_score,
+                "review_reasons": list(land_valuation.review_reasons or []),
+                "guidance_blockers": list(land_valuation.guidance_blockers or []),
+                "updated_at": land_valuation.updated_at,
+            }
+            if land_valuation
             else None
         ),
         "repair": {
@@ -1288,7 +1510,7 @@ def build_version(
     *,
     commit: bool = True,
 ) -> DispositionPackageVersionRead | None:
-    from app.services.dispositions import scoped_case_for_mutation
+    from app.services.dispositions import require_house_case_workflow, scoped_case_for_mutation
 
     case = scoped_case_for_mutation(
         db,
@@ -1298,6 +1520,7 @@ def build_version(
     )
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     has_economics_override = any(
         value is not None
         for value in (
@@ -1666,6 +1889,15 @@ def approve_version(
     )
     if version is None:
         return None
+    artifact_metadata = _external_artifact_metadata(version)
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("The disposition lead is no longer available.")
+    if normalize_asset_class(lead.asset_class) == "land" and artifact_metadata is None:
+        raise ValueError(
+            "Stonegate-generated Land investor packets are not available yet. "
+            "Upload the completed Land investor packet PDF for governed review."
+        )
     latest = db.scalar(
         select(DispositionPackageVersion)
         .where(
@@ -1710,7 +1942,6 @@ def approve_version(
     if blockers:
         raise ValueError("Package approval is blocked: " + "; ".join(blockers))
     now = datetime.now(UTC)
-    artifact_metadata = _external_artifact_metadata(version)
     if artifact_metadata is not None:
         if (
             artifact_metadata.get("malware_scan_status")

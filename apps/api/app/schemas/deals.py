@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,7 @@ class DealBlockerRead(BaseModel):
 class DealQueueItemRead(BaseModel):
     id: UUID
     lead_id: UUID
+    asset_class: Literal["house", "land"]
     transaction_id: UUID
     disposition_case_id: UUID | None
     seller_name: str

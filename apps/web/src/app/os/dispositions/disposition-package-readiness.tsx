@@ -179,6 +179,7 @@ function CheckIcon({ status }: { status: DispositionPackageReadinessCheck["statu
 }
 
 export function DispositionPackageReadiness({
+  assetClass,
   canEditDeals,
   caseId,
   dealId,
@@ -189,6 +190,7 @@ export function DispositionPackageReadiness({
   onMessage,
   request,
 }: {
+  assetClass: "house" | "land";
   canEditDeals: boolean;
   caseId: string;
   dealId: string;
@@ -569,16 +571,16 @@ export function DispositionPackageReadiness({
           <span>Choose your packet path</span>
           <h5 id="package-path-heading">How do you want to create the investor packet?</h5>
           <p>
-            Both paths create a governed draft that must be reviewed and approved. Uploading an
-            existing PDF preserves that exact file; it does not replace Stonegate&apos;s CRM
-            readiness, buyer matching, private economics, or outreach-summary controls.
+            {assetClass === "land"
+              ? "Upload the completed Land investor packet as a governed draft. Stonegate preserves that exact file while CRM readiness, buyer matching, and private economics remain structured records."
+              : "Both paths create a governed draft that must be reviewed and approved. Uploading an existing PDF preserves that exact file; it does not replace Stonegate's CRM readiness, buyer matching, private economics, or outreach-summary controls."}
           </p>
         </header>
         <div>
-          <a href="#build-with-stonegate">
+          {assetClass === "house" ? <a href="#build-with-stonegate">
             <RefreshCw aria-hidden="true" size={18} />
             <span><strong>Build with Stonegate</strong><small>Generate a packet from the current saved evidence and approved economics.</small></span>
-          </a>
+          </a> : null}
           <a href="#use-existing-pdf">
             <Upload aria-hidden="true" size={18} />
             <span><strong>Use existing PDF</strong><small>Upload your finished investor packet unchanged as the exact draft artifact.</small></span>
@@ -725,7 +727,7 @@ export function DispositionPackageReadiness({
       </section>
 
       <div className={styles.actionGrid}>
-        <form className={styles.buildPanel} id="build-with-stonegate" onSubmit={rebuild}>
+        {assetClass === "house" ? <form className={styles.buildPanel} id="build-with-stonegate" onSubmit={rebuild}>
           <div className={styles.panelHeading}>
             <div><span>Stonegate-built draft</span><h5>Build with Stonegate</h5></div>
             <RefreshCw aria-hidden="true" size={18} />
@@ -739,7 +741,7 @@ export function DispositionPackageReadiness({
             </div>
           ) : <p className={styles.permissionNote}>You can rebuild the public package, but internal economics are hidden for your role.</p>}
           <button disabled={!canEditDeals || busyAction !== null} type="submit">{busyAction === "rebuild" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <RefreshCw aria-hidden="true" size={15} />}{latestVersion ? "Rebuild draft" : "Build draft"}</button>
-        </form>
+        </form> : null}
 
         <section className={styles.releasePanel}>
           <div className={styles.panelHeading}>
@@ -748,9 +750,11 @@ export function DispositionPackageReadiness({
           </div>
           <button disabled={!canEditDeals || !data.can_approve || hasApprovalBlockers || !latestVersion?.is_current || latestVersion.status === "approved" || busyAction !== null} onClick={openApproval} type="button"><Check aria-hidden="true" size={15} />Approve {versionName(latestVersion)}</button>
           <button disabled={!approvedVersion || busyAction !== null} onClick={() => approvedVersion && void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${approvedVersion.id}/package.pdf`, approvedVersion.pdf_file_name ?? `stonegate-investor-package-v${approvedVersion.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />Download approved {versionName(approvedVersion)} PDF</button>
-          <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || busyAction !== null} onClick={() => void mutate("rank", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/matches`, { method: "POST", body: "{}" }), "Buyer pool scored against the current approved package.")} type="button"><UsersRound aria-hidden="true" size={15} />Refresh buyer ranking</button>
-          <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || qualifiedBuyerCount < 1 || busyAction !== null} onClick={() => void mutate("release", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, { method: "POST", body: "{}" }), "Approved recipient pool recorded. No buyer messages were sent.")} type="button"><Megaphone aria-hidden="true" size={15} />Prepare recipient pool</button>
-          <p id="release-version-requirement">Buyer ranking and recipient preparation require the current evidence fingerprint to match an approved package version. No buyer communication is sent by these controls.</p>
+          {assetClass === "house" ? <>
+            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || busyAction !== null} onClick={() => void mutate("rank", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/matches`, { method: "POST", body: "{}" }), "Buyer pool scored against the current approved package.")} type="button"><UsersRound aria-hidden="true" size={15} />Refresh buyer ranking</button>
+            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || !currentApprovedVersion || qualifiedBuyerCount < 1 || busyAction !== null} onClick={() => void mutate("release", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, { method: "POST", body: "{}" }), "Approved recipient pool recorded. No buyer messages were sent.")} type="button"><Megaphone aria-hidden="true" size={15} />Prepare recipient pool</button>
+            <p id="release-version-requirement">Buyer ranking and recipient preparation require the current evidence fingerprint to match an approved package version. No buyer communication is sent by these controls.</p>
+          </> : <p>Approve the exact uploaded Land packet, then use the Buyer pool tab for asset-aware matching. Residential recipient preparation remains unavailable for Land.</p>}
         </section>
       </div>
 

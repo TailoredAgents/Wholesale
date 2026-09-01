@@ -180,7 +180,8 @@ both outreach approval and bulk-send authority; the standard Disposition manager
 - Do not select a buyer or release a package by bypassing approval gates.
 - Treat **Prepare recipient pool** as an audited `prepared_not_sent` record only. It sends no
   email or SMS. Use the separate House **Outreach** view for exact-message review, approval, and
-  release; Land package readiness and outreach remain blocked.
+  release. Land supports exact external-packet approval and asset-aware buyer-pool matching, while
+  Land outreach remains blocked.
 - Confirm every selected recipient, channel, destination, sender, rendered message, exclusion, and
   delivery count before requesting outreach approval. One revision is capped at 25
   recipient-channel deliveries.
@@ -522,22 +523,23 @@ current human disposition work according to the active compensation policy.
 
 ### When A Deal Enters Dispositions
 
-1. Open or select the contracted House disposition case. Do not use this workflow for Land.
-2. Verify the executed contract, closing deadline, transaction, title/file, property intelligence,
-   underwriting, repair, inspection, and approved photo evidence.
+1. Open or select the contracted House or Land disposition case.
+2. Verify the executed contract, closing deadline, transaction, title/file, property identity, and
+   asset-specific valuation, diligence, inspection, and approved photo evidence.
 3. Review **Launch readiness**. Resolve every blocker and investigate warnings, unknowns, stale
    sources, and conflicts through the displayed remediation links.
 4. Review **Classified evidence** and make sure verified facts, seller statements, provider signals,
    Stonegate analysis, and unknowns are labeled truthfully.
 5. Compare the investor-visible preview and summaries with the permission-gated private economics.
    Never place a floor, private note, or unsupported statement in buyer-visible content.
-6. Select **Build draft** or **Rebuild draft**. A rebuild creates a new immutable version; it does
-   not alter a prior version.
+6. For House, select **Build draft** or **Rebuild draft**. For House or Land, **Use existing PDF**
+   preserves the completed packet as the exact immutable version. A new version does not alter a
+   prior version.
 7. An authorized approver records a reason, completes the attestation, and selects **Approve exact
    version**. If material evidence changes, rebuild and reapprove before ranking or release.
 8. Download and review the stored approved-version PDF. The file is the exact artifact frozen at
    approval.
-9. Select **Prepare recipient pool** only after buyer qualification. Confirm that the prepared
+9. For House outreach, select **Prepare recipient pool** only after buyer qualification. Confirm that the prepared
    recipients and exact version were recorded as `prepared_not_sent`; this step sends nothing.
 10. Open **Outreach**. Select only the intended owned-network buyers and eligible email and/or SMS
     paths. Confirm the active Resend alias or Dispositions buyer-relations Twilio line, and keep the
@@ -554,9 +556,10 @@ current human disposition work according to the active compensation policy.
 14. Work safely matched replies in the linked Buyer Inbox conversation and complete the review task.
     Ambiguous replies require reconciliation review before buyer, interest, or offer state changes.
 
-The governed workflow above is House-only and reaches only selected buyers already in Stonegate's
-owned Buyer Network. InvestorLift and Land outreach remain disabled. Real Resend/Twilio delivery and
-reply acceptance must still pass a controlled, capped production test before broad use.
+Steps 1-8 and the asset-aware Buyer pool support House and Land. Steps 9-14 are the governed
+House-only outreach workflow and reach only selected buyers already in Stonegate's owned Buyer
+Network. InvestorLift and Land outreach remain disabled. Real Resend/Twilio delivery and reply
+acceptance must still pass a controlled, capped production test before broad use.
 
 ### Buyer Work
 
@@ -619,8 +622,8 @@ released House **Outreach** revision can do so through Stonegate's existing comm
 10. After promoting the last backup, qualify and approve replacement backup coverage. Keep the
     transaction coordinator informed of changed terms and deadlines.
 
-This Offer Room workflow is House-only. Land disposition and InvestorLift remain outside the live
-workflow.
+This Offer Room workflow is House-only. Land Offer Room, automated outreach, and InvestorLift remain
+outside the live workflow; Land external-packet approval and Buyer pool are available separately.
 
 ### Devon And Austin Work Split
 

@@ -13,7 +13,7 @@ const providerStyles = readFileSync(resolve(appRoot, "os/dispositions/dispositio
 test("DS8 keeps the InvestorLift handoff inside the canonical disposition workspace", () => {
   assert.match(disposition, /<DispositionProviderWorkspace/);
   assert.match(disposition, /item === "provider" \? "InvestorLift"/);
-  assert.match(disposition, /tab === "provider"/);
+  assert.match(disposition, /activeTab === "provider"/);
   assert.match(deals, /"provider"/);
   assert.match(api, /export type DispositionProviderWorkspace/);
   assert.match(provider, /\/api\/v1\/dispositions\/cases\/\$\{caseId\}\/provider`/);

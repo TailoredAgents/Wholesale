@@ -13,8 +13,8 @@ const outreachStyles = readFileSync(resolve(appRoot, "os/dispositions/dispositio
 const rbac = readFileSync(resolve(process.cwd(), "../api/app/domain/rbac.py"), "utf8");
 
 test("DS6 outreach lives between the canonical buyer pool and offers tabs", () => {
-  assert.match(deals, /"package" \| "buyers" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
-  assert.match(disposition, /\["package", "buyers", "outreach", "offers", "provider", "reconciliation"\]/);
+  assert.match(deals, /"package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
+  assert.match(disposition, /\["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"\]/);
   assert.match(disposition, /<DispositionOutreachWorkspace/);
   assert.match(disposition, /item === "buyers" \? "Buyer pool"/);
   assert.match(disposition, /item === "offers" \? "Offer Room"/);
@@ -56,7 +56,7 @@ test("buyer and outreach authority both gate the tab, forced URL, and workspace 
   assert.match(page, /canViewOutreach=\{canViewOutreach\}/);
   assert.match(deals, /requestedDispositionTab === "outreach" && !canViewOutreach/);
   assert.match(disposition, /item !== "outreach" \|\| canViewOutreach/);
-  assert.match(disposition, /tab === "outreach" && canViewOutreach/);
+  assert.match(disposition, /activeTab === "outreach" && canViewOutreach/);
   assert.match(outreach, /captured_email/);
   assert.match(outreach, /captured_phone/);
   assert.match(outreach, /delivery\.provider/);

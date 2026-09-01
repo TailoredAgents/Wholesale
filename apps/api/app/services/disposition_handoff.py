@@ -6,6 +6,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
+from app.domain.assets import ASSET_CLASSES, normalize_asset_class, property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AuditEvent,
@@ -66,11 +67,11 @@ class DispositionOwnerRoute:
     team_id: UUID | None = None
 
 
-def ensure_house_disposition_case_for_executed_transaction(
+def ensure_disposition_case_for_executed_transaction(
     db: Session,
     transaction: Transaction,
 ) -> DispositionCase | None:
-    """Open the internal House disposition workspace from signed transaction facts.
+    """Open the shared disposition workspace from signed House or Land facts.
 
     This system-only entry point deliberately does not accept operator-supplied private
     economics. The public API continues to require the private-economics permission;
@@ -135,11 +136,12 @@ def ensure_house_disposition_case_for_executed_transaction(
     if (
         lead is None
         or lead.organization_id != locked_transaction.organization_id
-        or lead.asset_class != "house"
+        or lead.asset_class not in ASSET_CLASSES
         or lead.archived_at is not None
         or lead.stage_key in INACTIVE_LEAD_STAGES
     ):
         return None
+    asset_class = normalize_asset_class(lead.asset_class)
 
     owner_route = select_disposition_owner(
         db,
@@ -191,9 +193,12 @@ def ensure_house_disposition_case_for_executed_transaction(
         package_status="draft",
         package_snapshot={
             "package_reference": "pending",
+            "asset_class": asset_class,
             "property": {
                 "address": _property_address(property_record),
                 "property_type": property_record.property_type if property_record else None,
+                "county": property_record.county if property_record else None,
+                "parcel_id": property_record.parcel_id if property_record else None,
             },
             "opportunity": {"strategy": "assignment"},
             "pricing": {"buyer_asking_price_cents": buyer_price},
@@ -208,7 +213,10 @@ def ensure_house_disposition_case_for_executed_transaction(
         backup_buyer_id=None,
         selection_approved_by_user_id=None,
         selection_approved_at=None,
-        notes="Automatically opened from the executed seller purchase agreement.",
+        notes=(
+            f"Automatically opened from the executed {asset_class.title()} seller "
+            "purchase agreement."
+        ),
     )
     db.add(disposition_case)
     locked_transaction.compensation_plan_version_id = plan.id
@@ -231,6 +239,7 @@ def ensure_house_disposition_case_for_executed_transaction(
             new_value={
                 "transaction_id": str(locked_transaction.id),
                 "lead_id": str(locked_transaction.lead_id),
+                "asset_class": asset_class,
                 "owner_user_id": str(owner_route.user.id),
                 "owner_routing_source": owner_route.source,
                 "owner_team_id": str(owner_route.team_id) if owner_route.team_id else None,
@@ -239,10 +248,25 @@ def ensure_house_disposition_case_for_executed_transaction(
                 "status": "package_prep",
                 "private_economics_source": "executed_transaction",
             },
-            reason="Executed House purchase agreement automatically entered Dispositions.",
+            reason=(
+                f"Executed {asset_class.title()} purchase agreement automatically entered "
+                "Dispositions."
+            ),
         )
     )
     return disposition_case
+
+
+def ensure_house_disposition_case_for_executed_transaction(
+    db: Session,
+    transaction: Transaction,
+) -> DispositionCase | None:
+    """Compatibility entry point that preserves the generated House workflow boundary."""
+
+    lead = db.get(Lead, transaction.lead_id)
+    if lead is None or lead.asset_class != "house":
+        return None
+    return ensure_disposition_case_for_executed_transaction(db, transaction)
 
 
 def disposition_handoff_blockers(
@@ -276,7 +300,7 @@ def process_next_disposition_handoff_recovery(
     db: Session,
     _settings: Settings,
 ) -> UUID | None:
-    """Retry one executed House transaction after a temporary setup blocker clears."""
+    """Retry one executed House or Land transaction after a setup blocker clears."""
     cutoff = datetime.now(UTC) - HANDOFF_RECOVERY_INTERVAL
     latest_blocked_at = (
         select(func.max(AuditEvent.created_at))
@@ -314,7 +338,7 @@ def process_next_disposition_handoff_recovery(
             ),
             Transaction.status.in_(("executed", "closing", "funded")),
             Transaction.contract_executed_at.is_not(None),
-            Lead.asset_class == "house",
+            Lead.asset_class.in_(tuple(sorted(ASSET_CLASSES))),
             Lead.archived_at.is_(None),
             ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
             or_(latest_blocked_at.is_(None), latest_blocked_at <= cutoff),
@@ -324,7 +348,7 @@ def process_next_disposition_handoff_recovery(
     )
     if transaction is None:
         return None
-    ensure_house_disposition_case_for_executed_transaction(db, transaction)
+    ensure_disposition_case_for_executed_transaction(db, transaction)
     db.commit()
     return transaction.id
 
@@ -640,13 +664,13 @@ def revalidate_disposition_package_ready_alert(
             or latest_package_id != package.id
             or disposition_case.status not in ACTIVE_DISPOSITION_CASE_STATUSES
             or lead is None
-            or lead.asset_class != "house"
+            or lead.asset_class not in ASSET_CLASSES
             or lead.archived_at is not None
             or lead.stage_key in INACTIVE_LEAD_STAGES
             or deal is None
             or deal.stage_key in INACTIVE_DISPOSITION_DEAL_STAGES
         ):
-            reason = "The disposition package is no longer attached to an active House deal."
+            reason = "The disposition package is no longer attached to an active supported deal."
             terminal = True
         elif alert.recipient_user_id != current_owner_id:
             reason = "The queued recipient is no longer the assigned disposition owner."
@@ -816,7 +840,7 @@ def process_next_disposition_package_alert_recovery(
             DispositionPackageVersion.status == "approved",
             DispositionCase.package_status == "approved",
             DispositionCase.status.in_(tuple(ACTIVE_DISPOSITION_CASE_STATUSES)),
-            Lead.asset_class == "house",
+            Lead.asset_class.in_(tuple(sorted(ASSET_CLASSES))),
             Lead.archived_at.is_(None),
             ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
             ~Deal.stage_key.in_(tuple(INACTIVE_DISPOSITION_DEAL_STAGES)),
@@ -1011,7 +1035,7 @@ def _record_auto_create_blocked(
                 ),
                 task_type=HANDOFF_SETUP_TASK_TYPE,
                 work_kind="supporting",
-                title="Complete Dispositions setup for the executed House contract",
+                title="Complete Dispositions setup for the executed contract",
                 status="open",
                 priority="urgent",
                 due_at=datetime.now(UTC),
@@ -1079,11 +1103,14 @@ def _resolve_auto_create_blocked_tasks(
 def _property_address(property_record: Property | None) -> str:
     if property_record is None:
         return "Address unavailable"
-    city_state_zip = " ".join(
-        value for value in (property_record.state, property_record.postal_code) if value
-    )
-    locality = ", ".join(value for value in (property_record.city, city_state_zip) if value)
     return (
-        ", ".join(value for value in (property_record.street_address, locality) if value)
+        property_identity_label(
+            street_address=property_record.street_address,
+            city=property_record.city,
+            state=property_record.state,
+            postal_code=property_record.postal_code,
+            parcel_id=property_record.parcel_id,
+            county=property_record.county,
+        )
         or "Address unavailable"
     )

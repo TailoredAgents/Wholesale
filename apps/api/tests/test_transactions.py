@@ -31,6 +31,7 @@ from app.models.foundation import (
     OfferConcession,
     OfferNegotiationPlan,
     Organization,
+    Property,
     Role,
     RoleAssignment,
     Transaction,
@@ -93,9 +94,10 @@ def setup_transaction(db: Session, client: TestClient) -> tuple[str, str]:
                 "property_type": "single_family",
             },
             "source": "referral",
-            "stage_key": "offer_ready",
+            "stage_key": "qualified",
         },
     )
+    assert lead.status_code == 201, lead.text
     transaction_response = client.post(
         f"/api/v1/leads/{lead.json()['id']}/transactions",
         headers=HEADERS,
@@ -295,20 +297,19 @@ def test_owner_can_import_external_executed_contract_without_offer_authority(
         return SimpleNamespace(id=disposition_case_id)
 
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         fake_handoff,
     )
     response = post_external_execution_import(
         client,
         lead_id,
         content=b"%PDF-1.7\nfully executed purchase agreement",
-        params=external_execution_import_params(
-            file_name='..\\docusign-completed\"\r\nX-Test.pdf'
-        ),
+        params=external_execution_import_params(file_name='..\\docusign-completed"\r\nX-Test.pdf'),
     )
 
     assert response.status_code == 201, response.text
     imported = response.json()
+    assert imported["asset_class"] == "house"
     assert imported["lead_stage"] == "under_contract"
     assert imported["transaction_status"] == "executed"
     assert imported["disposition_case_id"] == str(disposition_case_id)
@@ -338,12 +339,14 @@ def test_owner_can_import_external_executed_contract_without_offer_authority(
     )
     assert transaction.transaction_metadata is not None
     assert transaction.transaction_metadata["source"] == "external_execution_import"
+    assert transaction.transaction_metadata["asset_class"] == "house"
     assert lead.stage_key == "under_contract"
     assert deal.stage_key == "under_contract"
     assert package.status == "executed"
     assert package.approval_request_id is None
     assert "purchase_authority" not in package.terms_snapshot
     assert package.terms_snapshot["authority_basis"] == "external_fully_executed_agreement"
+    assert package.terms_snapshot["asset_class"] == "house"
     assert document.contract_package_id == package.id
     assert document.document_type == "signed_purchase_agreement"
     assert document.status == "executed"
@@ -423,7 +426,7 @@ def test_external_execution_import_reuses_safe_contract_prep_and_voids_draft(
     )
     assert draft.status_code == 201, draft.text
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, _transaction: None,
     )
 
@@ -461,7 +464,7 @@ def test_external_execution_import_reuses_safe_contract_prep_and_voids_draft(
     assert "fully executed external" in (plan_approval.decision_notes or "")
 
 
-def test_external_execution_import_rejects_non_pdf_and_land(
+def test_external_execution_import_rejects_non_pdf_and_accepts_parcel_only_land(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -481,8 +484,40 @@ def test_external_execution_import_rejects_non_pdf_and_land(
         land_lead_id,
         content=b"%PDF-1.7\nland agreement",
     )
-    assert land.status_code == 409
-    assert "Land leads" in land.json()["detail"]
+    assert land.status_code == 201, land.text
+    payload = land.json()
+    assert payload["asset_class"] == "land"
+    assert payload["lead_stage"] == "under_contract"
+    assert payload["transaction_status"] == "executed"
+    transaction = db_session.get(Transaction, UUID(payload["transaction_id"]))
+    lead_record = db_session.get(Lead, UUID(land_lead_id))
+    assert transaction is not None
+    assert lead_record is not None
+    deal = db_session.get(Deal, transaction.deal_id)
+    property_record = db_session.get(Property, transaction.property_id)
+    assert deal is not None
+    assert property_record is not None
+    assert lead_record.stage_key == "under_contract"
+    assert deal.stage_key == "under_contract"
+    assert transaction.transaction_metadata is not None
+    assert transaction.transaction_metadata["asset_class"] == "land"
+    assert property_record.normalized_parcel_key == "GA|bibb|LANDAPN100"
+
+    invalid_land_lead_id = create_external_import_lead(db_session, client, asset_class="land")
+    invalid_land_lead = db_session.get(Lead, UUID(invalid_land_lead_id))
+    assert invalid_land_lead is not None
+    invalid_property = db_session.get(Property, invalid_land_lead.property_id)
+    assert invalid_property is not None
+    invalid_property.parcel_id = None
+    invalid_property.county = None
+    db_session.commit()
+    invalid_land = post_external_execution_import(
+        client,
+        invalid_land_lead_id,
+        content=b"%PDF-1.7\nland agreement without parcel identity",
+    )
+    assert invalid_land.status_code == 422
+    assert "APN with county and state" in invalid_land.json()["detail"]
 
 
 def test_external_execution_import_refuses_active_sent_contract_workflow(
@@ -549,7 +584,7 @@ def test_external_execution_import_does_not_resurrect_dead_deal(
     db_session.add(dead_deal)
     db_session.commit()
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, _transaction: None,
     )
 
@@ -596,7 +631,7 @@ def test_external_execution_import_requires_contract_authority_permission(
     )
 
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, _transaction: None,
     )
     allowed = post_external_execution_import(
@@ -631,7 +666,7 @@ def test_external_execution_import_keeps_object_storage_after_success(
         lambda *, provider, key: deleted.append((provider, key)),
     )
     monkeypatch.setattr(
-        "app.services.disposition_handoff.ensure_house_disposition_case_for_executed_transaction",
+        "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
         lambda _db, _transaction: None,
     )
 
@@ -679,14 +714,12 @@ def test_external_execution_import_cleans_object_storage_after_failure(
             raise RuntimeError("simulated handoff failure")
 
         monkeypatch.setattr(
-            "app.services.disposition_handoff."
-            "ensure_house_disposition_case_for_executed_transaction",
+            "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
             fail_handoff,
         )
     else:
         monkeypatch.setattr(
-            "app.services.disposition_handoff."
-            "ensure_house_disposition_case_for_executed_transaction",
+            "app.services.disposition_handoff.ensure_disposition_case_for_executed_transaction",
             lambda _db, _transaction: None,
         )
 
@@ -761,18 +794,31 @@ def create_external_import_lead(
         admin_name="Owner",
     )
     property_type = "vacant_land" if asset_class == "land" else "single_family"
+    property_payload = (
+        {
+            "street_address": "",
+            "city": "",
+            "state": "GA",
+            "postal_code": "",
+            "county": "Bibb",
+            "parcel_id": "LAND-APN-100",
+            "property_type": property_type,
+        }
+        if asset_class == "land"
+        else {
+            "street_address": "123 Peachtree St",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "property_type": property_type,
+        }
+    )
     response = client.post(
         "/api/v1/leads",
         headers=HEADERS,
         json={
             "contact": {"legal_name": "Jane Seller", "contact_type": "seller"},
-            "property": {
-                "street_address": "123 Peachtree St",
-                "city": "Atlanta",
-                "state": "GA",
-                "postal_code": "30303",
-                "property_type": property_type,
-            },
+            "property": property_payload,
             "source": "referral",
             "stage_key": "qualified",
             "asset_class": asset_class,

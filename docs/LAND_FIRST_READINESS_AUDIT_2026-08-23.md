@@ -4,6 +4,13 @@
 
 **Status:** Readiness audit plus Phase 1 ingress remediation; not authorization to activate production Land execution
 
+> **September 1 follow-up:** This remains a historical readiness snapshot. The CRM now supports
+> factual outside-offer recording, exact already-signed Land agreement import, a shared Disposition
+> case, exact external investor-packet approval, and asset-aware buyer-pool review. Statements below
+> describing those specific catch-up capabilities as missing are superseded. Generated/e-signed
+> Land agreements, generated packets, residential outreach, Offer Room, InvestorLift, and
+> Disposition intelligence remain outside the released Land boundary.
+
 **Near-term operating target:** Approximately 80% Land / 20% House
 
 **Later operating target:** Approximately 50% Land / 50% House

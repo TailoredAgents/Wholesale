@@ -159,7 +159,10 @@ snapshot or an earlier analysis.
   integrations with evidence status.
 - Land valuation report and calibration workspaces.
 - Consequential Land offer approval.
-- Land site-visit, counsel-approved contract, buyer-package, and disposition workflows.
+- Land site-visit, counsel-approved generated/e-signed contract, generated buyer-package, and
+  automated disposition-outreach workflows.
 
-Until those stages are verified, Land offer approval, contracts, e-signature, and disposition
-execution remain blocked even when research guidance is available.
+Until those stages are verified, consequential Land offer approval, Stonegate-generated contracts,
+e-signature, generated packets, and automated outreach remain blocked even when research guidance
+is available. Staff may separately record a real outside offer or already-executed agreement and
+may approve the exact externally prepared investor packet for asset-aware buyer-pool review.

@@ -15,7 +15,7 @@ const setupPage = readFileSync(resolve(appRoot, "os/dispositions/page.tsx"), "ut
 test("DS5 remains inside the canonical deal package tab", () => {
   assert.match(dealsWorkspace, /dealId=\{selected\.id\}/);
   assert.match(dispositionWorkspace, /<DispositionPackageReadiness/);
-  assert.match(dispositionWorkspace, /tab === "package"/);
+  assert.match(dispositionWorkspace, /activeTab === "package"/);
   assert.doesNotMatch(dispositionWorkspace, /\/package\/approve/);
   assert.doesNotMatch(dispositionWorkspace, /\/package\.pdf/);
 });
@@ -47,6 +47,17 @@ test("externally prepared packet PDFs remain exact governed package versions", (
   assert.match(packageWorkspace, /latestArtifactScanIssue/);
   assert.match(packageWorkspace, /PDF scan:/);
   assert.match(packageWorkspace, /hasApprovalBlockers/);
+});
+
+test("Land cases use exact external packets and hide residential-only disposition tools", () => {
+  assert.match(api, /asset_class: "house" \| "land"/);
+  assert.match(dispositionWorkspace, /selected\.asset_class === "land"/);
+  assert.match(dispositionWorkspace, /houseOnlyTabs/);
+  assert.match(dispositionWorkspace, /Land uses the same Package, Buyer pool, and closing record/);
+  assert.match(dispositionWorkspace, /assetClass=\{selected\.asset_class\}/);
+  assert.match(packageWorkspace, /assetClass === "land"/);
+  assert.match(packageWorkspace, /Upload the completed Land investor packet/);
+  assert.match(packageWorkspace, /use the Buyer pool tab for asset-aware matching/);
 });
 
 test("package starts with equal Stonegate-build and exact-PDF choices", () => {

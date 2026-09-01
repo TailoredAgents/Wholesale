@@ -20,7 +20,7 @@ test("DS7 replaces the basic offer list with one canonical Offer Room", () => {
   assert.match(api, /export type DispositionOfferRoomWorkspace/);
   assert.match(room, /\/offer-room/);
   assert.match(disposition, /item !== "offers" \|\| data\.can_view_private_economics/);
-  assert.match(disposition, /tab === "offers" && data\.can_view_private_economics/);
+  assert.match(disposition, /activeTab === "offers" && data\.can_view_private_economics/);
   assert.match(disposition, /initialTab === "offers" && !initialData\.can_view_private_economics/);
 });
 

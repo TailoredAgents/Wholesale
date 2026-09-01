@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import normalize_asset_class, property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     Buyer,
@@ -42,10 +43,14 @@ def _utc(value: datetime) -> datetime:
 def _address(property_record: Property | None) -> str:
     if property_record is None:
         return "Unknown property"
-    return (
-        f"{property_record.street_address}, {property_record.city}, "
-        f"{property_record.state} {property_record.postal_code}"
-    )
+    return property_identity_label(
+        street_address=property_record.street_address,
+        city=property_record.city,
+        state=property_record.state,
+        postal_code=property_record.postal_code,
+        parcel_id=property_record.parcel_id,
+        county=property_record.county,
+    ) or "Unknown property"
 
 
 def _contract_status(transaction: Transaction, package: ContractPackage | None) -> str:
@@ -324,6 +329,7 @@ def _build_item(
     return DealQueueItemRead(
         id=deal.id,
         lead_id=transaction.lead_id,
+        asset_class=normalize_asset_class(lead.asset_class if lead else None),
         transaction_id=transaction.id,
         disposition_case_id=case.id if case else None,
         seller_name=contact.legal_name if contact else "Unknown seller",

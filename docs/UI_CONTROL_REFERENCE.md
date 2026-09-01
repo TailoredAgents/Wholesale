@@ -354,11 +354,11 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
 | Pipeline columns | Group active sellers by normalized operating stage | Every column remains visible while Board mode is active |
 | Pipeline card | Selects seller context | Selecting the card does not change stage |
-| Card drag grip | Moves the seller to an ordinary destination and saves that stage; dropping on Offer or Under Contract opens its evidence-backed action instead | Requires `leads:edit`; mouse and press-and-hold touch dragging are supported; disabled while the same lead is saving or is already Under Contract |
+| Card drag grip | Moves the seller to an ordinary destination and saves that stage; dropping on Offer or Under Contract opens its evidence-backed action instead | Ordinary stages and Offer require `leads:edit`; Under Contract requires `contracts:record_executed` or legacy-compatible `contracts:modify`; mouse and press-and-hold touch dragging are supported |
 | Move to stage | Provides the keyboard/mobile alternative in the selected seller preview | Ordinary stages save directly; Offer opens workflow choices; Under Contract opens the signed-agreement form; the same permission, validation, stale-state protection, and rollback rules apply |
-| **Offer - choose workflow** | Opens **Stonegate Valuation & Offer** or **Record an outside offer** without changing the saved stage first | Requires `leads:edit`; the governed path opens `?tab=valuation#offer-decision`; outside-offer catch-up is House-only |
+| **Offer - choose workflow** | Opens the asset-aware Stonegate valuation workspace or **Record an outside offer** without changing the saved stage first | Requires `leads:edit`; outside-offer catch-up supports House and Land, while Stonegate-generated Land offer authority remains unavailable |
 | **Record an outside offer** | Saves an offer already presented outside Stonegate with amount, occurred date/time, method, outcome, optional seller response, and optional internal notes | Requires `leads:edit`; the time cannot be in the future; Countered/Negotiating enters Negotiating, every other outcome enters Offer Presented unless the lead is already Negotiating; verbal acceptance does not mean Under Contract |
-| **Under Contract - record signed agreement** | Opens the exact executed-contract upload instead of applying a label-only stage mutation | House only; requires `contracts:record_executed` or legacy-compatible `contracts:modify`, no conflicting executed workflow, and the evidence described under Contract Tab |
+| **Under Contract - record signed agreement** | Opens the exact executed-contract upload instead of applying a label-only stage mutation | House and Land; requires `contracts:record_executed` or legacy-compatible `contracts:modify`, no conflicting executed workflow, and the evidence described under Contract Tab |
 | Saving / result notice | Shows the in-progress move and its success or failure | A rejected or stale move restores the prior column and refreshes current server state |
 | Card action | Opens the recommended workspace for current operating status | Navigation only |
 | Conversation | Opens Inbox for the lead | Requires conversation access |
@@ -375,7 +375,7 @@ rules.
 
 The full lead record's **Change pipeline stage** control follows the same boundary. It does not
 offer Offer Pending Approval, Offer Ready, Offer Presented, Negotiating, or Under Contract as bare
-manual stages. It offers **Offer - choose workflow** and, for an eligible authorized House user,
+manual stages. It offers **Offer - choose workflow** and, for an eligible authorized House or Land user,
 **Under Contract - record signed agreement**. Offer stages can retreat to a normal pipeline stage
 with a required audit reason. An Under Contract lead remains locked to **Contract & Deal** so the
 signed agreement and transaction stay aligned. Pipeline **Continue negotiation** and **Negotiate**
@@ -1118,8 +1118,8 @@ changing ownership or stage does not create a second record.
 | Preferred contact method/time | Guides follow-up | Does not itself create a task |
 | **Save lead** | Atomically persists ownership, contact methods, seller, property, and qualification changes | Disabled while saving; validation errors are shown in the editor |
 | Stage / Stage reason | Selects an ordinary stage or an available Offer/Under Contract action; records why an offer stage is moved backward | Ordinary stages save directly; an offer retreat requires a substantive reason |
-| **Offer - choose workflow** | Opens the governed **Stonegate Valuation & Offer** path or the factual **Record an outside offer** form | Requires `leads:edit`; external catch-up is House-only and does not fabricate offer approval |
-| **Under Contract - record signed agreement** | Opens the executed-agreement importer from the stage control | Eligible House lead only; requires `contracts:record_executed` or `contracts:modify` and does not update the stage until the upload succeeds |
+| **Offer - choose workflow** | Opens the asset-aware Stonegate valuation path or the factual **Record an outside offer** form | Requires `leads:edit`; external catch-up supports House and Land and does not fabricate offer approval |
+| **Under Contract - record signed agreement** | Opens the executed-agreement importer from the stage control | Eligible House or Land lead; requires `contracts:record_executed` or `contracts:modify` and does not update the stage until the upload succeeds |
 | **Update stage** | Applies an ordinary stage change | Permission, transition, and current-stage concurrency rules apply; action destinations use their own submit control |
 | Administrative archive | Removes a confirmed duplicate or test record from active queues without deleting history | Requires archive permission; real opportunities must use business close-out |
 
@@ -1308,7 +1308,7 @@ appraisal or permission to promise a seller a price.
 | **Request next negotiation step** | Proposes the next amount/action using current authority and ledger | Blocked without approved authority |
 | Negotiation entry | Records asking, presented, counter, agreed, objection, and commitment context | Creates an auditable ledger |
 | **Continue negotiation** / **Negotiate** | Opens the seller's full negotiation ledger in **Valuation & Offer** | Links to `?tab=valuation#negotiation-governance`; it does not open Contract & Deal |
-| **Record an outside offer** | Records the amount and time actually presented outside Stonegate without inventing a governed offer plan | House only; requires `leads:edit`, a positive amount, a non-future occurred time, delivery method, seller outcome, and current-stage match |
+| **Record an outside offer** | Records the amount and time actually presented outside Stonegate without inventing a governed offer plan | House and Land; requires `leads:edit`, a positive amount, a non-future occurred time, delivery method, seller outcome, and current-stage match |
 | How it was presented | Classifies Phone, In person, Text / SMS, Email, Video meeting, or Other | Required for outside-offer catch-up |
 | Seller outcome | Classifies Presented, Considering, Countered, Negotiating, Verbally accepted, Declined, No response, or Other | Countered/Negotiating enters Negotiating; all other results enter Offer Presented unless already Negotiating; none enters Under Contract |
 | Seller response / Internal notes | Preserves the seller's actual response and staff-only context with the outside-offer evidence | Optional; each is limited to 2,000 characters |
@@ -1371,11 +1371,11 @@ disposition, buyer, task, document, and reconciliation records through one emplo
 | Contract, Closing, Disposition, Finance strip | Shows independent status for each workstream | Read-only aggregate state |
 | Summary | Shows the primary next action, blockers, evidence counts, selected buyer, and authorized economics | Default record section |
 | Contract | Embeds agreement packages, SignWell, signatures, version controls, and the outside-signed catch-up entry point | Uses existing contract permissions and server gates |
-| **Record an already-signed contract** in Deals > Contract | Opens the same House executed-agreement importer by source lead | Available to `contracts:record_executed` or `contracts:modify`; gives a Transaction Coordinator an entry point without general Leads access; hidden once the contract is executed or closing is funded/cancelled |
+| **Record an already-signed contract** in Deals > Contract | Opens the same House/Land executed-agreement importer by source lead | Available to `contracts:record_executed` or `contracts:modify`; gives a Transaction Coordinator an entry point without general Leads access; hidden once the contract is executed or closing is funded/cancelled |
 | Closing | Embeds checklist, dates, title, funding, and closing controls | Uses existing deal edit permission |
 | Documents | Embeds the transaction file room and evidence controls | Document access remains role controlled |
 | Parties | Embeds closing-party records | Uses transaction edit permission |
-| Disposition | Embeds Package, Buyers, Outreach, Offers, and Reconciliation for an existing House case | A new case is opened from the compatibility setup route; Land package and outreach controls remain blocked |
+| Disposition | Embeds the asset-appropriate case workspace | House shows the complete residential toolset; Land shows Package, asset-aware Buyer pool, and Reconciliation while residential call queue, Outreach, Offer Room, and InvestorLift stay hidden |
 | Finance | Opens the disposition reconciliation view in deal context | Economics are redacted from the aggregate unless authorized |
 | Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
 | Transaction / Disposition Copilot | Opens the active domain assistant in a drawer | Draft and review only; does not hide or replace source evidence |
@@ -1417,11 +1417,11 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | **Mark sent manually** | Records that staff delivered the exact agreement outside SignWell | Revalidates authority and creates a transaction event; the package stays authority-frozen until execution or audited withdrawal |
 | **Withdraw sent package** | Voids an outstanding manually delivered agreement after staff confirms every recipient can no longer sign it | Requires an explicit confirmation and meaningful audit reason; active SignWell requests must be cancelled and reconciled instead |
 | **Attest executed** | Records a completed externally signed agreement after a human explains how every required party's signature was verified | Requires the exact package document, `executed` evidence status, acceptable scan state, confirmation, and at least 10 characters of reason |
-| **Record an already-signed contract** | Imports an agreement fully executed outside Stonegate, records its actual terms and immutable signed evidence, marks the House transaction/deal/lead Under Contract/Executed, and attempts the canonical Dispositions handoff | Requires `contracts:record_executed` or legacy-compatible `contracts:modify`; intended standard roles are Acquisition Manager, Acquisition Representative, and Transaction Coordinator, while Owner, Founder/Operator, and CEO retain full authority; this permission grants no unrelated approval, send, lead, or Dispositions action |
+| **Record an already-signed contract** | Imports an agreement fully executed outside Stonegate, records its actual terms and immutable signed evidence, marks the House or Land transaction/deal/lead Under Contract/Executed, and attempts the canonical Dispositions handoff | Requires `contracts:record_executed` or legacy-compatible `contracts:modify`; intended standard roles are Acquisition Manager, Acquisition Representative, and Transaction Coordinator, while Owner, Founder/Operator, and CEO retain full authority; this permission grants no unrelated approval, send, lead, or Dispositions action |
 | Executed agreement upload | Sends the exact PDF and contract facts together as `multipart/form-data` | `.pdf` file name, PDF content/header, acceptable scan state, and 1-byte-to-15-MB size required; the request does not expose facts in the URL or rebuild the document |
 | Required import facts | Records seller name, buyer entity, purchase price, execution date/time, signature source, full-execution confirmation, and verification note | Names cannot be blank; price must be positive; time cannot be in the future; source is DocuSign, SignWell, PandaDoc, Adobe Acrobat Sign, manual signature, or Other; verification note is 10-500 characters |
 | Optional import facts | Records assignment fee, earnest money, title/closing company, closing date, inspection period, earnest-money due time, due-diligence deadline, external reference, and contract notes | Optional amounts must be non-negative; inspection period is 0-120 days; external reference is limited to 255 and notes to 2,000 characters |
-| Import entry points | Opens the one canonical form from the Pipeline Under Contract action, seller **Change pipeline stage**, seller **Contract & Deal**, or selected **Deals > Contract** | Pipeline movement also requires `leads:edit`; Deals is the Transaction Coordinator entry point when Leads is unavailable; House only |
+| Import entry points | Opens the one canonical form from the Pipeline Under Contract action, seller **Change pipeline stage**, seller **Contract & Deal**, or selected **Deals > Contract** | House and Land use the same importer; Pipeline movement uses the contract-recording permission, and Deals remains the Transaction Coordinator entry point when Leads editing is unavailable |
 | Dispositions handoff result | Returns **Ready** with a case ID or **Needs setup** with durable blockers after the contract is already recorded | Ready navigates to the case; Needs setup remains visible on the Disposition Desk, creates an urgent setup task, links to transaction/People & Access/Finance Policy, and retries after owner, active compensation plan, or human-led mode setup is corrected |
 | SignWell connection status | Shows whether API configuration is usable | Read-only |
 | **Verify SignWell** | Tests the configured provider connection/template | Requires SignWell credentials and template ID |
@@ -1526,28 +1526,28 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Case row | Opens a disposition case | Requires disposition access |
-| **Open disposition case** | Creates the marketing and buyer-offer workspace from a transaction | Requires a qualifying executed House transaction; Land remains blocked |
-| **Needs setup** intake | Keeps an executed House contract visible before its case can be auto-created and shows the durable blocker reason | Appears on the Disposition Desk when no authorized Dispositions owner, active compensation plan, or available human-led mode exists; **Resolve setup** opens the setup route, **Open deal** opens the source record, and the recovery worker retries after setup changes |
+| **Open disposition case** | Creates the buyer-placement workspace from a transaction | Requires a qualifying executed House or Land transaction |
+| **Needs setup** intake | Keeps an executed House or Land contract visible before its case can be auto-created and shows the durable blocker reason | Appears on the Disposition Desk when no authorized Dispositions owner, active compensation plan, or available human-led mode exists; **Resolve setup** opens the setup route, **Open deal** opens the source record, and the recovery worker retries after setup changes |
 | Launch readiness | Shows ready, warning, blocked, and stale status plus source freshness, conflicts, unknowns, and remediation links | Every blocker must be resolved before approval |
-| **Build with Stonegate** / **Use existing PDF** | Chooses whether Stonegate generates the draft PDF or preserves a completed external investor packet as the draft artifact | Top-level paths for contracted House cases; both remain governed drafts until the same human approval gate succeeds |
+| **Build with Stonegate** / **Use existing PDF** | Chooses whether Stonegate generates the draft PDF or preserves a completed external investor packet as the draft artifact | House supports both paths; Land supports the exact existing-PDF path until the dedicated generated Land packet is released; every draft still requires human approval |
 | Classified evidence | Groups claims as Verified fact, Seller statement, Provider signal, Stonegate analysis, or Unknown | Classification and provenance are read-only package evidence |
 | Investor-visible preview | Shows the facts and pricing that may appear in buyer summaries and the PDF | Must not contain private floors, seller notes, or unsupported claims |
 | Private economics | Shows purchase basis, buyer asking price, minimum acceptable amount, desired assignment fee, and approval authority | Visible only with the private-economics permission; never recipient-visible |
 | Deterministic buyer summaries | Previews email and SMS wording from the same saved public facts | Preview only; no message is sent |
-| **Build draft** / **Rebuild draft** | Creates a new immutable package version and generated PDF from the current saved evidence and source fingerprint | **Build with Stonegate** path; requires `deals:edit`; private overrides require private-economics access |
-| **Upload external packet draft** | Stores the **Use existing PDF** upload byte-for-byte as the immutable artifact for a new package version, plus its hash, source note, and scan state | Requires `deals:edit`, a valid PDF no larger than 15 MB, and current version concurrency; it supersedes an older draft but never replaces CRM readiness, matching, private economics, or deterministic summaries |
+| **Build draft** / **Rebuild draft** | Creates a new immutable package version and generated PDF from the current saved evidence and source fingerprint | House-only **Build with Stonegate** path; requires `deals:edit`; private overrides require private-economics access |
+| **Upload external packet draft** | Stores the **Use existing PDF** upload byte-for-byte as the immutable artifact for a new package version, plus its hash, source note, and scan state | House and Land; requires `deals:edit`, a valid PDF no larger than 15 MB, and current version concurrency; it supersedes an older draft but never replaces CRM readiness, matching, private economics, or deterministic summaries |
 | Draft external PDF review / version **PDF** | Opens the exact uploaded artifact before approval | Requires `deals:edit` or `dispositions:approve_packages`; blocked unless scan state is `clean` or `not_configured`; ordinary deal-view permission alone is insufficient while it is unapproved |
 | **Approve vN** | Opens approval for the exact latest generated or uploaded draft | Requires `dispositions:approve_packages`, no readiness or scan blockers, and a current source fingerprint |
 | Approval reason and attestation | Records what the approver reviewed and confirms no private or unverified claim is presented as fact | Both are required before **Approve exact version** |
 | **Download approved vN PDF** / version **PDF** | Downloads the exact PDF bytes stored when that version was approved | Approved generated and external artifacts use the same deal-view boundary; later source changes do not rewrite the saved bytes |
 | Version history | Shows immutable version number, status, evidence currency, fingerprint, approver, reason, and artifact | A material source change marks the prior approval non-current and requires rebuild/reapproval |
-| **Refresh buyer ranking** | Scores the buyer pool against the current approved package | Disabled when approval is missing or stale |
+| **Refresh buyer ranking** | Scores the asset-aware buyer pool against the current approved package | House and Land use their own verified buy-box criteria; disabled when approval is missing or stale |
 | **Prepare recipient pool** | Records qualified recipients against the exact package version and artifact hash as `prepared_not_sent` | Sends no email or SMS; the separate House Outreach view is required for delivery, and Land remains blocked |
 
-After an external PDF is approved, secure links and governed outreach use that exact uploaded
-artifact. Stonegate's saved CRM facts continue to supply readiness, buyer matching, private
-economics, and email/SMS summaries. This packet choice does not extend the disposition workflow to
-Land.
+After an external PDF is approved, secure links use that exact uploaded artifact. Stonegate's saved
+CRM facts continue to supply readiness, buyer matching, private economics, and email/SMS summaries.
+For Land, this enables the shared package and buyer-pool workflow without enabling residential-only
+outreach, Offer Room, InvestorLift, or Stonegate-generated Land packet controls.
 
 ### Buyer Matching
 

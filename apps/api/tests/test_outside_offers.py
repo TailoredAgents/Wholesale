@@ -31,31 +31,36 @@ def seed_owner(db_session: Session) -> None:
     )
 
 
-def lead_payload() -> dict[str, object]:
+def lead_payload(*, asset_class: str = "house") -> dict[str, object]:
+    property_payload: dict[str, object] = {
+        "street_address": "123 Peachtree St",
+        "city": "Atlanta",
+        "state": "GA",
+        "postal_code": "30303",
+        "county": "Fulton",
+        "property_type": "single_family",
+    }
+    if asset_class == "land":
+        property_payload["property_type"] = "vacant_land"
+        property_payload["parcel_id"] = "OUTSIDE-OFFER-LAND-100"
     return {
         "contact": {
             "legal_name": "Jamie Seller",
             "preferred_name": "Jamie",
             "contact_type": "seller",
         },
-        "property": {
-            "street_address": "123 Peachtree St",
-            "city": "Atlanta",
-            "state": "GA",
-            "postal_code": "30303",
-            "county": "Fulton",
-            "property_type": "single_family",
-        },
+        "property": property_payload,
+        "asset_class": asset_class,
         "source": "phone",
         "stage_key": "new",
     }
 
 
-def create_lead(client: TestClient) -> str:
+def create_lead(client: TestClient, *, asset_class: str = "house") -> str:
     response = client.post(
         "/api/v1/leads",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json=lead_payload(),
+        json=lead_payload(asset_class=asset_class),
     )
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
@@ -111,6 +116,7 @@ def test_record_outside_offer_sets_stage_and_appends_evidence(
     assert audit.new_value is not None
     assert audit.new_value | {"occurred_at": result["occurred_at"]} == {
         "source": "outside_offer_catch_up",
+        "asset_class": "house",
         "stage_key": "offer_presented",
         "amount_cents": 157_500_00,
         "occurred_at": result["occurred_at"],
@@ -352,7 +358,96 @@ def test_outside_offer_requires_edit_permission_and_tenant_scope(
     assert lead.stage_key == "new"
 
 
-def test_outside_offer_is_unavailable_for_land_and_under_contract_leads(
+@pytest.mark.parametrize(
+    ("outcome", "expected_stage"),
+    [("presented", "offer_presented"), ("countered", "negotiating")],
+)
+def test_land_outside_offer_records_evidence_and_enters_offer_stage(
+    db_session: Session,
+    api_db_override: None,
+    outcome: str,
+    expected_stage: str,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    lead_id = create_lead(client, asset_class="land")
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/outside-offers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=outside_offer_payload(
+            outcome=outcome,
+            seller_response="Land seller responded during the recorded offer discussion.",
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert result["stage_key"] == expected_stage
+    db_session.expire_all()
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    assert lead.asset_class == "land"
+    assert lead.stage_key == expected_stage
+    audit = db_session.get(AuditEvent, UUID(result["event_id"]))
+    assert audit is not None
+    assert audit.new_value is not None
+    assert audit.new_value["asset_class"] == "land"
+    assert audit.new_value["stage_key"] == expected_stage
+
+
+def test_land_offer_stage_requires_evidence_and_a_reason_to_leave(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    lead_id = create_lead(client, asset_class="land")
+
+    direct = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "offer_presented",
+            "expected_stage_key": "new",
+            "reason": "Attempted bare Land offer stage mutation.",
+        },
+    )
+    assert direct.status_code == 422
+    assert "require recorded offer evidence" in direct.json()["detail"]
+
+    recorded = client.post(
+        f"/api/v1/leads/{lead_id}/outside-offers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=outside_offer_payload(),
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    missing_reason = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "long_term_follow_up",
+            "expected_stage_key": "offer_presented",
+        },
+    )
+    assert missing_reason.status_code == 422
+    assert "leaving the controlled offer workflow" in missing_reason.json()["detail"]
+
+    corrected = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "stage_key": "long_term_follow_up",
+            "expected_stage_key": "offer_presented",
+            "reason": "Land seller declined and requested follow-up next quarter.",
+        },
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["stage_key"] == "long_term_follow_up"
+
+
+def test_outside_offer_remains_unavailable_after_contract_execution(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -361,18 +456,6 @@ def test_outside_offer_is_unavailable_for_land_and_under_contract_leads(
     lead_id = create_lead(client)
     lead = db_session.get(Lead, UUID(lead_id))
     assert lead is not None
-    lead.asset_class = "land"
-    db_session.commit()
-
-    land_response = client.post(
-        f"/api/v1/leads/{lead_id}/outside-offers",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json=outside_offer_payload(),
-    )
-    assert land_response.status_code == 409
-    assert "not available for Land" in land_response.json()["detail"]
-
-    lead.asset_class = "house"
     lead.stage_key = "under_contract"
     db_session.commit()
     contract_response = client.post(

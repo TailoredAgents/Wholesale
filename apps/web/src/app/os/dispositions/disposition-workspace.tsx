@@ -28,6 +28,7 @@ import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
 
 type Tab = "package" | "buyers" | "execution" | "outreach" | "offers" | "provider" | "reconciliation";
+const houseOnlyTabs = new Set<Tab>(["execution", "outreach", "offers", "provider"]);
 
 function money(cents: number | null) {
   return cents == null
@@ -70,14 +71,16 @@ export function DispositionWorkspace({
 }) {
   const { getToken } = useAuth();
   const [data, setData] = useState(initialData);
+  const initialSelectedCase = initialData.cases.find((item) => item.id === initialCaseId)
+    ?? initialData.cases[0]
+    ?? null;
   const [selectedId, setSelectedId] = useState(
-    initialData.cases.some((item) => item.id === initialCaseId)
-      ? initialCaseId ?? null
-      : initialData.cases[0]?.id ?? null,
+    initialSelectedCase?.id ?? null,
   );
   const [tab, setTab] = useState<Tab>(
     (initialTab === "outreach" && !canViewOutreach) ||
-      (initialTab === "offers" && !initialData.can_view_private_economics)
+      (initialTab === "offers" && !initialData.can_view_private_economics) ||
+      (initialSelectedCase?.asset_class === "land" && houseOnlyTabs.has(initialTab))
       ? "package"
       : initialTab,
   );
@@ -96,9 +99,13 @@ export function DispositionWorkspace({
     [],
   );
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
+  const activeTab =
+    selected?.asset_class === "land" && houseOnlyTabs.has(tab) ? "package" : tab;
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || selected?.asset_class === "land") {
+      return;
+    }
     let active = true;
     void request<DispositionCopilotOverview>(
       `/api/v1/dispositions/cases/${selectedId}/copilot`,
@@ -120,7 +127,7 @@ export function DispositionWorkspace({
     };
   // The request helper intentionally follows the selected case and current Clerk session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, selected?.asset_class]);
 
   async function headers(json = true) {
     const token = await getToken().catch(() => null);
@@ -163,7 +170,7 @@ export function DispositionWorkspace({
     try {
       await work();
       await reload();
-      if (selectedId) {
+      if (selectedId && selected?.asset_class === "house") {
         setCopilot(
           await request<DispositionCopilotOverview>(
             `/api/v1/dispositions/cases/${selectedId}/copilot`,
@@ -311,7 +318,8 @@ export function DispositionWorkspace({
   function selectWorkspaceTab(nextTab: Tab) {
     const allowedTab =
       (nextTab === "outreach" && !canViewOutreach) ||
-      (nextTab === "offers" && !data.can_view_private_economics)
+      (nextTab === "offers" && !data.can_view_private_economics) ||
+      (selected?.asset_class === "land" && houseOnlyTabs.has(nextTab))
         ? "package"
         : nextTab;
     setTab(allowedTab);
@@ -333,7 +341,8 @@ export function DispositionWorkspace({
         <div className={styles.detail}>
           {!selected ? <div className={styles.empty}><UsersRound size={30} /><h3>No disposition cases</h3><p>Executed transactions will appear here when ready for buyer placement.</p></div> : (
             <>
-              {copilot && copilotCaseId === selected.id ? (
+              {selected.asset_class === "land" ? <p className={styles.notice} role="status">Land uses the same Package, Buyer pool, and closing record. Upload the completed investor PDF; residential call queue, Offer Room, automated outreach, and InvestorLift remain hidden until their Land-specific controls are released.</p> : null}
+              {selected.asset_class === "house" && copilot && copilotCaseId === selected.id ? (
                 <CopilotLauncher
                   attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}
                   description="Reviews buyer fit, package evidence, offers, and placement risks without contacting buyers or selecting an offer."
@@ -350,10 +359,11 @@ export function DispositionWorkspace({
                   />
                 </CopilotLauncher>
               ) : null}
-              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as Tab[]).filter((item) => (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={tab === item ? "page" : undefined} className={tab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "execution" ? "Call queue" : item === "offers" ? "Offer Room" : item === "provider" ? "InvestorLift" : labelize(item)}</button>)}</nav>
+              <nav aria-label="Disposition deal sections" className={styles.tabs}>{(["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as Tab[]).filter((item) => (selected.asset_class !== "land" || !houseOnlyTabs.has(item)) && (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => <button aria-current={activeTab === item ? "page" : undefined} className={activeTab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">{item === "buyers" ? "Buyer pool" : item === "execution" ? "Call queue" : item === "offers" ? "Offer Room" : item === "provider" ? "InvestorLift" : labelize(item)}</button>)}</nav>
 
-              {tab === "package" ? (
+              {activeTab === "package" ? (
                 <DispositionPackageReadiness
+                  assetClass={selected.asset_class}
                   canEditDeals={canEditDeals}
                   caseId={selected.id}
                   dealId={dealId}
@@ -367,7 +377,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "buyers" ? (
+              {activeTab === "buyers" ? (
                 <DispositionBuyerPool
                   activityPanel={<form className={styles.form} onSubmit={engagement}><div className={styles.sectionTitle}><div><span>Buyer activity</span><h4>Log inquiry, showing, or follow-up</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><label><span>Activity</span><select name="engagement_type"><option value="inquiry">Inquiry</option><option value="showing">Showing</option><option value="follow_up">Follow-up</option><option value="deposit">Deposit</option></select></label><label><span>Follow-up date and time</span><input name="scheduled_at" type="datetime-local" /><small>Used when the activity is a follow-up.</small></label><label><span>Notes</span><textarea name="notes" required rows={4} /></label><button disabled={busy || !canEditDeals || !selected.matches.length} type="submit">Log buyer activity</button><div className={styles.activityList}>{selected.engagements.slice(0, 5).map((item) => <p key={item.id}><strong>{item.buyer_name}</strong><span>{labelize(item.engagement_type)} - {item.scheduled_at ? "Scheduled " + new Date(item.scheduled_at).toLocaleString() + " - " : ""}{item.notes}</span></p>)}</div></form>}
                   canEditBuyers={canEditBuyers}
@@ -384,7 +394,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "execution" ? (
+              {activeTab === "execution" ? (
                 <DispositionExecutionWorkspace
                   canEditDeals={canEditDeals}
                   caseId={selected.id}
@@ -397,7 +407,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "outreach" && canViewOutreach ? (
+              {activeTab === "outreach" && canViewOutreach ? (
                 <DispositionOutreachWorkspace
                   canApprove={canApproveOutreach}
                   canManage={canManageOutreach}
@@ -409,7 +419,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "offers" && data.can_view_private_economics ? (
+              {activeTab === "offers" && data.can_view_private_economics ? (
                 <DispositionOfferRoom
                   buyers={selected.matches.map((item) => ({ buyer_id: item.buyer_id, buyer_name: item.buyer_name, latest_proof_document_id: item.latest_proof_document_id }))}
                   canApproveBuyerSelection={canApproveBuyerSelection}
@@ -423,7 +433,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "provider" ? (
+              {activeTab === "provider" ? (
                 <DispositionProviderWorkspace
                   canApprove={canApproveOutreach}
                   canEditDeals={canEditDeals}
@@ -436,7 +446,7 @@ export function DispositionWorkspace({
                 />
               ) : null}
 
-              {tab === "reconciliation" ? <div className={styles.sectionGrid}>
+              {activeTab === "reconciliation" ? <div className={styles.sectionGrid}>
                 <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing statement</span><h4>Deal reconciliation</h4></div><strong>{selected.reconciliation ? labelize(selected.reconciliation.status) : "Not calculated"}</strong></div>{selected.reconciliation ? <><dl className={styles.facts}><div><dt>Collected deal revenue</dt><dd>{money(selected.reconciliation.gross_revenue_cents)}</dd></div><div><dt>Acquisition reserve</dt><dd>-{money(selected.reconciliation.acquisition_reserve_cents)}</dd></div><div><dt>Deal-specific costs</dt><dd>-{money(selected.reconciliation.deal_deductions_cents)}</dd></div><div><dt>Adjusted deal margin</dt><dd>{money(selected.reconciliation.adjusted_deal_margin_cents)}</dd></div><div><dt>Commission payouts</dt><dd>{money(selected.reconciliation.total_compensation_cents)}</dd></div><div><dt>Company profit</dt><dd>{money(selected.reconciliation.company_profit_cents)}</dd></div><div><dt>Company share</dt><dd>{(selected.reconciliation.company_margin_basis_points / 100).toFixed(1)}% / {(selected.reconciliation.target_margin_basis_points / 100).toFixed(0)}% target</dd></div></dl><div className={styles.payouts}>{selected.reconciliation.payouts.map((item) => <div key={item.id}><span>{labelize(item.role_key)} - {item.user_name ?? "Unassigned"}</span><strong>{money(item.amount_cents)}</strong></div>)}</div></> : <p className={styles.emptyRow}>Fund the transaction and record collected revenue in Finance before calculating.</p>}</section>
                 <section className={styles.actionPanel}><div className={styles.sectionTitle}><div><span>Owner control</span><h4>Close the books</h4></div></div><button disabled={busy || !canEditDeals || !selected.selected_buyer_id} onClick={() => action(() => post(`/api/v1/dispositions/cases/${selected.id}/reconciliation`), "Closing statement calculated from collected revenue and the frozen plan." )} type="button"><CircleDollarSign size={15} />Calculate statement</button><button disabled={busy || !canEditDeals || selected.reconciliation?.status !== "draft"} onClick={() => action(() => request(`/api/v1/dispositions/cases/${selected.id}/reconciliation/decision`, { method: "POST", body: JSON.stringify({ decision: "approved", notes: "Owner reviewed closing statement and payout allocation.", approve_below_target: false }) }), "Closing statement and commission payouts approved." )} type="button"><Check size={15} />Approve payouts</button><button disabled={busy || selected.reconciliation?.status !== "approved"} onClick={() => download(`/api/v1/dispositions/cases/${selected.id}/accounting.csv`, "stonegate-accounting-export.csv")} type="button"><Download size={15} />Accounting CSV</button><p>Approval is blocked when commission credit is unassigned or company profit falls below the active plan target.</p></section>
               </div> : null}

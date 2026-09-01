@@ -115,6 +115,45 @@ def lead_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("asset_class", ["house", "land"])
+@pytest.mark.parametrize(
+    ("stage_key", "detail_fragment"),
+    [
+        ("offer_pending_approval", "Valuation & Offer"),
+        ("offer_ready", "Valuation & Offer"),
+        ("offer_presented", "Record outside offer"),
+        ("negotiating", "Record outside offer"),
+        ("under_contract", "signed-contract workflow"),
+        ("not_a_real_stage", "Unsupported seller pipeline stage"),
+    ],
+)
+def test_create_lead_rejects_governed_or_unknown_initial_stage(
+    db_session: Session,
+    api_db_override: None,
+    asset_class: str,
+    stage_key: str,
+    detail_fragment: str,
+) -> None:
+    seed_owner(db_session)
+    payload = lead_payload()
+    payload["asset_class"] = asset_class
+    payload["stage_key"] = stage_key
+    if asset_class == "land":
+        property_payload = cast(dict[str, object], payload["property"])
+        property_payload["property_type"] = "vacant_land"
+        property_payload["parcel_id"] = "CREATE-GOVERNANCE-LAND-100"
+
+    response = TestClient(app).post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+
+    assert response.status_code == 422, response.text
+    assert detail_fragment in response.json()["detail"]
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
 def test_create_and_list_lead(
     db_session: Session,
     api_db_override: None,

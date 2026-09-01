@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.domain.assets import require_house_workflow
+from app.domain.assets import LAND_ASSET_CLASS, normalize_asset_class, require_house_workflow
 from app.models.foundation import (
     ActivityEvent,
     ApprovalRequest,
@@ -77,6 +77,7 @@ from app.services.document_storage import (
     store_content,
 )
 from app.services.esign import list_envelopes
+from app.services.property_identity import require_valid_property_identity
 from app.services.tasks import create_deal_next_action
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
@@ -1081,7 +1082,7 @@ def import_executed_contract(
     content: bytes,
     content_type: str,
 ) -> ExecutedContractImportRead | None:
-    """Adopt an already executed external House agreement as canonical evidence.
+    """Adopt an already executed external House or Land agreement as canonical evidence.
 
     This is intentionally separate from the normal offer-authority and contract-send
     workflow. It records historical facts supplied by an authorized operator and never
@@ -1126,7 +1127,12 @@ def import_executed_contract(
     )
     if lead is None:
         return None
-    require_house_workflow(lead.asset_class, workflow="External executed purchase agreement")
+    asset_class = normalize_asset_class(lead.asset_class)
+    if asset_class == LAND_ASSET_CLASS:
+        property_record = db.get(Property, lead.property_id)
+        if property_record is None:
+            raise ValueError("The Land property is no longer available.")
+        require_valid_property_identity(property_record, asset_class=asset_class)
     if lead.archived_at is not None or lead.stage_key in TERMINAL_LEAD_STAGES:
         raise ValueError("Reopen the closed lead before importing an executed contract.")
 
@@ -1304,9 +1310,11 @@ def import_executed_contract(
     transaction.transaction_metadata = {
         **(transaction.transaction_metadata or {}),
         "source": "external_execution_import",
+        "asset_class": asset_class,
         "esign_synced": False,
         "external_execution_import": {
             "schema_version": 1,
+            "asset_class": asset_class,
             "source": payload.execution_source,
             "external_reference": payload.external_reference.strip()
             if payload.external_reference
@@ -1353,6 +1361,7 @@ def import_executed_contract(
         inspection_period_days=payload.inspection_period_days,
         terms_snapshot={
             "document_type": PURCHASE_AGREEMENT,
+            "asset_class": asset_class,
             "authority_basis": "external_fully_executed_agreement",
             "external_execution_import": {
                 "schema_version": 1,
@@ -1445,10 +1454,10 @@ def import_executed_contract(
 
     from app.services.disposition_handoff import (
         disposition_handoff_blockers,
-        ensure_house_disposition_case_for_executed_transaction,
+        ensure_disposition_case_for_executed_transaction,
     )
 
-    disposition_case = ensure_house_disposition_case_for_executed_transaction(db, transaction)
+    disposition_case = ensure_disposition_case_for_executed_transaction(db, transaction)
     disposition_blockers = (
         [] if disposition_case is not None else disposition_handoff_blockers(db, transaction)
     )
@@ -1470,6 +1479,7 @@ def import_executed_contract(
             },
             new_value={
                 "lead_stage": lead.stage_key,
+                "asset_class": asset_class,
                 "transaction_status": transaction.status,
                 "contract_package_id": str(contract_package.id),
                 "document_id": str(document.id),
@@ -1501,6 +1511,7 @@ def import_executed_contract(
         contract_package_id=contract_package.id,
         document_id=document.id,
         lead_id=lead.id,
+        asset_class=asset_class,
         lead_stage=lead.stage_key,
         transaction_status=transaction.status,
         disposition_case_id=disposition_case.id if disposition_case is not None else None,

@@ -322,7 +322,7 @@ export function BuyerBuyBoxForm({
         <label><span>Why is this version changing?</span><textarea defaultValue={current ? "Updated after buyer review" : "Initial structured buy box"} maxLength={500} minLength={2} name="change_reason" required rows={2} /></label>
       </section>
 
-      {asset === "land" ? <p className={styles.infoNotice}>Land criteria are captured here now. Automated Land deal matching begins in DS4; this profile does not claim Land matching is active yet.</p> : null}
+      {asset === "land" ? <p className={styles.infoNotice}>Land criteria are used by the asset-aware buyer pool. Residential outreach, Offer Room, and provider automation remain unavailable for Land.</p> : null}
       {error ? <p className={styles.formError} role="alert">{error}</p> : null}
       <div className={`${styles.formActions} ${styles.stickyActions}`}><button className={styles.secondaryAction} onClick={onCancel} type="button">Cancel</button><button disabled={status === "saving"} type="submit">{status === "saving" ? "Saving version..." : `Save ${asset} buy box`}</button></div>
     </form>

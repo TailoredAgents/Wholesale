@@ -154,6 +154,7 @@ class DispositionCaseRead(BaseModel):
     id: UUID
     transaction_id: UUID
     lead_id: UUID
+    asset_class: Literal["house", "land"]
     seller_name: str
     property_address: str
     property_type: str | None
@@ -465,6 +466,7 @@ class BuyerPoolConversionRequest(BaseModel):
 
 class EligibleTransactionRead(BaseModel):
     id: UUID
+    asset_class: Literal["house", "land"]
     seller_name: str
     property_address: str
     purchase_price_cents: int | None

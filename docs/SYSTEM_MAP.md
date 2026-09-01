@@ -654,16 +654,17 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Existing cases are worked from the Disposition and Finance sections of the selected Deal.
 - `/os/dispositions` is setup-only when an executed transaction needs its first disposition case.
   A legacy `case` bookmark resolves to the same canonical Deal.
-- Executing a House purchase agreement now creates or reuses one disposition case, selects an
+- Recording an executed House or Land purchase agreement creates or reuses one disposition case, selects an
   active Dispositions-authorized owner in the human-led operating mode, and records any temporary
   setup blocker for worker retry after configuration is corrected.
-- An executed House transaction whose owner, compensation plan, or human-led operating setup is
+- An executed House or Land transaction whose owner, compensation plan, or human-led operating setup is
   incomplete remains visible on the Disposition Desk as a **Needs setup** intake. Its blocker text
   and corrective links remain visible until retry can create the canonical case.
-- The House Package view assembles saved evidence into a launch-readiness checklist, separates the
+- The asset-aware Package view assembles saved evidence into a launch-readiness checklist, separates the
   buyer-visible preview from permission-gated private economics, and classifies each claim as a
   verified fact, seller statement, provider signal, Stonegate analysis, or unknown.
-- House package drafts are immutable versions. Approval freezes the exact public snapshot,
+- Package drafts are immutable versions. House can use Stonegate generation or an exact external
+  PDF; Land uses an exact external PDF until generated Land packets are released. Approval freezes the exact public snapshot,
   evidence manifest, email/SMS summaries, and stored PDF bytes; material source changes make the
   approval stale and require a rebuilt, reapproved version.
 - Approval of the current package can notify the assigned disposition owner by staff SMS only when
@@ -674,7 +675,8 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   Disposition Copilot drafts remain server governed. **Prepare recipient pool** records exact
   `prepared_not_sent` recipients and sends no buyer communication. The separate House **Outreach**
   view can turn selected owned-network recipients into an immutable exact-message revision, but an
-  authorized human must approve and release it. Land package release and outreach remain blocked.
+  authorized human must approve and release it. Land package approval and asset-aware buyer-pool
+  matching are supported; residential outreach remains blocked.
 - The House **Offer Room** compares normalized offer terms and execution evidence side by side. It
   keeps immutable offer revisions, negotiation events, selection versions, replacements, and buyer
   outcomes; a score or AI recommendation cannot select a buyer.
@@ -983,7 +985,7 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
     V2.2 remains available only as an engineering rollback.
 27. When staff presented an offer by phone, email, text, video, or in person outside Stonegate, an
     authorized catch-up action records the amount, time, method, seller outcome, response, notes,
-    and audit evidence. It moves the House lead to Offer Presented or Negotiating without inventing
+    and audit evidence. It moves the House or Land lead to Offer Presented or Negotiating without inventing
     a Stonegate approval or allowing a bare stage patch to create offer authority.
 
 ### 8.8 Contract And E-Signature
@@ -1013,7 +1015,7 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 9. Manual execution requires the exact executed document type, an explicit executed evidence
    status, an acceptable scan state, and an audited human attestation. Provider completion records
    the completed envelope and executed document evidence.
-10. A separately permissioned House catch-up path accepts the exact already-signed PDF plus actual
+10. A separately permissioned House/Land catch-up path accepts the exact already-signed PDF plus actual
     purchase price, parties, execution time, and optional closing terms. In one transaction it
     creates immutable executed evidence, retires superseded draft authority, aligns the Lead, Deal,
     and Transaction to Under Contract, prepares closing follow-up, and initiates Dispositions. It
@@ -1034,10 +1036,10 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 1. The disposition case is opened from the contracted transaction when required operating setup is
    ready. Otherwise the executed transaction remains an explicit setup-blocked Disposition intake
    with corrective work and automatic retry; compensation or staffing setup never hides the deal.
-2. For a House deal, staff resolve launch-readiness blockers and review the classified source
+2. For a House or Land deal, staff resolve launch-readiness blockers and review the classified source
    evidence, buyer-visible preview, and authorized private economics.
-3. **Build with Stonegate** creates an immutable generated package version. **Use existing PDF**
-   instead accepts an externally prepared packet as the exact immutable artifact while Stonegate's
+3. For House, **Build with Stonegate** creates an immutable generated package version. For House or
+   Land, **Use existing PDF** accepts an externally prepared packet as the exact immutable artifact while Stonegate's
    CRM facts continue to govern readiness, matching, and public summaries. A separately authorized
    human records an approval reason and attestation for either exact current version; material
    evidence changes require a rebuilt or replacement version and renewed approval.
@@ -1089,14 +1091,16 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
     review-only mode. Accept, correct, reject, and ignore decisions preserve immutable evaluation
     evidence but never apply a proposal or release an external action.
 
-This workflow is House-only. Governed email/SMS outreach is limited to recipients already in
+The core case, external-package, buyer-pool, engagement, and reconciliation records support House
+and Land. Governed email/SMS outreach is House-only and limited to recipients already in
 Stonegate's owned Buyer Network. The separate InvestorLift view supports a House-only manual
 handoff of the current approved public package: staff prepare and approve an exact public-only
 revision, download it, publish it manually, record the external property ID and HTTPS URL, and stage
 observed inquiries, engagement, or offers for human review. It has no live provider transport,
 credential collection, webhook, polling, automated outreach, buyer creation, offer acceptance, or
-buyer selection. Land disposition packaging, buyer release, and outreach remain blocked until
-their separate asset-safe workflows are implemented and accepted.
+buyer selection. Land automated outreach, Offer Room, call queue, InvestorLift, and generated
+packet controls remain blocked until their separate asset-safe workflows are implemented and
+accepted.
 
 ### 8.11 Closing, Reconciliation, And Compensation
 
@@ -1506,8 +1510,9 @@ AI can organize evidence, rank buyers, and draft communication. Humans approve t
 prepared recipient pool, exact outreach revision, release, buyer selection, contract terms, and
 reconciliation. Prepared recipients remain `prepared_not_sent`; no DS5 preparation control sends
 email or SMS. DS6's separate Outreach workflow is the only implemented send path, and it excludes
-private economics from its bounded public template fields. The package and outreach workflow is
-House-only, and Land remains blocked.
+private economics from its bounded public template fields. Stonegate-generated packages and the
+outreach workflow are House-only. Land uses the same governed external-package approval,
+secure-link, and asset-aware buyer-pool path.
 
 ### 13.4 Governed Owned-Buyer Outreach
 

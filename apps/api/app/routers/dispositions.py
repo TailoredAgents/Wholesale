@@ -1435,10 +1435,10 @@ def refresh_case_buyer_pool(
     principal: Annotated[Principal, Depends(edit_dependency)],
 ) -> BuyerPoolRead:
     try:
-        result = dispositions.generate_matches(db, principal, case_id)
+        refreshed = disposition_buyer_pool.refresh_buyer_pool(db, principal, case_id)
     except ValueError as exc:
         raise invalid(exc) from exc
-    if result is None:
+    if not refreshed:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
     pool = disposition_buyer_pool.read_buyer_pool(db, principal, case_id)
     if pool is None:

@@ -176,6 +176,14 @@ def read_disposition_intelligence(
     all_cases = all_for(DispositionCase)
     transactions = {row.id: row for row in all_for(Transaction)}
     leads = {row.id: row for row in all_for(Lead)}
+    # DS10 intelligence is calibrated and accepted only for the governed House workflow.
+    # Land cases share the operational desk but must not silently enter House performance math.
+    all_cases = [
+        case
+        for case in all_cases
+        if (lead := leads.get(case.lead_id)) is not None
+        and lead.asset_class.strip().lower() == "house"
+    ]
     properties = {row.id: row for row in all_for(Property)}
     buyers_by_id = {row.id: row for row in all_for(Buyer)}
     users = {row.id: row for row in all_for(User)}

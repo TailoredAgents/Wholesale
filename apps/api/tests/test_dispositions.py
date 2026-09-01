@@ -36,8 +36,10 @@ from app.models.foundation import (
     DispositionMatch,
     DispositionOperatingMode,
     DispositionPackageVersion,
+    LandValuationAnalysis,
     Lead,
     Property,
+    PropertyIntelligenceSnapshot,
     RevenueRecord,
     Role,
     RoleAssignment,
@@ -79,13 +81,15 @@ def put_verified_buy_box(
         criteria = {
             "asset_class": "land",
             "geographies": [{"jurisdiction": "city", "value": "Atlanta", "state": "GA"}],
-            "strategies": ["land_hold"],
+            "strategies": ["wholesale_assignment"],
             "min_price_cents": 1000000,
             "max_price_cents": 30000000,
             "funding_methods": ["cash"],
             "min_acres": 1,
             "max_acres": 20,
-            "intended_uses": ["hold"],
+            "intended_uses": ["residential"],
+            "flood_zone_tolerance": "accepted",
+            "wetlands_tolerance": "accepted",
         }
     response = client.put(
         f"/api/v1/buyers/{buyer_id}/buy-boxes/{asset_class}",
@@ -266,10 +270,16 @@ def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, st
                 "property_type": "single_family",
             },
             "source": "referral",
-            "stage_key": "offer_ready",
+            "stage_key": "new",
         },
     )
     lead_id = lead_response.json()["id"]
+    lead = db.get(Lead, UUID(lead_id))
+    assert lead is not None
+    # This fixture establishes pre-existing approved House authority directly. Public lead
+    # creation intentionally cannot fabricate a governed offer/contract milestone.
+    lead.stage_key = "offer_ready"
+    db.commit()
     transaction_response = client.post(
         f"/api/v1/leads/{lead_id}/transactions",
         headers=HEADERS,
@@ -277,7 +287,6 @@ def setup_case_foundation(db: Session, client: TestClient) -> tuple[str, str, st
     )
     transaction_id = transaction_response.json()["transactions"][0]["id"]
     transaction = db.get(Transaction, UUID(transaction_id))
-    lead = db.get(Lead, UUID(lead_id))
     assert transaction is not None and lead is not None
     transaction.status = "executed"
     lead.stage_key = "under_contract"
@@ -767,6 +776,359 @@ def test_external_investor_packet_is_exact_immutable_and_uses_normal_approval(
     assert package_ready_audit is not None
 
 
+def test_land_case_accepts_exact_external_packet_but_not_generated_house_artifacts(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id, _ = setup_case_foundation(db_session, client)
+    lead = db_session.get(Lead, UUID(lead_id))
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert lead is not None and transaction is not None
+    property_record = db_session.get(Property, transaction.property_id)
+    assert property_record is not None
+    lead.asset_class = "land"
+    property_record.property_type = "vacant_land"
+    property_record.street_address = ""
+    property_record.city = ""
+    property_record.postal_code = ""
+    property_record.parcel_id = "LAND-42-TEST"
+    property_record.county = "Fulton"
+    property_record.state = "GA"
+    db_session.commit()
+
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["asset_class"] == "land"
+    assert created.json()["property_address"] == "APN LAND-42-TEST, Fulton, GA"
+    case_id = created.json()["id"]
+
+    deal_overview = client.get("/api/v1/deals", headers=HEADERS)
+    assert deal_overview.status_code == 200, deal_overview.text
+    land_deal = next(
+        item for item in deal_overview.json()["items"] if item["transaction_id"] == transaction_id
+    )
+    assert land_deal["asset_class"] == "land"
+    assert land_deal["property_address"] == "APN LAND-42-TEST, Fulton, GA"
+
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package",
+        headers=HEADERS,
+    )
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["public_preview"]["asset_class"] == "land"
+    identity = next(
+        item
+        for item in workspace.json()["current_readiness"]["checks"]
+        if item["key"] == "property_identity"
+    )
+    assert identity["status"] == "ready"
+    assert identity["detail"] == "APN LAND-42-TEST, Fulton, GA"
+    generated = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions",
+        headers=HEADERS,
+        json={"expected_latest_version": 0},
+    )
+    assert generated.status_code == 409, generated.text
+    assert "not available for Land leads" in generated.json()["detail"]
+
+    exact_pdf = b"%PDF-1.7\nExact externally prepared Land packet\n%%EOF"
+    uploaded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/external",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "expected_latest_version": 0,
+            "file_name": "land-investor-packet.pdf",
+            "content_type": "application/pdf",
+        },
+        content=exact_pdf,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    approved = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{uploaded.json()['id']}/approval",
+        headers=HEADERS,
+        json={
+            "expected_version": uploaded.json()["lock_version"],
+            "attestation": True,
+            "reason": "Reviewed the exact externally prepared Land packet.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["artifact_source"] == "external_upload"
+    downloaded = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package.pdf",
+        headers=HEADERS,
+    )
+    assert downloaded.status_code == 200, downloaded.text
+    assert downloaded.content == exact_pdf
+
+    land_pool = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/buyer-pool/runs",
+        headers=HEADERS,
+    )
+    assert land_pool.status_code == 200, land_pool.text
+    assert land_pool.json()["run"]["asset_class"] == "land"
+    assert land_pool.json()["run"]["matcher_version"] == "stonegate_buyer_pool_v2"
+    stored_pool_run = db_session.scalar(
+        select(DispositionBuyerPoolRun).where(
+            DispositionBuyerPoolRun.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert stored_pool_run is not None
+    assert stored_pool_run.input_snapshot["land_subject"]["identity"]["parcel_id"] == (
+        "LAND-42-TEST"
+    )
+
+    legacy_house_matching = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert legacy_house_matching.status_code == 409, legacy_house_matching.text
+    assert "not available for Land leads" in legacy_house_matching.json()["detail"]
+
+
+def test_land_package_identity_evidence_requires_provider_provenance(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id, _ = setup_case_foundation(db_session, client)
+    lead = db_session.get(Lead, UUID(lead_id))
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert lead is not None and transaction is not None
+    property_record = db_session.get(Property, transaction.property_id)
+    assert property_record is not None
+    lead.asset_class = "land"
+    property_record.property_type = "vacant_land"
+    property_record.street_address = ""
+    property_record.city = ""
+    property_record.postal_code = ""
+    property_record.parcel_id = "LAND-EVIDENCE-42"
+    property_record.county = "Fulton"
+    property_record.state = "GA"
+    db_session.commit()
+
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19_000_000,
+            "minimum_acceptable_cents": 18_000_000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package",
+        headers=HEADERS,
+    )
+    assert workspace.status_code == 200, workspace.text
+    identity_evidence = next(
+        item for item in workspace.json()["evidence_manifest"] if item["key"] == "property_identity"
+    )
+    assert identity_evidence["classification"] == "seller_statement"
+
+    property_record.address_validation_status = "provider_confirmed"
+    property_record.address_validation_provider = "realestateapi"
+    property_record.address_validated_at = datetime.now(UTC)
+    property_record.address_validation_metadata = {
+        "lookup_mode": "parcel",
+        "requested_parcel_key": "GA|FULTON|LANDEVIDENCE42",
+        "returned_parcel_key": "GA|FULTON|LANDEVIDENCE42",
+    }
+    db_session.commit()
+    provider_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package",
+        headers=HEADERS,
+    )
+    assert provider_workspace.status_code == 200, provider_workspace.text
+    provider_identity_evidence = next(
+        item
+        for item in provider_workspace.json()["evidence_manifest"]
+        if item["key"] == "property_identity"
+    )
+    assert provider_identity_evidence["classification"] == "provider_signal"
+    assert provider_identity_evidence["provenance"]["provider"] == "realestateapi"
+
+
+def test_land_package_valuation_requires_review_and_guidance_clearance(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id, _ = setup_case_foundation(db_session, client)
+    lead = db_session.get(Lead, UUID(lead_id))
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert lead is not None and transaction is not None
+    property_record = db_session.get(Property, transaction.property_id)
+    assert property_record is not None
+    lead.asset_class = "land"
+    property_record.property_type = "vacant_land"
+    property_record.parcel_id = "LAND-VALUATION-42"
+    property_record.county = "Fulton"
+    now = datetime.now(UTC)
+    snapshot = PropertyIntelligenceSnapshot(
+        organization_id=lead.organization_id,
+        property_id=property_record.id,
+        source_lead_id=lead.id,
+        source_market_analysis_id=None,
+        version_number=1,
+        research_profile="land_v1",
+        status="ready",
+        is_current=True,
+        address_signature=f"land-v1:{property_record.id}",
+        completeness_score=90,
+        confidence_score=80,
+        facts={},
+        valuation={},
+        comparables=[],
+        market_context={},
+        sources=[{"provider": "realestateapi", "operation": "property_detail"}],
+        conflicts=[],
+        media={},
+        snapshot_metadata={"lookup_mode": "parcel"},
+        captured_at=now,
+        expires_at=now + timedelta(days=30),
+    )
+    db_session.add(snapshot)
+    db_session.flush()
+    valuation = LandValuationAnalysis(
+        organization_id=lead.organization_id,
+        lead_id=lead.id,
+        property_id=property_record.id,
+        property_snapshot_id=snapshot.id,
+        source_analysis_id=None,
+        policy_version_id=None,
+        created_by_user_id=None,
+        version_number=1,
+        valuation_profile="land_v1",
+        methodology_version="land_v1",
+        analysis_fingerprint="b" * 64,
+        request_idempotency_key=None,
+        status="needs_review",
+        guidance_status="withheld",
+        valuation_basis="per_acre",
+        access_evidence_status="unverified",
+        subject_acres_ten_thousandths=100_000,
+        subject_lot_count=None,
+        supported_value_low_cents=10_000_000,
+        supported_value_cents=12_000_000,
+        supported_value_high_cents=14_000_000,
+        quick_sale_low_cents=None,
+        quick_sale_high_cents=None,
+        opening_offer_cents=None,
+        seller_contract_ceiling_cents=None,
+        assignment_fee_cents=0,
+        closing_title_reserve_cents=0,
+        curative_reserve_cents=0,
+        uncertainty_reserve_cents=0,
+        confidence_score=70,
+        selected_comp_count=3,
+        rejected_comp_count=0,
+        selected_comps=[],
+        rejected_comps=[],
+        subject_snapshot={},
+        search_snapshot={},
+        assumptions={},
+        review_reasons=[],
+        guidance_blockers=[],
+        policy_snapshot={},
+        analysis_metadata={},
+    )
+    db_session.add(valuation)
+    db_session.commit()
+
+    created = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "strategy": "assignment",
+            "asking_price_cents": 19_000_000,
+            "minimum_acceptable_cents": 18_000_000,
+            "operating_mode_key": "human_led",
+        },
+    )
+    assert created.status_code == 201, created.text
+    case_id = created.json()["id"]
+
+    scenarios = (
+        ("needs_review", "available", [], [], "analysis status is needs_review"),
+        ("ready", "withheld", [], [], "offer guidance is withheld"),
+        (
+            "ready",
+            "available",
+            ["Extended-tier comparable evidence requires human review."],
+            [],
+            "human review reasons remain unresolved",
+        ),
+        (
+            "ready",
+            "available",
+            [],
+            ["Legal access has not been human-verified with evidence."],
+            "offer-guidance blockers remain unresolved",
+        ),
+    )
+    for status, guidance_status, review_reasons, guidance_blockers, detail in scenarios:
+        valuation.status = status
+        valuation.guidance_status = guidance_status
+        valuation.review_reasons = review_reasons
+        valuation.guidance_blockers = guidance_blockers
+        db_session.commit()
+        workspace = client.get(
+            f"/api/v1/dispositions/cases/{case_id}/package",
+            headers=HEADERS,
+        )
+        assert workspace.status_code == 200, workspace.text
+        assert workspace.json()["public_preview"]["valuation"]["supported_value_cents"] == (
+            12_000_000
+        )
+        valuation_check = next(
+            item
+            for item in workspace.json()["current_readiness"]["checks"]
+            if item["key"] == "valuation"
+        )
+        assert valuation_check["status"] == "warning"
+        assert detail in valuation_check["detail"]
+        valuation_evidence = next(
+            item for item in workspace.json()["evidence_manifest"] if item["key"] == "valuation"
+        )
+        assert valuation_evidence["value"]["review_reasons"] == review_reasons
+        assert valuation_evidence["value"]["guidance_blockers"] == guidance_blockers
+
+    valuation.status = "ready"
+    valuation.guidance_status = "available"
+    valuation.review_reasons = []
+    valuation.guidance_blockers = []
+    db_session.commit()
+    ready_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/package",
+        headers=HEADERS,
+    )
+    assert ready_workspace.status_code == 200, ready_workspace.text
+    ready_valuation_check = next(
+        item
+        for item in ready_workspace.json()["current_readiness"]["checks"]
+        if item["key"] == "valuation"
+    )
+    assert ready_valuation_check["status"] == "ready"
+
+
 def test_external_investor_packet_rejects_non_pdf_and_oversized_content(
     db_session: Session,
     api_db_override: None,
@@ -866,8 +1228,7 @@ def test_external_investor_packet_with_scan_error_cannot_be_approved(
     assert blocked_preview.status_code == 422, blocked_preview.text
     assert "cannot be opened" in blocked_preview.json()["detail"]
     blocked = client.post(
-        f"/api/v1/dispositions/cases/{case_id}/package/versions/"
-        f"{uploaded.json()['id']}/approval",
+        f"/api/v1/dispositions/cases/{case_id}/package/versions/{uploaded.json()['id']}/approval",
         headers=HEADERS,
         json={
             "expected_version": uploaded.json()["lock_version"],
@@ -3177,7 +3538,7 @@ def test_explainable_buyer_pool_preserves_decisions_and_stages_external_candidat
     assert refreshed.status_code == 200, refreshed.text
     pool = refreshed.json()
     assert pool["run"]["version_number"] == 1
-    assert pool["run"]["matcher_version"] == "stonegate_buyer_pool_v1"
+    assert pool["run"]["matcher_version"] == "stonegate_buyer_pool_v2"
     assert pool["total"] == 2
     assert {item["source_type"] for item in pool["entries"]} == {"network", "external"}
 
@@ -3495,6 +3856,33 @@ def test_disposition_intelligence_populated_canonical_assignment_and_filters(
     assert campaign_quality["state"] == "unavailable"
     assert any(option["value"] == deal_id for option in payload["filter_options"]["deals"])
     assert any(option["value"] == buyer_id for option in payload["filter_options"]["buyers"])
+
+
+def test_disposition_intelligence_excludes_land_case_activity_and_filter_options(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, deal_id, buyer_id = _complete_case_for_disposition_intelligence(
+        db_session,
+        client,
+    )
+    case = db_session.get(DispositionCase, UUID(case_id))
+    assert case is not None
+    lead = db_session.get(Lead, case.lead_id)
+    assert lead is not None
+    lead.asset_class = "land"
+    db_session.commit()
+
+    response = client.get("/api/v1/dispositions/intelligence", headers=HEADERS)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["data_state"] == "unavailable"
+    assert all(value == 0 for value in payload["activity"].values())
+    assert payload["economics"]["completed_assignments"] == 0
+    assert all(options == [] for options in payload["filter_options"].values())
+    assert deal_id not in response.text
+    assert buyer_id not in response.text
 
 
 def test_disposition_intelligence_requires_deal_access_and_redacts_economics(

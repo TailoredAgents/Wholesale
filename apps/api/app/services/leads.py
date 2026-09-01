@@ -435,23 +435,13 @@ SELLER_PIPELINE_STAGES = {
     "dead",
     "reopened",
 }
-HOUSE_OFFER_WORKFLOW_STAGES = frozenset(
-    {
-        "offer_pending_approval",
-        "offer_ready",
-        "offer_presented",
-        "negotiating",
-    }
-)
+OFFER_EVIDENCE_STAGES = frozenset({"offer_presented", "negotiating"})
+HOUSE_OFFER_AUTHORITY_STAGES = frozenset({"offer_pending_approval", "offer_ready"})
+OFFER_WORKFLOW_STAGES = HOUSE_OFFER_AUTHORITY_STAGES | OFFER_EVIDENCE_STAGES
 HOUSE_CONTRACT_WORKFLOW_STAGES = frozenset({"under_contract"})
-HOUSE_WORKFLOW_CONTROLLED_STAGES = (
-    HOUSE_OFFER_WORKFLOW_STAGES | HOUSE_CONTRACT_WORKFLOW_STAGES
-)
 LAND_UNAVAILABLE_EXECUTION_STAGES = {
     "offer_pending_approval",
     "offer_ready",
-    "offer_presented",
-    "negotiating",
     "under_contract",
 }
 
@@ -464,8 +454,25 @@ TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 
 
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
+    if payload.stage_key not in SELLER_PIPELINE_STAGES:
+        raise ValueError(f"Unsupported seller pipeline stage: {payload.stage_key}")
     if payload.stage_key in TERMINAL_CLOSE_OUT_STAGES:
         raise ValueError("Create the lead in an active stage, then use Close out lead.")
+    if payload.stage_key in OFFER_EVIDENCE_STAGES:
+        raise ValueError(
+            "Create the lead in an ordinary active stage, then use Record outside offer "
+            "to store the presented-offer evidence."
+        )
+    if payload.stage_key in HOUSE_OFFER_AUTHORITY_STAGES:
+        raise ValueError(
+            "Create the lead in an ordinary active stage, then use Valuation & Offer "
+            "to prepare and approve a Stonegate offer."
+        )
+    if payload.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES:
+        raise ValueError(
+            "Create the lead in an ordinary active stage, then use the signed-contract "
+            "workflow to enter Under Contract."
+        )
     assigned_user_id = payload.assigned_user_id or principal.user_id
     assigned_user = db.scalar(
         select(User).where(
@@ -1544,37 +1551,37 @@ def update_lead_stage(
         )
     if previous_stage == payload.stage_key:
         return get_lead_detail(db, principal, lead_id)
-    if lead.asset_class == "house" and (
-        previous_stage in HOUSE_CONTRACT_WORKFLOW_STAGES
-        or payload.stage_key in HOUSE_WORKFLOW_CONTROLLED_STAGES
+    if previous_stage in HOUSE_CONTRACT_WORKFLOW_STAGES:
+        raise ValueError(
+            "Under-contract status is controlled by the signed-contract workflow. "
+            "Use Contract & Deal to record or change an executed contract."
+        )
+    if payload.stage_key in OFFER_EVIDENCE_STAGES:
+        raise ValueError(
+            "Offer Presented and Negotiating require recorded offer evidence. "
+            "Use Record outside offer or Valuation & Offer."
+        )
+    if lead.asset_class == "house" and payload.stage_key in (
+        HOUSE_OFFER_AUTHORITY_STAGES | HOUSE_CONTRACT_WORKFLOW_STAGES
     ):
-        if (
-            previous_stage in HOUSE_CONTRACT_WORKFLOW_STAGES
-            or payload.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES
-        ):
+        if payload.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES:
             raise ValueError(
                 "Under-contract status is controlled by the signed-contract workflow. "
                 "Use Contract & Deal to record or change an executed contract."
-            )
-        if payload.stage_key in {"offer_presented", "negotiating"}:
-            raise ValueError(
-                "Offer Presented and Negotiating require recorded offer evidence. "
-                "Use Record outside offer or Valuation & Offer."
             )
         raise ValueError(
             "Offer stages are controlled by the Valuation & Offer workflow. "
             "Use Valuation & Offer to prepare, approve, present, or negotiate an offer."
         )
+    if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:
+        require_house_workflow(lead.asset_class, workflow="Residential execution stage")
     if (
-        lead.asset_class == "house"
-        and previous_stage in HOUSE_OFFER_WORKFLOW_STAGES
+        previous_stage in OFFER_WORKFLOW_STAGES
         and len((payload.reason or "").strip()) < 10
     ):
         raise ValueError(
             "Explain why the lead is leaving the controlled offer workflow."
         )
-    if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:
-        require_house_workflow(lead.asset_class, workflow="Residential execution stage")
 
     lead.stage_key = payload.stage_key
     sync_conversation_to_lead_stage(
@@ -1628,7 +1635,6 @@ def record_outside_offer(
         return None
     if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
         raise ValueError("Reopen this closed lead before recording an outside offer.")
-    require_house_workflow(lead.asset_class, workflow="Residential offer recording")
     if lead.stage_key in HOUSE_CONTRACT_WORKFLOW_STAGES:
         raise ValueError(
             "This lead is already under contract. Record corrections in Contract & Deal."
@@ -1658,6 +1664,7 @@ def record_outside_offer(
     notes = payload.notes.strip() if payload.notes else None
     evidence = {
         "source": "outside_offer_catch_up",
+        "asset_class": lead.asset_class,
         "stage_key": recorded_stage,
         "amount_cents": payload.amount_cents,
         "occurred_at": occurred_at.isoformat(),

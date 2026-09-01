@@ -1,5 +1,9 @@
 # Flexible CRM Catch-Up And Disposition Release Plan
 
+Follow-up: `LAND_HOUSE_CRM_PARITY_RELEASE_PLAN.md` extends the evidence-backed outside-offer,
+signed-contract import, Disposition handoff, and exact external-packet path to Land. The House-only
+boundary below describes this earlier release, not the current product boundary.
+
 Status: Complete — verified and released to `origin/main`
 
 Release note: All automated gates passed. Manual authenticated browser acceptance was attempted but

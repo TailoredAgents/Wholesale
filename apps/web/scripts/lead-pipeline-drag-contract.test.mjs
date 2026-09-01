@@ -23,8 +23,12 @@ const dealsWorkspace = readFileSync(resolve(appRoot, "os/deals/deals-workspace.t
 const pipelineWorkspace = readFileSync(resolve(appRoot, "os/pipeline/pipeline-workspace.tsx"), "utf8");
 
 test("lead board stage movement is permission-gated and accessible", () => {
-  assert.match(page, /canEditLead=\{canCreateLead\}/);
+  assert.match(page, /canEditLead=\{canEditLead\}/);
+  assert.match(page, /canRecordOutsideOffer=\{canRecordOutsideOffer\}/);
+  assert.match(page, /canImportExecutedContract=\{canImportExecutedContract\}/);
   assert.match(workspace, /canEditLead: boolean/);
+  assert.match(workspace, /canImportExecutedContract: boolean/);
+  assert.match(workspace, /canRecordOutsideOffer: boolean/);
   assert.match(workspace, /disabled: !canMoveLead \|\| isPending/);
   assert.match(workspace, /<article[\s\S]*styles\.boardCard/);
   assert.match(workspace, /className=\{styles\.dragHandle\}/);
@@ -102,11 +106,12 @@ test("canonical destination stages and controlled-workflow restrictions stay exp
   assert.match(utilities, /stage\.key === "under_contract"/);
   assert.match(utilities, /Under-contract status requires the signed-contract workflow/);
   assert.match(utilities, /getPipelineStage\(lead\.stage_key\)\?\.key === "under_contract"/);
-  assert.match(workspace, /const canMoveLead = canEditLead && getPipelineStage\(lead\.stage_key\)\?\.key !== "under_contract"/);
+  assert.match(workspace, /const canMoveLead =\s*\(canEditLead \|\| canImportExecutedContract \|\| canRecordOutsideOffer\)/);
   assert.match(workspace, /disabled=\{Boolean\(workspaceStageMoveBlockReason\(selectedLead, pipelineStage\)\)\}/);
   assert.match(workspace, /title=\{workspaceStageMoveBlockReason\(selectedLead, pipelineStage\) \?\? undefined\}/);
   assert.match(workspace, /blockedReason=\{dropBlockedReason\}/);
-  assert.match(workspace, /disabled=\{!canEditLead\}/);
+  assert.match(workspace, /disabled=\{!canEditLead && !canImportExecutedContract && !canRecordOutsideOffer\}/);
+  assert.match(workspace, /return "Moving to this stage requires Lead editing access\."/);
   assert.doesNotMatch(workspace, /disabled=\{dropDisabled\}/);
   assert.match(workspace, /blockedReason \? styles\.blockedDropTarget : styles\.dropTarget/);
   assert.match(workspace, /Move blocked\. \$\{blockedReason\}/);
@@ -139,7 +144,9 @@ test("an authorized catch-up workflow records already-executed contracts without
   assert.match(executedContractImport, /Array\.isArray\(payload\.detail\)/);
   assert.match(executedContractImport, /type="number"/);
   assert.match(stageForm, /canImportExecutedContract: boolean/);
-  assert.match(stageForm, /assetClass === "house" && canImportExecutedContract/);
+  assert.match(stageForm, /canEditLead: boolean/);
+  assert.match(stageForm, /canImportExecutedContract && !hasExecutedTransaction/);
+  assert.doesNotMatch(stageForm, /assetClass === "house"/);
   assert.match(stageForm, /value="under_contract">Under Contract - record signed agreement/);
   assert.match(stageForm, /requestedStage === "under_contract"/);
   assert.match(stageForm, /<ExecutedContractImportForm/);
@@ -154,8 +161,10 @@ test("board and Move to stage open the governed signed-contract form for Under C
   assert.match(page, /canImportExecutedContract=\{canImportExecutedContract\}/);
   assert.match(workspace, /ExecutedContractImportForm,[\s\S]*ExecutedContractImportResponse/);
   assert.match(workspace, /canImportExecutedContract: boolean/);
-  assert.match(workspace, /targetStage\.key === "under_contract"[\s\S]*lead\.asset_class !== "house"/);
+  assert.doesNotMatch(workspace, /targetStage\.key === "under_contract"[\s\S]{0,300}lead\.asset_class !== "house"/);
   assert.match(workspace, /requires executed-contract recording access/);
+  assert.match(workspace, /if \(!lead \|\| pendingLeadIdsRef\.current\.has\(leadId\)\) return/);
+  assert.match(workspace, /canEditLead \|\| canImportExecutedContract \|\| canRecordOutsideOffer/);
   assert.match(workspace, /if \(targetStage\.key === "under_contract"\) \{[\s\S]*setContractImportLeadId\(leadId\)[\s\S]*return;/);
   assert.match(workspace, /<ExecutedContractImportDialog/);
   assert.match(workspace, /<ExecutedContractImportForm[\s\S]*leadId=\{lead\.id\}[\s\S]*onRecorded=\{onRecorded\}/);
@@ -175,7 +184,8 @@ test("board and Move to stage open the governed signed-contract form for Under C
 });
 
 test("Offer opens an action choice and outside evidence reaches governed offer stages", () => {
-  assert.match(page, /canRecordOutsideOffer=\{canCreateLead\}/);
+  assert.match(page, /const canRecordOutsideOffer = Boolean\(profile\?\.permissions\.includes\("leads:edit"\)\)/);
+  assert.match(page, /canRecordOutsideOffer=\{canRecordOutsideOffer\}/);
   assert.match(stageForm, /value="offer_action">Offer - choose workflow/);
   assert.match(stageForm, /requestedStage === "offer_action"/);
   assert.match(stageForm, /<OfferStageAction/);
@@ -185,12 +195,16 @@ test("Offer opens an action choice and outside evidence reaches governed offer s
   assert.match(workspace, /Opening the offer choices/);
   assert.match(offerStageAction, /\/outside-offers/);
   assert.match(offerStageAction, /expected_stage_key: expectedStageKey/);
-  assert.match(offerStageAction, /Stonegate Valuation &amp; Offer/);
+  assert.match(offerStageAction, /Review Land valuation/);
+  assert.match(offerStageAction, /Use Record an outside offer for an offer already presented/);
+  assert.match(offerStageAction, /Stonegate Valuation & Offer/);
   assert.match(offerStageAction, /Record an outside offer/);
   assert.match(offerStageAction, /result\.stage_key === "negotiating"/);
   assert.match(offerStageAction, /Verbally accepted/);
   assert.match(offerStageAction, /remains Offer Presented until a fully signed purchase agreement/);
-  assert.match(offerStageAction, /House leads are supported in this release/);
+  assert.match(offerStageAction, /assetClass === "land"[\s\S]*\? `\/os\/leads\/\$\{leadId\}\?tab=valuation`/);
+  assert.doesNotMatch(offerStageAction, /House leads are supported in this release/);
+  assert.doesNotMatch(offerStageAction, /assetClass === "house" \? \(/);
 
   const offerBranch = workspace.indexOf('if (targetStage.key === "offer")');
   const directStagePatch = workspace.indexOf('/stage`, {', offerBranch);
@@ -199,6 +213,18 @@ test("Offer opens an action choice and outside evidence reaches governed offer s
     workspace.slice(offerBranch, directStagePatch),
     /setOfferActionLeadId\(leadId\)[\s\S]*return;/,
   );
+});
+
+test("Land lead detail exposes factual contract catch-up without residential creation controls", () => {
+  assert.doesNotMatch(leadDetail, /meta="Intentionally blocked"/);
+  assert.match(leadDetail, /lead\.transactions\.map\(\(transaction\) => \(/);
+  assert.match(leadDetail, /Open transaction coordination/);
+  assert.match(leadDetail, /lead\.asset_class === "house" \? \([\s\S]*<TransactionForm leadId=\{lead\.id\}/);
+  assert.match(leadDetail, /Stonegate-generated Land agreements and e-signing remain unavailable/);
+  assert.match(leadDetail, /canImportExecutedContract && !lead\.transactions\.some[\s\S]*Record an already-signed contract/);
+  assert.match(leadDetail, /Open contract evidence and closing files/);
+  assert.doesNotMatch(leadDetail, /Legacy residential \$\{labelize\(transaction\.contract_type\)\}/);
+  assert.doesNotMatch(leadDetail, /lead\.asset_class === "land" \? "Incompatible with Land"/);
 });
 
 test("Transaction Coordinators receive the same executed-contract catch-up action in Deals", () => {

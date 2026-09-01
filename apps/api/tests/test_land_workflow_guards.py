@@ -103,15 +103,31 @@ def test_land_lead_is_blocked_from_residential_underwriting_entry_points(
         json={"stage_key": "underwriting", "reason": "Dedicated Land valuation started."},
     )
     assert valuation_stage.status_code == 200, valuation_stage.text
-    restricted_stage = client.patch(
-        f"/api/v1/leads/{lead_id}/stage",
-        headers=headers,
-        json={
-            "stage_key": "offer_pending_approval",
-            "reason": "Land offer approval is not released.",
-        },
-    )
-    assert restricted_stage.status_code == 409, restricted_stage.text
+    for stage_key in ("offer_pending_approval", "offer_ready", "under_contract"):
+        restricted_stage = client.patch(
+            f"/api/v1/leads/{lead_id}/stage",
+            headers=headers,
+            json={
+                "stage_key": stage_key,
+                "expected_stage_key": "underwriting",
+                "reason": "Land offer and contract automation is not released.",
+            },
+        )
+        assert restricted_stage.status_code == 409, restricted_stage.text
+        assert "not available for Land leads yet" in restricted_stage.json()["detail"]
+
+    for stage_key in ("offer_presented", "negotiating"):
+        evidence_stage = client.patch(
+            f"/api/v1/leads/{lead_id}/stage",
+            headers=headers,
+            json={
+                "stage_key": stage_key,
+                "expected_stage_key": "underwriting",
+                "reason": "Bare stage changes must not substitute for offer evidence.",
+            },
+        )
+        assert evidence_stage.status_code == 422, evidence_stage.text
+        assert "require recorded offer evidence" in evidence_stage.json()["detail"]
 
     write_requests = (
         (

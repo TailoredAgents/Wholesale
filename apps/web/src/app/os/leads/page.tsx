@@ -56,7 +56,8 @@ export default async function LeadsPage({
         : Promise.resolve({ calibration: null, apiConnected: true }),
     ]);
 
-  const canCreateLead = Boolean(profile?.permissions.includes("leads:edit"));
+  const canEditLead = Boolean(profile?.permissions.includes("leads:edit"));
+  const canRecordOutsideOffer = Boolean(profile?.permissions.includes("leads:edit"));
   const canImportExecutedContract = Boolean(
     profile?.permissions.includes("contracts:record_executed") ||
       profile?.permissions.includes("contracts:modify"),
@@ -86,7 +87,7 @@ export default async function LeadsPage({
       <PageHeader
         actions={
           <>
-            {canCreateLead && profile ? (
+            {canEditLead && profile ? (
               <NewLeadControl
                 currentUserId={profile.user_id}
                 initialOpen={first(params.new) === "lead"}
@@ -136,9 +137,9 @@ export default async function LeadsPage({
 
       {activeView === "database" ? (
         <LeadsWorkspace
-          canEditLead={canCreateLead}
+          canEditLead={canEditLead}
           canImportExecutedContract={canImportExecutedContract}
-          canRecordOutsideOffer={canCreateLead}
+          canRecordOutsideOffer={canRecordOutsideOffer}
           initialDisplay={display}
           initialAsset={requestedAsset as "all" | "house" | "land"}
           initialLeadId={first(params.lead)}
