@@ -18,8 +18,14 @@ CONTACT_CONSENT_WORDINGS = {
         "phone call or email about your property inquiry and possible selling options. "
         "This permission does not include text messages."
     ),
+    "seller-contact-web-v4": (
+        "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
+        "phone call, email, or a one-to-one text message about your property inquiry and "
+        "possible selling options. Recurring automated text messages require the separate "
+        "optional SMS consent below."
+    ),
 }
-CONSENT_WORDING_VERSION = "seller-contact-web-v3"
+CONSENT_WORDING_VERSION = "seller-contact-web-v4"
 CONSENT_WORDING = CONTACT_CONSENT_WORDINGS[CONSENT_WORDING_VERSION]
 
 SMS_CONSENT_WORDINGS = {

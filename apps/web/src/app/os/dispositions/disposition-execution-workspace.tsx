@@ -580,7 +580,7 @@ export function DispositionExecutionWorkspace({
 }
 
 function PermissionLine({ allowed, blockers, channel, status }: { allowed: boolean; blockers: string[]; channel: string; status: string }) {
-  return <div className={allowed ? styles.permissionAllowed : styles.permissionBlocked}><span>{channel}: {labelize(status)}</span>{!allowed ? <small>{blockers.join(" ")}</small> : <small>Recorded permission and delivery controls are ready.</small>}</div>;
+  return <div className={allowed ? styles.permissionAllowed : styles.permissionBlocked}><span>{channel} permission: {labelize(status)}</span>{!allowed ? <small>{blockers.join(" ")}</small> : <small>Manual outreach is available; this permission label remains informational.</small>}</div>;
 }
 
 function ShowingRow({

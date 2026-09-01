@@ -788,6 +788,7 @@ def create_call_intent(
     intent_source: str = "shared_inbox",
     extra_intent_metadata: dict[str, object] | None = None,
     require_browser_voice: bool = False,
+    require_recorded_permission: bool = True,
     requested_recipient: str | None = None,
     commit: bool = True,
 ) -> VoiceCallIntentRead | None:
@@ -850,10 +851,14 @@ def create_call_intent(
         return None
     if contact is None:
         return None
+    recorded_permission_required = (
+        require_recorded_permission
+        and not business_voice_permission_not_required(conversation, contact)
+    )
     eligibility = evaluate_voice_eligibility(
         db,
         contact,
-        require_permission=not business_voice_permission_not_required(conversation, contact),
+        require_permission=recorded_permission_required,
         requested_phone_number=(
             requested_recipient
             or business_voice_requested_phone_number(conversation, contact)
@@ -898,6 +903,7 @@ def create_call_intent(
             "source": intent_source,
             "conversation_type": conversation.conversation_type,
             "department_key": line.department_key,
+            "recorded_permission_required": recorded_permission_required,
             **(extra_intent_metadata or {}),
         },
     )
@@ -944,6 +950,7 @@ def start_forwarded_call(
     payload: VoiceCallIntentCreate,
     *,
     provider: TwilioVoiceCallProvider | None = None,
+    require_recorded_permission: bool = True,
 ) -> VoiceCallIntentRead | None:
     intent_read = create_call_intent(
         db,
@@ -951,6 +958,7 @@ def start_forwarded_call(
         conversation_id,
         payload,
         intent_source="forwarded_cellphone",
+        require_recorded_permission=require_recorded_permission,
     )
     if intent_read is None:
         return None
@@ -1071,6 +1079,7 @@ def start_forwarded_lead_call(
     payload: VoiceCallIntentCreate,
     *,
     provider: TwilioVoiceCallProvider | None = None,
+    require_recorded_permission: bool = True,
 ) -> VoiceCallIntentRead | None:
     lead = lock_organization_lead(
         db,
@@ -1092,6 +1101,7 @@ def start_forwarded_lead_call(
         conversation.id,
         payload,
         provider=provider,
+        require_recorded_permission=require_recorded_permission,
     )
 
 
@@ -1119,6 +1129,7 @@ def create_lead_call_intent(
         payload,
         intent_source="lead_detail",
         require_browser_voice=True,
+        require_recorded_permission=False,
     )
 
 
@@ -1172,6 +1183,27 @@ def process_forwarded_voice_connect(
         )
         if intent is None or intent.status != "started":
             raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
+    if intent.prospect_id is None:
+        _, contact_id = require_warm_call_intent_context(intent)
+        contact = db.get(Contact, contact_id)
+        if contact is None or contact.organization_id != intent.organization_id:
+            raise VoiceConfigurationError("Call contact is unavailable.")
+        recorded_permission_required = bool(
+            (intent.intent_metadata or {}).get("recorded_permission_required", True)
+        )
+        eligibility = evaluate_voice_eligibility(
+            db,
+            contact,
+            require_permission=recorded_permission_required,
+            requested_phone_number=intent.recipient,
+        )
+        if (
+            not eligibility.can_call
+            or eligibility.recipient is None
+            or eligibility.recipient != intent.recipient
+        ):
+            detail = " ".join(eligibility.blockers) or "The contact phone number changed."
+            raise VoiceConfigurationError(f"Call authorization is no longer valid. {detail}")
     line = db.get(VoiceLine, intent.voice_line_id)
     if line is None or line.status != "active":
         raise VoiceConfigurationError("Stonegate voice line is unavailable.")
@@ -1245,10 +1277,13 @@ def process_outbound_voice_request(
             or contact.organization_id != intent.organization_id
         ):
             raise VoiceConfigurationError("Call conversation is unavailable.")
+        recorded_permission_required = bool(
+            (intent.intent_metadata or {}).get("recorded_permission_required", True)
+        )
         eligibility = evaluate_voice_eligibility(
             db,
             contact,
-            require_permission=not business_voice_permission_not_required(conversation, contact),
+            require_permission=recorded_permission_required,
             requested_phone_number=intent.recipient,
         )
         if (

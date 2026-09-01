@@ -942,7 +942,7 @@ def test_quick_dial_replay_is_bound_to_request_and_actor(
     )
 
 
-def test_quick_dial_does_not_override_recorded_phone_revocation(
+def test_quick_dial_treats_recorded_phone_permission_as_advisory(
     db_session: Session,
     api_db_override: None,
     voice_settings: None,
@@ -981,15 +981,33 @@ def test_quick_dial_does_not_override_recorded_phone_revocation(
     )
     db_session.commit()
 
-    blocked = client.post(
+    advisory = client.post(
         "/api/v1/voice/quick-dial",
         headers=headers,
         json={**payload, "idempotency_key": "quick-dial-revocation-0002"},
     )
 
-    assert blocked.status_code == 422, blocked.text
-    assert "Recorded phone contact permission is required" in blocked.text
-    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 1
+    assert advisory.status_code == 201, advisory.text
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{advisory.json()['conversation_id']}",
+        headers=headers,
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["voice_eligibility"]["can_call"] is True
+    assert detail.json()["voice_eligibility"]["consent_status"] == "revoked"
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        {
+            "From": f"client:{session['identity']}",
+            "CallSid": "CA00000000000000000000000000000096",
+            "CallIntentId": advisory.json()["intent"]["id"],
+        },
+    )
+    assert outbound.status_code == 200, outbound.text
+    assert "+14045550197" in outbound.text
+    assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 2
 
 
 def test_quick_dial_reuses_existing_business_contact_without_creating_a_lead(
@@ -1465,7 +1483,7 @@ def test_outbound_execution_rechecks_suppression_after_intent_creation(
     assert intent.status == "pending"
 
 
-def test_manual_call_permission_unblocks_the_real_outbound_call_flow(
+def test_manual_call_treats_missing_permission_as_advisory_through_outbound_flow(
     db_session: Session,
     api_db_override: None,
     voice_settings: None,
@@ -1483,30 +1501,33 @@ def test_manual_call_permission_unblocks_the_real_outbound_call_flow(
     db_session.commit()
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
 
-    blocked = client.post(
-        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
-        headers=headers,
-        json={"idempotency_key": "manual-permission-blocked-0001"},
-    )
-
-    assert blocked.status_code == 422
-    assert "Recorded phone contact permission is required" in blocked.text
-    assert conversation.lead_id is not None
-
-    permission = client.patch(
-        f"/api/v1/leads/{conversation.lead_id}/contact-permission",
-        headers=headers,
-        json={"channel": "phone", "status": "granted", "source": "phone_call"},
-    )
     ready = client.post(
         f"/api/v1/voice/conversations/{conversation.id}/call-intents",
         headers=headers,
-        json={"idempotency_key": "manual-permission-ready-0001"},
+        json={"idempotency_key": "manual-permission-advisory-0001"},
     )
 
-    assert permission.status_code == 200, permission.text
     assert ready.status_code == 201, ready.text
     assert ready.json()["recipient"] == SELLER_NUMBER
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["voice_eligibility"]["can_call"] is True
+    assert detail.json()["voice_eligibility"]["consent_status"] == "missing"
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        {
+            "From": f"client:{session['identity']}",
+            "CallSid": "CA00000000000000000000000000000097",
+            "CallIntentId": ready.json()["id"],
+        },
+    )
+    assert outbound.status_code == 200, outbound.text
+    assert SELLER_NUMBER in outbound.text
 
 
 def test_forwarded_outbound_call_rings_staff_then_connects_seller(
@@ -1556,6 +1577,65 @@ def test_forwarded_outbound_call_rings_staff_then_connects_seller(
     assert SELLER_NUMBER in connected.text
     assert f'callerId="{STONEGATE_NUMBER}"' in connected.text
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+
+
+def test_forwarded_outbound_call_rechecks_suppression_before_connecting_seller(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FakeVoiceProvider:
+        def start(self, **kwargs: str) -> TwilioVoiceCallResult:
+            return TwilioVoiceCallResult(
+                sid="CA00000000000000000000000000000098",
+                status="queued",
+            )
+
+    monkeypatch.setattr(
+        "app.services.voice.get_twilio_voice_call_provider",
+        lambda: FakeVoiceProvider(),
+    )
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    response = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/forwarded-calls",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"idempotency_key": "forwarded-call-suppression-0001"},
+    )
+    assert response.status_code == 201, response.text
+    contact = db_session.get(Contact, conversation.contact_id)
+    assert contact is not None
+    db_session.add(
+        SuppressionRecord(
+            organization_id=contact.organization_id,
+            contact_id=contact.id,
+            channel="all",
+            normalized_address=SELLER_NUMBER,
+            status="active",
+            reason="Contact requested no calls or texts.",
+            source="manual",
+            provider=None,
+            external_event_id=None,
+            suppressed_at=datetime.now(ZoneInfo("UTC")),
+            lifted_at=None,
+            suppression_metadata=None,
+        )
+    )
+    db_session.commit()
+
+    connect_path = (
+        "/api/v1/webhooks/twilio/voice/forwarded-connect"
+        f"?intent_id={response.json()['id']}"
+    )
+    connected = post_signed(
+        client,
+        connect_path,
+        {"CallSid": "CA00000000000000000000000000000098", "Digits": "1"},
+    )
+
+    assert connected.status_code == 422, connected.text
+    assert "suppressed from phone calls" in connected.text
 
 
 def test_forwarded_outbound_call_can_start_from_lead_page(

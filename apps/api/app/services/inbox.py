@@ -71,7 +71,6 @@ from app.schemas.inbox import (
 )
 from app.services.call_intelligence import transcript_to_read
 from app.services.communication_compliance import (
-    business_voice_permission_not_required,
     business_voice_requested_phone_number,
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
@@ -79,7 +78,11 @@ from app.services.communication_compliance import (
 )
 from app.services.document_storage import read_content
 from app.services.email_identity import general_email_display_name
-from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
+from app.services.lead_lifecycle import (
+    LeadLifecycleConflictError,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
 from app.services.mailbox_notifications import (
     MAILBOX_NOTIFICATION_TYPES,
     latest_inbound_channel,
@@ -1692,14 +1695,33 @@ def get_conversation_detail(
         for item in appointments
     )
     timeline.sort(key=lambda item: (item.occurred_at, str(item.id)))
-    sms_eligibility = evaluate_sms_eligibility(db, contact)
+    sms_eligibility = evaluate_sms_eligibility(
+        db,
+        contact,
+        require_permission=False,
+    )
     business_phone_number = business_voice_requested_phone_number(conversation, contact)
     voice_eligibility = evaluate_voice_eligibility(
         db,
         contact,
-        require_permission=not business_voice_permission_not_required(conversation, contact),
+        require_permission=False,
         requested_phone_number=business_phone_number,
     )
+    sms_blockers = list(sms_eligibility.blockers)
+    voice_blockers = list(voice_eligibility.blockers)
+    if conversation.conversation_type not in {"lead", "buyer"}:
+        sms_blockers.append("SMS is only available from seller and buyer conversations.")
+    if conversation.conversation_type not in {"lead", "buyer", "general"}:
+        voice_blockers.append(
+            "Calling is only available from seller, buyer, and company conversations."
+        )
+    if conversation.conversation_type == "lead" and lead is not None:
+        try:
+            require_lead_open_for_work(lead)
+        except LeadLifecycleConflictError as exc:
+            lifecycle_blocker = str(exc)
+            sms_blockers.append(lifecycle_blocker)
+            voice_blockers.append(lifecycle_blocker)
 
     base = conversation_to_read(db, conversation)
     return ConversationDetailRead(
@@ -1752,22 +1774,22 @@ def get_conversation_detail(
             for appointment in appointments
         ],
         sms_eligibility=SmsEligibilityRead(
-            can_send=sms_eligibility.can_send,
+            can_send=sms_eligibility.can_send and not sms_blockers,
             recipient=sms_eligibility.recipient,
             consent_status=sms_eligibility.consent_status,
             is_suppressed=sms_eligibility.is_suppressed,
             provider_configured=sms_eligibility.provider_configured,
             within_allowed_hours=sms_eligibility.within_allowed_hours,
-            blockers=list(sms_eligibility.blockers),
+            blockers=sms_blockers,
         ),
         voice_eligibility=VoiceEligibilityRead(
-            can_call=voice_eligibility.can_call,
+            can_call=voice_eligibility.can_call and not voice_blockers,
             recipient=voice_eligibility.recipient,
             consent_status=voice_eligibility.consent_status,
             is_suppressed=voice_eligibility.is_suppressed,
             provider_configured=voice_eligibility.provider_configured,
             within_allowed_hours=voice_eligibility.within_allowed_hours,
-            blockers=list(voice_eligibility.blockers),
+            blockers=voice_blockers,
         ),
     )
 

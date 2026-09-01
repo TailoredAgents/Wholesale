@@ -344,6 +344,12 @@ function labelize(value: string | null | undefined) {
     .join(" ");
 }
 
+function contactPermissionLabel(status: string) {
+  if (status === "granted") return "permission recorded";
+  if (status === "revoked") return "not permissioned";
+  return "permission not recorded";
+}
+
 function formatCompactTime(value: string | null) {
   if (!value) return "No activity";
   const date = new Date(value);
@@ -2523,7 +2529,7 @@ export function InboxWorkspace({
                     <span>
                       {detail.sms_eligibility.can_send
                         ? canUseSms
-                          ? `Ready to send to ${detail.sms_eligibility.recipient}`
+                          ? `Ready to send to ${detail.sms_eligibility.recipient} · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
                           : "Your role cannot send seller text messages."
                         : detail.sms_eligibility.blockers.join(" ")}
                     </span>
@@ -2593,8 +2599,8 @@ export function InboxWorkspace({
                           ? callComposerMode === "cellphone" && forwardedCallStatus === "started"
                             ? "Answer your cellphone and press 1 to connect."
                             : callComposerMode === "browser"
-                              ? `Ready to call ${detail.voice_eligibility.recipient} through this browser.`
-                              : `Ready to call ${detail.voice_eligibility.recipient} through your cellphone.`
+                              ? `Ready to call ${detail.voice_eligibility.recipient} through this browser · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}.`
+                              : `Ready to call ${detail.voice_eligibility.recipient} through your cellphone · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}.`
                           : detail.voice_eligibility.blockers.join(" ")}
                       </span>
                     </div>
@@ -2754,10 +2760,10 @@ export function InboxWorkspace({
                     )}
                     <span>
                       {detail.sms_eligibility.can_send
-                        ? "SMS eligible"
+                        ? `SMS available · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
                         : detail.sms_eligibility.is_suppressed
-                          ? "SMS suppressed"
-                          : `SMS consent ${labelize(detail.sms_eligibility.consent_status)}`}
+                          ? `SMS suppressed · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
+                          : `SMS unavailable · ${contactPermissionLabel(detail.sms_eligibility.consent_status)} · ${detail.sms_eligibility.blockers.join(" ")}`}
                     </span>
                   </div>
                 )}
@@ -2776,10 +2782,10 @@ export function InboxWorkspace({
                     )}
                     <span>
                       {detail.voice_eligibility.can_call
-                        ? "Voice eligible"
+                        ? `Calling available · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}`
                         : detail.voice_eligibility.is_suppressed
-                          ? "Calling suppressed"
-                          : `Phone permission ${labelize(detail.voice_eligibility.consent_status)}`}
+                          ? `Calling suppressed · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}`
+                          : `Calling unavailable · ${contactPermissionLabel(detail.voice_eligibility.consent_status)} · ${detail.voice_eligibility.blockers.join(" ")}`}
                     </span>
                   </div>
                 ) : null}

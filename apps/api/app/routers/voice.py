@@ -127,6 +127,7 @@ def create_conversation_call_intent(
             conversation_id,
             payload,
             require_browser_voice=True,
+            require_recorded_permission=False,
         )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -157,7 +158,13 @@ def create_forwarded_conversation_call(
     principal: Annotated[Principal, Depends(call_dependency)],
 ) -> VoiceCallIntentRead:
     try:
-        intent = start_forwarded_call(db, principal, conversation_id, payload)
+        intent = start_forwarded_call(
+            db,
+            principal,
+            conversation_id,
+            payload,
+            require_recorded_permission=False,
+        )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -187,7 +194,13 @@ def create_forwarded_lead_call(
     principal: Annotated[Principal, Depends(call_dependency)],
 ) -> VoiceCallIntentRead:
     try:
-        intent = start_forwarded_lead_call(db, principal, lead_id, payload)
+        intent = start_forwarded_lead_call(
+            db,
+            principal,
+            lead_id,
+            payload,
+            require_recorded_permission=False,
+        )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:

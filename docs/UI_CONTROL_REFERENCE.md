@@ -156,9 +156,9 @@ outreach.
 | Your name | Creates or updates the seller identity | Required |
 | Phone | Primary contact number | A complete phone number is required for every website inquiry |
 | Email | Additional contact method | Optional; must be valid when entered |
-| Contact authorization disclosure | Explains that submitting authorizes phone or email follow-up about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
+| Contact authorization disclosure | Explains that submitting authorizes phone, email, or a one-to-one text about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
 | Optional SMS consent | Separately records recurring automated SMS consent and the `seller-sms-web-v3` wording version | Unchecked initially, never required, and never saved in the browser draft |
-| **Request My Options Review** | Promotes the same address-only record into a contact-completed seller inquiry, adds phone/email authorization evidence and optional SMS consent evidence, sends the Meta `Contact` event, and queues the separate **Stage 2 filled** employee SMS | Disabled while sending; validation or API errors leave answers on screen |
+| **Request My Options Review** | Promotes the same address-only record into a contact-completed seller inquiry, adds direct-contact authorization evidence and optional recurring automated SMS consent evidence, sends the Meta `Contact` event, and queues the separate **Stage 2 filled** employee SMS | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
@@ -831,7 +831,7 @@ history into separate channel threads.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **SMS** | Selects text-message composition | Requires SMS consent, a routable phone number, and configured Twilio SMS |
+| **SMS** | Selects text-message composition | Manual one-to-one texting requires a routable phone number, configured Twilio SMS, and no active STOP/DNC suppression; the recorded permission label remains visible but is advisory |
 | **Email** | Selects email composition | Requires an active Resend sender and recipient email |
 | **Call** | Opens device calling or manual call logging | Requires a seller phone number |
 | **Note** | Creates an internal timeline note | Requires conversation edit access |
@@ -844,7 +844,7 @@ history into separate channel threads.
 | Signature | Appends the sender's configured signature | Email only |
 | Attachment | Uploads files to the outbound email | Subject to file and provider limits |
 | Message body | Contains the SMS, email, call note, or internal note | Required before send/save |
-| **Send** | Sends the selected external message | Disabled when provider, consent, sender, recipient, or content requirements fail |
+| **Send** | Sends the selected external message | Disabled when provider, sender, recipient, suppression, contact-hour, or content requirements fail |
 | **Save note / Log communication** | Adds an internal or manually logged event | Does not contact the seller |
 
 ### SMS Permission
@@ -855,12 +855,15 @@ history into separate channel threads.
 | **Edit SMS permission** | Opens the staff documentation form | Available to authorized lead-edit or SMS-send staff while the lead is open |
 | Status | Records a new permission grant or revocation | Appends a new record; it does not rewrite prior evidence |
 | Where was this decision confirmed? | Identifies phone call, in person, Facebook, seller text, written form, or another documented source | Required for every staff-recorded change |
-| Evidence note | Explains when and how the seller granted or withdrew permission | Required; use specific factual evidence rather than an assumption |
+| Automatic audit evidence | Preserves the selected source, employee, timestamp, displayed phone number, activity, and audit history | No typed note is required |
 | **Save SMS permission** | Appends the permission record for the displayed phone number and writes activity and audit history | A grant requires a valid seller phone number; a not-permissioned decision can still be recorded without one |
 
 A seller's carrier-level **STOP** is an absolute suppression. Staff cannot manually replace it with
 a permission grant; the seller must send **START** from that phone number before SMS can resume.
 Permission recorded for one number does not transfer when the primary phone number changes.
+For deliberate staff-initiated CRM calls and one-to-one texts, this permission state is an
+informational label rather than a send/call blocker. Automated and bulk outreach retain their
+separate eligibility controls.
 
 ### Cellphone Calling
 
@@ -1095,7 +1098,7 @@ changing ownership or stage does not create a second record.
 | Contact type / value | Edits any seller phone number or email address | Phone and email format validation applies |
 | Primary | Chooses the preferred phone and preferred email used first by Stonegate | One primary is maintained per contact type |
 | Remove contact method | Deletes an incorrect or obsolete phone number or email address | Cannot leave the lead without any phone or email |
-| **SMS permission: Permissioned / Not permissioned** | Shows and edits the latest documented seller SMS decision from the Contact panel | Authorized staff may append a sourced grant or revocation with a required evidence note; carrier **STOP** requires seller **START** |
+| **SMS permission: Permissioned / Not permissioned** | Shows and edits the latest documented seller SMS decision from the Contact panel | Authorized staff may append a sourced grant or revocation without typing a note; carrier **STOP** requires seller **START** |
 | Property address / City / State / ZIP | Edits the subject property | Address required for market analysis |
 | Source / Campaign | Records acquisition attribution | Options come from configured operations data |
 | Motivation / Timeline / Condition / Occupancy | Saves qualification facts | Unknown is valid until confirmed |

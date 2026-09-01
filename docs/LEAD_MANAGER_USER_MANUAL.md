@@ -337,7 +337,9 @@ Use these Inbox views:
 For each conversation:
 
 1. Read the newest message and enough history to understand it.
-2. Confirm consent and contact eligibility.
+2. Review the permission label and confirm the channel is operationally available. Permission is
+   advisory for a deliberate staff call or one-to-one text; STOP, DNC, suppression, an invalid
+   number, or a provider problem still blocks contact.
 3. Respond or log the completed contact.
 4. Add an internal note when staff needs context.
 5. Update assignment when responsibility changes.

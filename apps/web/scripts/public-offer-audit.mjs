@@ -12,7 +12,7 @@ const executablePath = process.env.CHROME_EXECUTABLE_PATH ??
   (existsSync(macChrome) ? macChrome : undefined);
 const findings = [];
 const contactConsentWording =
-  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
+  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call, email, or a one-to-one text message about your property inquiry and possible selling options. Recurring automated text messages require the separate optional SMS consent below.";
 const smsConsentWording =
   "By checking this optional box, I agree to receive recurring automated text messages from Stonegate Home Buyers about my property inquiry, appointments, and possible selling options at the number provided. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. See our Terms & Conditions and Privacy Policy.";
 const addressSavingDisclosure =
@@ -124,7 +124,7 @@ async function installApiStubs(page, state) {
         property_id: "33333333-2222-4333-8444-555555555555",
         duplicate_status: "created",
         matched_existing_lead: false,
-        consent_wording_version: "seller-contact-web-v3",
+        consent_wording_version: "seller-contact-web-v4",
         enrichment_token: "test-enrichment-token-that-is-long-enough-for-the-api",
         enrichment_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
         message: "Thanks. Your property inquiry was received.",
@@ -1043,7 +1043,7 @@ async function auditJourney(browser, viewport) {
     mortgage_balance: null,
     preferred_contact_method: "phone",
     consent_to_contact: true,
-    consent_wording_version: "seller-contact-web-v3",
+    consent_wording_version: "seller-contact-web-v4",
     sms_consent: true,
     sms_consent_wording_version: "seller-sms-web-v3",
   })) {

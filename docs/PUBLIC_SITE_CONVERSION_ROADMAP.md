@@ -21,7 +21,8 @@ The public site already provides:
 - a two-step selling-options inquiry with optional post-submission property details
 - a cold address-only CRM capture and Meta `Lead` after a complete address is accepted, followed by
   promotion of the same record and Meta `Contact` after Contact completion
-- passive phone/email authorization on submission with a separate optional SMS checkbox
+- passive phone/email/one-to-one-text authorization on submission with a separate optional
+  recurring automated SMS checkbox
 - draft recovery, deterministic attempt deduplication, race-safe promotion, and submission recovery
 - phone-click, page-view, offer-start, form-step, abandonment, and submission measurement
 - real-user LCP, INP, and CLS reporting

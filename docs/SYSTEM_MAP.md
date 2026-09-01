@@ -251,7 +251,7 @@ Role-specific default routes include:
 | Route | Purpose |
 | --- | --- |
 | `/` | Main address-first direct-offer experience |
-| `/get-a-cash-offer` | Focused two-step seller inquiry with address-stage capture, passive phone/email authorization, separate optional SMS opt-in, and an unnumbered optional enrichment section after confirmation |
+| `/get-a-cash-offer` | Focused two-step seller inquiry with address-stage capture, passive phone/email/one-to-one-text authorization, separate optional recurring automated SMS opt-in, and an unnumbered optional enrichment section after confirmation |
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
@@ -279,8 +279,9 @@ property-research job, AI lead-preparation job, general staff notification, or s
 automation. Stonegate may research/skip trace the owner, but staff must manually check DNC status
 before any cold outreach; the intake path does not perform an automatic DNC check.
 
-The second visible step requires name and phone, accepts optional email, displays passive phone/email
-authorization, and offers a separate unchecked recurring automated SMS choice. Submitting it
+The second visible step requires name and phone, accepts optional email, displays passive
+phone/email/one-to-one-text authorization, and offers a separate unchecked recurring automated SMS
+choice. Submitting it
 promotes the same contact, property, lead, and form-submission record to
 `website_intake_status="completed"`; it does not create a second lead. Normal conversation,
 property-research, AI, speed-to-lead, and notification workflows start only at this point. A second
@@ -330,7 +331,7 @@ The address stage creates or reuses:
 The contact stage promotes that same record and adds or starts:
 
 - real seller identity and contact methods
-- phone/email and optional SMS consent evidence
+- phone/email/direct-text authorization and optional recurring automated SMS consent evidence
 - completed form-submission evidence
 - the first-party `contact_complete` event and Meta `Contact`
 - one durable `website_form` Stage 2 employee SMS per eligible recipient
@@ -347,12 +348,13 @@ records while preserving new form, attribution, and consent evidence.
 
 ### 6.3 Contact Authorization And SMS Consent
 
-Step 1 grants no permission to contact. The public property form displays the versioned phone/email
-disclosure next to the Step 2 final action and submits `consent_to_contact=true` only when the seller
-sends that completed inquiry. Recurring automated SMS consent is a separate unchecked choice. When
-checked, evidence includes the `seller-sms-web-v3` wording version, timestamp, source, IP address,
-and user agent. The checkbox is never required, selected by default, persisted in a browser draft,
-or inferred from general permission to contact.
+Step 1 grants no permission to contact. The public property form displays the versioned
+`seller-contact-web-v4` phone/email/one-to-one-text disclosure next to the Step 2 final action and
+submits `consent_to_contact=true` only when the seller sends that completed inquiry. Recurring
+automated SMS consent is a separate unchecked choice. When checked, evidence includes the
+`seller-sms-web-v3` wording version, timestamp, source, IP address, and user agent. The checkbox is
+never required, selected by default, persisted in a browser draft, or inferred as recurring
+automated-message consent from the direct-contact authorization.
 
 Internal new-lead SMS alerts are a separate operational use case sent only to employees who enabled
 the staff alert preference; the seller-facing checkbox does not control those alerts. The address
@@ -362,12 +364,16 @@ one Stage 1 text and one Stage 2 text even when the browser or worker retries.
 The seller record Contact panel and Inbox right sidebar show the latest SMS state as
 **Permissioned** or **Not permissioned**. Authorized staff can append a grant or revocation when
 the seller communicates the decision through a phone call, in person, Facebook, an inbound seller
-text, a written form, or another documented source. Every staff entry requires an evidence note
-and preserves source, actor, timestamp, activity, and audit history. It does not rewrite earlier
-consent evidence. An active Twilio **STOP** suppression cannot be manually overridden; the seller
-must send **START** from the same number before SMS permission can be restored.
+text, a written form, or another documented source. No typed note is required; every staff entry
+preserves source, actor, timestamp, activity, and audit history. It does not rewrite earlier consent
+evidence. An active Twilio **STOP** suppression cannot be manually overridden; the seller must send
+**START** from the same number before SMS permission can be restored.
 New SMS permission records are also bound to the normalized phone number that was permissioned, so
 replacing a seller's primary number does not silently transfer prior permission to the new number.
+For a deliberate staff-initiated CRM call or one-to-one text, the recorded permission state is an
+informational label rather than an execution gate. STOP/DNC suppression, invalid numbers, provider
+configuration, line authorization, role permissions, closed records, and SMS contact hours remain
+enforceable. Automated and bulk outreach continue to require their stricter permission checks.
 
 ### 6.4 Conversion Measurement
 
@@ -1217,7 +1223,7 @@ The Twilio SMS implementation supports:
 - STOP and START processing
 - suppression and consent controls
 - an editable **Permissioned / Not permissioned** seller-context control for authorized staff, with
-  required source and evidence-note capture plus append-only activity and audit history
+  required source selection, no typed-note requirement, and append-only activity and audit history
 - number normalization
 - organization and permission scope
 

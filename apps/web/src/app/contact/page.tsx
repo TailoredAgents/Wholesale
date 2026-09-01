@@ -34,7 +34,7 @@ const expectations = [
   {
     title: "Know what happens next",
     detail:
-      "Stonegate calls to discuss the property. Email is optional, and text messages require separate permission.",
+      "Stonegate may follow up by phone, email, or a one-to-one text about your inquiry. Recurring automated texts require separate optional SMS consent.",
   },
   {
     title: "Confirm coverage first",

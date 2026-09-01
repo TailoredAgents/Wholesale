@@ -71,12 +71,13 @@ class FakeTwilioProvider:
     ) -> OutboundMessageResult:
         assert dry_run is False
         self.requests.append(request)
+        provider_message_id = f"SM{len(self.requests):032d}"
         return OutboundMessageResult(
             provider="twilio",
-            provider_message_id="SM00000000000000000000000000000001",
+            provider_message_id=provider_message_id,
             status="queued",
             raw_payload={
-                "sid": "SM00000000000000000000000000000001",
+                "sid": provider_message_id,
                 "status": "queued",
                 "to": request.recipient,
             },
@@ -1081,7 +1082,7 @@ def test_twilio_status_recovery_is_tenant_scoped_bounded_and_does_not_starve_que
     assert orphan_event.processed_at is not None
 
 
-def test_outbound_sms_requires_consent_and_respects_suppression(
+def test_manual_outbound_sms_treats_permission_as_advisory_but_respects_suppression(
     db_session: Session,
     api_db_override: None,
     twilio_settings: None,
@@ -1125,16 +1126,83 @@ def test_outbound_sms_requires_consent_and_respects_suppression(
     assert fake_provider.requests == []
 
     db_session.query(SuppressionRecord).delete()
+    db_session.add(
+        SuppressionRecord(
+            organization_id=conversation.organization_id,
+            contact_id=contact.id,
+            channel="all",
+            normalized_address="+14045551212",
+            status="active",
+            reason="Company do-not-contact request",
+            source="test",
+            provider=None,
+            external_event_id="all-dnc",
+            suppressed_at=conversation.created_at,
+            lifted_at=None,
+            suppression_metadata=None,
+        )
+    )
+    db_session.commit()
+
+    global_dnc_response = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"body": "This also must not send.", "idempotency_key": "sms-global-dnc-1"},
+    )
+
+    assert global_dnc_response.status_code == 422
+    assert "suppressed" in global_dnc_response.json()["detail"].lower()
+    assert fake_provider.requests == []
+
+    db_session.query(SuppressionRecord).delete()
     db_session.query(ConsentRecord).delete()
     db_session.commit()
     missing_consent_response = client.post(
         f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json={"body": "This also must not send.", "idempotency_key": "sms-no-consent-1"},
+        json={"body": "Manual follow-up.", "idempotency_key": "sms-no-consent-1"},
     )
-    assert missing_consent_response.status_code == 422
-    assert "consent" in missing_consent_response.json()["detail"].lower()
-    assert fake_provider.requests == []
+    assert missing_consent_response.status_code == 201, missing_consent_response.text
+    assert missing_consent_response.json()["recipient"] == "+14045551212"
+    assert len(fake_provider.requests) == 1
+
+    db_session.add(
+        ConsentRecord(
+            organization_id=conversation.organization_id,
+            contact_id=contact.id,
+            channel="sms",
+            status="revoked",
+            source="phone_call",
+            wording_version="manual-v1",
+            wording="Seller declined SMS permission during a phone call.",
+            normalized_address="+14045551212",
+            captured_ip=None,
+            user_agent=None,
+        )
+    )
+    db_session.commit()
+
+    detail_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    detail_eligibility = detail_response.json()["sms_eligibility"]
+    assert detail_eligibility["consent_status"] == "revoked"
+    assert detail_eligibility["can_send"] is True
+    assert "Recorded SMS consent is required." not in detail_eligibility["blockers"]
+
+    revoked_permission_response = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "body": "Manual follow-up with the recorded label still visible.",
+            "idempotency_key": "sms-revoked-label-1",
+        },
+    )
+    assert revoked_permission_response.status_code == 201, revoked_permission_response.text
+    assert revoked_permission_response.json()["recipient"] == "+14045551212"
+    assert len(fake_provider.requests) == 2
 
 
 def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(

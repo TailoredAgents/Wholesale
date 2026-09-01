@@ -483,6 +483,14 @@ def test_staff_sms_permission_does_not_follow_a_changed_phone_number(
     eligibility = evaluate_sms_eligibility(db_session, contact)
     assert eligibility.consent_status == "missing"
     assert not eligibility.can_send
+    detail = client.get(
+        f"/api/v1/leads/{lead.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail.status_code == 200, detail.text
+    detail_eligibility = detail.json()["sms_eligibility"]
+    assert detail_eligibility["consent_status"] == "missing"
+    assert "Recorded SMS consent is required." not in detail_eligibility["blockers"]
 
 
 def test_staff_phone_permission_does_not_follow_a_changed_phone_number(
@@ -525,6 +533,17 @@ def test_staff_phone_permission_does_not_follow_a_changed_phone_number(
     eligibility = evaluate_voice_eligibility(db_session, contact)
     assert eligibility.consent_status == "missing"
     assert not eligibility.can_call
+    detail = client.get(
+        f"/api/v1/leads/{lead.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail.status_code == 200, detail.text
+    detail_eligibility = detail.json()["voice_eligibility"]
+    assert detail_eligibility["consent_status"] == "missing"
+    assert (
+        "Recorded phone contact permission is required."
+        not in detail_eligibility["blockers"]
+    )
 
 
 def test_phone_suppression_cannot_be_overridden_but_sms_can_be_managed(

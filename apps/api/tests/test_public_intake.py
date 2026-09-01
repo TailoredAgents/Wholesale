@@ -1399,13 +1399,14 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert phone_consent.normalized_address == "+14045551212"
     assert all(consent.status == "granted" for consent in consents)
     assert all(consent.captured_ip == "testclient" for consent in consents)
-    assert all(consent.wording_version == "seller-contact-web-v3" for consent in consents)
+    assert all(consent.wording_version == "seller-contact-web-v4" for consent in consents)
     assert all(
         consent.wording
         == (
             "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
-            "phone call or email about your property inquiry and possible selling options. "
-            "This permission does not include text messages."
+            "phone call, email, or a one-to-one text message about your property inquiry and "
+            "possible selling options. Recurring automated text messages require the separate "
+            "optional SMS consent below."
         )
         for consent in consents
     )
@@ -1462,29 +1463,38 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     )
     assert audit_event is not None
     assert audit_event.new_value is not None
-    assert audit_event.new_value["consent_wording_version"] == "seller-contact-web-v3"
+    assert audit_event.new_value["consent_wording_version"] == "seller-contact-web-v4"
     assert audit_event.new_value["sms_consent"] is False
     assert audit_event.new_value["sms_consent_wording_version"] is None
 
 
+@pytest.mark.parametrize(
+    ("contact_wording_version", "expected_contact_wording"),
+    [
+        ("seller-contact-web-v2", "cash offer request"),
+        ("seller-contact-web-v3", "possible selling options"),
+    ],
+)
 def test_public_intake_preserves_supported_older_consent_wording(
     db_session: Session,
     api_db_override: None,
+    contact_wording_version: str,
+    expected_contact_wording: str,
 ) -> None:
     seed_org(db_session)
     payload = public_payload()
-    payload["consent_wording_version"] = "seller-contact-web-v2"
+    payload["consent_wording_version"] = contact_wording_version
     payload["sms_consent"] = True
     payload["sms_consent_wording_version"] = "seller-sms-web-v2"
 
     response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
 
     assert response.status_code == 201, response.text
-    assert response.json()["consent_wording_version"] == "seller-contact-web-v2"
+    assert response.json()["consent_wording_version"] == contact_wording_version
     consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
     non_sms_consents = [consent for consent in consents if consent.channel != "sms"]
-    assert all(consent.wording_version == "seller-contact-web-v2" for consent in non_sms_consents)
-    assert all("cash offer request" in consent.wording for consent in non_sms_consents)
+    assert all(consent.wording_version == contact_wording_version for consent in non_sms_consents)
+    assert all(expected_contact_wording in consent.wording for consent in non_sms_consents)
     sms_consent = next(consent for consent in consents if consent.channel == "sms")
     assert sms_consent.wording_version == "seller-sms-web-v2"
     assert "cash offer updates" in sms_consent.wording

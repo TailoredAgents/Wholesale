@@ -112,6 +112,8 @@ def send_conversation_sms(
     principal: Principal,
     conversation_id: UUID,
     payload: SmsSendRequest,
+    *,
+    require_permission: bool = True,
 ) -> SmsSendRead | None:
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
@@ -172,7 +174,11 @@ def send_conversation_sms(
         return None
     if contact is None:
         return None
-    eligibility = evaluate_sms_eligibility(db, contact)
+    eligibility = evaluate_sms_eligibility(
+        db,
+        contact,
+        require_permission=require_permission,
+    )
     if not eligibility.can_send or eligibility.recipient is None:
         raise SmsComplianceError(eligibility.blockers)
 

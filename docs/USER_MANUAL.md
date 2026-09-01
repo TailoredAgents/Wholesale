@@ -752,9 +752,10 @@ The visible Contact step collects:
 
 - Name, required phone number, and optional email. Stonegate follows up by phone by default.
 - A passive disclosure explaining that submitting the form authorizes Stonegate to follow up by
-  phone or email about the property inquiry and possible selling options.
-- A separate optional, unchecked SMS consent box for recurring text messages about the property
-  inquiry, appointments, and possible selling options. SMS consent is not saved in browser drafts.
+  phone, email, or a one-to-one text about the property inquiry and possible selling options.
+- A separate optional, unchecked SMS consent box for recurring automated text messages about the
+  property inquiry, appointments, and possible selling options. SMS consent is not saved in browser
+  drafts.
 - Marketing attribution and privacy-safe conversion evidence.
 
 When the seller selects **Request My Options Review**:
@@ -1200,15 +1201,17 @@ authorized employee can document it without creating a second lead:
 3. Choose **Permissioned** or **Not permissioned**.
 4. Choose where the decision came from: phone call, in person, Facebook, seller text, written form,
    or another documented source.
-5. Enter a specific evidence note, including when and how the seller communicated the decision.
-6. Select **Save SMS permission**.
+5. Select **Save SMS permission**. No typed note is required.
 
-Stonegate appends the change rather than replacing prior evidence. The source, evidence note,
-employee, timestamp, activity event, and audit history remain available for review. Never mark a
+Stonegate appends the change rather than replacing prior evidence. The source, employee, timestamp,
+activity event, and audit history remain available for review. Never mark a
 seller permissioned based only on possession of a phone number. A carrier-level **STOP** cannot be
 manually overridden; the seller must text **START** from that number before SMS can resume.
 The saved permission is tied to the phone number shown in the editor; if the primary number changes,
-record permission for the new number before texting it.
+the label resets for the new number. Manual one-to-one CRM calls and texts remain available when the
+label is missing or not permissioned, but STOP/DNC suppression, invalid numbers, contact hours, and
+provider configuration still block contact. Automated and bulk outreach retain their separate
+permission rules.
 
 ### Understand Response State
 
@@ -1699,9 +1702,9 @@ Use the lead record when you need the complete evidence chain. Use focused works
 queue execution.
 
 The Contact panel also shows the latest **SMS permission** state. Authorized staff may append a
-grant or revocation with its real source and a required evidence note; the Activity and audit
-history preserve each change. A seller's **STOP** remains blocked until that seller sends
-**START**.
+grant or revocation by selecting its real source; no typed note is required. The employee,
+timestamp, source, Activity event, and audit history preserve each change. A seller's **STOP**
+remains blocked until that seller sends **START**.
 
 In **Property > Property Intelligence**, use the property map to confirm the general location,
 pan or zoom around the neighborhood, and select **Recenter** to return to the saved property pin.
@@ -2968,8 +2971,8 @@ operating exception.
 
 - Review required fields and field-level messages.
 - Use a valid phone and complete property address.
-- The phone/email authorization is passive text on the Contact step; there is no required contact
-  permission checkbox. The separate SMS choice is optional.
+- The phone/email/one-to-one-text authorization is passive text on the Contact step; there is no
+  required contact-permission checkbox. The separate recurring automated SMS choice is optional.
 - Retry after correcting the highlighted field.
 - A `201 Created` API log means the lead was accepted even if the browser later showed a UI error.
 
@@ -2987,15 +2990,15 @@ Possible reasons include:
 
 - Twilio is not configured or enabled.
 - No approved Stonegate sender is attached.
-- SMS consent is missing.
 - The number is invalid.
 - STOP or company suppression exists.
 - Contact-hour or frequency policy blocks the action.
 - The user lacks permission or assignment.
 
 If permission was obtained by phone, in person, Facebook, seller text, or a written record, use
-**Edit SMS permission** in the Inbox right sidebar or seller Contact panel and save the source plus
-a specific evidence note. Do not override a seller's **STOP** or company suppression, and do not
+**Edit SMS permission** in the Inbox right sidebar or seller Contact panel and save the source. No
+typed note is required. A missing or not-permissioned label does not block a deliberate manual
+one-to-one CRM text. Do not override a seller's **STOP** or company suppression, and do not
 use another business's Messaging Service. Only a new **START** from the seller can restore a
 carrier-level STOP.
 

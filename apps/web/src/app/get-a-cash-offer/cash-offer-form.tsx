@@ -30,7 +30,7 @@ const CashOfferConfirmation = dynamic(
 );
 
 const consentWording =
-  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
+  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call, email, or a one-to-one text message about your property inquiry and possible selling options. Recurring automated text messages require the separate optional SMS consent below.";
 const draftStorageKey = "stonegate_cash_offer_draft_v1";
 const confirmationStorageKey = "stonegate_cash_offer_confirmation_v1";
 const storageLifetimeMs = 24 * 60 * 60 * 1000;
@@ -523,7 +523,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       mortgage_balance: null,
       comments: null,
       consent_to_contact: true,
-      consent_wording_version: "seller-contact-web-v3",
+      consent_wording_version: "seller-contact-web-v4",
       sms_consent: smsConsent,
       sms_consent_wording_version: "seller-sms-web-v3",
       company_website: values.company_website,

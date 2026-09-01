@@ -580,6 +580,109 @@ def test_inbox_detail_combines_context_timeline_and_read_state(
     assert read_response.json()["unread_count"] == 0
 
 
+def test_inbox_detail_sms_readiness_matches_general_conversation_gate(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, _va, _acquisitions = seed_workspace(db_session)
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="General Phone Contact",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=owner.organization_id,
+            contact_id=contact.id,
+            method_type="phone",
+            value="+14045550198",
+            normalized_value="+14045550198",
+            is_primary=True,
+        )
+    )
+    conversation = create_general_conversation(
+        db_session,
+        organization_id=owner.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=owner.id,
+    )
+    db_session.commit()
+
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    detail_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    sms_readiness = detail_response.json()["sms_eligibility"]
+    blocker = "SMS is only available from seller and buyer conversations."
+    assert sms_readiness["can_send"] is False
+    assert blocker in sms_readiness["blockers"]
+
+    send_response = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers=headers,
+        json={"body": "Manual follow-up", "idempotency_key": "general-sms-gate-0001"},
+    )
+    assert send_response.status_code == 503, send_response.text
+    assert send_response.json()["detail"] == blocker
+
+
+def test_inbox_detail_contact_readiness_matches_closed_lead_lifecycle_gate(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_workspace(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json=lead_payload("405 Closed Lead Street"),
+    )
+    assert lead_response.status_code == 201, lead_response.text
+    lead = db_session.get(Lead, UUID(lead_response.json()["id"]))
+    assert lead is not None
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.lead_id == lead.id)
+    )
+    assert conversation is not None
+    lead.stage_key = "dead"
+    db_session.commit()
+
+    detail_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    detail = detail_response.json()
+    blocker = "This lead is closed. Reopen it before adding or changing active work."
+    assert detail["sms_eligibility"]["can_send"] is False
+    assert blocker in detail["sms_eligibility"]["blockers"]
+    assert detail["voice_eligibility"]["can_call"] is False
+    assert blocker in detail["voice_eligibility"]["blockers"]
+
+    sms_response = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers=headers,
+        json={"body": "Must not send", "idempotency_key": "closed-lead-sms-0001"},
+    )
+    assert sms_response.status_code == 409, sms_response.text
+    assert sms_response.json()["detail"] == blocker
+    call_response = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/forwarded-calls",
+        headers=headers,
+        json={"idempotency_key": "closed-lead-call-0001"},
+    )
+    assert call_response.status_code == 409, call_response.text
+    assert call_response.json()["detail"] == blocker
+
+
 def test_general_conversation_retains_email_without_a_lead(
     db_session: Session,
     api_db_override: None,

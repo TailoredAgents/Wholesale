@@ -49,11 +49,13 @@ export default function TermsPage() {
         <section className={styles.smsNotice}>
           <h2>Stonegate Home Buyers SMS program</h2>
           <p>
-            When you separately check the optional SMS consent box on our property-review form, you
-            agree to receive recurring automated text messages from Stonegate Home Buyers about
-            your property inquiry, qualification questions, appointments, possible selling options,
-            and related follow-up. Message frequency varies based on your inquiry and interactions.
-            Message and data rates may apply. Consent to receive text messages is not a condition of
+            By submitting our property-review form, you authorize Stonegate Home Buyers to contact
+            you by phone call, email, or a one-to-one text message about your property inquiry and
+            possible selling options. When you separately check the optional SMS consent box, you
+            also agree to receive recurring automated text messages about your property inquiry,
+            qualification questions, appointments, possible selling options, and related follow-up.
+            Message frequency varies based on your inquiry and interactions. Message and data rates
+            may apply. Consent to receive recurring automated text messages is not a condition of
             purchasing or selling property or receiving an offer.
           </p>
         </section>

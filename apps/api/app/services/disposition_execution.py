@@ -173,6 +173,7 @@ def send_pre_call_sms(
         principal,
         conversation.id,
         SmsSendRequest(body=payload.body, idempotency_key=payload.idempotency_key),
+        require_permission=False,
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
@@ -184,7 +185,7 @@ def send_pre_call_sms(
         candidate,
         engagement_type="sms",
         status="sent",
-        notes="Permission-aware pre-call SMS sent from the disposition execution queue.",
+        notes="One-to-one pre-call SMS sent from the disposition execution queue.",
         metadata={"communication_id": str(result.communication_id)},
     )
     db.commit()
@@ -206,6 +207,7 @@ def start_candidate_call(
         VoiceCallIntentCreate(idempotency_key=payload.idempotency_key),
         intent_source="disposition_execution",
         require_browser_voice=True,
+        require_recorded_permission=False,
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
@@ -232,6 +234,7 @@ def start_candidate_forwarded_call(
         principal,
         conversation.id,
         VoiceCallIntentCreate(idempotency_key=payload.idempotency_key),
+        require_recorded_permission=False,
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
@@ -659,8 +662,8 @@ def _candidate_read(
     conversation = _buyer_conversation(db, principal, buyer.id)
     contact = db.get(Contact, conversation.contact_id) if conversation is not None else None
     if contact is not None:
-        sms = evaluate_sms_eligibility(db, contact)
-        voice = evaluate_voice_eligibility(db, contact)
+        sms = evaluate_sms_eligibility(db, contact, require_permission=False)
+        voice = evaluate_voice_eligibility(db, contact, require_permission=False)
         sms_read = DispositionExecutionPermissionRead(
             status=sms.consent_status,
             allowed=sms.can_send,

@@ -125,6 +125,7 @@
 .success,
 .error,
 .auditNotice,
+.advisoryNotice,
 .numberNotice,
 .stopNotice {
   margin: 0;
@@ -138,6 +139,11 @@
 
 .auditNotice {
   color: #536159;
+}
+
+.advisoryNotice {
+  color: #536159;
+  font-weight: 650;
 }
 
 .stopNotice {

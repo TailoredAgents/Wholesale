@@ -219,7 +219,13 @@ def send_inbox_sms(
     principal: Annotated[Principal, Depends(send_sms_dependency)],
 ) -> SmsSendRead:
     try:
-        result = send_conversation_sms(db, principal, conversation_id, payload)
+        result = send_conversation_sms(
+            db,
+            principal,
+            conversation_id,
+            payload,
+            require_permission=False,
+        )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:

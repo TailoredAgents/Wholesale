@@ -43,6 +43,7 @@ def evaluate_sms_eligibility(
     *,
     settings: Settings | None = None,
     now: datetime | None = None,
+    require_permission: bool = True,
 ) -> SmsEligibility:
     settings = settings or get_settings()
     phone_method = db.scalar(
@@ -73,7 +74,7 @@ def evaluate_sms_eligibility(
         db.scalar(
             select(SuppressionRecord).where(
                 SuppressionRecord.organization_id == contact.organization_id,
-                SuppressionRecord.channel == "sms",
+                SuppressionRecord.channel.in_(("sms", "all")),
                 SuppressionRecord.normalized_address == recipient,
                 SuppressionRecord.status == "active",
             )
@@ -85,7 +86,7 @@ def evaluate_sms_eligibility(
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid recipient mobile number is required.")
-    if consent_status != "granted":
+    if require_permission and consent_status != "granted":
         blockers.append("Recorded SMS consent is required.")
     if suppression is not None:
         blockers.append("This number is suppressed from text messaging.")
@@ -185,14 +186,14 @@ def evaluate_voice_eligibility(
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller phone number is required.")
-    if consent_status != "granted" and (require_permission or latest_consent is not None):
+    if require_permission and consent_status != "granted":
         blockers.append("Recorded phone contact permission is required.")
     if suppression is not None:
         blockers.append("This number is suppressed from phone calls.")
     # Voice calls launched here are deliberate, human-initiated calls from an assigned Inbox
-    # conversation. Keep suppression, permission, provider, and line-authorization gates, but do
-    # not prevent staff from returning a seller's call after the configured inbound coverage
-    # window. Automated calling must enforce its own contact-hour policy before using Voice.
+    # conversation. Keep suppression, provider, and line-authorization gates, but do not prevent
+    # staff from returning a seller's call after the configured inbound coverage window.
+    # Automated calling must enforce permission and contact-hour policy before using Voice.
     if not settings.twilio_voice_configured:
         blockers.append(
             "Twilio Voice needs: " + ", ".join(settings.twilio_voice_configuration_blockers) + "."
@@ -212,12 +213,12 @@ def business_voice_permission_not_required(
     conversation: Conversation,
     contact: Contact,
 ) -> bool:
-    """Allow deliberate B2B Quick Dial calls without fabricating consent evidence.
+    """Recognize a deliberate B2B Quick Dial call without fabricating consent evidence.
 
     A generic inbound caller or email contact is not automatically a verified business call.
     The explicit Quick Dial preparation marker is the evidence that staff intentionally chose
-    the business-call workflow. An existing denial/revocation still blocks the call in
-    ``evaluate_voice_eligibility``.
+    the business-call workflow. Recorded permission remains visible as an advisory label, while
+    suppression and provider controls remain enforceable in ``evaluate_voice_eligibility``.
     """
 
     return business_voice_requested_phone_number(conversation, contact) is not None

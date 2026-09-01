@@ -328,6 +328,10 @@ function SmsPermissionControlContent({
         </div>
       </div>
       {currentPhoneNumber ? <p className={styles.numberNotice}>Number: {currentPhoneNumber}</p> : null}
+      <p className={styles.advisoryNotice}>
+        Permission labels are informational for manual CRM calls and one-to-one texts. A STOP,
+        DNC, invalid number, or provider block still prevents contact.
+      </p>
       {isCarrierRevoked ? (
         <p className={styles.stopNotice}>SMS is locked until the seller texts START from this number.</p>
       ) : null}

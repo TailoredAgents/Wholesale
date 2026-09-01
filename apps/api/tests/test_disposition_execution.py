@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.integrations.communications import OutboundMessageRequest, OutboundMessageResult
 from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
@@ -37,6 +38,28 @@ from tests.test_dispositions import (
 CELL_FORWARD_OWNER_EMAIL = HEADERS["X-Dev-User-Email"]
 
 
+class FakeSmsProvider:
+    provider_name = "twilio"
+
+    def __init__(self) -> None:
+        self.requests: list[OutboundMessageRequest] = []
+
+    def send(
+        self,
+        request: OutboundMessageRequest,
+        *,
+        dry_run: bool = True,
+    ) -> OutboundMessageResult:
+        assert dry_run is False
+        self.requests.append(request)
+        return OutboundMessageResult(
+            provider="twilio",
+            provider_message_id=f"SM{len(self.requests):032d}",
+            status="queued",
+            raw_payload={"status": "queued", "to": request.recipient},
+        )
+
+
 @pytest.fixture
 def cellphone_voice_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
     values = {
@@ -53,6 +76,27 @@ def cellphone_voice_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
         monkeypatch.setenv(key, value)
     for key in ("TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "TWILIO_TWIML_APP_SID"):
         monkeypatch.delenv(key, raising=False)
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.fixture
+def sms_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
+    values = {
+        "TWILIO_SMS_ENABLED": "true",
+        "TWILIO_ACCOUNT_SID": "AC00000000000000000000000000000000",
+        "TWILIO_AUTH_TOKEN": "test-sms-auth-token",
+        "TWILIO_SMS_FROM_NUMBER": "+16785417725",
+        "TWILIO_WEBHOOK_BASE_URL": "https://api.stonegate.test",
+        "TWILIO_VALIDATE_WEBHOOK_SIGNATURES": "true",
+        "TWILIO_SMS_ALLOWED_START_HOUR": "0",
+        "TWILIO_SMS_ALLOWED_END_HOUR": "24",
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     try:
         yield
@@ -112,22 +156,16 @@ def test_disposition_cellphone_forwarding_remains_available_without_browser_cred
     line.department_key = "dispositions"
     line.purpose_key = "buyer_relations"
     line.assigned_user_id = owner.id
-    conversation = ensure_buyer_conversation(db_session, buyer, actor_user_id=owner.id)
-    db_session.add(
-        ConsentRecord(
-            organization_id=buyer.organization_id,
-            contact_id=conversation.contact_id,
-            channel="phone",
-            status="granted",
-            source="phone_call",
-            wording_version="manual-v1",
-            wording="Buyer granted phone contact permission.",
-            normalized_address="+14045550189",
-            captured_ip=None,
-            user_agent=None,
-        )
-    )
+    ensure_buyer_conversation(db_session, buyer, actor_user_id=owner.id)
     db_session.commit()
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert workspace.status_code == 200, workspace.text
+    current_candidate = workspace.json()["current_candidate"]
+    assert current_candidate["voice"]["status"] == "missing"
+    assert current_candidate["voice"]["allowed"] is True
     payload = {
         "candidate_id": candidate_id,
         "idempotency_key": "disposition-cellphone-fallback-001",
@@ -151,6 +189,112 @@ def test_disposition_cellphone_forwarding_remains_available_without_browser_cred
     intent = db_session.get(VoiceCallIntent, UUID(forwarded.json()["id"]))
     assert intent is not None
     assert intent.intent_metadata["source"] == "forwarded_cellphone"
+
+
+def test_disposition_one_to_one_sms_treats_recorded_permission_as_advisory(
+    db_session: Session,
+    api_db_override: None,
+    sms_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    fake_provider = FakeSmsProvider()
+    monkeypatch.setattr(
+        "app.services.messaging.get_twilio_messaging_provider",
+        lambda: fake_provider,
+    )
+    client = TestClient(app)
+    case_id, candidate_id = _ready_execution_case(db_session, client)
+    candidate = db_session.get(DispositionBuyerPoolCandidate, UUID(candidate_id))
+    assert candidate is not None and candidate.buyer_id is not None
+    buyer = db_session.get(Buyer, candidate.buyer_id)
+    assert buyer is not None
+    buyer.phone = "+14045550190"
+    buyer.normalized_phone = "+14045550190"
+    owner = db_session.scalar(select(User).where(User.email == CELL_FORWARD_OWNER_EMAIL))
+    assert owner is not None
+    line = VoiceLine(
+        organization_id=owner.organization_id,
+        assigned_user_id=owner.id,
+        fallback_user_id=None,
+        assigned_team_id=None,
+        provider="twilio",
+        provider_phone_number_id="PN-disposition-execution-sms",
+        phone_number="+14705550199",
+        label="Dispositions execution SMS",
+        department_key="dispositions",
+        purpose_key="buyer_relations",
+        status="active",
+        is_default=True,
+        inbound_route="conversation_owner",
+        ring_strategy="everyone_at_once",
+        coverage_timezone="America/New_York",
+        coverage_start_hour=0,
+        coverage_end_hour=24,
+        prospecting_dialer_max_concurrent_legs=1,
+        missed_call_action="fallback_then_voicemail",
+        line_metadata={"test": True},
+    )
+    db_session.add(line)
+    conversation = ensure_buyer_conversation(db_session, buyer, actor_user_id=owner.id)
+    db_session.commit()
+
+    missing_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert missing_workspace.status_code == 200, missing_workspace.text
+    missing_sms = missing_workspace.json()["current_candidate"]["sms"]
+    assert missing_sms["status"] == "missing"
+    assert missing_sms["allowed"] is True
+
+    missing_send = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/sms",
+        headers=HEADERS,
+        json={
+            "candidate_id": candidate_id,
+            "body": "Manual buyer introduction without a recorded permission label.",
+            "idempotency_key": "dispo-sms-missing-001",
+        },
+    )
+    assert missing_send.status_code == 201, missing_send.text
+    assert len(fake_provider.requests) == 1
+
+    db_session.add(
+        ConsentRecord(
+            organization_id=buyer.organization_id,
+            contact_id=conversation.contact_id,
+            channel="sms",
+            status="revoked",
+            source="phone_call",
+            wording_version="manual-v1",
+            wording="Buyer declined SMS permission during a phone call.",
+            normalized_address="+14045550190",
+            captured_ip=None,
+            user_agent=None,
+        )
+    )
+    db_session.commit()
+
+    revoked_workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert revoked_workspace.status_code == 200, revoked_workspace.text
+    revoked_sms = revoked_workspace.json()["current_candidate"]["sms"]
+    assert revoked_sms["status"] == "revoked"
+    assert revoked_sms["allowed"] is True
+
+    revoked_send = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/sms",
+        headers=HEADERS,
+        json={
+            "candidate_id": candidate_id,
+            "body": "Manual buyer follow-up with the advisory label preserved.",
+            "idempotency_key": "dispo-sms-revoked-001",
+        },
+    )
+    assert revoked_send.status_code == 201, revoked_send.text
+    assert len(fake_provider.requests) == 2
 
 
 def test_no_answer_creates_retry_task_before_queue_advances(

@@ -728,8 +728,16 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
     property_record = db.get(Property, lead.property_id)
     if contact is None or property_record is None:
         raise RuntimeError("lead is missing its seller contact or property")
-    sms_eligibility = evaluate_sms_eligibility(db, contact)
-    voice_eligibility = evaluate_voice_eligibility(db, contact)
+    sms_eligibility = evaluate_sms_eligibility(
+        db,
+        contact,
+        require_permission=False,
+    )
+    voice_eligibility = evaluate_voice_eligibility(
+        db,
+        contact,
+        require_permission=False,
+    )
     contact_methods = db.scalars(
         select(ContactMethod)
         .where(
