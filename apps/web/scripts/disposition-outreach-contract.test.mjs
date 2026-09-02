@@ -116,7 +116,7 @@ test("company disposition visibility gates the tab, forced URL, and workspace mo
   assert.match(api, /provider_message_id: string \| null/);
 });
 
-test("internal acquisition roles can view outreach while external deal viewers cannot", () => {
+test("company roles can view dispositions while outreach management remains separately gated", () => {
   const companyVisibilityKeys = rbac.match(/COMPANY_DISPOSITION_VIEW_KEYS = \(([\s\S]*?)\n\)/)?.[1] ?? "";
   const acquisitionKeys = rbac.match(/ACQUISITION_KEYS = \(([\s\S]*?)\n\)/)?.[1] ?? "";
   assert.match(companyVisibilityKeys, /VIEW_DISPOSITIONS/);
@@ -126,11 +126,11 @@ test("internal acquisition roles can view outreach while external deal viewers c
   assert.match(rbac, /"acquisition_rep",[\s\S]*?\*ACQUISITION_KEYS/);
   assert.match(
     rbac,
-    /RoleDefinition\("read_only_partner", "Read-only partner", \(PermissionKeys\.VIEW_DEALS,\)\)/,
+    /"read_only_partner",[\s\S]*?\(\*COMPANY_DISPOSITION_VIEW_KEYS, PermissionKeys\.VIEW_DEALS\)/,
   );
   assert.match(
     rbac,
-    /RoleDefinition\("restricted_vendor", "Restricted attorney\/vendor", \(PermissionKeys\.VIEW_DEALS,\)\)/,
+    /"restricted_vendor",[\s\S]*?\(\*COMPANY_DISPOSITION_VIEW_KEYS, PermissionKeys\.VIEW_DEALS\)/,
   );
 });
 

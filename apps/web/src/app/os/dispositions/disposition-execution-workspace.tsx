@@ -248,6 +248,11 @@ export function DispositionExecutionWorkspace({
   const [queueSearch, setQueueSearch] = useState("");
   const [draggingBuyerId, setDraggingBuyerId] = useState<string | null>(null);
   const buyerIdRef = useRef<string | null>(null);
+  const buyerTimelineRequestRef = useRef<{
+    buyerId: string;
+    promise: Promise<void>;
+    requestId: symbol;
+  } | null>(null);
   const selectedQueueItemRef = useRef<HTMLLIElement>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
@@ -431,24 +436,35 @@ export function DispositionExecutionWorkspace({
     setEmailSenderId(defaultSender.id);
   }, [emailSenderAliases, emailSenderId]);
 
-  const loadBuyerTimeline = useCallback(async (buyerId: string) => {
-    setBuyerTimelineLoading(true);
-    try {
-      const result = await request<BuyerProfile>(
-        `/api/v1/buyers/${buyerId}/profile?timeline_limit=12`,
-      );
-      if (buyerIdRef.current === buyerId) {
-        setBuyerProfile(result);
-        setBuyerTimeline(result.timeline.items);
+  const loadBuyerTimeline = useCallback((buyerId: string) => {
+    const inFlight = buyerTimelineRequestRef.current;
+    if (inFlight?.buyerId === buyerId) return inFlight.promise;
+
+    const requestId = Symbol(buyerId);
+    const promise = (async () => {
+      setBuyerTimelineLoading(true);
+      try {
+        const result = await request<BuyerProfile>(
+          `/api/v1/buyers/${buyerId}/profile?timeline_limit=12`,
+        );
+        if (buyerIdRef.current === buyerId) {
+          setBuyerProfile(result);
+          setBuyerTimeline(result.timeline.items);
+        }
+      } catch {
+        if (buyerIdRef.current === buyerId) {
+          setBuyerProfile(null);
+          setBuyerTimeline([]);
+        }
+      } finally {
+        if (buyerTimelineRequestRef.current?.requestId === requestId) {
+          buyerTimelineRequestRef.current = null;
+        }
+        if (buyerIdRef.current === buyerId) setBuyerTimelineLoading(false);
       }
-    } catch {
-      if (buyerIdRef.current === buyerId) {
-        setBuyerProfile(null);
-        setBuyerTimeline([]);
-      }
-    } finally {
-      if (buyerIdRef.current === buyerId) setBuyerTimelineLoading(false);
-    }
+    })();
+    buyerTimelineRequestRef.current = { buyerId, promise, requestId };
+    return promise;
   }, [request]);
 
   const activeTimelineBuyerId = selectedCandidate(workspace, selectedBuyerId)?.buyer_id ?? null;

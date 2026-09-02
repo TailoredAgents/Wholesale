@@ -6432,8 +6432,32 @@ async function getClerkToken() {
   }
 }
 
-async function apiError(response: Response): Promise<Error> {
-  let detail = "No response detail";
+export type ApiConnectionState = "connected" | "unauthorized" | "unavailable";
+
+class StonegateApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, detail: string) {
+    super(`Stonegate API ${status}: ${detail}`);
+    this.name = "StonegateApiError";
+    this.status = status;
+  }
+}
+
+const transientApiStatuses = new Set([408, 425, 429, 502, 503, 504]);
+const serverReadRetryDelays = [300, 900];
+
+function apiConnectionState(error: unknown): Exclude<ApiConnectionState, "connected"> {
+  if (error instanceof StonegateApiError && [401, 403].includes(error.status)) {
+    return "unauthorized";
+  }
+  return "unavailable";
+}
+
+async function apiError(response: Response): Promise<StonegateApiError> {
+  let detail = transientApiStatuses.has(response.status)
+    ? "Stonegate is temporarily unavailable. The current page can retry safely."
+    : "No response detail";
   try {
     const payload = (await response.json()) as { detail?: unknown };
     if (typeof payload.detail === "string") {
@@ -6442,16 +6466,55 @@ async function apiError(response: Response): Promise<Error> {
   } catch {
     // The API may return an empty or non-JSON error response.
   }
-  return new Error(`Stonegate API ${response.status}: ${detail}`);
+  return new StonegateApiError(response.status, detail);
 }
 
-export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
+async function waitForServerReadRetry(milliseconds: number) {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function fetchServerApiRead(
+  path: string,
+  headers?: Record<string, string>,
+): Promise<Response> {
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const requestHeaders = headers ?? await getServerApiHeaders();
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= serverReadRetryDelays.length; attempt += 1) {
+    try {
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        headers: requestHeaders,
+        cache: "no-store",
+        // A fresh signal opts retry attempts out of React request memoization.
+        // The first attempt remains memoized across one server render.
+        ...(attempt > 0 ? { signal: new AbortController().signal } : {}),
+      });
+      lastResponse = response;
+      if (!transientApiStatuses.has(response.status) || attempt === serverReadRetryDelays.length) {
+        return response;
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Dynamic server usage")) throw error;
+      lastError = error;
+      if (attempt === serverReadRetryDelays.length) throw error;
+    }
+    await waitForServerReadRetry(serverReadRetryDelays[attempt]);
+  }
+
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error ? lastError : new Error("Stonegate API request failed.");
+}
+
+export async function getWorkspaceProfileResult(): Promise<{
+  profile: WorkspaceProfile | null;
+  apiConnected: boolean;
+  connectionState: ApiConnectionState;
+  errorMessage: string | null;
+}> {
   try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/me`, {
-      headers: await getServerApiHeaders(),
-      cache: "no-store",
-    });
+    const response = await fetchServerApiRead("/api/v1/me");
     if (!response.ok) throw await apiError(response);
     const profile = (await response.json()) as Partial<WorkspaceProfile>;
     if (
@@ -6463,9 +6526,14 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
       !Array.isArray(profile.permissions) ||
       typeof profile.unread_notification_count !== "number"
     ) {
-      return null;
+      throw new Error("Stonegate returned an incomplete workspace profile.");
     }
-    return profile as WorkspaceProfile;
+    return {
+      profile: profile as WorkspaceProfile,
+      apiConnected: true,
+      connectionState: "connected",
+      errorMessage: null,
+    };
   } catch (error) {
     if (
       !(error instanceof Error) ||
@@ -6473,33 +6541,28 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
     ) {
       console.error("Stonegate workspace profile verification failed.", error);
     }
-    return null;
+    return {
+      profile: null,
+      apiConnected: false,
+      connectionState: apiConnectionState(error),
+      errorMessage: error instanceof Error ? error.message : "Workspace access could not be verified.",
+    };
   }
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
+  return (await getWorkspaceProfileResult()).profile;
+}
 
+export async function getDashboardData(): Promise<DashboardData> {
   try {
     const headers = await getServerApiHeaders();
     const [summaryResponse, leadsResponse, speedToLeadResponse, openTaskResponse] =
       await Promise.all([
-      fetch(`${apiBaseUrl}/api/v1/dashboard/summary`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${apiBaseUrl}/api/v1/leads`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${apiBaseUrl}/api/v1/tasks/speed-to-lead`, {
-        headers,
-        cache: "no-store",
-      }),
-      fetch(`${apiBaseUrl}/api/v1/tasks/open`, {
-        headers,
-        cache: "no-store",
-      }),
+      fetchServerApiRead("/api/v1/dashboard/summary", headers),
+      fetchServerApiRead("/api/v1/leads", headers),
+      fetchServerApiRead("/api/v1/tasks/speed-to-lead", headers),
+      fetchServerApiRead("/api/v1/tasks/open", headers),
     ]);
 
     if (
@@ -7788,12 +7851,8 @@ export async function getDealOverview(): Promise<{
   deals: DealOverview | null;
   apiConnected: boolean;
 }> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
   try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/deals`, {
-      headers: await getServerApiHeaders(),
-      cache: "no-store",
-    });
+    const response = await fetchServerApiRead("/api/v1/deals");
     if (!response.ok) throw await apiError(response);
     return {
       deals: (await response.json()) as DealOverview,
@@ -7807,20 +7866,25 @@ export async function getDealOverview(): Promise<{
 export async function getDispositionOverview(): Promise<{
   dispositions: DispositionOverview | null;
   apiConnected: boolean;
+  connectionState: ApiConnectionState;
+  errorMessage: string | null;
 }> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
   try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/dispositions`, {
-      headers: await getServerApiHeaders(),
-      cache: "no-store",
-    });
+    const response = await fetchServerApiRead("/api/v1/dispositions");
     if (!response.ok) throw await apiError(response);
     return {
       dispositions: (await response.json()) as DispositionOverview,
       apiConnected: true,
+      connectionState: "connected",
+      errorMessage: null,
     };
-  } catch {
-    return { dispositions: null, apiConnected: false };
+  } catch (error) {
+    return {
+      dispositions: null,
+      apiConnected: false,
+      connectionState: apiConnectionState(error),
+      errorMessage: error instanceof Error ? error.message : "Disposition workspace request failed.",
+    };
   }
 }
 
@@ -7831,24 +7895,24 @@ export async function getDispositionDesk(
 ): Promise<{
   desk: DispositionDeskOverview | null;
   apiConnected: boolean;
+  connectionState: ApiConnectionState;
   errorMessage: string | null;
   isStale: boolean;
 }> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
   try {
     const query = new URLSearchParams({ scope });
     if (section) query.set("section", section);
     if (section && offset > 0) query.set("offset", String(offset));
-    const response = await fetch(`${apiBaseUrl}/api/v1/dispositions/desk?${query.toString()}`, {
-      headers: await getServerApiHeaders(),
-      cache: "no-store",
-    });
+    const response = await fetchServerApiRead(
+      `/api/v1/dispositions/desk?${query.toString()}`,
+    );
     if (!response.ok) throw await apiError(response);
     const desk = (await response.json()) as DispositionDeskOverview;
     const generatedAt = new Date(desk.source_health.generated_at);
     return {
       desk,
       apiConnected: true,
+      connectionState: "connected",
       errorMessage: null,
       isStale: Number.isNaN(generatedAt.getTime()) || Date.now() - generatedAt.getTime() > 5 * 60 * 1000,
     };
@@ -7856,6 +7920,7 @@ export async function getDispositionDesk(
     return {
       desk: null,
       apiConnected: false,
+      connectionState: apiConnectionState(error),
       errorMessage: error instanceof Error ? error.message : "Disposition desk request failed.",
       isStale: false,
     };

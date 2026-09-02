@@ -1,0 +1,71 @@
+.recovery {
+  min-height: 280px;
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--amber);
+  border-radius: 4px;
+  background: var(--surface);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: var(--text);
+  text-align: center;
+}
+
+.recovery > svg {
+  color: var(--amber);
+}
+
+.recovery > div {
+  max-width: 620px;
+  display: grid;
+  gap: 7px;
+}
+
+.recovery h2,
+.recovery p {
+  margin: 0;
+}
+
+.recovery h2 {
+  font-size: 18px;
+}
+
+.recovery p,
+.recovery small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.recovery p {
+  font-size: 13px;
+}
+
+.recovery small {
+  display: block;
+  font-size: 11px;
+}
+
+.recovery button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--brand);
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .recovery {
+    min-height: 220px;
+    padding: 24px 18px;
+  }
+}

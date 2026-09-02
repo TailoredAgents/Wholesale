@@ -8,6 +8,7 @@ import {
 import type { DispositionDeskCategory, DispositionIntelligenceQuery } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { StatusBadge } from "../_components/design-system";
+import { WorkspaceRecovery } from "../_components/workspace-recovery";
 import { DealsWorkspace } from "./deals-workspace";
 import { DispositionDeskWorkspace } from "./disposition-desk-workspace";
 import { DispositionIntelligenceWorkspace } from "./disposition-intelligence-workspace";
@@ -114,14 +115,24 @@ export default async function DealsPage({
           }
           title="Dispositions"
         />
-        <DispositionDeskWorkspace
-          apiConnected={dispositionDeskResult.apiConnected}
-          data={dispositionDeskResult.desk}
-          errorMessage={dispositionDeskResult.errorMessage}
-          initialDesk={selectedDesk}
-          initialPage={deskPage}
-          isStale={dispositionDeskResult.isStale}
-        />
+        {dispositionDeskResult.desk ? (
+          <DispositionDeskWorkspace
+            apiConnected={dispositionDeskResult.apiConnected}
+            data={dispositionDeskResult.desk}
+            errorMessage={dispositionDeskResult.errorMessage}
+            initialDesk={selectedDesk}
+            initialPage={deskPage}
+            isStale={dispositionDeskResult.isStale}
+          />
+        ) : (
+          <WorkspaceRecovery
+            autoRetry={dispositionDeskResult.connectionState === "unavailable"}
+            detail={dispositionDeskResult.errorMessage}
+            title={dispositionDeskResult.connectionState === "unauthorized"
+              ? "Disposition access could not be verified"
+              : undefined}
+          />
+        )}
       </WorkspacePage>
     );
   }

@@ -2,10 +2,11 @@ import Link from "next/link";
 
 import {
   getDispositionOverview,
-  getWorkspaceProfile,
+  getWorkspaceProfileResult,
 } from "../../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../../_components/page-contracts";
 import { StatusBadge } from "../../_components/design-system";
+import { WorkspaceRecovery } from "../../_components/workspace-recovery";
 import {
   DispositionWorkspace,
   type DispositionWorkspaceTab,
@@ -31,23 +32,66 @@ export default async function DispositionDealPage({
   params: Promise<{ caseId: string }>;
   searchParams: Promise<{ dispositionTab?: string; tab?: string }>;
 }) {
-  const [{ caseId }, query, dispositionResult, profile] = await Promise.all([
+  const [{ caseId }, query, dispositionResult, profileResult] = await Promise.all([
     params,
     searchParams,
     getDispositionOverview(),
-    getWorkspaceProfile(),
+    getWorkspaceProfileResult(),
   ]);
-  const dispositionCase = dispositionResult.dispositions?.cases.find((item) => item.id === caseId) ?? null;
   const requestedTab = query.tab ?? query.dispositionTab;
   const initialTab = workspaceTabs.has(requestedTab as DispositionWorkspaceTab)
     ? requestedTab as DispositionWorkspaceTab
     : "execution";
+  const profile = profileResult.profile;
+
+  if (!dispositionResult.dispositions || !dispositionResult.apiConnected) {
+    return (
+      <WorkspacePage>
+        <PageHeader
+          actions={<Link href="/os/deals?view=disposition">Disposition desk</Link>}
+          description="Stonegate is preserving this deal address while the API reconnects."
+          eyebrow="Operations / dispositions"
+          meta={<StatusBadge tone="warning">Reconnecting</StatusBadge>}
+          title="Disposition workspace temporarily unavailable"
+        />
+        <WorkspaceRecovery
+          autoRetry={dispositionResult.connectionState === "unavailable"}
+          detail={dispositionResult.errorMessage}
+          title={dispositionResult.connectionState === "unauthorized"
+            ? "Disposition access could not be verified"
+            : undefined}
+        />
+      </WorkspacePage>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <WorkspacePage>
+        <PageHeader
+          actions={<Link href="/os/deals?view=disposition">Disposition desk</Link>}
+          description="The deal loaded, but Stonegate is waiting to verify your workspace permissions."
+          eyebrow="Operations / dispositions"
+          meta={<StatusBadge tone="warning">Verifying access</StatusBadge>}
+          title="Disposition workspace temporarily unavailable"
+        />
+        <WorkspaceRecovery
+          autoRetry={profileResult.connectionState === "unavailable"}
+          detail={profileResult.errorMessage}
+          title={profileResult.connectionState === "unauthorized"
+            ? "Disposition access could not be verified"
+            : undefined}
+        />
+      </WorkspacePage>
+    );
+  }
+
+  const dispositionCase = dispositionResult.dispositions.cases.find((item) => item.id === caseId) ?? null;
   const canManageOutreach = Boolean(profile?.permissions.includes("dispositions:manage_outreach"));
   const canApproveOutreach = Boolean(profile?.permissions.includes("dispositions:approve_outreach"));
   const canViewOutreach = Boolean(profile?.permissions.includes("dispositions:view"));
-  const connected = dispositionResult.apiConnected && Boolean(profile);
 
-  if (!dispositionCase || !dispositionResult.dispositions) {
+  if (!dispositionCase) {
     return (
       <WorkspacePage>
         <PageHeader
@@ -70,7 +114,7 @@ export default async function DispositionDealPage({
         actions={<><Link href="/os/deals?view=disposition&desk=active_deals&scope=team">Disposition desk</Link>{profile?.permissions.includes("deals:view") ? <Link href={`/os/deals?view=all&display=queue&deal=${dispositionCase.deal_id}&tab=summary`}>Full deal record</Link> : null}</>}
         description={`${dispositionCase.asset_class === "land" ? "Land" : "House"} deal for ${dispositionCase.seller_name}. Work the ranked investor queue; packet and offer tools remain available.`}
         eyebrow="Dispositions / deal marketing"
-        meta={<StatusBadge tone={connected ? "success" : "warning"}>{connected ? "Workspace current" : "Access needs review"}</StatusBadge>}
+        meta={<StatusBadge tone="success">Workspace current</StatusBadge>}
         title={dispositionCase.property_address}
       />
       <DispositionWorkspace

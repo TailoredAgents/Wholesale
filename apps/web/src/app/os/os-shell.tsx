@@ -10,6 +10,7 @@ import {
   Menu,
   PhoneOutgoing,
   Plus,
+  RefreshCw,
   Search,
   UserRoundPlus,
   X,
@@ -19,7 +20,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { WorkspaceProfile } from "../lib/api";
+import type { ApiConnectionState, WorkspaceProfile } from "../lib/api";
 import { StonegateLogo } from "../stonegate-logo";
 import { AuthControls } from "./auth-controls";
 import { QuickDialDialog, QuickDialLauncher } from "./_components/quick-dial-dialog";
@@ -41,15 +42,29 @@ type RecentDestination = {
   label: string;
 };
 
-type AccessState = "verifying" | "resolved" | "error";
+type AccessState = "verifying" | "reconnecting" | "resolved" | "error";
 
 type OsShellProps = {
   children: ReactNode;
+  initialAccessError?: string | null;
+  initialConnectionState?: ApiConnectionState;
   pendingApprovalCount?: number;
   profile: WorkspaceProfile | null;
 };
 
 const recentStorageKey = "stonegate:recent-destinations";
+const workspaceProfileStorageKey = "stonegate:last-verified-workspace-profile";
+const workspaceProfileCacheLifetime = 4 * 60 * 60 * 1000;
+
+class BrowserAccessError extends Error {
+  readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.name = "BrowserAccessError";
+    this.retryable = retryable;
+  }
+}
 
 const developmentProfile: WorkspaceProfile = {
   user_id: "development-owner",
@@ -69,12 +84,18 @@ export function OsShell(props: OsShellProps) {
   );
 }
 
-function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShellProps) {
+function OsShellContent({
+  children,
+  initialAccessError = null,
+  initialConnectionState = "connected",
+  pendingApprovalCount = 0,
+  profile,
+}: OsShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchQuery = searchParams.toString();
   const router = useRouter();
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
   const webPhone = useWebPhone();
   const searchRef = useRef<HTMLInputElement>(null);
   const quickDialLauncherRef = useRef<HTMLButtonElement>(null);
@@ -92,9 +113,15 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
   const [recent, setRecent] = useState<RecentDestination[]>([]);
   const [resolvedProfile, setResolvedProfile] = useState<WorkspaceProfile | null>(profile);
   const [accessState, setAccessState] = useState<AccessState>(
-    profile ? "resolved" : "verifying",
+    profile
+      ? "resolved"
+      : initialConnectionState === "unavailable"
+        ? "reconnecting"
+        : initialConnectionState === "unauthorized"
+          ? "error"
+          : "verifying",
   );
-  const [accessError, setAccessError] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(initialAccessError);
   const [accessRetry, setAccessRetry] = useState(0);
   const effectiveProfile =
     isSignedIn === false
@@ -105,8 +132,11 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
   const helpProfile =
     effectiveProfile ??
     (process.env.NODE_ENV === "development" ? developmentProfile : null);
-  const visibleAccessState =
-    isLoaded && !isSignedIn ? "error" : effectiveProfile ? "resolved" : accessState;
+  const visibleAccessState = isLoaded && !isSignedIn
+    ? "error"
+    : profile
+      ? "resolved"
+      : accessState;
   const context = navigationContext(pathname, searchQuery);
   const navGroups = useMemo(
     () => (effectiveProfile ? visibleNavGroups(effectiveProfile) : []),
@@ -156,21 +186,65 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
   }, [helpOpen, phoneOccupied, quickDialOpen]);
 
   useEffect(() => {
-    if (profile || resolvedProfile || !isLoaded || !isSignedIn) return;
+    if (!isLoaded) return;
+    if (!isSignedIn || !userId) {
+      window.sessionStorage.removeItem(workspaceProfileStorageKey);
+      return;
+    }
+
+    const verifiedProfile = profile ?? (accessState === "resolved" ? resolvedProfile : null);
+    if (verifiedProfile) {
+      window.sessionStorage.setItem(workspaceProfileStorageKey, JSON.stringify({
+        profile: verifiedProfile,
+        userId,
+        verifiedAt: Date.now(),
+      }));
+      return;
+    }
+
+    if (resolvedProfile || initialConnectionState === "unauthorized") return;
+    try {
+      const cached = JSON.parse(
+        window.sessionStorage.getItem(workspaceProfileStorageKey) ?? "null",
+      ) as { profile?: Partial<WorkspaceProfile>; userId?: string; verifiedAt?: number } | null;
+      if (
+        cached?.userId === userId
+        && typeof cached.verifiedAt === "number"
+        && Date.now() - cached.verifiedAt <= workspaceProfileCacheLifetime
+        && cached.profile
+        && isWorkspaceProfile(cached.profile)
+      ) {
+        const frame = window.requestAnimationFrame(() => {
+          setResolvedProfile(cached.profile as WorkspaceProfile);
+          setAccessState("reconnecting");
+          setAccessError("Stonegate is temporarily unavailable. Your last verified navigation is preserved.");
+        });
+        return () => window.cancelAnimationFrame(frame);
+      }
+    } catch {
+      window.sessionStorage.removeItem(workspaceProfileStorageKey);
+    }
+  }, [accessState, initialConnectionState, isLoaded, isSignedIn, profile, resolvedProfile, userId]);
+
+  useEffect(() => {
+    if (profile || !isLoaded || !isSignedIn) return;
 
     const controller = new AbortController();
     let cancelled = false;
 
     async function verifyAccess() {
-      setAccessState("verifying");
-      setAccessError(null);
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-      let lastError: Error | null = null;
+      let attempt = 0;
 
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      while (!cancelled) {
         try {
           const token = await getToken({ skipCache: attempt > 0 });
-          if (!token) throw new Error("Clerk did not provide an active session token.");
+          if (!token) {
+            throw new BrowserAccessError(
+              "Clerk did not provide an active session token.",
+              false,
+            );
+          }
           const response = await fetch(`${apiBaseUrl}/api/v1/me`, {
             headers: { Authorization: `Bearer ${token}` },
             cache: "no-store",
@@ -183,8 +257,15 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
             const detail =
               typeof payload?.detail === "string"
                 ? payload.detail
-                : "The Stonegate API rejected the account session.";
-            throw new Error(detail);
+                : response.status >= 500
+                  ? "Stonegate is temporarily unavailable."
+                  : "The Stonegate API rejected the account session.";
+            const tokenMayBeStale = [401, 403].includes(response.status) && attempt === 0;
+            throw new BrowserAccessError(
+              detail,
+              tokenMayBeStale || response.status === 408 || response.status === 425
+                || response.status === 429 || response.status >= 500,
+            );
           }
           const candidate = (await response.json()) as Partial<WorkspaceProfile>;
           if (!isWorkspaceProfile(candidate)) {
@@ -197,17 +278,22 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
           return;
         } catch (error) {
           if (controller.signal.aborted) return;
-          lastError = error instanceof Error ? error : new Error("Access verification failed.");
-          if (attempt < 2) {
-            await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+          const lastError = error instanceof Error ? error : new Error("Access verification failed.");
+          const retryable = !(lastError instanceof BrowserAccessError) || lastError.retryable;
+          if (!retryable) {
+            if (!cancelled) {
+              console.error("Stonegate browser access verification failed.", lastError);
+              setAccessError(friendlyAccessError(lastError));
+              setAccessState("error");
+            }
+            return;
           }
+          setAccessState("reconnecting");
+          setAccessError("Stonegate is temporarily unavailable. Navigation is preserved and this page will retry automatically.");
+          const retryDelay = Math.min(1_000 * 2 ** attempt, 15_000);
+          attempt += 1;
+          await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
         }
-      }
-
-      if (!cancelled) {
-        console.error("Stonegate browser access verification failed.", lastError);
-        setAccessError(friendlyAccessError(lastError));
-        setAccessState("error");
       }
     }
 
@@ -216,7 +302,7 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
       cancelled = true;
       controller.abort();
     };
-  }, [accessRetry, getToken, isLoaded, isSignedIn, profile, resolvedProfile, router]);
+  }, [accessRetry, getToken, isLoaded, isSignedIn, profile, router]);
 
   useEffect(() => {
     if (!effectiveProfile || pathname !== "/os") return;
@@ -383,12 +469,18 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
         ) : (
           <div className={styles.navUnavailable} role="status">
             <strong>
-              {visibleAccessState === "error" ? "Account access could not be verified." : "Verifying account access..."}
+              {visibleAccessState === "error"
+                ? "Account access could not be verified."
+                : visibleAccessState === "reconnecting"
+                  ? "Stonegate is reconnecting."
+                  : "Verifying account access..."}
             </strong>
             <span>
               {visibleAccessState === "error"
                 ? accessError ?? "Sign in again or retry with the current session."
-                : "Workspace navigation will appear automatically."}
+                : visibleAccessState === "reconnecting"
+                  ? "Your signed-in session and current URL are intact. Navigation will return automatically."
+                  : "Workspace navigation will appear automatically."}
             </span>
             {visibleAccessState === "error" ? (
               <button
@@ -598,6 +690,27 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
             <AuthControls compact />
           </div>
         </header>
+
+        {effectiveProfile && visibleAccessState === "reconnecting" ? (
+          <div className={styles.connectionBanner} role="status">
+            <span>
+              <RefreshCw aria-hidden="true" size={14} />
+              <strong>Reconnecting to Stonegate</strong>
+              <small>Your navigation is preserved. This page will refresh automatically.</small>
+            </span>
+            <button
+              onClick={() => {
+                setAccessState("verifying");
+                setAccessError(null);
+                setAccessRetry((current) => current + 1);
+                router.refresh();
+              }}
+              type="button"
+            >
+              Retry now
+            </button>
+          </div>
+        ) : null}
 
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}

@@ -6,7 +6,7 @@ import test from "node:test";
 const appRoot = resolve(process.cwd(), "src/app");
 const api = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
 const deals = readFileSync(resolve(appRoot, "os/deals/deals-workspace.tsx"), "utf8");
-const dealsPage = readFileSync(resolve(appRoot, "os/deals/page.tsx"), "utf8");
+const dispositionDealPage = readFileSync(resolve(appRoot, "os/dispositions/[caseId]/page.tsx"), "utf8");
 const disposition = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
 const room = readFileSync(resolve(appRoot, "os/dispositions/disposition-offer-room.tsx"), "utf8");
 const roomStyles = readFileSync(resolve(appRoot, "os/dispositions/disposition-offer-room.module.css"), "utf8");
@@ -99,7 +99,7 @@ test("selection and replacement remain reason-required human actions with adviso
   assert.match(room, /another offer is not required/);
   assert.match(room, /Record outcome and reopen shopping/);
   assert.doesNotMatch(room, /!data\.current_selection \|\| !selectableReplacementOptions\.length/);
-  assert.match(dealsPage, /dispositions:approve_buyer_selection/);
+  assert.match(dispositionDealPage, /dispositions:approve_buyer_selection/);
   assert.doesNotMatch(room, /auto.?select/i);
 });
 

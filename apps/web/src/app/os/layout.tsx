@@ -2,7 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
-import { getApprovalRequests, getWorkspaceProfile } from "../lib/api";
+import { getApprovalRequests, getWorkspaceProfileResult } from "../lib/api";
 import { OsShell } from "./os-shell";
 
 export const metadata: Metadata = {
@@ -21,8 +21,8 @@ export const metadata: Metadata = {
 };
 
 export default async function OsLayout({ children }: { children: ReactNode }) {
-  const [profile, approvalResult] = await Promise.all([
-    getWorkspaceProfile(),
+  const [profileResult, approvalResult] = await Promise.all([
+    getWorkspaceProfileResult(),
     getApprovalRequests(),
   ]);
   const pendingApprovalCount = approvalResult.approvals.filter(
@@ -31,7 +31,12 @@ export default async function OsLayout({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider>
       <Suspense fallback={null}>
-        <OsShell pendingApprovalCount={pendingApprovalCount} profile={profile}>
+        <OsShell
+          initialAccessError={profileResult.errorMessage}
+          initialConnectionState={profileResult.connectionState}
+          pendingApprovalCount={pendingApprovalCount}
+          profile={profileResult.profile}
+        >
           {children}
         </OsShell>
       </Suspense>

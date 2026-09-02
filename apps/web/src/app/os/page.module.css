@@ -317,6 +317,52 @@
   backdrop-filter: blur(12px);
 }
 
+.connectionBanner {
+  min-height: 38px;
+  padding: 6px 24px;
+  border-bottom: 1px solid rgba(154, 91, 18, 0.24);
+  background: var(--amber-soft);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connectionBanner > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connectionBanner svg {
+  flex: 0 0 auto;
+  color: var(--amber);
+}
+
+.connectionBanner strong,
+.connectionBanner small {
+  font-size: 11px;
+}
+
+.connectionBanner small {
+  color: var(--muted);
+}
+
+.connectionBanner button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(154, 91, 18, 0.35);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .globalContext {
   min-width: 0;
   display: flex;

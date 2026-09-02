@@ -16,7 +16,7 @@ const setup = readFileSync(resolve(appRoot, "os/dispositions/disposition-setup-w
 const setupPage = readFileSync(resolve(appRoot, "os/dispositions/page.tsx"), "utf8");
 
 test("DS5 remains inside the canonical deal package tab", () => {
-  assert.match(dispositionDealPage, /dealId=\{deal\.id\}/);
+  assert.match(dispositionDealPage, /dealId=\{dispositionCase\.deal_id\}/);
   assert.match(dealsWorkspace, /Disposition has its own full-width outreach desk/);
   assert.match(dispositionWorkspace, /<DispositionPackageReadiness/);
   assert.match(dispositionWorkspace, /activeTab === "package"/);
