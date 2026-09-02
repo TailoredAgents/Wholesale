@@ -155,6 +155,8 @@ test("approval is version-governed while shopping and preparation remain advisor
   assert.match(packageWorkspace, /Review or approve it when useful; shopping and outreach may continue with its Preliminary label/);
   assert.match(packageStyles, /min-height: 44px/);
   assert.match(packageStyles, /@media \(max-width: 520px\)/);
+  assert.match(packageStyles, /@container disposition-detail \(max-width: 900px\)/);
+  assert.match(packageStyles, /@container disposition-detail \(max-width: 700px\)/);
   assert.match(packageStyles, /@media \(prefers-reduced-motion: reduce\)/);
 });
 

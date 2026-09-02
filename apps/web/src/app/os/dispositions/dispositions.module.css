@@ -1,6 +1,6 @@
-.workspace { display: grid; gap: 14px; }
+.workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
-.embeddedBody { min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
+.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
 .metrics > div { min-height: 76px; padding: 14px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }
@@ -39,7 +39,7 @@
 .openForm label span, .form label span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .openForm input, .openForm select, .openForm textarea, .form input, .form select, .form textarea, .proofForm input { width: 100%; min-height: 36px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 11px; }
 .openForm button, .form > button, .actionPanel > button, .proofForm button { min-height: 38px; margin: 11px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 4px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
-.detail { min-width: 0; }
+.detail { width: 100%; min-width: 0; max-width: 100%; container: disposition-detail / inline-size; }
 .dealHeader { min-height: 92px; padding: 16px 20px; display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
 .dealHeader h3 { margin: 4px 0; font-size: 20px; }
 .dealHeader p { margin: 0; color: var(--muted); font-size: 12px; }

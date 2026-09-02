@@ -196,6 +196,44 @@
   .loadError button { grid-column: 2; justify-self: start; }
 }
 
+/* This workbench lives inside a Deal record. Container rules prevent desktop-width media queries
+   from forcing multi-column content into a narrow embedded panel. */
+@container disposition-detail (max-width: 900px) {
+  .previewGrid, .actionGrid { grid-template-columns: minmax(0, 1fr); }
+  .versionList article { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .versionDecision { grid-column: 1 / -1; }
+  .versionList article > button { justify-self: start; }
+}
+
+@container disposition-detail (max-width: 700px) {
+  .workspace { padding: 12px; }
+  .hero { align-items: flex-start; flex-direction: column; }
+  .heroStatus { width: 100%; min-width: 0; justify-items: start; border-left: 0; border-top: 3px solid var(--line); text-align: left; }
+  .checkList article { grid-template-columns: auto minmax(0, 1fr); }
+  .checkList a { min-height: 44px; grid-column: 2; justify-self: start; }
+  .evidenceGroups, .summaryGrid { grid-template-columns: minmax(0, 1fr); }
+  .evidenceGroups > section, .summaryGrid label { border-right: 0; }
+  .summaryGrid label { border-bottom: 1px solid var(--line-soft); }
+  .summaryGrid button, .buildPanel > button, .releasePanel > button, .versionList article > button, .dialogActions button { min-height: 44px; }
+  .shareLinkActions, .shareLinkHistory article { align-items: stretch; flex-direction: column; }
+  .shareLinkActions button, .shareLinkHistory button { width: 100%; }
+  .externalUploadFields { grid-template-columns: minmax(0, 1fr); }
+  .packagePathChooser > div { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container disposition-detail (max-width: 520px) {
+  .hero h4 { font-size: 18px; }
+  .panelHeading { align-items: flex-start; flex-direction: column; }
+  .panelHeading > strong { text-align: left; }
+  .previewFacts > div { display: grid; }
+  .previewFacts dd { max-width: none; text-align: left; }
+  .economicsFields, .versionList article { grid-template-columns: minmax(0, 1fr); }
+  .economicsFields label:last-child, .versionDecision { grid-column: auto; }
+  .dialogActions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .loadError { grid-template-columns: auto minmax(0, 1fr); }
+  .loadError button { grid-column: 2; justify-self: start; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
 }

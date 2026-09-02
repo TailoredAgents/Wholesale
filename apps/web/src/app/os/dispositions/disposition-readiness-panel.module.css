@@ -277,6 +277,35 @@
   .checklist li > button { width: 100%; }
 }
 
+/* The readiness panel is embedded inside a Deal record, so its usable width can be much smaller
+   than the browser viewport. Respond to that actual content width as well as viewport width. */
+@container disposition-detail (max-width: 980px) {
+  .actionSummary { grid-template-columns: minmax(0, 1fr); }
+  .bestAction { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+}
+
+@container disposition-detail (max-width: 760px) {
+  .header { align-items: flex-start; flex-direction: column; }
+  .progress { justify-items: start; text-align: left; }
+  .checklist > div { grid-template-columns: minmax(0, 1fr); }
+  .checklist section,
+  .checklist section:nth-child(2n) { border-right: 0; }
+  .checklist li { grid-template-columns: 16px minmax(0, 1fr); }
+  .checklist li > button { grid-column: 2; width: fit-content; }
+  .footer { align-items: flex-start; flex-direction: column; }
+}
+
+@container disposition-detail (max-width: 520px) {
+  .header,
+  .bestAction,
+  .parallelActions { padding-right: 12px; padding-left: 12px; }
+  .checklist > summary { padding: 8px 12px; align-items: flex-start; flex-direction: column; }
+  .bestAction > button,
+  .parallelActions > button,
+  .openAction,
+  .checklist li > button { width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
 }

@@ -6,6 +6,7 @@ import test from "node:test";
 const appRoot = resolve(process.cwd(), "src/app");
 const api = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
 const workspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
+const workspaceStyles = readFileSync(resolve(appRoot, "os/dispositions/dispositions.module.css"), "utf8");
 const panel = readFileSync(resolve(appRoot, "os/dispositions/disposition-readiness-panel.tsx"), "utf8");
 const panelStyles = readFileSync(resolve(appRoot, "os/dispositions/disposition-readiness-panel.module.css"), "utf8");
 const packageWorkspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-package-readiness.tsx"), "utf8");
@@ -148,6 +149,8 @@ test("desk guidance and readiness UI are responsive and preserve explicit role r
   assert.match(desk, /Also available now/);
   assert.match(panelStyles, /@media \(max-width: 760px\)/);
   assert.match(panelStyles, /@media \(max-width: 520px\)/);
+  assert.match(workspaceStyles, /container: disposition-detail \/ inline-size/);
+  assert.match(panelStyles, /@container disposition-detail \(max-width: 980px\)/);
   assert.match(panelStyles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(workspace, /Read-only access: disposition actions are disabled for your role/);
   assert.match(workspace, /Executed House and Land transactions appear here for disposition work, even while setup is incomplete/);
