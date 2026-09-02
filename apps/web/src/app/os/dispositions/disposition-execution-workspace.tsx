@@ -1393,6 +1393,13 @@ function InvestorConversation({
   loading: boolean;
   timeline: BuyerTimelineItem[];
 }) {
+  const timelineRef = useRef<HTMLOListElement>(null);
+
+  useEffect(() => {
+    const element = timelineRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [candidate.buyer_id, timeline]);
+
   return (
     <section aria-label={`Conversation with ${candidate.name}`} className={`${styles.panel} ${styles.conversationTimeline}`}>
       <header>
@@ -1400,7 +1407,7 @@ function InvestorConversation({
         {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
       </header>
       {loading ? <p>Loading conversation…</p> : timeline.length ? (
-        <ol>{timeline.map((item) => (
+        <ol aria-live="polite" ref={timelineRef}>{timeline.map((item) => (
           <li data-direction={item.direction ?? "activity"} key={`${item.category}-${item.id}`}>
             <span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span>
             <strong>{item.summary}</strong>

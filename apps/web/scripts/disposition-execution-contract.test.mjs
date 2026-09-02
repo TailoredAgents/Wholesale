@@ -172,6 +172,8 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /slice\(0, 12\)\.reverse\(\)/);
   assert.match(workspace, /data-direction=\{item\.direction \?\? "activity"\}/);
   assert.match(workspace, /Shared with the canonical buyer relationship and Inbox history/);
+  assert.match(workspace, /element\.scrollTop = element\.scrollHeight/);
+  assert.match(workspace, /<ol aria-live="polite" ref=\{timelineRef\}>/);
   assert.match(workspace, /document\.visibilityState === "visible"/);
   assert.match(workspace, /30_000/);
   assert.match(workspace, /loadBuyerTimeline\(activeTimelineBuyerId\)/);
