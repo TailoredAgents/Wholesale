@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.email_delivery import EmailProviderError
+from app.integrations.google_gmail import GoogleGmailError
 from app.integrations.twilio_messaging import TwilioMessagingError
 from app.integrations.twilio_voice_calls import TwilioVoiceCallError
 from app.schemas.disposition_desk import (
@@ -18,6 +20,7 @@ from app.schemas.disposition_desk import (
 )
 from app.schemas.disposition_execution import (
     DispositionExecutionCallCreate,
+    DispositionExecutionEmailCreate,
     DispositionExecutionOutcomeCreate,
     DispositionExecutionSessionUpdate,
     DispositionExecutionSmsCreate,
@@ -85,6 +88,7 @@ from app.schemas.dispositions import (
     ProofVerificationRequest,
     ReconciliationDecision,
 )
+from app.schemas.email import EmailSendRead
 from app.schemas.inbox import SmsSendRead
 from app.schemas.voice import VoiceCallIntentRead
 from app.services import (
@@ -105,6 +109,10 @@ from app.services.disposition_copilot import (
     analyze_disposition,
     get_disposition_copilot_overview,
     review_recommendation,
+)
+from app.services.email import (
+    EmailConfigurationError,
+    EmailDispatchConflictError,
 )
 from app.services.messaging import (
     SmsComplianceError,
@@ -141,6 +149,10 @@ bulk_send_dependency = require_any_permission(
 send_sms_dependency = require_any_permission(
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
+)
+send_email_dependency = require_any_permission(
+    PermissionKeys.SEND_EMAIL,
+    PermissionKeys.SEND_ASSIGNED_EMAIL,
 )
 call_dependency = require_any_permission(
     PermissionKeys.PLACE_CALLS,
@@ -1329,6 +1341,34 @@ def send_case_execution_sms(
             detail=str(exc),
         ) from exc
     except TwilioMessagingError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post(
+    "/cases/{case_id}/execution/email",
+    status_code=201,
+    dependencies=[Depends(buyer_edit_dependency), Depends(send_email_dependency)],
+)
+def send_case_execution_email(
+    case_id: UUID,
+    payload: DispositionExecutionEmailCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> EmailSendRead:
+    try:
+        return disposition_execution.send_follow_up_email(db, principal, case_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except EmailDispatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except EmailConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except (EmailProviderError, GoogleGmailError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except ValueError as exc:
         raise invalid(exc) from exc

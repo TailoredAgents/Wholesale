@@ -20,6 +20,8 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import type {
+  BuyerProfile,
+  BuyerTimelineItem,
   DispositionExecutionCandidate,
   DispositionExecutionShowing,
   DispositionExecutionWorkspace,
@@ -56,10 +58,33 @@ type SessionUpdate = {
   skipped_buyer_ids?: string[];
   buyer_id?: string;
   sms_draft?: string | null;
+  email_subject?: string | null;
+  email_draft?: string | null;
+  email_sender_alias_id?: string | null;
   notes_draft?: string | null;
   callback_at?: string | null;
   selected_outcome?: Outcome | null;
   current_step?: "sms" | "call" | "email" | "outcome";
+};
+type EmailSenderAlias = {
+  id: string;
+  email_address: string;
+  display_name: string;
+  is_default: boolean;
+  can_send: boolean;
+};
+type EmailConfiguration = {
+  items: EmailSenderAlias[];
+  provider: string;
+  provider_configured: boolean;
+  configuration_blockers: string[];
+};
+type EmailSendResult = {
+  communication_id: string;
+  provider_message_id: string;
+  provider_thread_id: string;
+  status: string;
+  recipient: string;
 };
 
 const OUTCOMES: Array<{ value: Outcome; label: string; tone: "positive" | "neutral" | "negative" }> = [
@@ -183,6 +208,15 @@ export function DispositionExecutionWorkspace({
   const [busy, setBusy] = useState<string | null>(null);
   const [smsDraft, setSmsDraft] = useState("");
   const [smsComposerOpen, setSmsComposerOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [emailSenderAliases, setEmailSenderAliases] = useState<EmailSenderAlias[]>([]);
+  const [emailSenderId, setEmailSenderId] = useState("");
+  const [emailProviderConfigured, setEmailProviderConfigured] = useState<boolean | null>(null);
+  const [emailConfigurationBlockers, setEmailConfigurationBlockers] = useState<string[]>([]);
+  const [buyerTimeline, setBuyerTimeline] = useState<BuyerTimelineItem[]>([]);
+  const [buyerTimelineLoading, setBuyerTimelineLoading] = useState(false);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
   const [callCountdown, setCallCountdown] = useState<number | null>(null);
   const [countdownBuyerId, setCountdownBuyerId] = useState<string | null>(null);
@@ -195,6 +229,7 @@ export function DispositionExecutionWorkspace({
   const [sessionSaveState, setSessionSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const callCountdownTimer = useRef<number | null>(null);
   const buyerIdRef = useRef<string | null>(null);
+  const emailIdempotencyKeyRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
   const browserCallActive = webPhone.status.callActive;
   const browserCallActiveRef = useRef(browserCallActive);
@@ -230,6 +265,9 @@ export function DispositionExecutionWorkspace({
       setSmsComposerOpen(
         buyerState?.current_step === "sms" && buyerState.sms_status === "drafted",
       );
+      setEmailComposerOpen(
+        buyerState?.current_step === "email" && buyerState.email_status === "drafted",
+      );
       setCallCountdown(null);
       setCountdownBuyerId(null);
       setNotes(buyerState?.notes_draft ?? "");
@@ -239,6 +277,10 @@ export function DispositionExecutionWorkspace({
         ? { buyerId: nextBuyerId!, label: labelize(result.session.last_outcome) }
         : null);
       setSmsDraft(nextCandidate?.sms_draft ?? "");
+      setEmailSubject(nextCandidate?.email_subject ?? "");
+      setEmailDraft(nextCandidate?.email_draft ?? "");
+      setEmailSenderId(buyerState?.email_sender_alias_id ?? "");
+      emailIdempotencyKeyRef.current = null;
       if (callCountdownTimer.current !== null) {
         window.clearInterval(callCountdownTimer.current);
         callCountdownTimer.current = null;
@@ -290,6 +332,72 @@ export function DispositionExecutionWorkspace({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const loadEmailConfiguration = useCallback(async () => {
+    try {
+      const result = await request<EmailConfiguration>("/api/v1/email/aliases");
+      setEmailSenderAliases(result.items.filter((item) => item.can_send));
+      setEmailProviderConfigured(result.provider_configured);
+      setEmailConfigurationBlockers(result.configuration_blockers);
+    } catch (error) {
+      setEmailSenderAliases([]);
+      setEmailProviderConfigured(false);
+      setEmailConfigurationBlockers([
+        error instanceof Error ? error.message : "Email sending is unavailable for this user.",
+      ]);
+    }
+  }, [request]);
+
+  useEffect(() => {
+    // Email configuration is remote authorization state and must be synchronized client-side.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadEmailConfiguration();
+  }, [loadEmailConfiguration]);
+
+  useEffect(() => {
+    if (!emailSenderAliases.length) return;
+    const savedSenderIsAvailable = emailSenderAliases.some(
+      (item) => item.id === emailSenderId,
+    );
+    if (savedSenderIsAvailable) return;
+    const defaultSender = emailSenderAliases.find((item) => item.is_default)
+      ?? emailSenderAliases[0];
+    // Keep the server-authorized default in local composer state until the next draft save.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEmailSenderId(defaultSender.id);
+  }, [emailSenderAliases, emailSenderId]);
+
+  const loadBuyerTimeline = useCallback(async (buyerId: string) => {
+    setBuyerTimelineLoading(true);
+    try {
+      const result = await request<BuyerProfile>(
+        `/api/v1/buyers/${buyerId}/profile?timeline_limit=12`,
+      );
+      if (buyerIdRef.current === buyerId) setBuyerTimeline(result.timeline.items);
+    } catch {
+      if (buyerIdRef.current === buyerId) setBuyerTimeline([]);
+    } finally {
+      if (buyerIdRef.current === buyerId) setBuyerTimelineLoading(false);
+    }
+  }, [request]);
+
+  const activeTimelineBuyerId = selectedCandidate(workspace, selectedBuyerId)?.buyer_id ?? null;
+
+  useEffect(() => {
+    if (!activeTimelineBuyerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBuyerTimeline([]);
+      return;
+    }
+    void loadBuyerTimeline(activeTimelineBuyerId);
+  }, [activeTimelineBuyerId, loadBuyerTimeline]);
+
+  async function refreshOutreachWorkspace() {
+    await load();
+    const buyerId = buyerIdRef.current;
+    if (buyerId) await loadBuyerTimeline(buyerId);
+    await loadEmailConfiguration();
+  }
 
   useEffect(() => {
     browserCallActiveRef.current = browserCallActive;
@@ -358,6 +466,9 @@ export function DispositionExecutionWorkspace({
           body: JSON.stringify({
             buyer_id: candidate.buyer_id,
             sms_draft: smsDraft,
+            email_subject: emailSubject,
+            email_draft: emailDraft,
+            email_sender_alias_id: emailSenderId || null,
             notes_draft: notes,
             callback_at: callbackAt ? new Date(callbackAt).toISOString() : null,
             selected_outcome: selectedOutcome,
@@ -405,6 +516,99 @@ export function DispositionExecutionWorkspace({
     onMessage(`The saved SMS draft for ${candidate.name} was discarded. A fresh deal-aware draft is available.`);
   }
 
+  async function discardCurrentEmailDraft() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (!candidate) return;
+    const result = await saveCurrentBuyerState({
+      email_subject: null,
+      email_draft: null,
+      current_step: "email",
+    });
+    if (!result) return;
+    const restoredCandidate = executionCandidates(result).find(
+      (item) => item.buyer_id === candidate.buyer_id,
+    );
+    setEmailSubject(restoredCandidate?.email_subject ?? "");
+    setEmailDraft(restoredCandidate?.email_draft ?? "");
+    setEmailComposerOpen(false);
+    emailIdempotencyKeyRef.current = null;
+    onMessage(`The saved email draft for ${candidate.name} was discarded. A fresh deal-aware draft is available.`);
+  }
+
+  async function insertPacketLinkInEmail() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (!candidate || !workspace?.package_pdf_path || !canEditDeals) return;
+    const issued = await action(
+      "email-packet",
+      () => request<DispositionPackageShareLinkIssued>(
+        `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+        {
+          method: "POST",
+          body: JSON.stringify({ expires_in_hours: 72 }),
+        },
+      ),
+      `A secure 72-hour investor packet link was created for ${candidate.name}.`,
+    );
+    if (!issued) return;
+    const packetLabel = issued.is_preliminary ? "Preliminary investor packet" : "Investor packet";
+    const nextDraft = `${emailDraft.trimEnd()}\n\n${packetLabel} (secure link expires in 72 hours):\n${issued.share_url}`.trim();
+    setEmailDraft(nextDraft);
+    emailIdempotencyKeyRef.current = null;
+    await saveCurrentBuyerState({
+      email_draft: nextDraft,
+      current_step: "email",
+    });
+  }
+
+  async function sendFollowUpEmail() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (
+      !candidate
+      || !candidate.actionable
+      || !candidate.email
+      || !canEditDeals
+      || !emailProviderConfigured
+      || !emailSenderId
+    ) return;
+    const subject = emailSubject.trim();
+    const body = emailDraft.trim();
+    if (!subject || !body) {
+      onMessage("Review the email subject and message before sending it.");
+      return;
+    }
+    const saved = await saveCurrentBuyerState({
+      email_subject: subject,
+      email_draft: body,
+      email_sender_alias_id: emailSenderId,
+      current_step: "email",
+    });
+    if (!saved) return;
+    emailIdempotencyKeyRef.current ??= idempotency("dispo-email");
+    const result = await action(
+      "email",
+      () => request<EmailSendResult>(
+        `/api/v1/dispositions/cases/${caseId}/execution/email`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...executionBuyerReference(candidate),
+            email_sender_alias_id: emailSenderId,
+            subject,
+            body,
+            idempotency_key: emailIdempotencyKeyRef.current,
+          }),
+        },
+      ),
+      `Follow-up email accepted for ${candidate.name}.`,
+    );
+    if (!result) return;
+    emailIdempotencyKeyRef.current = null;
+    setEmailComposerOpen(false);
+    await refreshSessionSnapshot();
+    await loadBuyerTimeline(candidate.buyer_id);
+    onMessage(`Follow-up email ${labelize(result.status)} for ${candidate.name}. Delivery and replies will appear in relationship activity.`);
+  }
+
   async function sendSms() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals || !candidate.sms.allowed) return;
@@ -442,6 +646,7 @@ export function DispositionExecutionWorkspace({
     if (!result) return;
 
     await refreshSessionSnapshot();
+    await loadBuyerTimeline(candidate.buyer_id);
     setSmsComposerOpen(false);
     if (candidate.voice.allowed) {
       if (result.headsetReady) {
@@ -525,7 +730,10 @@ export function DispositionExecutionWorkspace({
       },
       `Browser call started for ${candidate.name}.`,
     );
-    if (result) await refreshSessionSnapshot();
+    if (result) {
+      await refreshSessionSnapshot();
+      await loadBuyerTimeline(candidate.buyer_id);
+    }
   }
 
   async function startCellphoneCall() {
@@ -554,7 +762,10 @@ export function DispositionExecutionWorkspace({
       },
       `Stonegate is calling your cellphone first, then connecting ${candidate.name}.`,
     );
-    if (result) await refreshSessionSnapshot();
+    if (result) {
+      await refreshSessionSnapshot();
+      await loadBuyerTimeline(candidate.buyer_id);
+    }
   }
 
   function cancelPreparedCall() {
@@ -598,6 +809,7 @@ export function DispositionExecutionWorkspace({
       const issuedPackageLabel = result.is_preliminary ? "Preliminary" : "Approved";
       onMessage(`${issuedPackageLabel} investor packet text accepted for ${candidate.name}. The secure link expires in 72 hours. If delivery is ever uncertain, check the buyer conversation before retrying.`);
       await load();
+      await loadBuyerTimeline(candidate.buyer_id);
     }
   }
 
@@ -632,6 +844,7 @@ export function DispositionExecutionWorkspace({
         : `${labelize(outcome)} saved for ${candidate.name}. Staying on this investor until you choose what is next.`,
     );
     if (result) {
+      await loadBuyerTimeline(candidate.buyer_id);
       if (advance === "next") {
         const advanced = await updateSession(
           { advance_to_next: true, state: "active" },
@@ -734,7 +947,10 @@ export function DispositionExecutionWorkspace({
       ),
       `Showing scheduled with ${candidate.name}. Record the call outcome when the conversation ends.`,
     );
-    if (result) applyWorkspace(result);
+    if (result) {
+      applyWorkspace(result);
+      await loadBuyerTimeline(candidate.buyer_id);
+    }
   }
 
   async function clearPass() {
@@ -788,7 +1004,10 @@ export function DispositionExecutionWorkspace({
         ? "Showing completed. A follow-up task is due in 24 hours."
         : `Showing marked ${labelize(status)}.`,
     );
-    if (result) applyWorkspace(result);
+    if (result) {
+      applyWorkspace(result);
+      await loadBuyerTimeline(showing.buyer_id);
+    }
   }
 
   if (loading) {
@@ -808,6 +1027,13 @@ export function DispositionExecutionWorkspace({
     || outcomeSavedForCurrent;
   const smsUnavailable = roleOrBusyDisabled || !candidate?.sms.allowed;
   const voiceUnavailable = roleOrBusyDisabled || !candidate?.voice.allowed || webPhone.busy || browserCallActive;
+  const emailUnavailable = busy !== null
+    || !canEditDeals
+    || !candidate?.actionable
+    || !candidate.email
+    || sessionPaused
+    || !emailProviderConfigured
+    || !emailSenderId;
   const packetUnavailable = smsUnavailable || !workspace.package_pdf_path;
   const packageIsPreliminary = workspace.package_is_preliminary
     ?? workspace.package_status !== "approved";
@@ -835,6 +1061,13 @@ export function DispositionExecutionWorkspace({
     : null;
   const currentStep = buyerProgress?.current_step ?? "sms";
   const outcomeNeedsCallback = selectedOutcome === "callback" && !callbackAt;
+  const emailHasPacketLink = emailDraft.includes("/api/v1/public/investor-packages/");
+  const visibleBuyerTimeline = buyerTimeline.filter(
+    (item) => item.category !== "relationship" || !["sms", "email"].includes(item.event_type),
+  ).slice(0, 6);
+  const inboundReplyCount = buyerTimeline.filter(
+    (item) => item.category === "communication" && item.direction === "inbound",
+  ).length;
 
   return (
     <section aria-label="Disposition call queue" className={styles.workspace} id="call-queue" tabIndex={-1}>
@@ -847,7 +1080,7 @@ export function DispositionExecutionWorkspace({
         <div className={styles.heroActions}>
           <div><strong>{queuePosition || "–"}</strong><span>of {candidates.length || 0}</span><small>queue position</small></div>
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
-          <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void load()} type="button"><RefreshCw size={15} />Refresh</button>
+          <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button>
           <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span>
           {sessionPaused
             ? <button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume session</button>
@@ -897,7 +1130,7 @@ export function DispositionExecutionWorkspace({
               <ol className={styles.cadenceSteps}>
                 <li data-ready={candidate.actionable && candidate.sms.allowed}><span>1</span><div><strong>SMS</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent · saved" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready to review" : "Unavailable"}</small></div></li>
                 <li data-ready={candidate.actionable && candidate.voice.allowed}><span>2</span><div><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Result saved" : buyerProgress?.call_status === "started" ? "Started · saved" : candidate.voice.allowed ? "Browser or cellphone" : "Unavailable"}</small></div></li>
-                <li data-ready={Boolean(candidate.email)}><span>3</span><div><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent · saved" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email ? "Address ready; composer arrives in Phase 4" : "No email recorded"}</small></div></li>
+                <li data-ready={Boolean(candidate.email && emailProviderConfigured && emailSenderId)}><span>3</span><div><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent · saved" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email ? emailProviderConfigured === null ? "Checking sender…" : emailProviderConfigured ? "Ready to review" : "Sender unavailable" : "No email recorded"}</small></div></li>
               </ol>
 
               <div className={styles.channelSection}>
@@ -943,8 +1176,31 @@ export function DispositionExecutionWorkspace({
 
               <div className={styles.channelSection}>
                 <div className={styles.sectionTitle}><Mail size={17} /><div><span>Step 3</span><h4>Email follow-up</h4></div></div>
-                <p className={styles.help}>{candidate.email ? `${candidate.email} is ready. Phase 4 adds the editable one-to-one email draft and send control here.` : "Add an email to the relationship profile before using the Phase 4 email composer."}</p>
-                <div className={styles.packetActions}><button disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={16} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet now`}</button></div>
+                <p className={styles.help}>{candidate.email ? `Review the deal-aware starting draft for ${candidate.email}. Nothing sends until you approve it.` : "Add an email to the relationship profile before sending follow-up."}</p>
+                {emailProviderConfigured === false ? <div className={styles.permissionBlocked}><span>Email sender unavailable</span><small>{emailConfigurationBlockers.join(" ") || "Configure an authorized Stonegate sender."}</small></div> : null}
+                {emailProviderConfigured === true && !emailSenderAliases.length ? <div className={styles.permissionBlocked}><span>No authorized email sender</span><small>Ask an email administrator to grant this user access to an active Stonegate sender.</small></div> : null}
+                <div className={styles.packetActions}>
+                  <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={16} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet now`}</button>
+                  {!emailComposerOpen ? <button disabled={emailUnavailable} onClick={() => setEmailComposerOpen(true)} type="button"><Mail size={16} />{buyerProgress?.email_status === "sent" ? "Review another email" : "Review follow-up email"}</button> : null}
+                </div>
+                {emailComposerOpen ? (
+                  <div className={`${styles.smsComposer} ${styles.emailComposer}`}>
+                    <div className={styles.messageContext}>
+                      <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.email}</small></div>
+                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{emailHasPacketLink ? "Secure packet link included" : "Packet link optional"}</small></div>
+                    </div>
+                    <label><span>Stonegate sender</span><select disabled={emailUnavailable} onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSenderId(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} value={emailSenderId}><option value="">Select sender</option>{emailSenderAliases.map((sender) => <option key={sender.id} value={sender.id}>{sender.display_name} · {sender.email_address}</option>)}</select></label>
+                    <label><span>Subject</span><input onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSubject(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} value={emailSubject} /></label>
+                    <label><span>Editable message</span><textarea aria-label="Investor follow-up email draft" onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailDraft(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} rows={9} value={emailDraft} /></label>
+                    <small className={styles.characterCount}>{emailDraft.trim().length} characters · Deal-aware starting draft, not an automatic send</small>
+                    <div className={styles.composerActions}>
+                      <button className={styles.secondary} disabled={busy !== null || !workspace.package_pdf_path || emailHasPacketLink} onClick={() => void insertPacketLinkInEmail()} type="button"><Download size={15} />{emailHasPacketLink ? "Packet link included" : `Insert ${packageLabel} packet link`}</button>
+                      <button className={styles.secondary} disabled={busy === "email"} onClick={() => void discardCurrentEmailDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Discard saved draft</button>
+                      <button className={styles.secondary} disabled={busy === "email"} onClick={() => setEmailComposerOpen(false)} type="button">Close draft</button>
+                      <button disabled={emailUnavailable || !emailSubject.trim() || !emailDraft.trim()} onClick={() => void sendFollowUpEmail()} type="button"><Mail size={16} />{busy === "email" ? "Sending…" : "Send email"}</button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -1004,6 +1260,13 @@ export function DispositionExecutionWorkspace({
               })}
             </ol>
             <footer><span>Next up</span><strong>{nextCandidate?.name ?? "Choose anyone in the queue"}</strong></footer>
+            <section className={styles.relationshipActivity} aria-label={`Recent relationship activity for ${candidate.name}`}>
+              <header><div><span>Relationship activity</span><strong>Recent contact</strong></div>{inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}</header>
+              {buyerTimelineLoading ? <p>Loading activity…</p> : visibleBuyerTimeline.length ? (
+                <ol>{visibleBuyerTimeline.map((item) => <li data-inbound={item.direction === "inbound"} key={`${item.category}-${item.id}`}><span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span><strong>{item.summary}</strong><small>{item.direction ? labelize(item.direction) : item.status ? labelize(item.status) : "Relationship update"}{item.status && item.direction ? ` · ${labelize(item.status)}` : ""}</small></li>)}</ol>
+              ) : <p>No relationship activity has been recorded yet.</p>}
+              <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open full relationship history <ArrowRight size={13} /></Link>
+            </section>
           </aside>
         </div>
       ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No buyer is available for one-to-one work</strong><span>Review the visible Buyer Network records and their contact controls, or add another canonical buyer.</span></div></section>}

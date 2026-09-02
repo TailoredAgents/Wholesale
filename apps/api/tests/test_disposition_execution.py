@@ -11,13 +11,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import principal_for_user
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.integrations.communications import OutboundMessageRequest, OutboundMessageResult
 from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
     Buyer,
     BuyerEngagement,
+    CommunicationRecord,
     ConsentRecord,
     DispositionBuyerPoolCandidate,
     DispositionBuyerPoolEntry,
@@ -25,6 +26,7 @@ from app.models.foundation import (
     DispositionCampaignRecipient,
     DispositionCase,
     DispositionExecutionSession,
+    EmailSenderAlias,
     Lead,
     SuppressionRecord,
     Task,
@@ -1444,6 +1446,8 @@ def test_execution_session_restores_operator_position_drafts_and_queue_order(
             "skipped_buyer_ids": [skipped_buyer_id],
             "buyer_id": active_buyer_id,
             "sms_draft": "Saved private one-to-one investor draft.",
+            "email_subject": "Saved investor follow-up",
+            "email_draft": "Saved private one-to-one email draft.",
             "notes_draft": "Resume with the requested terms in view.",
             "callback_at": callback_at.isoformat(),
             "selected_outcome": "callback",
@@ -1459,6 +1463,8 @@ def test_execution_session_restores_operator_position_drafts_and_queue_order(
     assert session["queue_buyer_ids"] == initial_order
     buyer_state = session["buyer_states"][active_buyer_id]
     assert buyer_state["sms_draft"] == "Saved private one-to-one investor draft."
+    assert buyer_state["email_subject"] == "Saved investor follow-up"
+    assert buyer_state["email_draft"] == "Saved private one-to-one email draft."
     assert buyer_state["notes_draft"] == "Resume with the requested terms in view."
     assert buyer_state["selected_outcome"] == "callback"
     assert buyer_state["current_step"] == "outcome"
@@ -1526,6 +1532,86 @@ def test_execution_outcome_updates_durable_last_result_and_follow_up(
     assert buyer_state["current_step"] == "outcome"
     assert buyer_state["selected_outcome"] == "no_answer"
     assert buyer_state["notes_draft"] == "Persist this retry across visits."
+
+
+def test_execution_email_uses_canonical_conversation_and_persists_progress(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    case_id, buyer_id = _unranked_execution_case(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == HEADERS["X-Dev-User-Email"]))
+    assert owner is not None
+    alias = EmailSenderAlias(
+        organization_id=owner.organization_id,
+        owner_user_id=owner.id,
+        assigned_team_id=None,
+        created_by_user_id=owner.id,
+        provider="resend",
+        provider_identity_id=None,
+        email_address="buyers@stonegate.example",
+        display_name="Stonegate Buyer Relations",
+        alias_type="department",
+        purpose_key="buyer_outreach",
+        status="active",
+        inbound_enabled=True,
+        outbound_enabled=True,
+        is_default=True,
+        signature_text="Stonegate Buyer Relations",
+        routing_metadata={"department_key": "dispositions"},
+    )
+    db_session.add(alias)
+    db_session.commit()
+    settings = Settings.model_validate(
+        {"APP_ENV": "test", "COMMUNICATION_PROVIDER_MODE": "simulate"}
+    )
+    monkeypatch.setattr("app.services.email.get_settings", lambda: settings)
+
+    sent = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/email",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "email_sender_alias_id": str(alias.id),
+            "subject": "Atlanta property follow-up",
+            "body": "Here is the reviewed one-to-one follow-up.",
+            "idempotency_key": "durable-execution-email-001",
+        },
+    )
+    assert sent.status_code == 201, sent.text
+    assert sent.json()["status"] == "sent"
+    communication = db_session.get(
+        CommunicationRecord,
+        UUID(sent.json()["communication_id"]),
+    )
+    assert communication is not None
+    assert communication.channel == "email"
+    assert communication.subject == "Atlanta property follow-up"
+
+    restored = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert restored.status_code == 200, restored.text
+    session_state = restored.json()["session"]["buyer_states"][buyer_id]
+    assert session_state["email_status"] == "sent"
+    assert session_state["email_subject"] == "Atlanta property follow-up"
+    assert session_state["email_draft"] == "Here is the reviewed one-to-one follow-up."
+    assert session_state["email_sender_alias_id"] == str(alias.id)
+    assert session_state["current_step"] == "outcome"
+
+    profile = client.get(
+        f"/api/v1/buyers/{buyer_id}/profile?timeline_limit=12",
+        headers=HEADERS,
+    )
+    assert profile.status_code == 200, profile.text
+    assert any(
+        item["category"] == "communication"
+        and item["channel"] == "email"
+        and item["status"] == "sent"
+        for item in profile.json()["timeline"]["items"]
+    )
 
 
 def test_durable_execution_session_migration_follows_advisory_workbench() -> None:

@@ -3159,6 +3159,8 @@ export type DispositionExecutionCandidate = {
   sms: DispositionExecutionPermission;
   voice: DispositionExecutionPermission;
   sms_draft: string;
+  email_subject: string;
+  email_draft: string;
 };
 
 export type DispositionExecutionShowing = {
@@ -3176,6 +3178,9 @@ export type DispositionExecutionShowing = {
 
 export type DispositionExecutionBuyerState = {
   sms_draft: string;
+  email_subject: string;
+  email_draft: string;
+  email_sender_alias_id: string | null;
   notes_draft: string;
   callback_at: string | null;
   selected_outcome:

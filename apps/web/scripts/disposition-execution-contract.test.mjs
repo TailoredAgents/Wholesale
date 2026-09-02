@@ -102,7 +102,7 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /<dt>Position<\/dt>/);
   assert.match(workspace, /workspace\.remaining_candidate_count/);
   assert.match(workspace, /Open relationship profile/);
-  assert.match(workspace, /Address ready; composer arrives in Phase 4/);
+  assert.match(workspace, /Review follow-up email/);
   assert.match(workspace, /async function recordOutcome\(outcome: Outcome, advance: "next" \| "stay"\)/);
   assert.match(workspace, /setSelectedOutcome\(outcome\.value\); void saveCurrentBuyerState/);
   assert.match(workspace, /Save & stay/);
@@ -133,12 +133,39 @@ test("the execution desk durably restores operator session state", async () => {
   assert.match(workspace, /result\.session\.skipped_buyer_ids/);
   assert.match(workspace, /result\.session\.buyer_states/);
   assert.match(workspace, /sms_draft: smsDraft/);
+  assert.match(workspace, /email_subject: emailSubject/);
+  assert.match(workspace, /email_draft: emailDraft/);
+  assert.match(workspace, /email_sender_alias_id: emailSenderId \|\| null/);
   assert.match(workspace, /notes_draft: notes/);
   assert.match(workspace, /selected_outcome: selectedOutcome/);
   assert.match(workspace, /state: "paused"/);
   assert.match(workspace, /advance_to_next: true/);
   assert.match(workspace, /This exact position will resume until you continue/);
   assert.doesNotMatch(workspace, /browser session|while this screen stays open/i);
+});
+
+test("one-to-one email is editable, permission-aware, durable, and relationship-linked", async () => {
+  const [workspace, api] = await Promise.all([
+    readFile(workspacePath, "utf8"),
+    readFile(apiPath, "utf8"),
+  ]);
+
+  assert.match(api, /email_subject: string/);
+  assert.match(api, /email_draft: string/);
+  assert.match(api, /email_sender_alias_id: string \| null/);
+  assert.match(workspace, /\/api\/v1\/email\/aliases/);
+  assert.match(workspace, /execution\/email/);
+  assert.match(workspace, /aria-label="Investor follow-up email draft"/);
+  assert.match(workspace, /Nothing sends until you approve it/);
+  assert.match(workspace, /Insert \$\{packageLabel\} packet link/);
+  assert.match(workspace, /expires_in_hours: 72/);
+  assert.match(workspace, /emailIdempotencyKeyRef/);
+  assert.match(workspace, /Email sender unavailable/);
+  assert.match(workspace, /relationship activity/i);
+  assert.match(workspace, /\/api\/v1\/buyers\/\$\{buyerId\}\/profile/);
+  assert.match(workspace, /item\.direction === "inbound"/);
+  assert.match(workspace, /Open full relationship history/);
+  assert.doesNotMatch(workspace, /composer arrives in Phase 4/i);
 });
 
 test("one-to-one actions use a stable buyer reference and passed buyers remain recoverable", async () => {

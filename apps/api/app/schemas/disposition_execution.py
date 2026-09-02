@@ -61,6 +61,8 @@ class DispositionExecutionCandidateRead(BaseModel):
     sms: DispositionExecutionPermissionRead
     voice: DispositionExecutionPermissionRead
     sms_draft: str
+    email_subject: str
+    email_draft: str
 
 
 class DispositionShowingRead(BaseModel):
@@ -78,6 +80,9 @@ class DispositionShowingRead(BaseModel):
 
 class DispositionExecutionBuyerStateRead(BaseModel):
     sms_draft: str = ""
+    email_subject: str = ""
+    email_draft: str = ""
+    email_sender_alias_id: UUID | None = None
     notes_draft: str = ""
     callback_at: datetime | None = None
     selected_outcome: DispositionCallOutcome | None = None
@@ -142,6 +147,13 @@ class DispositionExecutionSmsCreate(_DispositionExecutionBuyerReference):
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 
+class DispositionExecutionEmailCreate(_DispositionExecutionBuyerReference):
+    email_sender_alias_id: UUID
+    subject: str = Field(min_length=1, max_length=255)
+    body: str = Field(min_length=1, max_length=4000)
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
 class DispositionExecutionCallCreate(_DispositionExecutionBuyerReference):
     idempotency_key: str = Field(min_length=8, max_length=120)
 
@@ -162,6 +174,9 @@ class DispositionExecutionSessionUpdate(BaseModel):
     skipped_buyer_ids: list[UUID] | None = None
     buyer_id: UUID | None = None
     sms_draft: str | None = Field(default=None, max_length=1600)
+    email_subject: str | None = Field(default=None, max_length=255)
+    email_draft: str | None = Field(default=None, max_length=4000)
+    email_sender_alias_id: UUID | None = None
     notes_draft: str | None = Field(default=None, max_length=1000)
     callback_at: datetime | None = None
     selected_outcome: DispositionCallOutcome | None = None
@@ -171,6 +186,9 @@ class DispositionExecutionSessionUpdate(BaseModel):
     def require_buyer_for_draft_state(self) -> "DispositionExecutionSessionUpdate":
         buyer_fields = {
             "sms_draft",
+            "email_subject",
+            "email_draft",
+            "email_sender_alias_id",
             "notes_draft",
             "callback_at",
             "selected_outcome",

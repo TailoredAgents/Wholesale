@@ -106,8 +106,8 @@ or update readiness and packet details without any gate.
 **Repository status:** Implemented September 1, 2026. The desk now keeps the current investor,
 editable channel cadence, result controls, and compact queue in one responsive workbench. Result
 selection and queue movement are separate operator decisions. Skip and pause are intentionally
-operator-led; Phase 3 now persists them across visits. The one-to-one email composer remains Phase
-4. Operator acceptance with a live deal remains outstanding.
+operator-led; Phase 3 now persists them across visits. Phase 4 now completes the editable
+one-to-one email step. Operator acceptance with a live deal remains outstanding.
 
 Goal: turn the existing dialer into a focused workbench with three stable areas.
 
@@ -140,6 +140,15 @@ Goal: let Alex stop and return without reconstructing what happened.
 - Preserve queue history when buyer ranking is refreshed; do not silently erase completed work.
 
 ## Phase 4 — Complete The SMS, Call, Email Cadence
+
+**Repository status:** Implemented September 1, 2026. The outreach desk now loads only authorized
+Stonegate senders, restores an editable deal-aware subject and body per investor, optionally inserts
+a secure 72-hour preliminary or approved packet link, and sends through the canonical buyer
+conversation. Email send state persists with the operator session. The desk surfaces recent buyer
+relationship activity—including inbound replies and provider delivery state—from the same timeline
+used by Investor Relationships. Drafting remains deterministic and operator-controlled; no AI text
+or message is generated or sent automatically. Operator acceptance with a live email provider and
+production-equivalent deal remains outstanding.
 
 Goal: add first-class one-to-one email to the existing SMS and calling experience.
 

@@ -32,6 +32,7 @@ from app.schemas.disposition_execution import (
     DispositionExecutionBuyerStateRead,
     DispositionExecutionCallCreate,
     DispositionExecutionCandidateRead,
+    DispositionExecutionEmailCreate,
     DispositionExecutionOutcomeCreate,
     DispositionExecutionPermissionRead,
     DispositionExecutionSessionRead,
@@ -45,6 +46,7 @@ from app.schemas.disposition_execution import (
     ShowingAccessStatus,
     ShowingStatus,
 )
+from app.schemas.email import EmailSendRead, EmailSendRequest
 from app.schemas.inbox import SmsSendRead, SmsSendRequest
 from app.schemas.voice import VoiceCallIntentCreate, VoiceCallIntentRead
 from app.services import buyers as buyer_service
@@ -54,6 +56,7 @@ from app.services.communication_compliance import (
     evaluate_voice_eligibility,
 )
 from app.services.disposition_state import ACTIVE_DISPOSITION_CASE_STATUSES
+from app.services.email import send_conversation_email
 from app.services.inbox import ensure_buyer_conversation
 from app.services.messaging import send_conversation_sms
 from app.services.voice import create_call_intent, start_forwarded_call
@@ -303,6 +306,9 @@ def update_execution_session(
 
     buyer_fields = {
         "sms_draft",
+        "email_subject",
+        "email_draft",
+        "email_sender_alias_id",
         "notes_draft",
         "callback_at",
         "selected_outcome",
@@ -321,6 +327,36 @@ def update_execution_session(
                 if previous_sms_status == "sent"
                 and previous_sms_draft == buyer_state["sms_draft"]
                 else "drafted" if buyer_state["sms_draft"] else "not_started"
+            )
+        email_fields = {"email_subject", "email_draft", "email_sender_alias_id"}
+        if fields.intersection(email_fields):
+            previous_email = (
+                buyer_state["email_subject"],
+                buyer_state["email_draft"],
+                buyer_state["email_sender_alias_id"],
+            )
+            previous_email_status = buyer_state["email_status"]
+            if "email_subject" in fields:
+                buyer_state["email_subject"] = payload.email_subject or ""
+            if "email_draft" in fields:
+                buyer_state["email_draft"] = payload.email_draft or ""
+            if "email_sender_alias_id" in fields:
+                buyer_state["email_sender_alias_id"] = (
+                    str(payload.email_sender_alias_id)
+                    if payload.email_sender_alias_id is not None
+                    else None
+                )
+            current_email = (
+                buyer_state["email_subject"],
+                buyer_state["email_draft"],
+                buyer_state["email_sender_alias_id"],
+            )
+            buyer_state["email_status"] = (
+                "sent"
+                if previous_email_status == "sent" and previous_email == current_email
+                else "drafted"
+                if buyer_state["email_subject"] or buyer_state["email_draft"]
+                else "not_started"
             )
         if "notes_draft" in fields:
             buyer_state["notes_draft"] = payload.notes_draft or ""
@@ -445,6 +481,9 @@ def _session_buyer_state(
 ) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "sms_draft": "",
+        "email_subject": "",
+        "email_draft": "",
+        "email_sender_alias_id": None,
         "notes_draft": "",
         "callback_at": None,
         "selected_outcome": None,
@@ -543,6 +582,9 @@ def _execution_session_audit_value(
             "call_status": state.get("call_status"),
             "email_status": state.get("email_status"),
             "has_sms_draft": bool(state.get("sms_draft")),
+            "has_email_subject": bool(state.get("email_subject")),
+            "has_email_draft": bool(state.get("email_draft")),
+            "email_sender_alias_id": state.get("email_sender_alias_id"),
             "has_notes_draft": bool(state.get("notes_draft")),
             "selected_outcome": state.get("selected_outcome"),
             "has_callback_at": bool(state.get("callback_at")),
@@ -579,6 +621,9 @@ def _mark_session_channel(
     channel: str,
     status: str,
     sms_draft: str | None = None,
+    email_subject: str | None = None,
+    email_draft: str | None = None,
+    email_sender_alias_id: UUID | None = None,
     outcome: str | None = None,
     notes: str | None = None,
     follow_up_at: datetime | None = None,
@@ -591,6 +636,12 @@ def _mark_session_channel(
     )
     if sms_draft is not None:
         buyer_state["sms_draft"] = sms_draft
+    if email_subject is not None:
+        buyer_state["email_subject"] = email_subject
+    if email_draft is not None:
+        buyer_state["email_draft"] = email_draft
+    if email_sender_alias_id is not None:
+        buyer_state["email_sender_alias_id"] = str(email_sender_alias_id)
     if outcome is not None:
         now = datetime.now(UTC)
         buyer_state["selected_outcome"] = outcome
@@ -675,6 +726,96 @@ def send_pre_call_sms(
         channel="sms",
         status="sent",
         sms_draft=payload.body,
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        replay = _engagement_by_idempotency(
+            db,
+            principal,
+            case,
+            payload.idempotency_key,
+            request_fingerprint=request_fingerprint,
+        )
+        if replay is None:
+            raise
+    return result
+
+
+def send_follow_up_email(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    payload: DispositionExecutionEmailCreate,
+) -> EmailSendRead:
+    case = _mutable_case(db, principal, case_id)
+    referenced_buyer_id = _referenced_buyer_id(
+        db,
+        principal,
+        case,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
+    request_fingerprint = _request_fingerprint(payload, buyer_id=referenced_buyer_id)
+    existing = _engagement_by_idempotency(
+        db,
+        principal,
+        case,
+        payload.idempotency_key,
+        request_fingerprint=request_fingerprint,
+    )
+    case, candidate, buyer = _candidate_for_action(
+        db,
+        principal,
+        case_id,
+        candidate_id=payload.candidate_id,
+        buyer_id=payload.buyer_id,
+    )
+    if not buyer.email:
+        raise ValueError("Add an email address to this investor before sending follow-up.")
+    conversation = ensure_buyer_conversation(db, buyer, actor_user_id=principal.user_id)
+    db.commit()
+    result = send_conversation_email(
+        db,
+        principal,
+        conversation.id,
+        EmailSendRequest(
+            email_sender_alias_id=payload.email_sender_alias_id,
+            subject=payload.subject,
+            body=payload.body,
+            idempotency_key=payload.idempotency_key,
+        ),
+    )
+    if result is None:
+        raise ValueError("The buyer conversation is unavailable.")
+    if existing is None:
+        _log_engagement(
+            db,
+            principal,
+            case,
+            buyer,
+            candidate,
+            engagement_type="email",
+            status=result.status,
+            notes=f"One-to-one follow-up email: {payload.subject.strip()}",
+            idempotency_key=payload.idempotency_key,
+            metadata={
+                "communication_id": str(result.communication_id),
+                "provider_message_id": result.provider_message_id,
+                "request_fingerprint": request_fingerprint,
+            },
+        )
+    _mark_session_channel(
+        db,
+        principal,
+        case,
+        buyer,
+        channel="email",
+        status="sent",
+        email_subject=payload.subject.strip(),
+        email_draft=payload.body.strip(),
+        email_sender_alias_id=payload.email_sender_alias_id,
     )
     try:
         db.commit()
@@ -1398,6 +1539,20 @@ def _candidate_read(
                 sender_name=_sender_name(db, principal.user_id),
             )
         ),
+        email_subject=(
+            str(session_buyer_state.get("email_subject"))
+            if session_buyer_state and session_buyer_state.get("email_subject")
+            else _email_subject(property_record)
+        ),
+        email_draft=(
+            str(session_buyer_state.get("email_draft"))
+            if session_buyer_state and session_buyer_state.get("email_draft")
+            else _email_draft(
+                buyer.name,
+                property_record,
+                sender_name=_sender_name(db, principal.user_id),
+            )
+        ),
     )
 
 
@@ -1615,6 +1770,7 @@ def _engagement_by_idempotency(
 def _request_fingerprint(
     payload: (
         DispositionExecutionSmsCreate
+        | DispositionExecutionEmailCreate
         | DispositionExecutionOutcomeCreate
         | DispositionShowingCreate
     ),
@@ -1785,6 +1941,27 @@ def _sms_draft(
     return (
         f"Hey {first_name}, this is {sender_name} with Stonegate. I have a property {location}. "
         "Would you be interested in looking at something similar?"
+    )
+
+
+def _email_subject(property_record: Property) -> str:
+    return f"Property opportunity: {_property_address(property_record)}"
+
+
+def _email_draft(
+    name: str,
+    property_record: Property,
+    *,
+    sender_name: str,
+) -> str:
+    first_name = name.strip().split()[0] if name.strip() else "there"
+    address = _property_address(property_record)
+    return (
+        f"Hi {first_name},\n\n"
+        f"Following up on the property opportunity at {address}. "
+        "If it fits what you are buying, reply with any questions or the terms you would need "
+        "to move forward.\n\n"
+        f"Thanks,\n{sender_name}\nStonegate"
     )
 
 
