@@ -46,7 +46,7 @@ test("the persistent panel offers guidance and every action-specific check witho
   assert.doesNotMatch(panel, /disabled=/);
   const compactPanel = panel.slice(
     panel.indexOf("if (compact)"),
-    panel.indexOf("return (\n    <section aria-labelledby"),
+    panel.indexOf('aria-labelledby="disposition-readiness-heading"'),
   );
   assert.match(compactPanel, /Reference only/);
   assert.match(compactPanel, /Readiness details/);
@@ -80,8 +80,8 @@ test("package, pool, call, and outreach work remain usable while checklist evide
   assert.match(outreach, /Prepare recipient pool/);
   assert.match(outreach, /\/api\/v1\/dispositions\/cases\/\$\{caseId\}\/campaigns\/release/);
   assert.match(buyerPool, /Package, proof-of-funds, and match-readiness gaps remain visible warnings while you shop/);
-  assert.match(execution, /These items do not prevent logging work/);
-  assert.match(execution, /Contact controls still follow the buyer/);
+  assert.match(execution, /These items do not prevent work/);
+  assert.match(execution, /Contact controls still follow each investor/);
   assert.match(outreach, /Checklist gaps do not stop drafting or shopping/);
   assert.match(provider, /Package checklist gaps do not disable preparation/);
 });
@@ -127,7 +127,9 @@ test("activity and offer controls hydrate the full Buyer Network independently o
   assert.doesNotMatch(workspace, /selected\.matches\.map\(\(item\) => <option/);
   assert.match(workspace, /Pool and legacy choices remain usable when the canonical Buyer Network is unavailable/);
   assert.match(workspace, /Buyer Network and legacy choices remain usable when the ranked pool is unavailable/);
-  assert.match(workspace, /Promise\.all\(\[[\s\S]*loadBuyerNetworkChoices\(nextId\)[\s\S]*loadBuyerPoolChoices\(nextId\)/);
+  assert.match(workspace, /const buyerChoicesNeeded = activeTab === "buyers" \|\| activeTab === "offers"/);
+  assert.match(workspace, /if \(!selectedId \|\| !buyerChoicesNeeded\) return/);
+  assert.match(workspace, /if \(buyerChoicesNeeded\) \{[\s\S]*refreshes\.push\(loadBuyerNetworkChoices\(nextId\), loadBuyerPoolChoices\(nextId\)\)/);
 });
 
 test("buyer decisions permit primary-only coverage and warning-bearing replacement options", () => {

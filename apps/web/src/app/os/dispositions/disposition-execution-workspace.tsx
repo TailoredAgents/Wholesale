@@ -495,15 +495,22 @@ export function DispositionExecutionWorkspace({
     }
   }
 
-  async function action<T>(key: string, operation: () => Promise<T>, success: string) {
+  async function action<T>(
+    key: string,
+    operation: () => Promise<T>,
+    success: string,
+    refreshParent = false,
+  ) {
     setBusy(key);
     onMessage(null);
     try {
       const result = await operation();
-      try {
-        await onWorkspaceChanged();
-      } catch {
-        // The local mutation succeeded; the parent readiness panel can be refreshed independently.
+      if (refreshParent) {
+        try {
+          await onWorkspaceChanged();
+        } catch {
+          // The local mutation succeeded; the parent overview can refresh independently.
+        }
       }
       onMessage(success);
       return result;
@@ -684,8 +691,10 @@ export function DispositionExecutionWorkspace({
     if (!result) return;
     emailIdempotencyKeyRef.current = null;
     setResultComposerOpen(true);
-    await refreshSessionSnapshot();
-    await loadBuyerTimeline(candidate.buyer_id);
+    await Promise.all([
+      refreshSessionSnapshot(),
+      loadBuyerTimeline(candidate.buyer_id),
+    ]);
     onMessage(`Follow-up email ${labelize(result.status)} for ${candidate.name}. Delivery and replies will appear in the conversation.`);
   }
 
@@ -697,7 +706,6 @@ export function DispositionExecutionWorkspace({
       onMessage("Review the introduction and enter a message before sending it.");
       return;
     }
-    await saveCurrentBuyerState({ sms_draft: body, current_step: "sms" });
     const result = await action(
       "sms",
       () => request(`/api/v1/dispositions/cases/${caseId}/execution/sms`, {
@@ -713,8 +721,10 @@ export function DispositionExecutionWorkspace({
     if (!result) return;
 
     setResultComposerOpen(true);
-    await refreshSessionSnapshot();
-    await loadBuyerTimeline(candidate.buyer_id);
+    await Promise.all([
+      refreshSessionSnapshot(),
+      loadBuyerTimeline(candidate.buyer_id),
+    ]);
   }
 
   async function startBrowserCall() {
@@ -751,8 +761,10 @@ export function DispositionExecutionWorkspace({
     );
     if (result) {
       setResultComposerOpen(true);
-      await refreshSessionSnapshot();
-      await loadBuyerTimeline(candidate.buyer_id);
+      await Promise.all([
+        refreshSessionSnapshot(),
+        loadBuyerTimeline(candidate.buyer_id),
+      ]);
     }
   }
 
@@ -778,8 +790,10 @@ export function DispositionExecutionWorkspace({
     );
     if (result) {
       setResultComposerOpen(true);
-      await refreshSessionSnapshot();
-      await loadBuyerTimeline(candidate.buyer_id);
+      await Promise.all([
+        refreshSessionSnapshot(),
+        loadBuyerTimeline(candidate.buyer_id),
+      ]);
     }
   }
 
@@ -896,10 +910,6 @@ export function DispositionExecutionWorkspace({
       onMessage("Choose the requested callback date and time first.");
       return;
     }
-    await saveCurrentBuyerState({
-      selected_outcome: outcome,
-      current_step: "outcome",
-    });
     const result = await action(
       `outcome-${outcome}`,
       () => request<DispositionExecutionWorkspace>(
@@ -918,6 +928,7 @@ export function DispositionExecutionWorkspace({
       advance === "next"
         ? `${labelize(outcome)} saved for ${candidate.name}. Moving to the next available investor.`
         : `${labelize(outcome)} saved for ${candidate.name}. Staying on this investor until you choose what is next.`,
+      true,
     );
     if (result) {
       await loadBuyerTimeline(candidate.buyer_id);
@@ -999,6 +1010,7 @@ export function DispositionExecutionWorkspace({
         },
       ),
       `Showing scheduled with ${candidate.name}. Record the call outcome when the conversation ends.`,
+      true,
     );
     if (result) {
       applyWorkspace(result);
@@ -1030,6 +1042,7 @@ export function DispositionExecutionWorkspace({
         },
       ),
       `${candidate.name} is available for one-to-one execution again.`,
+      true,
     );
     if (result !== null) await load();
   }
@@ -1056,6 +1069,7 @@ export function DispositionExecutionWorkspace({
       status === "completed"
         ? "Showing completed. A follow-up task is due in 24 hours."
         : `Showing marked ${labelize(status)}.`,
+      true,
     );
     if (result) {
       applyWorkspace(result);
@@ -1203,9 +1217,9 @@ export function DispositionExecutionWorkspace({
                 timeline={visibleBuyerTimeline}
               />
               <div aria-label="Outreach channel" className={styles.channelTabs} role="tablist">
-                <button aria-controls="investor-sms" aria-selected={activeChannel === "sms"} id="outreach-text-tab" onClick={() => { setActiveChannel("sms"); void saveCurrentBuyerState({ current_step: "sms" }); }} role="tab" type="button"><MessageSquareText size={15} /><span><strong>Text</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready" : "Unavailable"}</small></span></button>
-                <button aria-controls="investor-call" aria-selected={activeChannel === "call"} id="outreach-call-tab" onClick={() => { setActiveChannel("call"); void saveCurrentBuyerState({ current_step: "call" }); }} role="tab" type="button"><Headphones size={15} /><span><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Completed" : buyerProgress?.call_status === "started" ? "Started" : candidate.voice.allowed ? "Ready" : "Unavailable"}</small></span></button>
-                <button aria-controls="investor-email" aria-selected={activeChannel === "email"} id="outreach-email-tab" onClick={() => { setActiveChannel("email"); void saveCurrentBuyerState({ current_step: "email" }); }} role="tab" type="button"><Mail size={15} /><span><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email && emailProviderConfigured ? "Ready" : "Unavailable"}</small></span></button>
+                <button aria-controls="investor-sms" aria-selected={activeChannel === "sms"} id="outreach-text-tab" onClick={() => setActiveChannel("sms")} role="tab" type="button"><MessageSquareText size={15} /><span><strong>Text</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready" : "Unavailable"}</small></span></button>
+                <button aria-controls="investor-call" aria-selected={activeChannel === "call"} id="outreach-call-tab" onClick={() => setActiveChannel("call")} role="tab" type="button"><Headphones size={15} /><span><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Completed" : buyerProgress?.call_status === "started" ? "Started" : candidate.voice.allowed ? "Ready" : "Unavailable"}</small></span></button>
+                <button aria-controls="investor-email" aria-selected={activeChannel === "email"} id="outreach-email-tab" onClick={() => setActiveChannel("email")} role="tab" type="button"><Mail size={15} /><span><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email && emailProviderConfigured ? "Ready" : "Unavailable"}</small></span></button>
               </div>
               <div className={styles.channelWorkspace}>
 
@@ -1219,7 +1233,7 @@ export function DispositionExecutionWorkspace({
                   <div className={styles.composerActions}>
                     <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><Download size={15} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet`}</button>
                     <button className={styles.secondary} disabled={busy === "sms"} onClick={() => void discardCurrentSmsDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Reset draft</button>
-                    <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send text"}</button>
+                    <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} onMouseDown={(event) => event.preventDefault()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send text"}</button>
                   </div>
                 </div>
               </div> : null}
@@ -1247,7 +1261,7 @@ export function DispositionExecutionWorkspace({
                   <div className={styles.composerActions}>
                     <button className={styles.secondary} disabled={busy !== null || !workspace.package_pdf_path || emailHasPacketLink} onClick={() => void insertPacketLinkInEmail()} type="button"><Download size={15} />{emailHasPacketLink ? "Packet link included" : `Insert ${packageLabel} packet link`}</button>
                     <button className={styles.secondary} disabled={busy === "email"} onClick={() => void discardCurrentEmailDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Reset draft</button>
-                    <button disabled={emailUnavailable || !emailSubject.trim() || !emailDraft.trim()} onClick={() => void sendFollowUpEmail()} type="button"><Mail size={16} />{busy === "email" ? "Sending…" : "Send email"}</button>
+                    <button disabled={emailUnavailable || !emailSubject.trim() || !emailDraft.trim()} onClick={() => void sendFollowUpEmail()} onMouseDown={(event) => event.preventDefault()} type="button"><Mail size={16} />{busy === "email" ? "Sending…" : "Send email"}</button>
                   </div>
                 </div>
               </div> : null}
@@ -1259,7 +1273,7 @@ export function DispositionExecutionWorkspace({
                 </header>
                 {resultComposerOpen || outcomeSavedForCurrent ? <div className={styles.resultComposer}>
                   <small>No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small>
-                  <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); void saveCurrentBuyerState({ selected_outcome: outcome.value, current_step: "outcome" }); }} type="button">{outcome.label}</button>)}</div>
+                  <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); setSessionSaveState("idle"); }} type="button">{outcome.label}</button>)}</div>
                   <div className={styles.outcomeInputs} data-callback={selectedOutcome === "callback"}>
                     <label><span>Notes</span><textarea disabled={outcomeSavedForCurrent} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, objections, or requested next step…" rows={2} value={notes} /></label>
                     {selectedOutcome === "callback" ? <label><span>Callback time</span><input disabled={outcomeSavedForCurrent} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required before saving Callback.</small></label> : null}
@@ -1270,8 +1284,8 @@ export function DispositionExecutionWorkspace({
                     <div className={styles.outcomeActions}>
                       <button className={styles.secondary} disabled={busy !== null} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={15} />Skip for now</button>
                       <span />
-                      <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
-                      <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
+                      <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} onMouseDown={(event) => event.preventDefault()} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
+                      <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} onMouseDown={(event) => event.preventDefault()} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
                     </div>
                   )}
                 </div> : null}

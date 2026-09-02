@@ -251,7 +251,7 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /Finished an interaction\?/);
   assert.match(workspace, /setResultComposerOpen\(true\)/);
   assert.match(workspace, /async function recordOutcome\(outcome: Outcome, advance: "next" \| "stay"\)/);
-  assert.match(workspace, /setSelectedOutcome\(outcome\.value\); void saveCurrentBuyerState/);
+  assert.match(workspace, /setSelectedOutcome\(outcome\.value\); setSessionSaveState\("idle"\)/);
   assert.match(workspace, /Save & stay/);
   assert.match(workspace, /Save & next/);
   assert.match(workspace, /selectedOutcome === "callback" \? <label/);
@@ -263,6 +263,31 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /No buyer outcome was changed/);
   assert.match(workspace, /queue order and drafts remain saved/);
   assert.doesNotMatch(workspace, /onClick=\{\(\) => void recordOutcome\(outcome\.value\)\}/);
+});
+
+test("routine outreach avoids full deal and investor-list reloads", async () => {
+  const [workspace, parent] = await Promise.all([
+    readFile(workspacePath, "utf8"),
+    readFile(parentPath, "utf8"),
+  ]);
+
+  const actionFunction = workspace.match(
+    /async function action<T>\([\s\S]*?(?=\n  async function updateSession)/,
+  )?.[0] ?? "";
+  const sendSmsFunction = workspace.match(
+    /async function sendSms\(\)[\s\S]*?(?=\n  async function startBrowserCall)/,
+  )?.[0] ?? "";
+
+  assert.match(actionFunction, /refreshParent = false/);
+  assert.match(actionFunction, /if \(refreshParent\)/);
+  assert.doesNotMatch(sendSmsFunction, /saveCurrentBuyerState/);
+  assert.match(sendSmsFunction, /Promise\.all\(\[/);
+  assert.match(parent, /const buyerChoicesNeeded = activeTab === "buyers" \|\| activeTab === "offers"/);
+  assert.match(parent, /if \(!selectedId \|\| !buyerChoicesNeeded\) return/);
+  assert.match(parent, /onWorkspaceChanged=\{\(\) => reloadOverview\(selected\.id\)\}/);
+  assert.doesNotMatch(workspace, /setActiveChannel\("sms"\); void saveCurrentBuyerState/);
+  assert.doesNotMatch(workspace, /setActiveChannel\("call"\); void saveCurrentBuyerState/);
+  assert.doesNotMatch(workspace, /setActiveChannel\("email"\); void saveCurrentBuyerState/);
 });
 
 test("the execution desk durably restores operator session state", async () => {

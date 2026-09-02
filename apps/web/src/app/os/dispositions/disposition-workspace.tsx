@@ -238,6 +238,7 @@ export function DispositionWorkspace({
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
   const activeTab =
     selected?.asset_class === "land" && landUnavailableTabs.has(tab) ? "package" : tab;
+  const buyerChoicesNeeded = activeTab === "buyers" || activeTab === "offers";
   const buyerChoices = useMemo(
     () => mergeBuyerChoices(
       buyerNetworkCaseId === selected?.id ? buyerNetworkEntries : [],
@@ -287,7 +288,7 @@ export function DispositionWorkspace({
   }, [selectedId]);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !buyerChoicesNeeded) return;
     void loadBuyerNetworkChoices(selectedId);
     void loadBuyerPoolChoices(selectedId);
     return () => {
@@ -296,7 +297,7 @@ export function DispositionWorkspace({
     };
   // Buyer-choice hydration follows the selected case and authenticated request helper.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, buyerChoicesNeeded]);
 
   async function loadReadiness(caseId = selectedId) {
     if (!caseId) return null;
@@ -393,17 +394,22 @@ export function DispositionWorkspace({
     }
   }
 
-  async function reload(preferredId = selectedId) {
+  async function reloadOverview(preferredId = selectedId) {
     const next = await request<DispositionOverview>("/api/v1/dispositions");
     setData(next);
     const nextId = preferredId ?? next.cases[0]?.id ?? null;
     setSelectedId(nextId);
+    return nextId;
+  }
+
+  async function reload(preferredId = selectedId) {
+    const nextId = await reloadOverview(preferredId);
     if (nextId) {
-      await Promise.all([
-        loadReadiness(nextId),
-        loadBuyerNetworkChoices(nextId),
-        loadBuyerPoolChoices(nextId),
-      ]);
+      const refreshes: Promise<unknown>[] = [loadReadiness(nextId)];
+      if (buyerChoicesNeeded) {
+        refreshes.push(loadBuyerNetworkChoices(nextId), loadBuyerPoolChoices(nextId));
+      }
+      await Promise.all(refreshes);
     }
   }
 
@@ -832,7 +838,7 @@ export function DispositionWorkspace({
                   }
                   key={selected.id}
                   onMessage={setMessage}
-                  onWorkspaceChanged={() => reload(selected.id)}
+                  onWorkspaceChanged={() => reloadOverview(selected.id)}
                   request={request}
                 />
               ) : null}
