@@ -1,17 +1,22 @@
 "use client";
 
 import {
+  ArrowRight,
   CalendarClock,
   CheckCircle2,
   Download,
   Headphones,
+  Mail,
   MessageSquareText,
+  Pause,
   PhoneCall,
+  Play,
   RefreshCw,
   ShieldAlert,
   SkipForward,
   UserRound,
 } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -125,6 +130,20 @@ function candidateAvailabilityLabel(candidate: DispositionExecutionCandidate) {
   return candidate.actionable ? "Available" : "Unavailable";
 }
 
+function nextActionableCandidate(
+  candidates: DispositionExecutionCandidate[],
+  currentBuyerId: string,
+  skippedBuyerIds: Set<string>,
+) {
+  const currentIndex = candidates.findIndex((candidate) => candidate.buyer_id === currentBuyerId);
+  const orderedCandidates = currentIndex >= 0
+    ? [...candidates.slice(currentIndex + 1), ...candidates.slice(0, currentIndex)]
+    : candidates;
+  return orderedCandidates.find(
+    (candidate) => candidate.actionable && !skippedBuyerIds.has(candidate.buyer_id),
+  ) ?? null;
+}
+
 export function DispositionExecutionWorkspace({
   canEditDeals,
   caseId,
@@ -150,6 +169,10 @@ export function DispositionExecutionWorkspace({
   const [countdownBuyerId, setCountdownBuyerId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [callbackAt, setCallbackAt] = useState("");
+  const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
+  const [savedOutcome, setSavedOutcome] = useState<{ buyerId: string; label: string } | null>(null);
+  const [sessionPaused, setSessionPaused] = useState(false);
+  const [sessionSkippedBuyerIds, setSessionSkippedBuyerIds] = useState<string[]>([]);
   const callCountdownTimer = useRef<number | null>(null);
   const buyerIdRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
@@ -159,11 +182,16 @@ export function DispositionExecutionWorkspace({
     idempotency("dispo-outcome"),
   );
 
-  const applyWorkspace = useCallback((result: DispositionExecutionWorkspace) => {
+  const applyWorkspace = useCallback((
+    result: DispositionExecutionWorkspace,
+    { advance = false }: { advance?: boolean } = {},
+  ) => {
     const candidates = executionCandidates(result);
-    const nextCandidate = candidates.find(
-      (candidate) => candidate.buyer_id === buyerIdRef.current && candidate.actionable,
-    )
+    const nextCandidate = (!advance
+      ? candidates.find(
+        (candidate) => candidate.buyer_id === buyerIdRef.current && candidate.actionable,
+      )
+      : null)
       ?? (result.current_candidate?.actionable ? result.current_candidate : null)
       ?? candidates.find((candidate) => candidate.actionable)
       ?? null;
@@ -176,6 +204,8 @@ export function DispositionExecutionWorkspace({
       setCountdownBuyerId(null);
       setNotes("");
       setCallbackAt("");
+      setSelectedOutcome(null);
+      setSavedOutcome(null);
       setSmsDraft(nextCandidate?.sms_draft ?? "");
       if (callCountdownTimer.current !== null) {
         window.clearInterval(callCountdownTimer.current);
@@ -201,6 +231,8 @@ export function DispositionExecutionWorkspace({
     setCountdownBuyerId(null);
     setNotes("");
     setCallbackAt("");
+    setSelectedOutcome(null);
+    setSavedOutcome(null);
     setSmsDraft(nextCandidate.sms_draft);
     onMessage(`Working ${nextCandidate.name}. Buyer Network context remains visible.`);
   }
@@ -449,7 +481,7 @@ export function DispositionExecutionWorkspace({
     }
   }
 
-  async function recordOutcome(outcome: Outcome) {
+  async function recordOutcome(outcome: Outcome, advance: "next" | "stay") {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals) return;
     if (outcome === "callback" && !callbackAt) {
@@ -471,11 +503,57 @@ export function DispositionExecutionWorkspace({
           }),
         },
       ),
-      `${labelize(outcome)} recorded. The queue moved to the next available buyer.`,
+      advance === "next"
+        ? `${labelize(outcome)} saved for ${candidate.name}. Moving to the next available investor.`
+        : `${labelize(outcome)} saved for ${candidate.name}. Staying on this investor until you choose what is next.`,
     );
     if (result) {
-      applyWorkspace(result);
+      if (advance === "next") {
+        applyWorkspace(result, { advance: true });
+      } else {
+        setWorkspace(result);
+        setSavedOutcome({ buyerId: candidate.buyer_id, label: labelize(outcome) });
+      }
     }
+  }
+
+  function continueToNextBuyer() {
+    if (!workspace || !savedOutcome) return;
+    applyWorkspace(workspace, { advance: true });
+  }
+
+  function skipCurrentBuyer() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (!candidate || !workspace) return;
+    const skippedBuyerIds = new Set([...sessionSkippedBuyerIds, candidate.buyer_id]);
+    const nextCandidate = nextActionableCandidate(
+      executionCandidates(workspace),
+      candidate.buyer_id,
+      skippedBuyerIds,
+    );
+    setSessionSkippedBuyerIds([...skippedBuyerIds]);
+    if (!nextCandidate) {
+      onMessage("No other unskipped investor is available in this browser session. You can choose anyone directly from the queue.");
+      return;
+    }
+    chooseCandidate(nextCandidate.buyer_id);
+    onMessage(`${candidate.name} was skipped for this browser session. No buyer record or outcome was changed.`);
+  }
+
+  function pauseSession() {
+    if (callCountdownTimer.current !== null) {
+      window.clearInterval(callCountdownTimer.current);
+      callCountdownTimer.current = null;
+    }
+    setCallCountdown(null);
+    setCountdownBuyerId(null);
+    setSessionPaused(true);
+    onMessage("Outreach is paused in this open browser session. No message, call, or buyer outcome was changed.");
+  }
+
+  function resumeSession() {
+    setSessionPaused(false);
+    onMessage("Outreach resumed at the same investor in this open browser session.");
   }
 
   async function createShowing(event: FormEvent<HTMLFormElement>) {
@@ -569,210 +647,206 @@ export function DispositionExecutionWorkspace({
 
   const candidates = executionCandidates(workspace);
   const candidate = selectedCandidate(workspace, selectedBuyerId);
-  const roleOrBusyDisabled = busy !== null || !canEditDeals || !candidate?.actionable;
+  const outcomeSavedForCurrent = Boolean(
+    candidate && savedOutcome?.buyerId === candidate.buyer_id,
+  );
+  const roleOrBusyDisabled = busy !== null
+    || !canEditDeals
+    || !candidate?.actionable
+    || sessionPaused
+    || outcomeSavedForCurrent;
   const smsUnavailable = roleOrBusyDisabled || !candidate?.sms.allowed;
   const voiceUnavailable = roleOrBusyDisabled || !candidate?.voice.allowed || webPhone.busy || browserCallActive;
   const packetUnavailable = smsUnavailable || !workspace.package_pdf_path;
   const packageIsPreliminary = workspace.package_is_preliminary
     ?? workspace.package_status !== "approved";
   const packageLabel = packageIsPreliminary ? "preliminary" : "approved";
+  const queuePosition = candidate
+    ? candidates.findIndex((item) => item.buyer_id === candidate.buyer_id) + 1
+    : 0;
+  const contactedStages = new Set([
+    "contacted", "interested", "showing", "offer", "selected", "backup", "pass", "fallout",
+  ]);
+  const interestedStages = new Set(["interested", "showing", "offer", "selected", "backup"]);
+  const contactedCount = candidates.filter((item) => contactedStages.has(item.lifecycle_stage)).length;
+  const interestedCount = candidates.filter((item) => interestedStages.has(item.lifecycle_stage)).length;
+  const skippedBuyerIds = new Set(sessionSkippedBuyerIds);
+  const nextCandidate = candidate
+    ? nextActionableCandidate(candidates, candidate.buyer_id, skippedBuyerIds)
+    : null;
+  const outcomeNeedsCallback = selectedOutcome === "callback" && !callbackAt;
 
   return (
     <section aria-label="Disposition call queue" className={styles.workspace} id="call-queue" tabIndex={-1}>
       <header className={styles.hero}>
         <div>
-          <span>One-to-one buyer execution</span>
-          <h3>Disposition call queue</h3>
-          <p>{workspace.property_address}</p>
+          <span>One-to-one investor outreach</span>
+          <h3>Outreach session</h3>
+          <p>SMS, call, record the result, then decide whether to stay, advance, skip, or pause.</p>
         </div>
         <div className={styles.heroActions}>
-          <strong>{workspace.remaining_candidate_count}</strong>
-          <span>buyers available</span>
-          <button aria-label="Refresh disposition call queue" disabled={busy !== null || loading} onClick={() => void load()} type="button"><RefreshCw size={15} />Refresh</button>
+          <div><strong>{queuePosition || "–"}</strong><span>of {candidates.length || 0}</span><small>queue position</small></div>
+          {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
+          <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void load()} type="button"><RefreshCw size={15} />Refresh</button>
+          {sessionPaused
+            ? <button onClick={resumeSession} type="button"><Play size={15} />Resume session</button>
+            : <button className={styles.secondary} disabled={busy !== null} onClick={pauseSession} type="button"><Pause size={15} />Pause session</button>}
         </div>
       </header>
 
-      {candidates.length ? (
-        <section aria-labelledby="buyer-network-heading" className={styles.buyerSelector}>
-          <div className={styles.selectorIntroduction}>
-            <span>Buyer Network</span>
-            <h4 id="buyer-network-heading">Work the buyer who makes sense now</h4>
-            <p>Ranked fit is guidance, not a queue gate. Unranked network buyers remain available for deliberate one-to-one work.</p>
-          </div>
-          <label className={styles.selectorControl}>
-            <span>Active buyer</span>
-            <select
-              aria-label="Choose a buyer from Buyer Network"
-              disabled={busy !== null}
-              onChange={(event) => chooseCandidate(event.target.value)}
-              value={candidate?.buyer_id ?? ""}
-            >
-              {!candidate ? <option disabled value="">Select a buyer</option> : null}
-              {candidates.map((item) => (
-                <option key={item.buyer_id} value={item.buyer_id}>
-                  {hasRankedFit(item)
-                    ? `${candidateRankLabel(item)} ${item.name} - ${candidateFitLabel(item)} fit`
-                    : `${item.name} - Buyer Network / Unranked`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ol className={styles.rankedPool}>
-            {candidates.map((item) => {
-              const selected = item.buyer_id === candidate?.buyer_id;
-              return (
-                <li key={item.buyer_id}>
-                  <button
-                    aria-current={selected ? "true" : undefined}
-                    className={styles.rankedBuyer}
-                    data-actionable={item.actionable}
-                    data-selected={selected}
-                    disabled={busy !== null}
-                    onClick={() => chooseCandidate(item.buyer_id)}
-                    type="button"
-                  >
-                    <span className={styles.rankedBuyerRank} data-ranked={hasRankedFit(item)}>{candidateRankLabel(item)}</span>
-                    <span className={styles.rankedBuyerIdentity}>
-                      <strong>{item.name}</strong>
-                      <small>{item.company_name ?? "Independent investor"}</small>
-                    </span>
-                    <span className={styles.rankedBuyerChannels}>
-                      <small data-allowed={item.actionable}>{candidateAvailabilityLabel(item)}</small>
-                      <small data-allowed={item.actionable && item.sms.allowed}>SMS {item.actionable && item.sms.allowed ? "ready" : "unavailable"}</small>
-                      <small data-allowed={item.actionable && item.voice.allowed}>Call {item.actionable && item.voice.allowed ? "ready" : "unavailable"}</small>
-                    </span>
-                    <strong className={styles.rankedBuyerScore} data-ranked={hasRankedFit(item)}>{candidateFitLabel(item)}</strong>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      ) : null}
+      {sessionPaused ? <div className={styles.pausedBanner} role="status"><Pause size={18} /><div><strong>Session paused at {candidate?.name ?? "the current queue position"}</strong><span>This pause lasts while this screen stays open. Durable resume across visits is Phase 3.</span></div><button onClick={resumeSession} type="button"><Play size={15} />Resume</button></div> : null}
 
       {workspace.blockers.length ? (
-        <div className={styles.blockers} role="status">
-          <ShieldAlert size={19} />
-          <div><strong>Advisory checklist</strong>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<span>These items do not prevent logging work. Contact controls still follow the buyer&apos;s live channel permissions.</span></div>
-        </div>
+        <details className={styles.advisoryDetails}>
+          <summary><ShieldAlert size={16} />Advisory deal checklist <strong>{workspace.blockers.length}</strong></summary>
+          <div>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<small>These items do not prevent work. Contact controls still follow each investor&apos;s live channel permissions.</small></div>
+        </details>
       ) : null}
 
       {candidate ? (
-        <div className={styles.executionGrid}>
-          <section className={styles.panel}>
-            <div className={styles.candidateHeader}>
-              <div className={styles.rank} data-ranked={hasRankedFit(candidate)}>{candidateRankLabel(candidate)}</div>
-              <div><span>Current buyer</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
-              <div className={styles.score} data-ranked={hasRankedFit(candidate)}><strong>{candidateFitLabel(candidate)}</strong><span>{hasRankedFit(candidate) ? "fit score" : "Unranked"}</span></div>
-            </div>
-            {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{candidateAvailabilityLabel(candidate)}</strong><span>{candidate.action_blockers.join(" ") || "This buyer is not currently actionable."}</span></div> : null}
-            <dl className={styles.profile}>
-              <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
-              <div><dt>Email</dt><dd>{candidate.email ?? "Not recorded"}</dd></div>
-              <div><dt>Relationship</dt><dd>{labelize(candidate.relationship_status ?? "unknown")}</dd></div>
-              <div><dt>Nearby purchase</dt><dd>{candidate.recent_purchase_reference ?? "No address-level reference saved"}</dd></div>
+        <div className={styles.outreachLayout}>
+          <div className={styles.currentInvestor}>
+            <section className={`${styles.panel} ${styles.investorOverview}`}>
+              <div className={styles.candidateHeader}>
+                <div className={styles.rank} data-ranked={hasRankedFit(candidate)}>{candidateRankLabel(candidate)}</div>
+                <div><span>Current investor</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
+                <div className={styles.score} data-ranked={hasRankedFit(candidate)}><strong>{candidateFitLabel(candidate)}</strong><span>{hasRankedFit(candidate) ? "fit score" : "Unranked"}</span></div>
+              </div>
+              {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
+              <dl className={styles.profile}>
+                <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
+                <div><dt>Email</dt><dd>{candidate.email ?? "Not recorded"}</dd></div>
+                <div><dt>Relationship</dt><dd>{labelize(candidate.relationship_status ?? "unknown")}</dd></div>
+                <div><dt>Nearby purchase</dt><dd>{candidate.recent_purchase_reference ?? "No address-level reference saved"}</dd></div>
+              </dl>
+              <details className={styles.fitEvidence}>
+                <summary>{hasRankedFit(candidate) ? "Why this investor ranks here" : "Buyer Network / Unranked"}</summary>
+                <div className={styles.evidence}>{hasRankedFit(candidate)
+                  ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
+                  : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}</div>
+              </details>
+              <div className={styles.investorUtilities}>
+                <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open relationship profile <ArrowRight size={14} /></Link>
+                {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
+              </div>
+            </section>
+
+            <section className={`${styles.panel} ${styles.cadencePanel}`}>
+              <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Investor cadence</span><h4>Text, call, then follow up</h4></div></div>
+              <ol className={styles.cadenceSteps}>
+                <li data-ready={candidate.actionable && candidate.sms.allowed}><span>1</span><div><strong>SMS</strong><small>{candidate.sms.allowed ? "Ready to review" : "Unavailable"}</small></div></li>
+                <li data-ready={candidate.actionable && candidate.voice.allowed}><span>2</span><div><strong>Call</strong><small>{candidate.voice.allowed ? "Browser or cellphone" : "Unavailable"}</small></div></li>
+                <li data-ready={Boolean(candidate.email)}><span>3</span><div><strong>Email</strong><small>{candidate.email ? "Address ready; composer arrives in Phase 4" : "No email recorded"}</small></div></li>
+              </ol>
+
+              <div className={styles.channelSection}>
+                <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Step 1</span><h4>Review the introduction SMS</h4></div></div>
+                <p className={styles.help}>Nothing sends automatically. Personalize the draft and confirm the final message.</p>
+                <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
+
+                {!smsComposerOpen ? (
+                  <button disabled={smsUnavailable} onClick={() => setSmsComposerOpen(true)} type="button"><MessageSquareText size={16} />Review introduction SMS</button>
+                ) : (
+                  <div className={styles.smsComposer}>
+                    <div className={styles.messageContext}>
+                      <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
+                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked investor ${candidateRankLabel(candidate)}` : "Buyer Network / Unranked"}</small></div>
+                    </div>
+                    <label><span>Editable message</span><textarea aria-label="Introduction SMS draft" onChange={(event) => setSmsDraft(event.target.value)} rows={5} value={smsDraft} /></label>
+                    <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
+                    <div className={styles.composerActions}>
+                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => setSmsComposerOpen(false)} type="button">Cancel</button>
+                      <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send SMS and prepare call"}</button>
+                    </div>
+                  </div>
+                )}
+
+                {callCountdown !== null && countdownBuyerId === candidate.buyer_id ? (
+                  <div aria-live="polite" className={styles.callCountdown} role="status">
+                    <div className={styles.countdownNumber}>{callCountdown}</div>
+                    <div><strong>Introduction accepted</strong><span>Calling {candidate.name} in {callCountdown} second{callCountdown === 1 ? "" : "s"}.</span></div>
+                    <div className={styles.countdownActions}><button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button">Call now</button><button className={styles.secondary} disabled={busy !== null} onClick={cancelPreparedCall} type="button">Cancel</button></div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className={styles.channelSection}>
+                <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
+                <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
+                <div className={styles.callActions}>
+                  <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={16} />{busy === "browser-call" || webPhone.busy ? "Starting browser call…" : browserCallActive ? "Browser call in progress" : `Call ${candidate.name} in browser`}</button>
+                  <button className={styles.secondary} disabled={voiceUnavailable} onClick={() => void startCellphoneCall()} type="button"><PhoneCall size={16} />{busy === "cellphone-call" ? "Calling your cellphone…" : "Use my cellphone"}</button>
+                </div>
+              </div>
+
+              <div className={styles.channelSection}>
+                <div className={styles.sectionTitle}><Mail size={17} /><div><span>Step 3</span><h4>Email follow-up</h4></div></div>
+                <p className={styles.help}>{candidate.email ? `${candidate.email} is ready. Phase 4 adds the editable one-to-one email draft and send control here.` : "Add an email to the relationship profile before using the Phase 4 email composer."}</p>
+                <div className={styles.packetActions}><button disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={16} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet now`}</button></div>
+              </div>
+            </section>
+
+            <section className={`${styles.panel} ${styles.outcomePanel}`}>
+              <div className={styles.sectionTitle}><SkipForward size={18} /><div><span>Record result</span><h4>Choose the outcome, then choose what happens next</h4></div></div>
+              <div className={styles.outcomeInputs}>
+                <label><span>Call notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onChange={(event) => setNotes(event.target.value)} placeholder="Interest, buy box, objections, requested next step…" rows={3} value={notes} /></label>
+                <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onChange={(event) => setCallbackAt(event.target.value)} type="datetime-local" value={callbackAt} /><small>Required for Callback. No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></label>
+              </div>
+              <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => setSelectedOutcome(outcome.value)} type="button">{outcome.label}</button>)}</div>
+              {outcomeSavedForCurrent ? (
+                <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. Continue when you are ready.</span></div><button onClick={continueToNextBuyer} type="button">Next investor <ArrowRight size={15} /></button></div>
+              ) : (
+                <div className={styles.outcomeActions}>
+                  <button className={styles.secondary} disabled={roleOrBusyDisabled || !callbackAt} onClick={() => { setSelectedOutcome("callback"); void recordOutcome("callback", "stay"); }} type="button"><CalendarClock size={15} />Schedule follow-up</button>
+                  <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={skipCurrentBuyer} type="button"><SkipForward size={15} />Skip for now</button>
+                  <span />
+                  <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
+                  <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
+                </div>
+              )}
+            </section>
+
+            <details className={styles.secondaryTools}>
+              <summary><CalendarClock size={16} /><span><strong>Showing and access tools</strong><small>Schedule access when this investor requests it.</small></span></summary>
+              <form className={styles.showingForm} onSubmit={createShowing}>
+                <label><span>Date and time</span><input name="scheduled_at" required type="datetime-local" /></label>
+                <label><span>Access state</span><select defaultValue="pending" name="access_status"><option value="pending">Access pending</option><option value="confirmed">Access confirmed</option><option value="shared_privately">Shared privately</option><option value="not_required">No access needed</option><option value="not_requested">Not requested</option></select></label>
+                <label className={styles.wide}><span>Internal notes</span><input name="showing_notes" placeholder="Do not enter lockbox or alarm codes here." /></label>
+                <button disabled={roleOrBusyDisabled} type="submit"><CalendarClock size={16} />Schedule showing</button>
+              </form>
+            </details>
+          </div>
+
+          <aside aria-labelledby="investor-queue-heading" className={styles.queuePanel}>
+            <header><div><span>Investor queue</span><h4 id="investor-queue-heading">Who is next</h4></div><strong>{workspace.remaining_candidate_count} available</strong></header>
+            <dl className={styles.queueMetrics}>
+              <div><dt>Position</dt><dd>{queuePosition || "–"}/{candidates.length}</dd></div>
+              <div><dt>Contacted</dt><dd>{contactedCount}</dd></div>
+              <div><dt>Interested</dt><dd>{interestedCount}</dd></div>
+              <div><dt>Skipped</dt><dd>{sessionSkippedBuyerIds.length}</dd></div>
             </dl>
-            <div className={styles.evidence}>
-              <strong>{hasRankedFit(candidate) ? "Why this buyer ranks here" : "Buyer Network / Unranked"}</strong>
-              {hasRankedFit(candidate)
-                ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
-                : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}
-            </div>
-            {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
-            {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} investor packet</button> : null}
-          </section>
-
-          <section className={styles.panel}>
-            <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Step 1</span><h4>Review the introduction text</h4></div></div>
-            <p className={styles.help}>Nothing sends automatically. Open the draft, personalize it, then confirm the final message.</p>
-            <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
-
-            {!smsComposerOpen ? (
-              <button
-                disabled={smsUnavailable}
-                onClick={() => setSmsComposerOpen(true)}
-                type="button"
-              >
-                <MessageSquareText size={16} />Review introduction text
-              </button>
-            ) : (
-              <div className={styles.smsComposer}>
-                <div className={styles.messageContext}>
-                  <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
-                  <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked buyer ${candidateRankLabel(candidate)}` : "Buyer Network / Unranked"}</small></div>
-                </div>
-                <label>
-                  <span>Editable message</span>
-                  <textarea aria-label="Introduction SMS draft" onChange={(event) => setSmsDraft(event.target.value)} rows={6} value={smsDraft} />
-                </label>
-                <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
-                <div className={styles.composerActions}>
-                  <button
-                    className={styles.secondary}
-                    disabled={busy === "sms"}
-                    onClick={() => setSmsComposerOpen(false)}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                  <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button">
-                    <MessageSquareText size={16} />
-                    {busy === "sms" ? "Sending…" : "Send text and prepare call"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {callCountdown !== null && countdownBuyerId === candidate.buyer_id ? (
-              <div aria-live="polite" className={styles.callCountdown} role="status">
-                <div className={styles.countdownNumber}>{callCountdown}</div>
-                <div>
-                  <strong>Introduction accepted</strong>
-                  <span>Calling {candidate.name} in {callCountdown} second{callCountdown === 1 ? "" : "s"}.</span>
-                </div>
-                <div className={styles.countdownActions}>
-                  <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button">Call now</button>
-                  <button className={styles.secondary} disabled={busy !== null} onClick={cancelPreparedCall} type="button">Cancel</button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className={styles.divider} />
-            <div className={styles.sectionTitle}><Headphones size={18} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
-            <p className={styles.help}>Browser calling is preferred for this deliberate one-at-a-time queue. Your cellphone remains available as a fallback.</p>
-            <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
-            <div className={styles.callActions}>
-              <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={16} />{busy === "browser-call" || webPhone.busy ? "Starting browser call…" : browserCallActive ? "Browser call in progress" : `Call ${candidate.name} in browser`}</button>
-              <button className={styles.secondary} disabled={voiceUnavailable} onClick={() => void startCellphoneCall()} type="button"><PhoneCall size={16} />{busy === "cellphone-call" ? "Calling your cellphone…" : "Call through my cellphone"}</button>
-            </div>
-            <div className={styles.divider} />
-            <div className={styles.sectionTitle}><Download size={18} /><div><span>While connected</span><h4>Send the available investor packet</h4></div></div>
-            <p className={styles.help}>Creates a revocable link to the exact buyer-safe PDF and texts it only to this buyer. An incomplete version is labeled Preliminary.</p>
-            <button disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={16} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet`}</button>
-          </section>
-
-          <section className={`${styles.panel} ${styles.fullWidth}`}>
-            <div className={styles.sectionTitle}><SkipForward size={18} /><div><span>Step 3</span><h4>Record the result and move to the next buyer</h4></div></div>
-            <div className={styles.outcomeInputs}>
-              <label><span>Call notes</span><textarea onChange={(event) => setNotes(event.target.value)} placeholder="Interest, buy box, objections, requested next step…" rows={3} value={notes} /></label>
-              <label><span>Callback time</span><input onChange={(event) => setCallbackAt(event.target.value)} type="datetime-local" value={callbackAt} /><small>Required only for Callback. No-answer gets a 4-hour retry task; voicemail gets a 24-hour task.</small></label>
-            </div>
-            <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => void recordOutcome(outcome.value)} type="button">{outcome.label}</button>)}</div>
-          </section>
-
-          <section className={`${styles.panel} ${styles.fullWidth}`}>
-            <div className={styles.sectionTitle}><CalendarClock size={18} /><div><span>Showing control</span><h4>Schedule access without placing codes in outreach</h4></div></div>
-            <form className={styles.showingForm} onSubmit={createShowing}>
-              <label><span>Date and time</span><input name="scheduled_at" required type="datetime-local" /></label>
-              <label><span>Access state</span><select defaultValue="pending" name="access_status"><option value="pending">Access pending</option><option value="confirmed">Access confirmed</option><option value="shared_privately">Shared privately</option><option value="not_required">No access needed</option><option value="not_requested">Not requested</option></select></label>
-              <label className={styles.wide}><span>Internal notes</span><input name="showing_notes" placeholder="Do not enter lockbox or alarm codes here." /></label>
-              <button disabled={roleOrBusyDisabled} type="submit"><CalendarClock size={16} />Schedule showing</button>
-            </form>
-          </section>
+            <p className={styles.queueGuidance}>Ranking is guidance. Choose any investor; unavailable channel controls remain enforced individually.</p>
+            <ol className={styles.rankedPool}>
+              {candidates.map((item) => {
+                const selected = item.buyer_id === candidate.buyer_id;
+                const skipped = skippedBuyerIds.has(item.buyer_id);
+                return (
+                  <li key={item.buyer_id}>
+                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => chooseCandidate(item.buyer_id)} type="button">
+                      <span className={styles.rankedBuyerRank} data-ranked={hasRankedFit(item)}>{candidateRankLabel(item)}</span>
+                      <span className={styles.rankedBuyerIdentity}><strong>{item.name}</strong><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
+                      <strong className={styles.rankedBuyerScore} data-ranked={hasRankedFit(item)}>{candidateFitLabel(item)}</strong>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            <footer><span>Next up</span><strong>{nextCandidate?.name ?? "Choose anyone in the queue"}</strong></footer>
+          </aside>
         </div>
       ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No buyer is available for one-to-one work</strong><span>Review the visible Buyer Network records and their contact controls, or add another canonical buyer.</span></div></section>}
 
-      {workspace.showings.length ? <section className={styles.panel}><div className={styles.sectionTitle}><CalendarClock size={18} /><div><span>Structured showing state</span><h4>Buyer access and follow-up</h4></div></div><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></section> : null}
+      {workspace.showings.length ? <details className={styles.secondaryTools}><summary><CalendarClock size={16} /><span><strong>Scheduled showings</strong><small>{workspace.showings.length} access appointment{workspace.showings.length === 1 ? "" : "s"}</small></span></summary><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></details> : null}
     </section>
   );
 }

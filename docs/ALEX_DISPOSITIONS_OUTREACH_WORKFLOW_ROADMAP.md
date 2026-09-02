@@ -103,6 +103,12 @@ or update readiness and packet details without any gate.
 
 ## Phase 2 — Redesign The One-To-One Outreach Desk
 
+**Repository status:** Implemented September 1, 2026. The desk now keeps the current investor,
+editable channel cadence, result controls, and compact queue in one responsive workbench. Result
+selection and queue movement are separate operator decisions. Skip and pause are intentionally
+limited to the open browser session until Phase 3 adds durable exact-resume state; the one-to-one
+email composer remains Phase 4. Operator acceptance with a live deal remains outstanding.
+
 Goal: turn the existing dialer into a focused workbench with three stable areas.
 
 1. **Deal strip** — property, asking price, packet link/status, key disclosures, and quick access to

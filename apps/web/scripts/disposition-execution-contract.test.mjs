@@ -22,12 +22,12 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(parent, /tab === "execution"\) return "Outreach desk"/);
   assert.match(workspace, /execution\/sms/);
   assert.match(workspace, /!candidate\.sms\.allowed/);
-  assert.match(workspace, /Review introduction text/);
+  assert.match(workspace, /Review the introduction SMS/);
   assert.match(workspace, /Nothing sends automatically/);
   assert.match(workspace, /aria-label="Introduction SMS draft"/);
   assert.match(workspace, /Recipient/);
   assert.match(workspace, /workspace\.property_address/);
-  assert.match(workspace, /Send text and prepare call/);
+  assert.match(workspace, /Send SMS and prepare call/);
   assert.match(workspace, /execution\/calls/);
   assert.match(workspace, /!candidate\.voice\.allowed/);
   assert.match(workspace, /useWebPhone/);
@@ -42,10 +42,10 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
     workspace,
     /async function startCellphoneCall\(\)[\s\S]*window\.clearInterval\(callCountdownTimer\.current\)/,
   );
-  assert.match(workspace, /Call through my cellphone/);
+  assert.match(workspace, /Use my cellphone/);
   assert.match(workspace, /execution\/forwarded-calls/);
   assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
-  assert.match(workspace, /Open \{packageLabel\} investor packet/);
+  assert.match(workspace, /Open \{packageLabel\} packet/);
   assert.match(workspace, /Text \$\{packageLabel\} packet/);
   assert.match(workspace, /workspace\.package_is_preliminary/);
   assert.match(workspace, /workspace\.package_status !== "approved"/);
@@ -59,7 +59,7 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /setOutcomeIdempotencyKey\(idempotency\("dispo-outcome"\)\)/);
   assert.match(workspace, /idempotency_key: `dispo-showing-/);
   assert.match(workspace, /outcome === "callback"/);
-  assert.match(workspace, /No-answer gets a 4-hour retry task/);
+  assert.match(workspace, /No answer creates a 4-hour retry/);
   assert.doesNotMatch(workspace, /setTimeout\([^)]*sendSms/);
   assert.doesNotMatch(workspace, /here is the \$\{packageLabel\} property package/);
 });
@@ -75,21 +75,47 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(api, /rank: number \| null/);
   assert.match(api, /score_basis_points: number \| null/);
   assert.match(workspace, /workspace\.candidates\.length/);
-  assert.match(workspace, />Buyer Network</);
-  assert.match(workspace, /Choose a buyer from Buyer Network/);
+  assert.match(workspace, /canonical Buyer Network record/);
+  assert.match(workspace, /Investor queue/);
+  assert.match(workspace, /Who is next/);
   assert.match(workspace, /candidates\.map\(\(item\) =>/);
   assert.match(workspace, /key=\{item\.buyer_id\}/);
   assert.match(workspace, /chooseCandidate\(item\.buyer_id\)/);
-  assert.match(workspace, /value=\{candidate\?\.buyer_id \?\? ""\}/);
-  assert.match(workspace, /Ranked fit is guidance, not a queue gate/);
+  assert.match(workspace, /Ranking is guidance\. Choose any investor/);
   assert.match(workspace, /Buyer Network \/ Unranked/);
   assert.match(workspace, /hasRankedFit\(candidate\)/);
   assert.match(workspace, /No rank or fit score is implied/);
   assert.doesNotMatch(workspace, /Math\.round\(item\.score_basis_points \/ 100\)/);
-  assert.match(workspace, /item\.sms\.allowed/);
-  assert.match(workspace, /item\.voice\.allowed/);
+  assert.match(workspace, /candidate\.sms\.allowed/);
+  assert.match(workspace, /candidate\.voice\.allowed/);
   assert.match(workspace, /disabled=\{roleOrBusyDisabled\}/);
   assert.doesNotMatch(workspace, /packageApproved|qualifiedBuyerCount/);
+});
+
+test("the outreach session keeps result recording operator-led", async () => {
+  const workspace = await readFile(workspacePath, "utf8");
+
+  assert.match(workspace, /Outreach session/);
+  assert.match(workspace, /styles\.currentInvestor/);
+  assert.match(workspace, /styles\.queuePanel/);
+  assert.match(workspace, /Current investor/);
+  assert.match(workspace, /<dt>Position<\/dt>/);
+  assert.match(workspace, /workspace\.remaining_candidate_count/);
+  assert.match(workspace, /Open relationship profile/);
+  assert.match(workspace, /Address ready; composer arrives in Phase 4/);
+  assert.match(workspace, /async function recordOutcome\(outcome: Outcome, advance: "next" \| "stay"\)/);
+  assert.match(workspace, /onClick=\{\(\) => setSelectedOutcome\(outcome\.value\)\}/);
+  assert.match(workspace, /Save & stay/);
+  assert.match(workspace, /Save & next/);
+  assert.match(workspace, /Schedule follow-up/);
+  assert.match(workspace, /Skip for now/);
+  assert.match(workspace, /Pause session/);
+  assert.match(workspace, /advance === "next"[\s\S]*applyWorkspace\(result, \{ advance: true \}\)/);
+  assert.match(workspace, /function continueToNextBuyer\(\)[\s\S]*applyWorkspace\(workspace, \{ advance: true \}\)/);
+  assert.match(workspace, /setWorkspace\(result\);[\s\S]*setSavedOutcome/);
+  assert.match(workspace, /No buyer record or outcome was changed/);
+  assert.match(workspace, /This pause lasts while this screen stays open/);
+  assert.doesNotMatch(workspace, /onClick=\{\(\) => void recordOutcome\(outcome\.value\)\}/);
 });
 
 test("one-to-one actions use a stable buyer reference and passed buyers remain recoverable", async () => {
