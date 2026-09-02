@@ -89,6 +89,9 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /Text \$\{packageLabel\} packet/);
   assert.match(workspace, /className=\{styles\.packetQuickBar\}/);
   assert.match(workspace, /Investor asks for the packet\?/);
+  assert.match(workspace, /async function copyPacketLink\(\)/);
+  assert.match(workspace, /navigator\.clipboard\.writeText\(issued\.share_url\)/);
+  assert.match(workspace, /Copy link/);
   assert.match(workspace, /Send by text/);
   assert.match(workspace, /Send by email/);
   assert.match(workspace, /async function emailInvestorPacket\(\)/);

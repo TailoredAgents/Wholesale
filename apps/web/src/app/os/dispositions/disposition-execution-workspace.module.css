@@ -236,7 +236,7 @@
   .conversationHeader { grid-template-columns: minmax(140px, .8fr) minmax(0, 1.2fr); }
   .conversationStatus { grid-column: 1 / -1; grid-row: 2; display: flex; justify-content: flex-end; }
   .packetQuickBar { align-items: stretch; flex-direction: column; }
-  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .outcomeInputs, .showingForm { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }
@@ -257,7 +257,7 @@
   .conversationHeader { grid-template-columns: minmax(140px, .8fr) minmax(0, 1.2fr); }
   .conversationStatus { grid-column: 1 / -1; grid-row: 2; display: flex; justify-content: flex-end; }
   .packetQuickBar { align-items: stretch; flex-direction: column; }
-  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .outcomeInputs, .showingForm { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }

@@ -10,6 +10,7 @@ import {
   EllipsisVertical,
   GripVertical,
   Headphones,
+  Link2,
   Mail,
   MessageSquareText,
   PhoneCall,
@@ -818,6 +819,28 @@ export function DispositionExecutionWorkspace({
     }
   }
 
+  async function copyPacketLink() {
+    if (!workspace?.package_pdf_path || !canEditDeals) return;
+    const issued = await action(
+      "packet-link",
+      () => request<DispositionPackageShareLinkIssued>(
+        `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+        {
+          method: "POST",
+          body: JSON.stringify({ expires_in_hours: 72 }),
+        },
+      ),
+      "A secure 72-hour investor packet link was created.",
+    );
+    if (!issued) return;
+    try {
+      await navigator.clipboard.writeText(issued.share_url);
+      onMessage(`${issued.is_preliminary ? "Preliminary" : "Approved"} investor packet link copied. It expires in 72 hours.`);
+    } catch {
+      onMessage("The secure packet link was created, but your browser blocked clipboard access. Open Deal & Packet to copy a new link.");
+    }
+  }
+
   async function emailInvestorPacket() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (
@@ -1169,6 +1192,7 @@ export function DispositionExecutionWorkspace({
                 <div><Download size={16} /><span><strong>Investor asks for the packet?</strong><small>Send the current {packageLabel} PDF without leaving the call or conversation.</small></span></div>
                 <div>
                   {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open packet</button> : null}
+                  <button className={styles.secondary} disabled={!canEditDeals || !workspace.package_pdf_path || busy !== null} onClick={() => void copyPacketLink()} type="button"><Link2 size={14} />{busy === "packet-link" ? "Copying…" : "Copy link"}</button>
                   <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={14} />{busy === "packet-sms" ? "Sending…" : "Send by text"}</button>
                   <button className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} type="button"><Mail size={14} />{busy === "packet-email" ? "Sending…" : "Send by email"}</button>
                 </div>
