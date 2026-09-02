@@ -19,7 +19,7 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   ]);
 
   assert.match(parent, /DispositionExecutionWorkspace/);
-  assert.match(parent, /tab === "execution"\) return "One-to-one"/);
+  assert.match(parent, /tab === "execution"\) return "Outreach desk"/);
   assert.match(workspace, /execution\/sms/);
   assert.match(workspace, /!candidate\.sms\.allowed/);
   assert.match(workspace, /Review introduction text/);

@@ -145,20 +145,10 @@ export function DispositionReadinessPanel({
           <span className={styles.compactProgress} aria-label={`${progress}% complete`}><i style={{ width: `${progress}%` }} /></span>
         </summary>
         <div className={styles.compactBody}>
-          <p className={styles.compactGuidance}>Advisory only—this checklist never locks the packet, buyer search, dialer, or outreach tools.</p>
+          <p className={styles.compactGuidance}>Reference only—unfinished items never lock the packet, investor search, outreach queue, or another authorized task.</p>
           {error ? <p className={styles.refreshWarning} role="status"><AlertTriangle aria-hidden="true" size={14} />{error} Showing the last checklist for this deal.<button onClick={onRetry} type="button">Retry</button></p> : null}
-          <div className={styles.actionSummary}>
-            <div className={styles.bestAction}>
-              <span>Suggested action (optional)</span>
-              {bestAction ? <><strong>{bestAction.label}</strong><p>{bestAction.detail}</p><ActionStatus action={bestAction} /><button onClick={() => onNavigate(actionTarget(bestAction))} type="button">Open action<ArrowRight aria-hidden="true" size={14} /></button></> : <><strong>Choose the work that moves this deal</strong><p>Every applicable workspace remains available.</p></>}
-            </div>
-            <div className={styles.parallelActions}>
-              <span>Also available now</span>
-              {parallelActions.length ? parallelActions.map((action) => <button key={action.key} onClick={() => onNavigate(actionTarget(action))} type="button"><span><strong>{action.label}</strong><small>{action.detail}</small></span><ArrowRight aria-hidden="true" size={14} /></button>) : <p>Open any workspace below to continue.</p>}
-            </div>
-          </div>
           <details className={styles.checklist}>
-            <summary><span>All action-specific checks</span><strong>{readiness.warning_count} attention · {readiness.completed_count} complete</strong></summary>
+            <summary><span>Readiness details</span><strong>{readiness.warning_count} attention · {readiness.completed_count} complete</strong></summary>
             <div>
               {applicableActions.map((action) => {
                 const checks = action.checks.filter((check) => check.status !== "not_applicable");

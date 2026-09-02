@@ -252,7 +252,16 @@
 .tabBadge[data-tone="warning"] { background: #fff1c9; color: #795400; }
 .tabBadge[data-tone="hard"] { background: var(--danger-soft); color: var(--danger); }
 .workspaceNavigation { position: sticky; z-index: 12; top: 0; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 8px 20px rgb(20 41 46 / .07); backdrop-filter: blur(12px); }
-.workspacePrimaryNav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workspaceDealStrip { min-height: 50px; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+.workspaceDealStrip > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
+.workspaceDealStrip > div span { color: var(--brand-strong); font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.workspaceDealStrip > div strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.workspaceDealStrip > div small { grid-column: 2; color: var(--muted); font-size: 8px; }
+.workspaceDealStrip dl { margin: 0; display: flex; align-items: center; }
+.workspaceDealStrip dl > div { min-width: 88px; padding: 0 10px; display: grid; gap: 2px; border-left: 1px solid var(--line-soft); }
+.workspaceDealStrip dt { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.workspaceDealStrip dd { margin: 0; font-size: 9px; font-weight: 850; }
+.workspacePrimaryNav { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .workspacePrimaryNav > button { min-width: 0; min-height: 68px; padding: 10px 13px; display: flex; align-items: center; gap: 10px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
 .workspacePrimaryNav > button:last-child { border-right: 0; }
 .workspacePrimaryNav > button > svg { flex: 0 0 auto; }
@@ -263,6 +272,11 @@
 .workspaceSecondaryNav { min-height: 44px; padding: 6px 9px; display: flex; align-items: center; gap: 6px; overflow-x: auto; border-top: 1px solid var(--line-soft); }
 .workspaceSecondaryNav button { min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
 .workspaceSecondaryNav button[aria-current="page"] { border-color: var(--brand); background: var(--surface); color: var(--brand-strong); }
+.workspaceMoreTools { position: relative; margin-left: auto; }
+.workspaceMoreTools > summary { min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 800; list-style: none; white-space: nowrap; }
+.workspaceMoreTools > summary::-webkit-details-marker { display: none; }
+.workspaceMoreTools > div { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 210px; padding: 6px; display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 28px rgb(20 41 46 / .14); }
+.workspaceMoreTools > div button { width: 100%; min-height: 40px; justify-content: flex-start; border-radius: 5px; }
 .dispositionOverview { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .dispositionOverview > header { min-height: 108px; padding: 18px 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; background: linear-gradient(135deg, var(--brand-soft), var(--surface)); }
 .dispositionOverview > header > div { min-width: 0; display: grid; gap: 5px; }
@@ -538,9 +552,6 @@
 
 /* Deal records embed this desk in a narrower content column even on desktop viewports. */
 @container disposition-detail (max-width: 1100px) {
-  .workspacePrimaryNav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workspacePrimaryNav > button:nth-child(2) { border-right: 0; }
-  .workspacePrimaryNav > button:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
   .overviewFacts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overviewActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sectionGrid { grid-template-columns: 1fr; }
@@ -561,6 +572,17 @@
 
 @container disposition-detail (max-width: 760px) {
   .workspaceNavigation { position: static; }
+  .workspaceDealStrip { align-items: flex-start; flex-direction: column; }
+  .workspaceDealStrip dl { width: 100%; }
+  .workspaceDealStrip dl > div { min-width: 0; flex: 1; }
+  .workspaceDealStrip dl > div:first-child { padding-left: 0; border-left: 0; }
+  .workspacePrimaryNav { grid-template-columns: 1fr; }
+  .workspacePrimaryNav > button { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); }
+  .workspacePrimaryNav > button:last-child { border-bottom: 3px solid transparent; }
+  .workspacePrimaryNav > button.activeWorkspaceSection:last-child { border-bottom-color: var(--brand); }
+  .workspaceMoreTools { margin-left: 0; }
+  .workspaceMoreTools > div { position: fixed; right: 12px; left: 12px; top: auto; width: auto; }
   .dispositionOverview > header { align-items: flex-start; flex-direction: column; }
   .overviewFacts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tabs { padding: 0 12px; gap: 14px; overflow-x: auto; }

@@ -44,6 +44,13 @@ test("the persistent panel offers guidance and every action-specific check witho
   assert.match(panel, /The deal workspace remains available/);
   assert.match(panel, /Showing the last checklist for this deal/);
   assert.doesNotMatch(panel, /disabled=/);
+  const compactPanel = panel.slice(
+    panel.indexOf("if (compact)"),
+    panel.indexOf("return (\n    <section aria-labelledby"),
+  );
+  assert.match(compactPanel, /Reference only/);
+  assert.match(compactPanel, /Readiness details/);
+  assert.doesNotMatch(compactPanel, /Suggested action \(optional\)|Also available now/);
 });
 
 test("attention badges and remediation links navigate to stable workbench anchors", () => {
@@ -142,11 +149,10 @@ test("buyer decisions permit primary-only coverage and warning-bearing replaceme
 });
 
 test("desk guidance and readiness UI are responsive and preserve explicit role restrictions", () => {
-  assert.match(desk, /best_action_href \?\? item\.primary_action\.href/);
-  assert.match(desk, /Suggested action \(optional\)/);
+  assert.match(desk, /Start \/ continue outreach/);
   assert.match(desk, /<details className=\{styles\.cardChecklist\}>/);
-  assert.match(desk, /All checklist issues/);
-  assert.match(desk, /Also available now/);
+  assert.match(desk, /Deal details &amp; readiness/);
+  assert.doesNotMatch(desk, /Suggested action \(optional\)|Also available now/);
   assert.match(panelStyles, /@media \(max-width: 760px\)/);
   assert.match(panelStyles, /@media \(max-width: 520px\)/);
   assert.match(workspaceStyles, /container: disposition-detail \/ inline-size/);

@@ -29,7 +29,7 @@ export default async function DispositionsPage({
   return (
     <WorkspacePage>
       <PageHeader
-        description="Start buyer placement for an executed purchase agreement. Ongoing disposition work stays inside the Deal record."
+        description="Recover or manually start buyer placement for an executed purchase agreement. Ongoing work stays in the dedicated outreach desk."
         eyebrow="Deals / setup"
         meta={<StatusBadge tone={connected ? "success" : "danger"}>{connected ? "Eligible contracts current" : "Setup unavailable"}</StatusBadge>}
         title="Open disposition case"

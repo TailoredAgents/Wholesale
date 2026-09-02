@@ -14,9 +14,11 @@ const deskStyles = readFileSync(resolve(appRoot, "os/deals/disposition-desk.modu
 const buyersPage = readFileSync(resolve(appRoot, "os/buyers/page.tsx"), "utf8");
 const buyersWorkspace = readFileSync(resolve(appRoot, "os/buyers/buyers-workspace.tsx"), "utf8");
 const dispositionWorkspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
+const dispositionDealPage = readFileSync(resolve(appRoot, "os/dispositions/[caseId]/page.tsx"), "utf8");
 const buyerPool = readFileSync(resolve(appRoot, "os/dispositions/disposition-buyer-pool.tsx"), "utf8");
 const navigation = readFileSync(resolve(appRoot, "os/os-navigation.tsx"), "utf8");
 const iaContract = readFileSync(resolve(process.cwd(), "scripts/os-ia-contract.mjs"), "utf8");
+const alexRoadmap = readFileSync(resolve(process.cwd(), "../../docs/ALEX_DISPOSITIONS_OUTREACH_WORKFLOW_ROADMAP.md"), "utf8");
 
 test("the canonical disposition desk is URL-backed and server-loaded", () => {
   assert.match(api, /export type DispositionDeskScope = "mine" \| "team"/);
@@ -67,35 +69,69 @@ test("Deals provides an accessible route-level loading state", () => {
   assert.match(dealsStyles, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test("the desk exposes six operational queues with truthful scoped work context", () => {
-  for (const label of ["Today", "Active Deals", "Buyer Follow-ups", "Replies", "Offers", "Deadlines"]) {
+test("the desk centers the two daily jobs and keeps supporting queues secondary", () => {
+  for (const label of ["Deals to Market", "Investor Relationships", "Replies", "Offers", "Deadlines"]) {
     assert.match(desk, new RegExp(`label: "${label}"`));
   }
+  assert.doesNotMatch(desk, /label: "Today"/);
+  assert.match(desk, /primaryDeskViews\.map/);
+  assert.match(desk, /secondaryDeskViews\.map/);
+  assert.match(desk, /return deskViews\.some[\s\S]*: "active_deals"/);
+  assert.match(page, /params\.desk === "today" \? "active_deals"/);
+  assert.match(page, /: "active_deals";/);
   assert.match(desk, /new URLSearchParams\(\{ desk: view, scope, view: "disposition" \}\)/);
   assert.match(desk, /data\.can_view_team/);
   assert.match(desk, />Owner</);
   assert.match(desk, />Due</);
   assert.match(desk, />Reason</);
-  assert.match(desk, />Checklist</);
+  assert.match(desk, />Readiness</);
   assert.match(desk, /item\.primary_action\.href/);
   assert.match(desk, /item\.secondary_action/);
   assert.match(desk, /item\.needs_setup \? "Needs setup"/);
-  assert.match(desk, /executed transaction is safely recorded and visible here/);
-  assert.match(desk, /item when practical; it is advisory guidance, not a required first step/);
+  assert.match(desk, /Setup is incomplete, but outreach and every other authorized disposition action remain available/);
   assert.match(desk, /data\.buyer_network\.missing_proof/);
   assert.match(desk, /data\.coverage_warnings/);
-  assert.match(desk, /caseWorkbench\?\.best_action_href \?\? item\.primary_action\.href/);
-  assert.match(desk, /Suggested action \(optional\)/);
   assert.match(desk, /<details className=\{styles\.cardChecklist\}>/);
-  assert.match(desk, /All checklist issues/);
-  assert.match(desk, /Also available now/);
-  assert.match(desk, /className=\{styles\.directActions\}/);
-  for (const label of ["Packet", "Find buyers", "Dial buyers", "Offers"]) {
-    assert.match(desk, new RegExp(`label: "${label}"`));
-  }
+  assert.match(desk, /Deal details &amp; readiness/);
+  assert.match(desk, /Start \/ continue outreach/);
+  assert.match(desk, /Deal &amp; packet/);
+  assert.match(desk, /Offers &amp; closing/);
   assert.match(desk, /dealWorkbenchHref\(item\.disposition_case_id, "execution"\)/);
   assert.match(desk, /\/os\/dispositions\/\$\{encodeURIComponent\(caseId\)\}/);
-  assert.match(desk, /Work this deal/);
+  assert.match(desk, /<details className=\{styles\.deskDetails\}>/);
+  assert.match(desk, /Desk status &amp; readiness/);
+  assert.doesNotMatch(desk, /Suggested action \(optional\)|Also available now|Work this deal/);
+});
+
+test("a disposition deal opens on one outreach-led three-section workspace", () => {
+  assert.match(dispositionDealPage, /: "execution";/);
+  for (const label of ["Outreach Desk", "Deal &amp; Packet", "Offers & Closing"]) {
+    assert.match(dispositionWorkspace, new RegExp(label));
+  }
+  assert.match(dispositionWorkspace, /dedicatedSection === "outreach"/);
+  assert.match(dispositionWorkspace, /dedicatedSection === "deal"/);
+  assert.match(dispositionWorkspace, /className=\{styles\.workspaceDealStrip\}/);
+  assert.match(dispositionWorkspace, /<dt>Asking<\/dt>/);
+  assert.match(dispositionWorkspace, /<dt>Packet<\/dt>/);
+  assert.match(dispositionWorkspace, /<dt>Investors<\/dt>/);
+  assert.match(dispositionWorkspace, /Outreach queue/);
+  assert.match(dispositionWorkspace, /Find \/ pull investors/);
+  assert.match(dispositionWorkspace, /<summary>More tools<\/summary>/);
+  assert.match(dispositionWorkspace, /variant === "dedicated" && dedicatedSection === "deal"/);
+  assert.match(dispositionWorkspace, /initialTab = "execution"/);
+  assert.doesNotMatch(dispositionWorkspace, /<strong>Market Deal<\/strong>/);
+  assert.match(dealsWorkspace, /: "execution";/);
+  assert.match(dealsWorkspace, /Start \/ continue outreach/);
+});
+
+test("the Alex workflow roadmap preserves every phase and acceptance target", () => {
+  for (let phase = 1; phase <= 7; phase += 1) {
+    assert.match(alexRoadmap, new RegExp(`Phase ${phase}`));
+  }
+  assert.match(alexRoadmap, /Under Contract -> Ready in Dispositions/);
+  assert.match(alexRoadmap, /guidance, not a workflow lock/);
+  assert.match(alexRoadmap, /End-To-End Acceptance Checklist/);
+  assert.match(alexRoadmap, /14\. Alex can select a primary\/backup buyer/);
 });
 
 test("stale, unavailable, and truncated data remain explicit without disabling canonical work", () => {
@@ -106,6 +142,7 @@ test("stale, unavailable, and truncated data remain explicit without disabling c
   assert.match(desk, /data\.source_health\.external_provider_status/);
   assert.match(desk, /Stonegate records/);
   assert.match(desk, /External discovery/);
+  assert.match(desk, /className=\{styles\.deskDetailsBody\}/);
   assert.match(desk, /sectionState\.has_more/);
   assert.match(desk, /sectionState\.offset > 0 \|\| sectionState\.has_more/);
   assert.match(desk, /sectionState\.offset \+ sectionState\.returned/);
@@ -121,7 +158,7 @@ test("stale, unavailable, and truncated data remain explicit without disabling c
 
 test("desk actions preserve deal subsection context and can open buyer creation safely", () => {
   assert.match(dealsWorkspace, /type DispositionTab = "package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
-  assert.match(dealsWorkspace, /Disposition workspace/);
+  assert.match(dealsWorkspace, /full-width outreach desk/);
   assert.match(dealsWorkspace, /\/os\/dispositions\/\$\{selected\.disposition_case_id\}/);
   assert.match(desk, /\/os\/buyers\?create=1&returnTo=/);
   assert.match(buyersPage, /firstValue\(rawParams\?\.create\) === "1"/);

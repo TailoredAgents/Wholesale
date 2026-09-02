@@ -128,7 +128,7 @@ export function DealsWorkspace({
   const tab = tabs.some((item) => item.key === initialTab) ? initialTab as DealTab : "summary";
   const requestedDispositionTab = (["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as DispositionTab[]).includes(initialDispositionTab as DispositionTab)
     ? initialDispositionTab as DispositionTab
-    : "package";
+    : "execution";
   const dispositionTab = requestedDispositionTab;
   const filtered = useMemo(() => deals.items.filter((item) => includesView(item, view)), [deals.items, view]);
   const selected = deals.items.find((item) => item.id === initialDealId) ?? filtered[0] ?? null;
@@ -199,7 +199,7 @@ export function DealsWorkspace({
           ) : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace assetClass={selected.asset_class} initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
-          {tab === "disposition" && selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has its own full-width workspace</strong><p>Open the dedicated deal-marketing screen for the packet, buyer search, one-to-one dialer, bulk outreach, and offers.</p><Link href={`/os/dispositions/${selected.disposition_case_id}?tab=${dispositionTab}`}>Open disposition workspace <ArrowRight size={15} /></Link></div> : null}
+          {tab === "disposition" && selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has its own full-width outreach desk</strong><p>Open the investor queue to start or continue SMS and calls. Deal, packet, buyer search, campaigns, and offer tools remain available there.</p><Link href={`/os/dispositions/${selected.disposition_case_id}?tab=${dispositionTab}`}>Start / continue outreach <ArrowRight size={15} /></Link></div> : null}
           {tab === "finance" && selected.disposition_case_id ? <div className={styles.contextEmpty}><Banknote size={24} /><strong>Disposition finance moved to the full-width workspace</strong><p>Review buyer selection, closing protection, reconciliation, and payouts without squeezing them into this Deal record.</p><Link href={`/os/dispositions/${selected.disposition_case_id}?tab=reconciliation`}>Open finance reconciliation <ArrowRight size={15} /></Link></div> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions?transaction=${selected.transaction_id}`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>

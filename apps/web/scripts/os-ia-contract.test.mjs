@@ -261,7 +261,7 @@ test("IA9 canonical records preserve context and load only active specialist dat
 
   assert.match(dealsPage, /transactionTabs\.has\(params\.tab/);
   assert.doesNotMatch(dealsPage, /getDispositionOverview\(\)/);
-  assert.match(dealWorkspace, /Disposition has its own full-width workspace/);
+  assert.match(dealWorkspace, /Disposition has its own full-width outreach desk/);
   assert.match(dealWorkspace, /returnTo=/);
   assert.doesNotMatch(transactionWorkspace, /\bembedded\b/);
   assert.match(dispositionWorkspace, /variant === "dedicated"/);

@@ -89,8 +89,8 @@ export default async function DealsPage({
       "deadlines",
     ]);
     const selectedDesk = deskCategories.has(params.desk as DispositionDeskCategory)
-      ? params.desk as DispositionDeskCategory
-      : "today";
+      ? params.desk === "today" ? "active_deals" : params.desk as DispositionDeskCategory
+      : "active_deals";
     const parsedPage = Number.parseInt(params.deskPage ?? "1", 10);
     const deskPage = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const dispositionDeskResult = await getDispositionDesk(
@@ -107,8 +107,8 @@ export default async function DealsPage({
     return (
       <WorkspacePage>
         <PageHeader
-          description="Prioritize buyer placement, replies, offers, follow-ups, and deadlines from one daily desk."
-          eyebrow="Operations / buyer placement"
+          description="Market contracted deals through one-to-one investor outreach and keep buyer relationships moving."
+          eyebrow="Operations / dispositions"
           meta={
             <StatusBadge tone={deskStatus.tone}>{deskStatus.label}</StatusBadge>
           }

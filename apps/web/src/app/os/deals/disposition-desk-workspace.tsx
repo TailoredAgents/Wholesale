@@ -3,12 +3,10 @@
 import {
   AlertTriangle,
   ArrowRight,
-  CalendarClock,
   CheckCircle2,
-  Clock3,
-  Inbox,
-  MessageSquareReply,
+  ChevronDown,
   Plus,
+  PhoneCall,
   RefreshCw,
   ShieldCheck,
   UserRound,
@@ -30,7 +28,7 @@ import styles from "./disposition-desk.module.css";
 
 type DeskView = DispositionDeskCategory;
 
-const deskViews: Array<{
+const primaryDeskViews: Array<{
   key: DeskView;
   label: string;
   description: string;
@@ -38,26 +36,28 @@ const deskViews: Array<{
   emptyMessage: string;
 }> = [
   {
-    key: "today",
-    label: "Today",
-    description: "A recommended starting point for due and high-attention work; other deal work remains available.",
-    emptyTitle: "Today is clear",
-    emptyMessage: "No disposition work is due today. Review active deals or buyer coverage next.",
-  },
-  {
     key: "active_deals",
-    label: "Active Deals",
-    description: "Every open buyer-placement case and its next controlled action.",
-    emptyTitle: "No active disposition deals",
-    emptyMessage: "Open a disposition case from an executed deal when buyer placement is ready.",
+    label: "Deals to Market",
+    description: "Contracted deals that are ready for investor outreach, even while packet or readiness details are still being completed.",
+    emptyTitle: "No deals to market",
+    emptyMessage: "New Under Contract deals will appear here automatically for investor outreach.",
   },
   {
     key: "buyer_follow_ups",
-    label: "Buyer Follow-ups",
-    description: "Scheduled relationship work tied to a buyer and an active deal.",
-    emptyTitle: "No buyer follow-ups waiting",
-    emptyMessage: "Schedule the next buyer touch from the Deal record after a real conversation.",
+    label: "Investor Relationships",
+    description: "Due follow-ups and relationship work across the buyer network.",
+    emptyTitle: "No investor follow-ups waiting",
+    emptyMessage: "No investor relationship follow-ups are due in this scope.",
   },
+];
+
+const secondaryDeskViews: Array<{
+  key: Exclude<DeskView, "today" | "active_deals" | "buyer_follow_ups">;
+  label: string;
+  description: string;
+  emptyTitle: string;
+  emptyMessage: string;
+}> = [
   {
     key: "replies",
     label: "Replies",
@@ -81,6 +81,8 @@ const deskViews: Array<{
   },
 ];
 
+const deskViews = [...primaryDeskViews, ...secondaryDeskViews];
+
 const metricKeys: Record<DeskView, keyof DispositionDeskOverview["metrics"]> = {
   today: "today",
   active_deals: "active_deals",
@@ -97,7 +99,7 @@ function hrefFor(view: DeskView, scope: DispositionDeskScope, page = 1) {
 }
 
 function validView(value: string | undefined): DeskView {
-  return deskViews.some((item) => item.key === value) ? value as DeskView : "today";
+  return deskViews.some((item) => item.key === value) ? value as DeskView : "active_deals";
 }
 
 function formatDue(value: string | null) {
@@ -133,31 +135,17 @@ function dealWorkbenchHref(caseId: string, dispositionTab: string) {
   return `/os/dispositions/${encodeURIComponent(caseId)}?tab=${encodeURIComponent(dispositionTab)}`;
 }
 
-function directDealActions(item: DispositionDeskItem) {
-  if (!item.deal_id || !item.disposition_case_id) return [];
-  const actions = [
-    { label: "Packet", href: dealWorkbenchHref(item.disposition_case_id, "package") },
-    { label: "Find buyers", href: dealWorkbenchHref(item.disposition_case_id, "buyers") },
-    { label: "Dial buyers", href: dealWorkbenchHref(item.disposition_case_id, "execution") },
-  ];
-  if (item.asset_class !== "land") {
-    actions.push(
-      { label: "Offers", href: dealWorkbenchHref(item.disposition_case_id, "offers") },
-    );
-  }
-  return actions;
-}
-
 function dispositionActionHref(item: DispositionDeskItem, href: string) {
   if (!item.disposition_case_id || !href.startsWith("/os/deals?")) return href;
   const target = new URL(href, "https://stonegate.internal");
   if (target.searchParams.get("tab") !== "disposition") return href;
-  const dispositionTab = target.searchParams.get("dispositionTab") ?? "overview";
+  const dispositionTab = target.searchParams.get("dispositionTab") ?? "execution";
   const anchor = target.hash;
   return `${dealWorkbenchHref(item.disposition_case_id, dispositionTab)}${anchor}`;
 }
 
 function WorkItem({ item }: { item: DispositionDeskItem }) {
+  const isActiveDeal = item.category === "active_deals" && Boolean(item.disposition_case_id);
   const caseWorkbench = item.category === "active_deals" && item.checklist
     ? item.checklist
     : null;
@@ -166,16 +154,10 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
     : item.blocker
       ? [{ key: `${item.key}-legacy`, label: "Recorded checklist item", blocker_class: null, detail: item.blocker, href: null }]
       : [];
-  const parallelActions = caseWorkbench?.parallel_actions?.length
-    ? caseWorkbench.parallel_actions
-    : item.secondary_action
-      ? [item.secondary_action]
-      : [];
-  const workbenchActions = caseWorkbench ? directDealActions(item) : [];
-  const primaryHref = dispositionActionHref(
-    item,
-    caseWorkbench?.best_action_href ?? item.primary_action.href,
-  );
+  const parallelActions = item.secondary_action ? [item.secondary_action] : [];
+  const primaryHref = isActiveDeal && item.disposition_case_id
+    ? dealWorkbenchHref(item.disposition_case_id, "execution")
+    : dispositionActionHref(item, item.primary_action.href);
   return (
     <article className={styles.workCard} data-severity={item.severity}>
       <header className={styles.workHeader}>
@@ -203,14 +185,14 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
           <dd>{item.reason}</dd>
         </div>
         <div>
-          <dt>Checklist</dt>
+          <dt>Readiness</dt>
           <dd>{caseWorkbench ? `${caseWorkbench.completed_count} of ${caseWorkbench.total_count} actions complete - ${caseWorkbench.warning_count} need attention` : item.blocker ?? "No issue recorded"}</dd>
         </div>
       </dl>
 
       {caseWorkbench ? (
         <details className={styles.cardChecklist}>
-          <summary><span>All checklist issues</span><strong>{caseWorkbench.warning_count}</strong></summary>
+          <summary><span>Deal details &amp; readiness</span><strong>{caseWorkbench.warning_count}</strong></summary>
           <div>
             {checklistIssues.map((issue) => (
               <article data-tone={issue.blocker_class ?? "warning"} key={issue.key}>
@@ -219,41 +201,38 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
                 {issue.href ? <Link href={issue.href}>Open<ArrowRight aria-hidden="true" size={13} /></Link> : null}
               </article>
             ))}
-            {!checklistIssues.length ? <p>{caseWorkbench.warning_count ? <AlertTriangle aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}{caseWorkbench.warning_count ? "Open the deal workbench for the current issue details; other available actions remain usable." : "No open checklist issues. You can still choose any available parallel action."}</p> : null}
+            {!checklistIssues.length ? <p>{caseWorkbench.warning_count ? <AlertTriangle aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}{caseWorkbench.warning_count ? "Open the deal workspace for the current issue details; outreach remains usable." : "No open checklist issues. Outreach and the other deal tools remain available."}</p> : null}
           </div>
         </details>
       ) : null}
 
       {item.needs_setup ? (
         <p className={styles.setupNotice}>
-          The executed transaction is safely recorded and visible here. Complete the listed setup
-          item when practical; it is advisory guidance, not a required first step. Use any
-          disposition actions available on this card while setup remains incomplete.
+          Setup is incomplete, but outreach and every other authorized disposition action remain available.
         </p>
       ) : null}
 
-      {workbenchActions.length ? (
-        <nav aria-label={`Work ${item.title}`} className={styles.directActions}>
-          <span>Work this deal</span>
-          <div>
-            {workbenchActions.map((action) => (
-              <Link href={action.href} key={action.label}>{action.label}</Link>
-            ))}
-          </div>
-        </nav>
-      ) : null}
-
-      <footer className={styles.workActions}>
-        <div className={styles.bestActionGroup}>
-          {caseWorkbench ? <span>Suggested action (optional)</span> : null}
+      {isActiveDeal && item.disposition_case_id ? (
+        <footer className={styles.dealActions}>
           <Link className={styles.primaryAction} href={primaryHref}>
-            {caseWorkbench?.best_action_label ?? item.primary_action.label}
+            <PhoneCall aria-hidden="true" size={16} />
+            Start / continue outreach
             <ArrowRight aria-hidden="true" size={15} />
           </Link>
-        </div>
-        {parallelActions.length ? <div className={styles.parallelActionGroup}><span>{caseWorkbench ? "Also available now" : "Related action"}</span><div>{parallelActions.slice(0, 3).map((action) => <Link className={styles.secondaryAction} href={dispositionActionHref(item, action.href)} key={`${action.href}-${action.label}`}>{action.label}</Link>)}</div></div> : null}
-        {caseWorkbench && caseWorkbench.parallel_action_keys.length > parallelActions.length ? <small className={styles.moreActions}>{caseWorkbench.parallel_action_keys.length - parallelActions.length} more available action{caseWorkbench.parallel_action_keys.length - parallelActions.length === 1 ? "" : "s"} are shown inside the deal workbench.</small> : null}
-      </footer>
+          <nav aria-label={`More ways to work ${item.title}`} className={styles.secondaryDealActions}>
+            <Link href={dealWorkbenchHref(item.disposition_case_id, "package")}>Deal &amp; packet</Link>
+            {item.asset_class !== "land" ? <Link href={dealWorkbenchHref(item.disposition_case_id, "offers")}>Offers &amp; closing</Link> : null}
+          </nav>
+        </footer>
+      ) : (
+        <footer className={styles.workActions}>
+          <Link className={styles.primaryAction} href={primaryHref}>
+            {item.primary_action.label}
+            <ArrowRight aria-hidden="true" size={15} />
+          </Link>
+          {parallelActions.length ? <div className={styles.parallelActionGroup}><span>Related action</span><div>{parallelActions.slice(0, 3).map((action) => <Link className={styles.secondaryAction} href={dispositionActionHref(item, action.href)} key={`${action.href}-${action.label}`}>{action.label}</Link>)}</div></div> : null}
+        </footer>
+      )}
     </article>
   );
 }
@@ -323,9 +302,9 @@ export function DispositionDeskWorkspace({
     <section aria-label="Disposition desk" className={styles.workspace}>
       <header className={styles.hero}>
         <div>
-          <span>Buyer placement command center</span>
-          <h2>Disposition desk</h2>
-          <p>{data.scope_label} | {data.scope_member_count} owner{data.scope_member_count === 1 ? "" : "s"} represented</p>
+          <span>Dispositions</span>
+          <h2>Market deals. Build investor relationships.</h2>
+          <p>Open a contracted deal, work the next investor, and pick up where you left off.</p>
         </div>
         <div className={styles.quickActions}>
           {data.can_edit_buyers ? (
@@ -375,31 +354,23 @@ export function DispositionDeskWorkspace({
         </div>
       ) : null}
 
-      <section aria-label="Disposition data health" className={styles.healthBanner}>
-        <div>
-          <CheckCircle2 aria-hidden="true" size={18} />
-          <span>Stonegate records</span>
-          <strong>{apiConnected && data.source_health.canonical_data_status === "current" && !snapshotIsStale ? "Current" : "Needs review"}</strong>
-        </div>
-        <div>
-          <ShieldCheck aria-hidden="true" size={18} />
-          <span>External discovery</span>
-          <StatusBadge tone={providerTone}>{data.source_health.external_provider_status.replaceAll("_", " ")}</StatusBadge>
-        </div>
-        <p>{data.source_health.message}</p>
-      </section>
-
       <nav aria-label="Disposition desk views" className={styles.viewTabs}>
-        {deskViews.map((item) => (
+        {primaryDeskViews.map((item) => (
           <Link aria-current={view === item.key ? "page" : undefined} className={view === item.key ? styles.activeView : styles.viewTab} href={hrefFor(item.key, scope)} key={item.key}>
             <span>{item.label}</span>
             <strong>{data.metrics[metricKeys[item.key]]}</strong>
           </Link>
         ))}
-        <Link className={styles.viewTab} href="/os/deals?view=disposition&desk=performance">
-          <span>Performance</span>
-          <strong>View</strong>
-        </Link>
+      </nav>
+
+      <nav aria-label="Secondary disposition queues" className={styles.secondaryQueues}>
+        <span>Also available</span>
+        {secondaryDeskViews.map((item) => (
+          <Link aria-current={view === item.key ? "page" : undefined} href={hrefFor(item.key, scope)} key={item.key}>
+            {item.label}<strong>{data.metrics[metricKeys[item.key]]}</strong>
+          </Link>
+        ))}
+        <Link href="/os/deals?view=disposition&desk=performance">Performance</Link>
       </nav>
 
       <div className={styles.dashboardGrid}>
@@ -443,66 +414,82 @@ export function DispositionDeskWorkspace({
           )}
         </section>
 
-        <aside className={styles.sideRail}>
-          <section className={styles.networkPanel}>
-            <header>
-              <div>
-                <span>Owned relationships</span>
-                <h2>Buyer network health</h2>
-              </div>
-              <WalletCards aria-hidden="true" size={20} />
-            </header>
-            <dl>
-              <div><dt>Total buyers</dt><dd>{data.buyer_network.total}</dd></div>
-              <div><dt>Active</dt><dd>{data.buyer_network.active}</dd></div>
-              <div><dt>Needs review</dt><dd>{data.buyer_network.needs_review}</dd></div>
-              <div><dt>Missing proof</dt><dd>{data.buyer_network.missing_proof}</dd></div>
-              <div><dt>Proof expiring</dt><dd>{data.buyer_network.expiring_proof}</dd></div>
-              <div><dt>Missing criteria</dt><dd>{data.buyer_network.missing_criteria}</dd></div>
-              <div><dt>Unassigned</dt><dd>{data.buyer_network.unassigned}</dd></div>
-            </dl>
-            <Link href="/os/buyers">Review buyer network <ArrowRight aria-hidden="true" size={14} /></Link>
-          </section>
-
-          <section className={styles.coveragePanel}>
-            <header>
-              <div>
-                <span>Deal readiness</span>
-                <h2>Coverage warnings</h2>
-              </div>
-              <AlertTriangle aria-hidden="true" size={20} />
-            </header>
-            {data.coverage_warnings.length ? (
-              <div className={styles.coverageList}>
-                {data.coverage_warnings.slice(0, 5).map((warning) => (
-                  <article key={warning.key}>
-                    <div>
-                      <strong>{warning.title}</strong>
-                      <span>{warning.blocker ?? warning.reason}</span>
-                    </div>
-                    <Link aria-label={`Open ${warning.title}`} href={warning.primary_action.href}><ArrowRight aria-hidden="true" size={15} /></Link>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className={styles.clearCoverage}><CheckCircle2 aria-hidden="true" size={16} /> No weak buyer-coverage warnings.</p>
-            )}
-            {data.coverage_warnings.length > 5 ? (
-              <Link href={hrefFor("active_deals", scope)}>
-                Showing 5 of {data.sections.coverage_warnings.total}; open active deals
-              </Link>
-            ) : null}
-          </section>
-
-          <section className={styles.legendPanel}>
-            <h2>What gets prioritized</h2>
-            <p><Clock3 aria-hidden="true" size={15} /> Due and overdue work</p>
-            <p><MessageSquareReply aria-hidden="true" size={15} /> Buyer replies and received offers</p>
-            <p><CalendarClock aria-hidden="true" size={15} /> Contract and closing deadlines</p>
-            <p><Inbox aria-hidden="true" size={15} /> Recorded next actions, not duplicate tasks</p>
-          </section>
-        </aside>
       </div>
+
+      <details className={styles.deskDetails}>
+        <summary>
+          <span><ChevronDown aria-hidden="true" size={16} />Desk status &amp; readiness</span>
+          <small>Data health, buyer network health, and deal coverage</small>
+        </summary>
+        <div className={styles.deskDetailsBody}>
+          <section aria-label="Disposition data health" className={styles.healthBanner}>
+            <div>
+              <CheckCircle2 aria-hidden="true" size={18} />
+              <span>Stonegate records</span>
+              <strong>{apiConnected && data.source_health.canonical_data_status === "current" && !snapshotIsStale ? "Current" : "Needs review"}</strong>
+            </div>
+            <div>
+              <ShieldCheck aria-hidden="true" size={18} />
+              <span>External discovery</span>
+              <StatusBadge tone={providerTone}>{data.source_health.external_provider_status.replaceAll("_", " ")}</StatusBadge>
+            </div>
+            <p>{data.source_health.message}</p>
+          </section>
+
+          <aside className={styles.sideRail}>
+            <section className={styles.networkPanel}>
+              <header>
+                <div>
+                  <span>Owned relationships</span>
+                  <h2>Buyer network health</h2>
+                </div>
+                <WalletCards aria-hidden="true" size={20} />
+              </header>
+              <dl>
+                <div><dt>Total buyers</dt><dd>{data.buyer_network.total}</dd></div>
+                <div><dt>Active</dt><dd>{data.buyer_network.active}</dd></div>
+                <div><dt>Needs review</dt><dd>{data.buyer_network.needs_review}</dd></div>
+                <div><dt>Missing proof</dt><dd>{data.buyer_network.missing_proof}</dd></div>
+                <div><dt>Proof expiring</dt><dd>{data.buyer_network.expiring_proof}</dd></div>
+                <div><dt>Missing criteria</dt><dd>{data.buyer_network.missing_criteria}</dd></div>
+                <div><dt>Unassigned</dt><dd>{data.buyer_network.unassigned}</dd></div>
+              </dl>
+              <Link href="/os/buyers">Review buyer network <ArrowRight aria-hidden="true" size={14} /></Link>
+            </section>
+
+            <section className={styles.coveragePanel}>
+              <header>
+                <div>
+                  <span>Deal readiness</span>
+                  <h2>Coverage warnings</h2>
+                </div>
+                <AlertTriangle aria-hidden="true" size={20} />
+              </header>
+              {data.coverage_warnings.length ? (
+                <div className={styles.coverageList}>
+                  {data.coverage_warnings.slice(0, 5).map((warning) => (
+                    <article key={warning.key}>
+                      <div>
+                        <strong>{warning.title}</strong>
+                        <span>{warning.blocker ?? warning.reason}</span>
+                      </div>
+                      <Link aria-label={`Open ${warning.title}`} href={warning.primary_action.href}><ArrowRight aria-hidden="true" size={15} /></Link>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className={styles.clearCoverage}><CheckCircle2 aria-hidden="true" size={16} /> No weak buyer-coverage warnings.</p>
+              )}
+              {data.coverage_warnings.length > 5 ? (
+                <Link href={hrefFor("active_deals", scope)}>
+                  Showing 5 of {data.sections.coverage_warnings.total}; open active deals
+                </Link>
+              ) : null}
+            </section>
+
+          </aside>
+        </div>
+      </details>
     </section>
   );
 }

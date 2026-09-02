@@ -15,7 +15,7 @@ test("every embedded disposition tab responds to the Deal panel width", () => {
   const tabStyles = new Map([
     ["Packet", source("disposition-package-readiness.module.css")],
     ["Find buyers", shared],
-    ["One-to-one", source("disposition-execution-workspace.module.css")],
+    ["Outreach desk", source("disposition-execution-workspace.module.css")],
     ["Bulk outreach", source("disposition-outreach-workspace.module.css")],
     ["Offers & closing", source("disposition-offer-room.module.css")],
     ["External distribution", source("disposition-provider-workspace.module.css")],

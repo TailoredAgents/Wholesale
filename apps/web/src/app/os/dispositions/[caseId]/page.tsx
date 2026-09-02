@@ -44,7 +44,7 @@ export default async function DispositionDealPage({
   const requestedTab = query.tab ?? query.dispositionTab;
   const initialTab = workspaceTabs.has(requestedTab as DispositionWorkspaceTab)
     ? requestedTab as DispositionWorkspaceTab
-    : "overview";
+    : "execution";
   const canManageOutreach = Boolean(profile?.permissions.includes("dispositions:manage_outreach"));
   const canApproveOutreach = Boolean(profile?.permissions.includes("dispositions:approve_outreach"));
   const canViewOutreach = Boolean(
@@ -74,7 +74,7 @@ export default async function DispositionDealPage({
     <WorkspacePage>
       <PageHeader
         actions={<><Link href="/os/deals?view=disposition&desk=active_deals">Disposition desk</Link><Link href={`/os/deals?view=all&display=queue&deal=${deal.id}&tab=summary`}>Full deal record</Link></>}
-        description={`${dispositionCase.asset_class === "land" ? "Land" : "House"} deal · ${dispositionCase.seller_name} · Work the packet, buyers, dialer, and outreach in any order.`}
+        description={`${dispositionCase.asset_class === "land" ? "Land" : "House"} deal for ${dispositionCase.seller_name}. Work the ranked investor queue; packet and offer tools remain available.`}
         eyebrow="Dispositions / deal marketing"
         meta={<StatusBadge tone={connected ? "success" : "warning"}>{connected ? "Workspace current" : "Access needs review"}</StatusBadge>}
         title={dispositionCase.property_address}
