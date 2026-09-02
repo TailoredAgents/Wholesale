@@ -117,6 +117,57 @@ def test_bootstrap_refreshes_roles_for_legacy_organizations(db_session: Session)
     assert restored_count == 3
 
 
+def test_bootstrap_grants_disposition_view_to_custom_human_roles(
+    db_session: Session,
+) -> None:
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Custom Role Workspace",
+        admin_email="owner@example.com",
+        admin_name="Owner",
+    )
+    custom_role = Role(
+        organization_id=foundation.organization.id,
+        key="legacy_team_member",
+        name="Legacy team member",
+    )
+    db_session.add(custom_role)
+    db_session.commit()
+
+    bootstrap_foundation(
+        db_session,
+        organization_name="Custom Role Workspace",
+        admin_email="owner@example.com",
+        admin_name="Owner",
+    )
+
+    disposition_view = db_session.scalar(
+        select(Permission).where(Permission.key == PermissionKeys.VIEW_DISPOSITIONS)
+    )
+    assert disposition_view is not None
+    assert db_session.scalar(
+        select(RolePermission).where(
+            RolePermission.organization_id == foundation.organization.id,
+            RolePermission.role_id == custom_role.id,
+            RolePermission.permission_id == disposition_view.id,
+        )
+    ) is not None
+    ai_service_role = db_session.scalar(
+        select(Role).where(
+            Role.organization_id == foundation.organization.id,
+            Role.key == "ai_service",
+        )
+    )
+    assert ai_service_role is not None
+    assert db_session.scalar(
+        select(RolePermission).where(
+            RolePermission.organization_id == foundation.organization.id,
+            RolePermission.role_id == ai_service_role.id,
+            RolePermission.permission_id == disposition_view.id,
+        )
+    ) is None
+
+
 def test_bootstrap_replaces_only_builtin_manager_global_bulk_authority(
     db_session: Session,
 ) -> None:

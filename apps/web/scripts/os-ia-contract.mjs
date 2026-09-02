@@ -65,9 +65,9 @@ export const targetDestinations = [
     id: "dispositions",
     label: "Dispositions",
     group: "operations",
-    canonicalRoute: "/os/deals?view=disposition",
+    canonicalRoute: "/os/deals?view=disposition&scope=team",
     anyPermissions: [],
-    allPermissions: ["deals:view", "buyers:view"],
+    allPermissions: ["dispositions:view"],
   },
   {
     id: "deals",
@@ -172,17 +172,17 @@ export const targetRoleExperiences = [
   {
     role: "acquisition_manager",
     defaultRoute: "/os/leads?view=queue",
-    destinations: ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads"],
+    destinations: ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "dispositions"],
   },
   {
     role: "acquisition_rep",
     defaultRoute: "/os/calendar?view=day",
-    destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "deals"],
+    destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "dispositions", "deals"],
   },
   {
     role: "prospecting_caller",
     defaultRoute: "/os/prospecting?view=my-calls",
-    destinations: ["prospecting"],
+    destinations: ["prospecting", "dispositions"],
   },
   {
     role: "disposition_manager",
@@ -197,27 +197,27 @@ export const targetRoleExperiences = [
   {
     role: "transaction_coordinator",
     defaultRoute: "/os/deals?view=closing-exceptions",
-    destinations: ["home", "inbox", "tasks", "calendar", "deals"],
+    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals"],
   },
   {
     role: "marketing_manager",
     defaultRoute: "/os/marketing",
-    destinations: ["home", "prospecting", "marketing"],
+    destinations: ["home", "prospecting", "dispositions", "marketing"],
   },
   {
     role: "finance_accounting",
     defaultRoute: "/os/finance",
-    destinations: ["home", "inbox", "tasks", "calendar", "deals", "finance"],
+    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals", "finance"],
   },
   {
     role: "read_only_partner",
     defaultRoute: "/os/deals",
-    destinations: ["deals"],
+    destinations: ["dispositions", "deals"],
   },
   {
     role: "restricted_vendor",
     defaultRoute: "/os/deals",
-    destinations: ["deals"],
+    destinations: ["dispositions", "deals"],
   },
   {
     role: "ai_service",
@@ -821,6 +821,7 @@ export const permissionInventory = [
   "buyers:manage_proof",
   "deals:view",
   "deals:edit",
+  "dispositions:view",
   "dispositions:view_private_economics",
   "dispositions:approve_packages",
   "dispositions:manage_outreach",

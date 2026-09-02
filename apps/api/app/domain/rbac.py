@@ -513,7 +513,15 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.SEND_EMAIL,
         ),
     ),
-    RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),
-    RoleDefinition("restricted_vendor", "Restricted attorney/vendor", (PermissionKeys.VIEW_DEALS,)),
+    RoleDefinition(
+        "read_only_partner",
+        "Read-only partner",
+        (*COMPANY_DISPOSITION_VIEW_KEYS, PermissionKeys.VIEW_DEALS),
+    ),
+    RoleDefinition(
+        "restricted_vendor",
+        "Restricted attorney/vendor",
+        (*COMPANY_DISPOSITION_VIEW_KEYS, PermissionKeys.VIEW_DEALS),
+    ),
     RoleDefinition("ai_service", "AI service identity", (PermissionKeys.VIEW_LEADS,)),
 )

@@ -136,6 +136,25 @@ def ensure_role_permissions(
                     )
                 )
                 existing_pairs.add(pair)
+
+    # Dispositions is shared operational context for every signed-in human in the
+    # company. Grant the read-only workspace permission to custom/legacy roles as
+    # well as the built-in roles so access does not depend on an exact role key.
+    disposition_view = permissions_by_key[PermissionKeys.VIEW_DISPOSITIONS]
+    for role in roles_by_key.values():
+        if role.key == "ai_service":
+            continue
+        pair = (role.id, disposition_view.id)
+        if pair in existing_pairs:
+            continue
+        db.add(
+            RolePermission(
+                organization_id=organization.id,
+                role_id=role.id,
+                permission_id=disposition_view.id,
+            )
+        )
+        existing_pairs.add(pair)
     _reconcile_builtin_role_permissions(
         db,
         organization,

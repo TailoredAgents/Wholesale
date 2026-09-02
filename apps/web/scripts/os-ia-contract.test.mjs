@@ -140,7 +140,7 @@ test("target role visibility is complete, bounded, and least-privilege for servi
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "prospecting_caller")
       ?.destinations,
-    ["prospecting"],
+    ["prospecting", "dispositions"],
   );
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "operations_assistant")

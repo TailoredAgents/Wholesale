@@ -36,16 +36,6 @@ export type OsNavGroup = {
 export const ownerRoles = ["owner", "founder_operator", "ceo"];
 const acquisitionRoles = ["acquisition_manager", "acquisition_rep"];
 const dispositionRoles = ["disposition_manager", "disposition_rep"];
-const internalCompanyRoles = [
-  "administrator",
-  "operations_assistant",
-  ...acquisitionRoles,
-  ...dispositionRoles,
-  "prospecting_caller",
-  "transaction_coordinator",
-  "marketing_manager",
-  "finance_accounting",
-];
 
 const homeRoles = [
   "administrator",
@@ -156,7 +146,7 @@ export const osNavGroups: OsNavGroup[] = [
         href: "/os/deals?view=disposition&scope=team",
         label: "Dispositions",
         icon: Megaphone,
-        roles: internalCompanyRoles,
+        roles: [],
         anyPermissions: [],
         allPermissions: ["dispositions:view"],
         activeHrefs: [
@@ -245,7 +235,7 @@ export function isOwnerProfile(profile: WorkspaceProfile) {
 export function canSeeNavItem(profile: WorkspaceProfile, item: OsNavItem) {
   if (isOwnerProfile(profile)) return true;
   if (item.alwaysVisible) return true;
-  const roleRelevant = profile.role_keys.some((role) => item.roles.includes(role));
+  const roleRelevant = item.roles.length === 0 || profile.role_keys.some((role) => item.roles.includes(role));
   const authorized =
     item.anyPermissions.length === 0 ||
     item.anyPermissions.some((permission) => profile.permissions.includes(permission));

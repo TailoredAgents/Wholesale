@@ -146,7 +146,7 @@ def test_disposition_outreach_permissions_are_bootstrap_discoverable() -> None:
     "role_key",
     ["read_only_partner", "restricted_vendor"],
 )
-def test_non_disposition_roles_cannot_read_outreach_sensitive_details(
+def test_every_human_workspace_role_can_enter_disposition_outreach(
     role_key: str,
     db_session: Session,
     api_db_override: None,
@@ -163,10 +163,8 @@ def test_non_disposition_roles_cannot_read_outreach_sensitive_details(
         headers=headers,
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"].startswith("Missing one of permissions:")
-    assert PermissionKeys.VIEW_DISPOSITIONS in response.json()["detail"]
-    assert PermissionKeys.VIEW_BUYERS in response.json()["detail"]
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Disposition case not found."
     for sensitive_key in (
         "captured_email",
         "captured_phone",

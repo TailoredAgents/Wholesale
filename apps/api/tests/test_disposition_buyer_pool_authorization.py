@@ -46,7 +46,7 @@ def _headers_for_role(db: Session, *, role_key: str, email: str) -> dict[str, st
     return {"X-Dev-User-Email": email}
 
 
-def test_deal_viewer_cannot_read_buyer_pool_or_run_history(
+def test_read_only_human_role_can_enter_buyer_pool_and_run_history(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -67,11 +67,9 @@ def test_deal_viewer_cannot_read_buyer_pool_or_run_history(
         headers=headers,
     )
 
-    assert pool.status_code == 403
-    assert pool.json()["detail"].startswith("Missing one of permissions:")
-    assert "buyers:view" in pool.json()["detail"]
-    assert "dispositions:view" in pool.json()["detail"]
-    assert history.status_code == 403
+    assert pool.status_code == 404
+    assert pool.json()["detail"] == "Disposition case not found."
+    assert history.status_code == 404
     assert history.json()["detail"] == pool.json()["detail"]
 
 

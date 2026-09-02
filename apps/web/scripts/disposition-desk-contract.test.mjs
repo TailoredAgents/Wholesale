@@ -209,7 +209,7 @@ test("the disposition role default and responsive controls use the canonical des
   assert.match(navigation, /return "\/os\/deals\?view=disposition"/);
   assert.match(navigation, /label: "Dispositions"/);
   assert.match(navigation, /href: "\/os\/deals\?view=disposition&scope=team"/);
-  assert.match(navigation, /roles: internalCompanyRoles/);
+  assert.match(navigation, /href: "\/os\/deals\?view=disposition&scope=team",[\s\S]*?label: "Dispositions",[\s\S]*?roles: \[\]/);
   assert.match(navigation, /allPermissions: \["dispositions:view"\]/);
   assert.match(navigation, /activePaths: \["\/os\/dispositions"\]/);
   assert.equal((iaContract.match(/defaultRoute: "\/os\/deals\?view=disposition"/g) ?? []).length, 2);
