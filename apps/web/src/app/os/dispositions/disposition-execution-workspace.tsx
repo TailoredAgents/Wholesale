@@ -442,6 +442,16 @@ export function DispositionExecutionWorkspace({
     void loadBuyerTimeline(activeTimelineBuyerId);
   }, [activeTimelineBuyerId, loadBuyerTimeline]);
 
+  useEffect(() => {
+    if (!activeTimelineBuyerId) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadBuyerTimeline(activeTimelineBuyerId);
+      }
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTimelineBuyerId, loadBuyerTimeline]);
+
   async function refreshOutreachWorkspace() {
     await load();
     const buyerId = buyerIdRef.current;
@@ -667,7 +677,7 @@ export function DispositionExecutionWorkspace({
     setEmailComposerOpen(false);
     await refreshSessionSnapshot();
     await loadBuyerTimeline(candidate.buyer_id);
-    onMessage(`Follow-up email ${labelize(result.status)} for ${candidate.name}. Delivery and replies will appear in relationship activity.`);
+    onMessage(`Follow-up email ${labelize(result.status)} for ${candidate.name}. Delivery and replies will appear in the conversation.`);
   }
 
   async function sendSms() {

@@ -172,6 +172,9 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /slice\(0, 12\)\.reverse\(\)/);
   assert.match(workspace, /data-direction=\{item\.direction \?\? "activity"\}/);
   assert.match(workspace, /Shared with the canonical buyer relationship and Inbox history/);
+  assert.match(workspace, /document\.visibilityState === "visible"/);
+  assert.match(workspace, /30_000/);
+  assert.match(workspace, /loadBuyerTimeline\(activeTimelineBuyerId\)/);
   assert.match(workspace, /styles\.quickContactBar/);
   assert.match(workspace, /Current investor/);
   assert.match(workspace, /<dt>Position<\/dt>/);
@@ -236,7 +239,7 @@ test("one-to-one email is editable, permission-aware, durable, and relationship-
   assert.match(workspace, /expires_in_hours: 72/);
   assert.match(workspace, /emailIdempotencyKeyRef/);
   assert.match(workspace, /Email sender unavailable/);
-  assert.match(workspace, /relationship activity/i);
+  assert.match(workspace, /Delivery and replies will appear in the conversation/);
   assert.match(workspace, /\/api\/v1\/buyers\/\$\{buyerId\}\/profile/);
   assert.match(workspace, /item\.direction === "inbound"/);
   assert.match(workspace, /Open and update full relationship/);
