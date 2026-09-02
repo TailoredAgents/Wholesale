@@ -1282,6 +1282,140 @@
   }
 }
 
+@container disposition-detail (max-width: 1100px) {
+  .hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .heroStats {
+    width: 100%;
+  }
+
+  .selectionGrid,
+  .operationsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container disposition-detail (max-width: 760px) {
+  .workspace {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .hero,
+  .selectionCard {
+    padding: 12px;
+  }
+
+  .error {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .heroStats {
+    grid-template-columns: 1fr;
+  }
+
+  .heroStats div {
+    min-height: 48px;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .heroStats div:last-child {
+    border-bottom: 0;
+  }
+
+  .attentionStrip {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .attentionStrip button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .sectionHeading,
+  .placementPathHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .placementProgress {
+    width: 100%;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    justify-items: start;
+    gap: 8px;
+    border-left-width: 2px;
+  }
+
+  .placementSteps {
+    grid-template-columns: repeat(7, minmax(170px, 72cqw));
+    scroll-snap-type: inline proximity;
+  }
+
+  .placementSteps li {
+    min-width: 170px;
+    scroll-snap-align: start;
+  }
+
+  .placementNextAction {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .placementNextAction a {
+    grid-column: 2;
+  }
+
+  .coverageSlots,
+  .formsGrid,
+  .twoFields {
+    grid-template-columns: 1fr;
+  }
+
+  .coverageSlot {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .coverageSlot:last-child {
+    border-bottom: 0;
+  }
+
+  .comparisonViewport {
+    padding: 12px;
+    grid-auto-columns: minmax(270px, 86cqw);
+  }
+
+  .checkpoint {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .checkpointActions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .replacementItem {
+    grid-template-columns: 1fr;
+  }
+
+  .replacementItem p {
+    grid-column: auto;
+  }
+
+  .form summary {
+    min-height: 68px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin,
   .form summary svg {

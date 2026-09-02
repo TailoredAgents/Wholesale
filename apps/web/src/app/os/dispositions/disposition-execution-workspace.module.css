@@ -108,3 +108,15 @@
   .composerActions, .callActions, .countdownActions { display: grid; grid-template-columns: 1fr; }
   .composerActions button, .callActions button, .countdownActions button { width: 100%; }
 }
+
+@container disposition-detail (max-width: 850px) {
+  .hero, .buyerSelector, .executionGrid { display: grid; grid-template-columns: 1fr; }
+  .rankedPool { grid-column: auto; grid-template-columns: 1fr; max-height: 360px; }
+  .heroActions { justify-self: start; text-align: left; }
+  .fullWidth { grid-column: auto; }
+  .profile, .outcomeInputs, .showingForm, .messageContext { grid-template-columns: 1fr; }
+  .showingForm .wide { grid-column: auto; }
+  .showingList article { grid-template-columns: 1fr; }
+  .composerActions, .callActions, .countdownActions { display: grid; grid-template-columns: 1fr; }
+  .composerActions button, .callActions button, .countdownActions button { width: 100%; }
+}

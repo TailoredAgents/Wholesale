@@ -156,6 +156,34 @@
   .revisionList article > span { text-align: left; }
 }
 
+@container disposition-detail (max-width: 900px) {
+  .copyGrid, .messagePreviews, .deliveryList { grid-template-columns: 1fr; }
+  .copyGrid > section, .messagePreviews article, .deliveryCard { border-right: 0; }
+  .integrityFacts { grid-template-columns: 1fr 1fr; }
+  .integrityFacts div:nth-child(2) { border-right: 0; }
+  .integrityFacts div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
+}
+
+@container disposition-detail (max-width: 760px) {
+  .workspace { padding: 12px; }
+  .hero { align-items: flex-start; flex-direction: column; }
+  .heroStatus { width: 100%; justify-items: start; text-align: left; }
+  .heroStatus button { width: 100%; min-height: 44px; }
+  .readinessGrid { grid-template-columns: 1fr; }
+  .readinessGrid p { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .recipientList { max-height: none; }
+  .recipientList > article { grid-template-columns: 1fr; }
+  .channelChoices { grid-template-columns: 1fr; }
+  .integrityFacts { grid-template-columns: 1fr; }
+  .integrityFacts div, .integrityFacts div:nth-child(2) { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .controlActions { display: grid; }
+  .controlActions button, .draftPanel > .primaryButton, .approvalPanel > .primaryButton { width: calc(100% - 28px); margin-left: 14px; margin-right: 14px; min-height: 46px; }
+  .controlActions button { width: 100%; margin: 0; }
+  .deliveryCard dl { grid-template-columns: 1fr; }
+  .revisionList article { grid-template-columns: 1fr; }
+  .revisionList article > span { text-align: left; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
 }

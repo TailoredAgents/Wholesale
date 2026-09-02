@@ -628,6 +628,31 @@
   .linkFacts dd { max-width: none; text-align: left; }
 }
 
+@container disposition-detail (max-width: 1050px) {
+  .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .layout { grid-template-columns: 1fr; }
+}
+
+@container disposition-detail (max-width: 760px) {
+  .workspace { padding: 12px; }
+  .hero { align-items: flex-start; flex-direction: column; }
+  .heroStatus { width: 100%; justify-items: start; border-left: 0; border-top: 3px solid #c58a16; text-align: left; }
+  .steps { grid-template-columns: 1fr; }
+  .revisionCard { grid-template-columns: 1fr 1fr; }
+  .revisionCard > button { justify-self: start; }
+}
+
+@container disposition-detail (max-width: 520px) {
+  .hero h4 { font-size: 18px; }
+  .panelHeading { align-items: flex-start; flex-direction: column; }
+  .panelHeading > strong { text-align: left; }
+  .formGrid, .revisionCard { grid-template-columns: 1fr; }
+  .form label[data-wide="true"] { grid-column: auto; }
+  .formFooter { display: grid; grid-template-columns: 1fr; }
+  .linkFacts > div { display: grid; }
+  .linkFacts dd { max-width: none; text-align: left; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
 }
