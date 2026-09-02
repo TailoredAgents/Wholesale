@@ -26,6 +26,13 @@
 .fitEvidence summary { padding: 8px 0; color: #17633d; font-size: 11px; font-weight: 800; cursor: pointer; }
 .fitEvidence[open] summary { padding-bottom: 7px; }
 .conversationUtilities .evidence { padding: 0 0 10px; border-top: 0; }
+.packetQuickBar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #dce3dd; background: #f4f8f5; }
+.packetQuickBar > div { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.packetQuickBar > div:first-child { color: #17633d; }
+.packetQuickBar > div:first-child > span { display: grid; gap: 1px; }
+.packetQuickBar strong { font-size: 11px; }
+.packetQuickBar small { overflow: hidden; color: #68756d; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.packetQuickBar > div:last-child { flex: none; }
 .channelSection { margin-top: 11px; padding-top: 11px; border-top: 1px solid #e5e8e5; }
 .channelSection .sectionTitle { margin-bottom: 7px; }
 .savedOutcome { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border: 1px solid #8bb79c; border-radius: 4px; background: #eef8f1; color: #155f38; }
@@ -228,6 +235,8 @@
   .fullWidth { grid-column: auto; }
   .conversationHeader { grid-template-columns: minmax(140px, .8fr) minmax(0, 1.2fr); }
   .conversationStatus { grid-column: 1 / -1; grid-row: 2; display: flex; justify-content: flex-end; }
+  .packetQuickBar { align-items: stretch; flex-direction: column; }
+  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .outcomeInputs, .showingForm { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }
@@ -247,6 +256,8 @@
   .fullWidth { grid-column: auto; }
   .conversationHeader { grid-template-columns: minmax(140px, .8fr) minmax(0, 1.2fr); }
   .conversationStatus { grid-column: 1 / -1; grid-row: 2; display: flex; justify-content: flex-end; }
+  .packetQuickBar { align-items: stretch; flex-direction: column; }
+  .packetQuickBar > div:last-child { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .outcomeInputs, .showingForm { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }
@@ -267,6 +278,8 @@
   .conversationStatus { grid-column: auto; grid-row: auto; justify-content: flex-start; }
   .resultDock > header { align-items: stretch; flex-direction: column; }
   .resultDock > header button { width: 100%; }
+  .packetQuickBar > div:last-child { grid-template-columns: 1fr; }
+  .packetQuickBar button { width: 100%; }
   .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
   .relationshipFacts div:nth-child(even) { border-left: 0; }
 }
@@ -283,6 +296,8 @@
   .conversationStatus { grid-column: auto; grid-row: auto; justify-content: flex-start; }
   .resultDock > header { align-items: stretch; flex-direction: column; }
   .resultDock > header button { width: 100%; }
+  .packetQuickBar > div:last-child { grid-template-columns: 1fr; }
+  .packetQuickBar button { width: 100%; }
   .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
   .relationshipFacts div:nth-child(even) { border-left: 0; }
 }

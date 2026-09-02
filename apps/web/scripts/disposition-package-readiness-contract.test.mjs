@@ -53,6 +53,14 @@ test("externally prepared packet PDFs remain exact governed package versions", (
   assert.doesNotMatch(packageWorkspace, /hasApprovalBlockers/);
   assert.match(packageWorkspace, /shoppingArtifactIssue/);
   assert.match(packageWorkspace, /shoppingArtifactAvailable/);
+  assert.match(packageWorkspace, /maximumExternalPacketBytes = 15 \* 1024 \* 1024/);
+  assert.match(packageWorkspace, /validateExternalPacket\(file\)/);
+  assert.match(packageWorkspace, /file\.slice\(0, 5\)\.arrayBuffer\(\)/);
+  assert.match(packageWorkspace, /PDF only - maximum 15 MB/);
+  assert.match(packageWorkspace, /className=\{styles\.uploadProgress\}/);
+  assert.match(packageWorkspace, /"external-upload"[\s\S]*true,[\s\S]*false/);
+  assert.match(dispositionWorkspace, /response\.status === 413/);
+  assert.match(dispositionWorkspace, /Investor packet PDFs cannot exceed 15 MB/);
 });
 
 test("Land cases use exact external packets and share the buyer marketing tools", () => {

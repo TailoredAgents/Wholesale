@@ -188,6 +188,25 @@ def invalid(exc: ValueError) -> HTTPException:
     )
 
 
+async def _read_external_packet_body(request: Request) -> bytes:
+    """Read an uploaded packet without allowing an oversized body into memory."""
+    limit = disposition_packages.MAX_EXTERNAL_PACKAGE_PDF_SIZE
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            declared_size = int(declared_length)
+        except ValueError as exc:
+            raise ValueError("The investor packet upload has an invalid content length.") from exc
+        if declared_size > limit:
+            raise ValueError("External investor packet PDFs cannot exceed 15 MB.")
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > limit:
+            raise ValueError("External investor packet PDFs cannot exceed 15 MB.")
+        content.extend(chunk)
+    return bytes(content)
+
+
 @router.get("")
 def read_overview(
     db: Annotated[Session, Depends(get_db)],
@@ -830,6 +849,7 @@ async def create_external_case_package_version(
     if request_type != "application/pdf" or declared_type != "application/pdf":
         raise invalid(ValueError("External investor packets must be uploaded as application/pdf."))
     try:
+        content = await _read_external_packet_body(request)
         result = disposition_packages.build_external_version(
             db,
             principal,
@@ -837,7 +857,7 @@ async def create_external_case_package_version(
             expected_latest_version=expected_latest_version,
             file_name=file_name,
             content_type=declared_type,
-            content=await request.body(),
+            content=content,
             source_note=source_note,
         )
     except ValueError as exc:

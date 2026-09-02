@@ -54,6 +54,33 @@ const classificationDescriptions: Record<DispositionPackageEvidenceClassificatio
 
 const classifications = Object.keys(classificationLabels) as DispositionPackageEvidenceClassification[];
 const acceptableArtifactScanStatuses = new Set(["clean", "not_configured"]);
+const maximumExternalPacketBytes = 15 * 1024 * 1024;
+
+function fileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function validateExternalPacket(file: File) {
+  if (!file.name.toLowerCase().endsWith(".pdf")) {
+    return "Choose a file whose name ends in .pdf.";
+  }
+  const normalizedType = file.type.split(";", 1)[0].trim().toLowerCase();
+  if (normalizedType && normalizedType !== "application/pdf") {
+    return "Choose a PDF file. This file is labeled as a different document type.";
+  }
+  if (file.size === 0) return "The selected PDF is empty.";
+  if (file.size > maximumExternalPacketBytes) {
+    return `This PDF is ${fileSize(file.size)}. Investor packet PDFs cannot exceed 15 MB.`;
+  }
+  try {
+    const header = new TextDecoder("ascii").decode(await file.slice(0, 5).arrayBuffer());
+    if (header !== "%PDF-") return "The selected file does not contain a valid PDF header.";
+  } catch {
+    return "Stonegate could not read this PDF. Choose the file again or export a fresh copy.";
+  }
+  return null;
+}
 
 function money(cents: number | null | undefined) {
   return cents == null
@@ -198,7 +225,7 @@ export function DispositionPackageReadiness({
   leadId: string;
   download: (path: string, fileName: string) => Promise<void>;
   onCaseChanged: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string | null) => void;
   request: Request;
 }) {
   const requestRef = useRef(request);
@@ -219,6 +246,7 @@ export function DispositionPackageReadiness({
   const [shareLinks, setShareLinks] = useState<DispositionPackageShareLink[]>([]);
   const [issuedLink, setIssuedLink] = useState<DispositionPackageShareLinkIssued | null>(null);
   const [copiedLink, setCopiedLink] = useState<"link" | "sms" | null>(null);
+  const [selectedExternalPacket, setSelectedExternalPacket] = useState<{ name: string; size: number } | null>(null);
 
   useEffect(() => {
     requestRef.current = request;
@@ -315,10 +343,12 @@ export function DispositionPackageReadiness({
     work: () => Promise<unknown>,
     successMessage: string,
     reloadCase = true,
+    broadcastError = true,
   ) {
     setBusyAction(actionKey);
     setError(null);
     setSuccess(null);
+    onMessage(null);
     try {
       await work();
       await load();
@@ -329,7 +359,7 @@ export function DispositionPackageReadiness({
     } catch (mutationError) {
       const detail = mutationError instanceof Error ? mutationError.message : "Unable to update the package.";
       setError(detail);
-      onMessage(detail);
+      if (broadcastError) onMessage(detail);
       requestAnimationFrame(() => statusRef.current?.focus());
       return false;
     } finally {
@@ -362,12 +392,19 @@ export function DispositionPackageReadiness({
     event.preventDefault();
     if (!data || !canEditDeals) return;
     const form = event.currentTarget;
-    const values = new FormData(form);
-    const file = values.get("external_package_pdf");
-    if (!(file instanceof File) || file.size === 0) {
+    const fileInput = form.elements.namedItem("external_package_pdf") as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+    if (!file) {
       setError("Choose the completed investor-packet PDF.");
       return;
     }
+    const validationError = await validateExternalPacket(file);
+    if (validationError) {
+      setError(validationError);
+      requestAnimationFrame(() => statusRef.current?.focus());
+      return;
+    }
+    const values = new FormData(form);
     const query = new URLSearchParams({
       expected_latest_version: String(data.latest_version?.version_number ?? 0),
       file_name: file.name,
@@ -387,8 +424,13 @@ export function DispositionPackageReadiness({
           },
         ),
       "External investor packet uploaded as an exact draft. Review or approve it when useful; shopping and outreach may continue with its Preliminary label.",
+      true,
+      false,
     );
-    if (uploaded) form.reset();
+    if (uploaded) {
+      form.reset();
+      setSelectedExternalPacket(null);
+    }
   }
 
   function openApproval() {
@@ -772,17 +814,23 @@ export function DispositionPackageReadiness({
         <div className={styles.externalUploadFields}>
           <label>
             <span>Investor packet PDF</span>
-            <input accept="application/pdf,.pdf" name="external_package_pdf" required type="file" />
+            <input accept="application/pdf,.pdf" name="external_package_pdf" onChange={(event) => {
+              const file = event.target.files?.[0];
+              setSelectedExternalPacket(file ? { name: file.name, size: file.size } : null);
+              setError(null);
+            }} required type="file" />
+            {selectedExternalPacket ? <small>{selectedExternalPacket.name} - {fileSize(selectedExternalPacket.size)}</small> : <small>PDF only - maximum 15 MB</small>}
           </label>
           <label>
             <span>Source note</span>
             <input maxLength={500} name="source_note" placeholder="Optional: who prepared it and when" />
           </label>
         </div>
-        <button disabled={!canEditDeals || busyAction !== null} type="submit">
+        <button aria-busy={busyAction === "external-upload"} disabled={!canEditDeals || busyAction !== null} type="submit">
           {busyAction === "external-upload" ? <LoaderCircle aria-hidden="true" className={styles.spin} size={15} /> : <Upload aria-hidden="true" size={15} />}
           {busyAction === "external-upload" ? "Uploading exact PDF..." : "Upload external packet draft"}
         </button>
+        {busyAction === "external-upload" && selectedExternalPacket ? <div aria-live="polite" className={styles.uploadProgress} role="status"><span /><small>Uploading {selectedExternalPacket.name}. Keep this page open until it finishes.</small></div> : null}
       </form>
 
       <details className={`${styles.panel} ${styles.foldPanel}`}>

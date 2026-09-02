@@ -87,6 +87,13 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
   assert.match(workspace, /Open \{packageLabel\} packet/);
   assert.match(workspace, /Text \$\{packageLabel\} packet/);
+  assert.match(workspace, /className=\{styles\.packetQuickBar\}/);
+  assert.match(workspace, /Investor asks for the packet\?/);
+  assert.match(workspace, /Send by text/);
+  assert.match(workspace, /Send by email/);
+  assert.match(workspace, /async function emailInvestorPacket\(\)/);
+  assert.match(workspace, /idempotency\("dispo-packet-email"\)/);
+  assert.match(workspace, /packetEmailUnavailable/);
   assert.match(workspace, /workspace\.package_is_preliminary/);
   assert.match(workspace, /workspace\.package_status !== "approved"/);
   assert.match(workspace, /issuedPackageLabel = issued\.is_preliminary \? "preliminary" : "approved"/);

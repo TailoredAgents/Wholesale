@@ -214,15 +214,24 @@ export function DispositionWorkspace({
       headers: { ...(await headers(!(options.body instanceof Blob))), ...(options.headers ?? {}) },
     });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as {
+      const responseBody = await response.text().catch(() => "");
+      let payload: {
         detail?: string | { message?: string } | Array<{ msg?: string }>;
-      };
+      } = {};
+      try {
+        payload = JSON.parse(responseBody) as typeof payload;
+      } catch {
+        // Gateways may return HTML or an empty response for rejected uploads.
+      }
       const detail = typeof payload.detail === "string"
         ? payload.detail
         : Array.isArray(payload.detail)
           ? payload.detail.map((item) => item.msg).filter(Boolean).join(" ")
           : payload.detail?.message;
-      throw new Error(detail || "Request failed.");
+      const fallback = response.status === 413
+        ? "The uploaded file is too large. Investor packet PDFs cannot exceed 15 MB."
+        : `Request failed (${response.status}).`;
+      throw new Error(detail || fallback);
     }
     return response.json() as Promise<T>;
   }, [apiBase, headers]);

@@ -818,6 +818,54 @@ export function DispositionExecutionWorkspace({
     }
   }
 
+  async function emailInvestorPacket() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (
+      !candidate
+      || !candidate.actionable
+      || !candidate.email
+      || !workspace?.package_pdf_path
+      || !canEditDeals
+      || !emailProviderConfigured
+      || !emailSenderId
+    ) return;
+    const firstName = candidate.name.trim().split(/\s+/)[0] || "there";
+    const result = await action(
+      "packet-email",
+      async () => {
+        const issued = await request<DispositionPackageShareLinkIssued>(
+          `/api/v1/dispositions/cases/${caseId}/package/share-links`,
+          {
+            method: "POST",
+            body: JSON.stringify({ expires_in_hours: 72 }),
+          },
+        );
+        const issuedPackageLabel = issued.is_preliminary ? "preliminary" : "approved";
+        const delivery = await request<EmailSendResult>(
+          `/api/v1/dispositions/cases/${caseId}/execution/email`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              ...executionBuyerReference(candidate),
+              email_sender_alias_id: emailSenderId,
+              subject: `${issued.is_preliminary ? "Preliminary " : ""}property package - ${workspace.property_address}`,
+              body: `Hi ${firstName},\n\nHere is the ${issuedPackageLabel} property package for ${workspace.property_address}. This secure link expires in 72 hours:\n${issued.share_url}`,
+              idempotency_key: idempotency("dispo-packet-email"),
+            }),
+          },
+        );
+        return { delivery, issued };
+      },
+      `Investor packet email accepted for ${candidate.name}.`,
+    );
+    if (!result) return;
+    setResultComposerOpen(true);
+    const issuedPackageLabel = result.issued.is_preliminary ? "Preliminary" : "Approved";
+    onMessage(`${issuedPackageLabel} investor packet email ${labelize(result.delivery.status)} for ${candidate.name}. The secure link expires in 72 hours; delivery and replies appear in the conversation.`);
+    await load();
+    await loadBuyerTimeline(candidate.buyer_id);
+  }
+
   async function recordOutcome(outcome: Outcome, advance: "next" | "stay") {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals) return;
@@ -1015,6 +1063,7 @@ export function DispositionExecutionWorkspace({
     || !emailProviderConfigured
     || !emailSenderId;
   const packetUnavailable = smsUnavailable || !workspace.package_pdf_path;
+  const packetEmailUnavailable = emailUnavailable || !workspace.package_pdf_path;
   const packageIsPreliminary = workspace.package_is_preliminary
     ?? workspace.package_status !== "approved";
   const packageLabel = packageIsPreliminary ? "preliminary" : "approved";
@@ -1116,6 +1165,14 @@ export function DispositionExecutionWorkspace({
                 </details>
                 {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
               </div>
+              <section aria-label="Investor packet delivery" className={styles.packetQuickBar}>
+                <div><Download size={16} /><span><strong>Investor asks for the packet?</strong><small>Send the current {packageLabel} PDF without leaving the call or conversation.</small></span></div>
+                <div>
+                  {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open packet</button> : null}
+                  <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={14} />{busy === "packet-sms" ? "Sending…" : "Send by text"}</button>
+                  <button className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} type="button"><Mail size={14} />{busy === "packet-email" ? "Sending…" : "Send by email"}</button>
+                </div>
+              </section>
               <InvestorConversation
                 candidate={candidate}
                 loading={buyerTimelineLoading}
