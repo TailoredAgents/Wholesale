@@ -1,6 +1,8 @@
 .workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
+.dedicatedWorkspace { gap: 12px; }
 .embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
+.landMarketNotice { margin: 0; padding: 10px 14px; border: 1px solid #d8c58e; border-radius: 8px; background: #fff9e9; color: #684e1c; font-size: 11px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
 .metrics > div { min-height: 76px; padding: 14px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }
@@ -249,6 +251,37 @@
 .tabBadge[data-tone="complete"], .tabBadge[data-tone="available"] { background: var(--brand-soft); color: var(--brand-strong); }
 .tabBadge[data-tone="warning"] { background: #fff1c9; color: #795400; }
 .tabBadge[data-tone="hard"] { background: var(--danger-soft); color: var(--danger); }
+.workspaceNavigation { position: sticky; z-index: 12; top: 0; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 8px 20px rgb(20 41 46 / .07); backdrop-filter: blur(12px); }
+.workspacePrimaryNav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workspacePrimaryNav > button { min-width: 0; min-height: 68px; padding: 10px 13px; display: flex; align-items: center; gap: 10px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
+.workspacePrimaryNav > button:last-child { border-right: 0; }
+.workspacePrimaryNav > button > svg { flex: 0 0 auto; }
+.workspacePrimaryNav > button > span { min-width: 0; display: grid; gap: 2px; }
+.workspacePrimaryNav > button strong { color: var(--text); font-size: 11px; }
+.workspacePrimaryNav > button small { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
+.workspaceSecondaryNav { min-height: 44px; padding: 6px 9px; display: flex; align-items: center; gap: 6px; overflow-x: auto; border-top: 1px solid var(--line-soft); }
+.workspaceSecondaryNav button { min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.workspaceSecondaryNav button[aria-current="page"] { border-color: var(--brand); background: var(--surface); color: var(--brand-strong); }
+.dispositionOverview { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.dispositionOverview > header { min-height: 108px; padding: 18px 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; background: linear-gradient(135deg, var(--brand-soft), var(--surface)); }
+.dispositionOverview > header > div { min-width: 0; display: grid; gap: 5px; }
+.dispositionOverview > header span { color: var(--brand-strong); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.dispositionOverview > header h3 { margin: 0; font-size: 21px; }
+.dispositionOverview > header p { max-width: 720px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.dispositionOverview > header > strong { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--brand-strong); font-size: 9px; text-transform: uppercase; white-space: nowrap; }
+.overviewFacts { margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.overviewFacts > div { min-width: 0; min-height: 64px; padding: 10px 13px; display: grid; align-content: center; gap: 3px; border-right: 1px solid var(--line-soft); }
+.overviewFacts > div:last-child { border-right: 0; }
+.overviewFacts dt { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.overviewFacts dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 800; }
+.overviewActions { padding: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.overviewActions button { min-width: 0; min-height: 84px; padding: 12px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--brand-strong); font: inherit; text-align: left; cursor: pointer; }
+.overviewActions button:hover { border-color: var(--brand); background: var(--brand-soft); }
+.overviewActions button > svg { flex: 0 0 auto; }
+.overviewActions button > span { min-width: 0; display: grid; gap: 4px; }
+.overviewActions button strong { font-size: 12px; }
+.overviewActions button small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .buyerTab { display: grid; }
 .discoveryPanel { margin: 18px 18px 0; border: 1px solid var(--line); background: var(--surface); }
 .discoveryPanel > header { min-height: 76px; padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line-soft); }
@@ -505,6 +538,11 @@
 
 /* Deal records embed this desk in a narrower content column even on desktop viewports. */
 @container disposition-detail (max-width: 1100px) {
+  .workspacePrimaryNav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspacePrimaryNav > button:nth-child(2) { border-right: 0; }
+  .workspacePrimaryNav > button:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
+  .overviewFacts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overviewActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sectionGrid { grid-template-columns: 1fr; }
   .discoveryTierGrid { grid-template-columns: 1fr; }
   .discoveryTier { border-right: 0; border-bottom: 1px solid var(--line-soft); }
@@ -522,6 +560,9 @@
 }
 
 @container disposition-detail (max-width: 760px) {
+  .workspaceNavigation { position: static; }
+  .dispositionOverview > header { align-items: flex-start; flex-direction: column; }
+  .overviewFacts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tabs { padding: 0 12px; gap: 14px; overflow-x: auto; }
   .moreTabs { position: static; }
   .moreTabs > div { position: fixed; z-index: 50; right: 12px; left: 12px; top: auto; width: auto; }
@@ -569,6 +610,11 @@
 }
 
 @container disposition-detail (max-width: 520px) {
+  .workspacePrimaryNav, .overviewFacts, .overviewActions { grid-template-columns: minmax(0, 1fr); }
+  .workspacePrimaryNav > button, .workspacePrimaryNav > button:nth-child(2) { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .workspacePrimaryNav > button:last-child { border-bottom: 3px solid transparent; }
+  .workspacePrimaryNav > button.activeWorkspaceSection:last-child { border-bottom-color: var(--brand); }
+  .overviewFacts > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .sectionTitle { align-items: flex-start; flex-direction: column; gap: 5px; }
   .facts div, .activityList p, .payouts div { display: grid; }
   .facts dd { text-align: left; }

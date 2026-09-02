@@ -576,7 +576,6 @@ def release_campaign(
     )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     from app.services.disposition_packages import require_package_artifact
 
     package_version = require_package_artifact(

@@ -7,6 +7,7 @@ const appRoot = resolve(process.cwd(), "src/app");
 const api = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
 const dealsWorkspace = readFileSync(resolve(appRoot, "os/deals/deals-workspace.tsx"), "utf8");
 const dispositionWorkspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
+const dispositionDealPage = readFileSync(resolve(appRoot, "os/dispositions/[caseId]/page.tsx"), "utf8");
 const packageWorkspace = readFileSync(resolve(appRoot, "os/dispositions/disposition-package-readiness.tsx"), "utf8");
 const buyerPool = readFileSync(resolve(appRoot, "os/dispositions/disposition-buyer-pool.tsx"), "utf8");
 const outreach = readFileSync(resolve(appRoot, "os/dispositions/disposition-outreach-workspace.tsx"), "utf8");
@@ -15,7 +16,8 @@ const setup = readFileSync(resolve(appRoot, "os/dispositions/disposition-setup-w
 const setupPage = readFileSync(resolve(appRoot, "os/dispositions/page.tsx"), "utf8");
 
 test("DS5 remains inside the canonical deal package tab", () => {
-  assert.match(dealsWorkspace, /dealId=\{selected\.id\}/);
+  assert.match(dispositionDealPage, /dealId=\{deal\.id\}/);
+  assert.match(dealsWorkspace, /Disposition has its own full-width workspace/);
   assert.match(dispositionWorkspace, /<DispositionPackageReadiness/);
   assert.match(dispositionWorkspace, /activeTab === "package"/);
   assert.doesNotMatch(dispositionWorkspace, /\/package\/approve/);
@@ -53,18 +55,20 @@ test("externally prepared packet PDFs remain exact governed package versions", (
   assert.match(packageWorkspace, /shoppingArtifactAvailable/);
 });
 
-test("Land cases use exact external packets and hide residential-only disposition tools", () => {
+test("Land cases use exact external packets and share the buyer marketing tools", () => {
   assert.match(api, /asset_class: "house" \| "land"/);
   assert.match(dispositionWorkspace, /selected\.asset_class === "land"/);
-  assert.match(dispositionWorkspace, /houseOnlyTabs/);
-  assert.match(dispositionWorkspace, /"provider", "reconciliation"/);
-  assert.match(dispositionWorkspace, /Land uses Package and Buyer pool in this release/);
-  assert.match(dispositionWorkspace, /buyer selection, funding, closing protection, reconciliation/);
-  assert.doesNotMatch(dispositionWorkspace, /Land uses the same Package, Buyer pool, and closing record/);
+  assert.match(dispositionWorkspace, /landUnavailableTabs/);
+  assert.match(dispositionWorkspace, /\["offers", "provider", "reconciliation"\]/);
+  assert.doesNotMatch(dispositionWorkspace, /landUnavailableTabs = new Set<Tab>\(\[[^\]]*"execution"/);
+  assert.doesNotMatch(dispositionWorkspace, /landUnavailableTabs = new Set<Tab>\(\[[^\]]*"outreach"/);
+  assert.match(dispositionWorkspace, /Land marketing is active/);
+  assert.match(dispositionWorkspace, /one-to-one dialer/);
+  assert.match(dispositionWorkspace, /supervised bulk outreach/);
   assert.match(dispositionWorkspace, /assetClass=\{selected\.asset_class\}/);
   assert.match(packageWorkspace, /assetClass === "land"/);
   assert.match(packageWorkspace, /Upload the completed Land investor packet/);
-  assert.match(packageWorkspace, /Find buyers remains available now for asset-aware matching, independently of package approval/);
+  assert.match(packageWorkspace, /Find buyers, the one-to-one dialer, and supervised bulk outreach remain available independently of package approval/);
   assert.doesNotMatch(packageWorkspace, /Approve the exact uploaded Land packet, then use the Buyer pool/);
 });
 

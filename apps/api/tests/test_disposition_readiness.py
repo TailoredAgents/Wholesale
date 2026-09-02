@@ -78,6 +78,8 @@ def test_land_readiness_excludes_house_only_release_actions_from_progress(
     assert response.status_code == 200, response.text
     body = response.json()
     actions = {item["key"]: item for item in body["actions"]}
+    for key in ("contact_buyers", "prepare_outreach"):
+        assert actions[key]["state"] != "not_applicable"
     for key in ("prepare_assignment", "record_funding", "reconcile"):
         assert actions[key]["state"] == "not_applicable"
     applicable = [item for item in body["actions"] if item["state"] != "not_applicable"]

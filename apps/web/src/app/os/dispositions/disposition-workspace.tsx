@@ -5,7 +5,13 @@ import {
   Check,
   CircleDollarSign,
   Download,
+  FileText,
+  Gavel,
+  LayoutDashboard,
   LoaderCircle,
+  Megaphone,
+  PhoneCall,
+  Send,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -37,7 +43,8 @@ import {
 import { DispositionOutreachWorkspace } from "./disposition-outreach-workspace";
 import styles from "./dispositions.module.css";
 
-type Tab = "package" | "buyers" | "execution" | "outreach" | "offers" | "provider" | "reconciliation";
+export type DispositionWorkspaceTab = "overview" | "package" | "buyers" | "execution" | "outreach" | "offers" | "provider" | "reconciliation";
+type Tab = DispositionWorkspaceTab;
 type LegacyBuyerMatch = DispositionOverview["cases"][number]["matches"][number];
 type WorkspaceBuyerChoice = {
   buyer_id: string;
@@ -45,8 +52,9 @@ type WorkspaceBuyerChoice = {
   latest_proof_document_id: string | null;
 };
 const primaryWorkspaceTabs: Tab[] = ["package", "buyers", "execution", "outreach", "offers"];
-const workspaceTabs: Tab[] = [...primaryWorkspaceTabs, "provider", "reconciliation"];
+const workspaceTabs: Tab[] = ["overview", ...primaryWorkspaceTabs, "provider", "reconciliation"];
 const tabRootAnchors: Record<Tab, string> = {
+  overview: "disposition-overview",
   package: "package-versions",
   buyers: "buyer-pool",
   execution: "call-queue",
@@ -55,13 +63,14 @@ const tabRootAnchors: Record<Tab, string> = {
   provider: "provider-handoff",
   reconciliation: "deal-reconciliation",
 };
-const houseOnlyTabs = new Set<Tab>(["execution", "outreach", "offers", "provider", "reconciliation"]);
+const landUnavailableTabs = new Set<Tab>(["offers", "provider", "reconciliation"]);
 
 function isWorkspaceTab(value: string | null): value is Tab {
   return Boolean(value && workspaceTabs.includes(value as Tab));
 }
 
 function tabLabel(tab: Tab) {
+  if (tab === "overview") return "Overview";
   if (tab === "package") return "Packet";
   if (tab === "buyers") return "Find buyers";
   if (tab === "execution") return "One-to-one";
@@ -135,6 +144,7 @@ export function DispositionWorkspace({
   initialCaseId,
   initialData,
   initialTab = "package",
+  variant = "embedded",
 }: {
   canApproveBuyerSelection: boolean;
   canEditBuyers: boolean;
@@ -147,6 +157,7 @@ export function DispositionWorkspace({
   initialCaseId?: string;
   initialData: DispositionOverview;
   initialTab?: Tab;
+  variant?: "embedded" | "dedicated";
 }) {
   const { getToken } = useAuth();
   const [data, setData] = useState(initialData);
@@ -159,7 +170,7 @@ export function DispositionWorkspace({
   const [tab, setTab] = useState<Tab>(
     (initialTab === "outreach" && !canViewOutreach) ||
       (initialTab === "offers" && !initialData.can_view_private_economics) ||
-      (initialSelectedCase?.asset_class === "land" && houseOnlyTabs.has(initialTab))
+      (initialSelectedCase?.asset_class === "land" && landUnavailableTabs.has(initialTab))
       ? "package"
       : initialTab,
   );
@@ -190,7 +201,7 @@ export function DispositionWorkspace({
   );
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
   const activeTab =
-    selected?.asset_class === "land" && houseOnlyTabs.has(tab) ? "package" : tab;
+    selected?.asset_class === "land" && landUnavailableTabs.has(tab) ? "package" : tab;
   const buyerChoices = useMemo(
     () => mergeBuyerChoices(
       buyerNetworkCaseId === selected?.id ? buyerNetworkEntries : [],
@@ -544,12 +555,17 @@ export function DispositionWorkspace({
     const allowedTab =
       (nextTab === "outreach" && !canViewOutreach) ||
       (nextTab === "offers" && !data.can_view_private_economics) ||
-      (selected?.asset_class === "land" && houseOnlyTabs.has(nextTab))
+      (selected?.asset_class === "land" && landUnavailableTabs.has(nextTab))
         ? "package"
         : nextTab;
     setTab(allowedTab);
     const url = new URL(window.location.href);
-    url.searchParams.set("dispositionTab", allowedTab);
+    if (variant === "dedicated") {
+      url.searchParams.set("tab", allowedTab);
+      url.searchParams.delete("dispositionTab");
+    } else {
+      url.searchParams.set("dispositionTab", allowedTab);
+    }
     if (anchor) url.hash = anchor.startsWith("#") ? anchor : `#${anchor}`;
     window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
     if (anchor) {
@@ -584,6 +600,13 @@ export function DispositionWorkspace({
   }
 
   const activeReadiness = readinessCaseId === selected?.id ? readiness : null;
+  const dedicatedSection = activeTab === "overview"
+    ? "overview"
+    : activeTab === "package"
+      ? "package"
+      : ["buyers", "execution", "outreach", "provider"].includes(activeTab)
+        ? "market"
+        : "closing";
 
   function tabAttention(tabKey: Tab) {
     const actions = (activeReadiness?.actions ?? []).filter(
@@ -615,7 +638,7 @@ export function DispositionWorkspace({
   );
 
   return (
-    <section aria-label="Disposition management" className={`${styles.workspace} ${styles.embeddedWorkspace}`} id="disposition-workbench" tabIndex={-1}>
+    <section aria-label="Disposition management" className={`${styles.workspace} ${variant === "dedicated" ? styles.dedicatedWorkspace : styles.embeddedWorkspace}`} id="disposition-workbench" tabIndex={-1}>
       {message ? <p aria-live="polite" className={messageIsError ? styles.notice : styles.success} role={messageIsError ? "alert" : "status"}>{message}</p> : null}
       {!canEditDeals ? <p className={styles.notice} role="status">Read-only access: disposition actions are disabled for your role.</p> : null}
 
@@ -623,7 +646,7 @@ export function DispositionWorkspace({
         <div className={styles.detail}>
           {!selected ? <div className={styles.empty}><UsersRound size={30} /><h3>No disposition cases</h3><p>Executed House and Land transactions appear here for disposition work, even while setup is incomplete.</p></div> : (
             <>
-              {selected.asset_class === "land" ? <p className={styles.notice} role="status">Land uses Package and Buyer pool in this release. Upload the completed investor PDF and use asset-aware matching; buyer selection, funding, closing protection, reconciliation, the residential call queue, automated outreach, Offer Room, and InvestorLift are out of scope.</p> : null}
+              {selected.asset_class === "land" ? <p className={styles.landMarketNotice} role="status">Land marketing is active. Use the investor packet, asset-aware buyer matching, one-to-one dialer, and supervised bulk outreach in any order. Residential Offer Room, finance reconciliation, and InvestorLift handoff remain separate workflows.</p> : null}
               {selected.asset_class === "house" && copilot && copilotCaseId === selected.id ? (
                 <CopilotLauncher
                   attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}
@@ -642,20 +665,40 @@ export function DispositionWorkspace({
                 </CopilotLauncher>
               ) : null}
               <DispositionReadinessPanel
+                compact={variant === "dedicated"}
                 error={readinessError}
                 loading={readinessLoading}
                 onNavigate={openReadinessTarget}
                 onRetry={() => void loadReadiness(selected.id)}
                 readiness={activeReadiness}
               />
-              {activeTab === "reconciliation" ? (
+              {variant === "dedicated" ? (
+                <nav aria-label="Disposition deal workspace" className={styles.workspaceNavigation}>
+                  <div className={styles.workspacePrimaryNav}>
+                    <button aria-current={dedicatedSection === "overview" ? "page" : undefined} className={dedicatedSection === "overview" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab("overview")} type="button"><LayoutDashboard aria-hidden="true" size={17} /><span><strong>Overview</strong><small>Status and checklist</small></span></button>
+                    <button aria-current={dedicatedSection === "package" ? "page" : undefined} className={dedicatedSection === "package" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab("package")} type="button"><FileText aria-hidden="true" size={17} /><span><strong>Packet</strong><small>Build, upload, and share</small></span></button>
+                    <button aria-current={dedicatedSection === "market" ? "page" : undefined} className={dedicatedSection === "market" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["buyers", "execution", "outreach", "provider"].includes(activeTab) ? activeTab : "buyers")} type="button"><Megaphone aria-hidden="true" size={17} /><span><strong>Market Deal</strong><small>Buyers, dialer, and outreach</small></span></button>
+                    {selected.asset_class === "house" && data.can_view_private_economics ? <button aria-current={dedicatedSection === "closing" ? "page" : undefined} className={dedicatedSection === "closing" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["offers", "reconciliation"].includes(activeTab) ? activeTab : "offers")} type="button"><Gavel aria-hidden="true" size={17} /><span><strong>Offers & Closing</strong><small>Compare, select, and close</small></span></button> : null}
+                  </div>
+                  {dedicatedSection === "market" ? <div className={styles.workspaceSecondaryNav}>
+                    <button aria-current={activeTab === "buyers" ? "page" : undefined} onClick={() => selectWorkspaceTab("buyers")} type="button"><UsersRound aria-hidden="true" size={15} />Find buyers</button>
+                    <button aria-current={activeTab === "execution" ? "page" : undefined} onClick={() => selectWorkspaceTab("execution")} type="button"><PhoneCall aria-hidden="true" size={15} />Dial buyers</button>
+                    {canViewOutreach ? <button aria-current={activeTab === "outreach" ? "page" : undefined} onClick={() => selectWorkspaceTab("outreach")} type="button"><Send aria-hidden="true" size={15} />Bulk outreach</button> : null}
+                    {selected.asset_class === "house" ? <button aria-current={activeTab === "provider" ? "page" : undefined} onClick={() => selectWorkspaceTab("provider")} type="button">External distribution</button> : null}
+                  </div> : null}
+                  {dedicatedSection === "closing" ? <div className={styles.workspaceSecondaryNav}>
+                    <button aria-current={activeTab === "offers" ? "page" : undefined} onClick={() => selectWorkspaceTab("offers")} type="button">Offers & closing</button>
+                    <button aria-current={activeTab === "reconciliation" ? "page" : undefined} onClick={() => selectWorkspaceTab("reconciliation")} type="button"><CircleDollarSign aria-hidden="true" size={15} />Finance reconciliation</button>
+                  </div> : null}
+                </nav>
+              ) : activeTab === "reconciliation" ? (
                 <nav aria-label="Disposition and finance sections" className={styles.financeContextNav}>
                   <Link href={dispositionHref}>Back to Dispositions</Link>
                   <span>Finance reconciliation</span>
                 </nav>
               ) : (
                 <nav aria-label="Disposition deal sections" className={styles.tabs}>
-                  {primaryWorkspaceTabs.filter((item) => (selected.asset_class !== "land" || !houseOnlyTabs.has(item)) && (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => {
+                  {primaryWorkspaceTabs.filter((item) => (selected.asset_class !== "land" || !landUnavailableTabs.has(item)) && (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => {
                     const attention = tabAttention(item);
                     return (
                       <button aria-current={activeTab === item ? "page" : undefined} className={activeTab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">
@@ -685,6 +728,27 @@ export function DispositionWorkspace({
                   ) : null}
                 </nav>
               )}
+
+              {activeTab === "overview" ? <section className={styles.dispositionOverview} id="disposition-overview" tabIndex={-1}>
+                <header>
+                  <div><span>Deal marketing command center</span><h3>Choose the work that moves this deal</h3><p>Nothing here requires a fixed sequence. Start with the packet, find buyers, dial them individually, or prepare supervised outreach.</p></div>
+                  <strong data-status={selected.status}>{labelize(selected.status)}</strong>
+                </header>
+                <dl className={styles.overviewFacts}>
+                  <div><dt>Asset</dt><dd>{selected.asset_class === "land" ? "Land" : "House"}</dd></div>
+                  <div><dt>Asking price</dt><dd>{money(selected.asking_price_cents)}</dd></div>
+                  <div><dt>Packet</dt><dd>{labelize(selected.package_status)}</dd></div>
+                  <div><dt>Buyer pool</dt><dd>{selected.matches.length} matched</dd></div>
+                  <div><dt>Offers</dt><dd>{selected.offers.length}</dd></div>
+                </dl>
+                <div className={styles.overviewActions}>
+                  <button onClick={() => selectWorkspaceTab("package")} type="button"><FileText aria-hidden="true" size={19} /><span><strong>Work on packet</strong><small>Upload, build, preview, or share the investor packet.</small></span></button>
+                  <button onClick={() => selectWorkspaceTab("buyers")} type="button"><UsersRound aria-hidden="true" size={19} /><span><strong>Find buyers</strong><small>Search and rank the best investor matches.</small></span></button>
+                  <button onClick={() => selectWorkspaceTab("execution")} type="button"><PhoneCall aria-hidden="true" size={19} /><span><strong>Dial buyers</strong><small>Work the ranked list one buyer at a time.</small></span></button>
+                  {canViewOutreach ? <button onClick={() => selectWorkspaceTab("outreach")} type="button"><Send aria-hidden="true" size={19} /><span><strong>Bulk outreach</strong><small>Prepare exact recipients and supervised delivery.</small></span></button> : null}
+                  {selected.asset_class === "house" && data.can_view_private_economics ? <button onClick={() => selectWorkspaceTab("offers")} type="button"><Gavel aria-hidden="true" size={19} /><span><strong>Offers & closing</strong><small>Compare offers, select coverage, and protect closing.</small></span></button> : null}
+                </div>
+              </section> : null}
 
               {activeTab === "package" ? (
                 <DispositionPackageReadiness

@@ -89,12 +89,14 @@ function CheckRow({
 }
 
 export function DispositionReadinessPanel({
+  compact = false,
   error,
   loading,
   onNavigate,
   onRetry,
   readiness,
 }: {
+  compact?: boolean;
   error: string | null;
   loading: boolean;
   onNavigate: (target: DispositionReadinessTarget) => void;
@@ -132,6 +134,47 @@ export function DispositionReadinessPanel({
   const progress = readiness.total_count > 0
     ? Math.round((readiness.completed_count / readiness.total_count) * 100)
     : 100;
+
+  if (compact) {
+    return (
+      <details className={styles.compactPanel}>
+        <summary>
+          <span><ClipboardCheck aria-hidden="true" size={15} />Deal checklist</span>
+          <strong>{readiness.completed_count} of {readiness.total_count} complete</strong>
+          <small>{readiness.warning_count ? `${readiness.warning_count} need attention` : "Everything tracked is complete"}</small>
+          <span className={styles.compactProgress} aria-label={`${progress}% complete`}><i style={{ width: `${progress}%` }} /></span>
+        </summary>
+        <div className={styles.compactBody}>
+          <p className={styles.compactGuidance}>Advisory only—this checklist never locks the packet, buyer search, dialer, or outreach tools.</p>
+          {error ? <p className={styles.refreshWarning} role="status"><AlertTriangle aria-hidden="true" size={14} />{error} Showing the last checklist for this deal.<button onClick={onRetry} type="button">Retry</button></p> : null}
+          <div className={styles.actionSummary}>
+            <div className={styles.bestAction}>
+              <span>Suggested action (optional)</span>
+              {bestAction ? <><strong>{bestAction.label}</strong><p>{bestAction.detail}</p><ActionStatus action={bestAction} /><button onClick={() => onNavigate(actionTarget(bestAction))} type="button">Open action<ArrowRight aria-hidden="true" size={14} /></button></> : <><strong>Choose the work that moves this deal</strong><p>Every applicable workspace remains available.</p></>}
+            </div>
+            <div className={styles.parallelActions}>
+              <span>Also available now</span>
+              {parallelActions.length ? parallelActions.map((action) => <button key={action.key} onClick={() => onNavigate(actionTarget(action))} type="button"><span><strong>{action.label}</strong><small>{action.detail}</small></span><ArrowRight aria-hidden="true" size={14} /></button>) : <p>Open any workspace below to continue.</p>}
+            </div>
+          </div>
+          <details className={styles.checklist}>
+            <summary><span>All action-specific checks</span><strong>{readiness.warning_count} attention · {readiness.completed_count} complete</strong></summary>
+            <div>
+              {applicableActions.map((action) => {
+                const checks = action.checks.filter((check) => check.status !== "not_applicable");
+                return <section aria-labelledby={`compact-readiness-action-${action.key}`} key={action.key}><header><div><h5 id={`compact-readiness-action-${action.key}`}>{action.label}</h5><p>{action.detail}</p></div><ActionStatus action={action} /></header>{checks.length ? <ul>{checks.map((check) => <CheckRow check={check} key={check.key} onNavigate={onNavigate} />)}</ul> : <p className={styles.noChecks}>No additional checks for this action.</p>}<button className={styles.openAction} onClick={() => onNavigate(actionTarget(action))} type="button">Open {action.label}<ArrowRight aria-hidden="true" size={13} /></button></section>;
+              })}
+            </div>
+          </details>
+          <footer className={styles.footer}>
+            {readiness.owner ? <span><UserRound aria-hidden="true" size={13} />Owner: {readiness.owner.label}</span> : <span>Owner not assigned</span>}
+            <span>Updated <time dateTime={readiness.generated_at}>{new Date(readiness.generated_at).toLocaleString()}</time></span>
+            {loading ? <span aria-live="polite"><RefreshCw aria-hidden="true" className={styles.spin} size={12} />Refreshing</span> : null}
+          </footer>
+        </div>
+      </details>
+    );
+  }
 
   return (
     <section aria-labelledby="disposition-readiness-heading" className={styles.panel}>

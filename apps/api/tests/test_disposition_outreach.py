@@ -18,6 +18,7 @@ from app.models.foundation import (
     DispositionOutreachDelivery,
     DispositionOutreachRevision,
     EmailSenderAlias,
+    Lead,
     SuppressionRecord,
     User,
     VoiceLine,
@@ -117,6 +118,41 @@ def prepare_outreach_case(
     db.add(alias)
     db.commit()
     return case_id, campaign, alias
+
+
+def test_land_case_can_prepare_supervised_bulk_outreach(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, campaign, alias = prepare_outreach_case(db_session, client)
+    disposition_case = db_session.get(DispositionCase, UUID(case_id))
+    assert disposition_case is not None
+    lead = db_session.get(Lead, disposition_case.lead_id)
+    assert lead is not None
+    lead.asset_class = "land"
+    db_session.commit()
+
+    workspace = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/outreach",
+        headers=HEADERS,
+    )
+    assert workspace.status_code == 200, workspace.text
+    recipient_id = workspace.json()["prepared_recipients"][0]["id"]
+    drafted = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/outreach/drafts",
+        headers=HEADERS,
+        json={
+            "campaign_id": str(campaign.id),
+            "recipients": [
+                {"campaign_recipient_id": recipient_id, "channels": ["email"]}
+            ],
+            "email_sender_alias_id": str(alias.id),
+            "email_subject": "Land opportunity at {property_address}",
+            "email_body": "Hi {buyer_name}, review {package_reference}.",
+        },
+    )
+    assert drafted.status_code == 201, drafted.text
 
 
 def test_unranked_pass_after_approval_blocks_queue_until_explicit_clear(

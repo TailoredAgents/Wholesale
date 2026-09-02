@@ -2,7 +2,6 @@ import {
   getDealOverview,
   getDispositionDesk,
   getDispositionIntelligence,
-  getDispositionOverview,
   getTransactionOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
@@ -128,32 +127,18 @@ export default async function DealsPage({
   }
 
   const transactionTabs = new Set(["contract", "closing", "documents", "parties", "timeline"]);
-  const dispositionTabs = new Set(["disposition", "finance"]);
-  const [dealResult, transactionResult, dispositionResult, profile] = await Promise.all([
+  const [dealResult, transactionResult, profile] = await Promise.all([
     getDealOverview(),
     transactionTabs.has(params.tab ?? "")
       ? getTransactionOverview()
       : Promise.resolve({ transactions: null, apiConnected: true }),
-    dispositionTabs.has(params.tab ?? "")
-      ? getDispositionOverview()
-      : Promise.resolve({ dispositions: null, apiConnected: true }),
     getWorkspaceProfile(),
   ]);
-  const connected = dealResult.apiConnected && transactionResult.apiConnected && dispositionResult.apiConnected;
+  const connected = dealResult.apiConnected && transactionResult.apiConnected;
   const profileAvailable = profile !== null;
   const canViewDisposition = Boolean(
     profile?.permissions.includes("deals:view") &&
     profile.permissions.includes("buyers:view"),
-  );
-  const canManageOutreach = Boolean(
-    profile?.permissions.includes("dispositions:manage_outreach"),
-  );
-  const canApproveOutreach = Boolean(
-    profile?.permissions.includes("dispositions:approve_outreach"),
-  );
-  const canViewOutreach = Boolean(
-    profile?.permissions.includes("buyers:view") &&
-    (canManageOutreach || canApproveOutreach),
   );
 
   return (
@@ -180,28 +165,17 @@ export default async function DealsPage({
       ) : null}
       {dealResult.deals ? (
         <DealsWorkspace
-          canApproveBuyerSelection={Boolean(profile?.permissions.includes("dispositions:approve_buyer_selection"))}
-          canApproveOutreach={canApproveOutreach}
-          canEditBuyers={Boolean(profile?.permissions.includes("buyers:edit"))}
-          canEditDeals={Boolean(profile?.permissions.includes("deals:edit"))}
-          canManageOutreach={canManageOutreach}
           canRecordExecutedContract={Boolean(
             profile?.permissions.includes("contracts:record_executed") ||
               profile?.permissions.includes("contracts:modify"),
           )}
-          canSendBulk={Boolean(
-            profile?.permissions.includes("dispositions:send_bulk_outreach")
-              || profile?.permissions.includes("communications:send_bulk"),
-          )}
           canViewDisposition={canViewDisposition}
-          canViewOutreach={canViewOutreach}
           initialDealId={params.deal}
           initialDisplay={params.display}
           initialDispositionTab={params.dispositionTab}
           initialTab={params.tab}
           initialView={params.view}
           deals={dealResult.deals}
-          dispositions={dispositionResult.dispositions}
           transactions={transactionResult.transactions}
         />
       ) : (

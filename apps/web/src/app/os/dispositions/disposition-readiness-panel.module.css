@@ -4,6 +4,37 @@
   background: var(--surface);
 }
 
+.compactPanel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.compactPanel > summary {
+  position: relative;
+  min-height: 64px;
+  padding: 10px 68px 10px 16px;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto minmax(100px, .35fr);
+  align-items: center;
+  gap: 10px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.compactPanel > summary::-webkit-details-marker { display: none; }
+.compactPanel > summary > span:first-child { display: inline-flex; align-items: center; gap: 7px; color: var(--brand-strong); font-size: 11px; font-weight: 850; text-transform: uppercase; }
+.compactPanel > summary > strong { font-size: 12px; }
+.compactPanel > summary > small { color: #795400; font-size: 10px; font-weight: 750; }
+.compactPanel > summary::after { position: absolute; top: 21px; right: 16px; content: "Show"; color: var(--brand-strong); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.compactPanel[open] > summary::after { content: "Hide"; }
+.compactProgress { height: 5px; grid-column: 1 / -1; border-radius: 999px; background: var(--surface-muted); overflow: hidden; }
+.compactProgress i { height: 100%; display: block; border-radius: inherit; background: var(--brand); }
+.compactBody { border-top: 1px solid var(--line-soft); }
+.compactGuidance { margin: 0; padding: 9px 16px; border-bottom: 1px solid var(--line-soft); background: var(--brand-soft); color: var(--brand-strong); font-size: 10px; line-height: 1.45; }
+
 .header {
   min-height: 86px;
   padding: 14px 20px;
@@ -256,6 +287,8 @@
 }
 
 @media (max-width: 760px) {
+  .compactPanel > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .compactPanel > summary > small { grid-column: 1; }
   .header { align-items: flex-start; flex-direction: column; }
   .progress { justify-items: start; text-align: left; }
   .checklist > div { grid-template-columns: 1fr; }
@@ -285,6 +318,8 @@
 }
 
 @container disposition-detail (max-width: 760px) {
+  .compactPanel > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .compactPanel > summary > small { grid-column: 1; }
   .header { align-items: flex-start; flex-direction: column; }
   .progress { justify-items: start; text-align: left; }
   .checklist > div { grid-template-columns: minmax(0, 1fr); }
@@ -296,6 +331,8 @@
 }
 
 @container disposition-detail (max-width: 520px) {
+  .compactPanel > summary { grid-template-columns: minmax(0, 1fr); }
+  .compactPanel > summary > strong, .compactPanel > summary > small { grid-column: 1; }
   .header,
   .bestAction,
   .parallelActions { padding-right: 12px; padding-left: 12px; }

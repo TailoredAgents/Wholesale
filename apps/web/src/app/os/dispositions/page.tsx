@@ -17,13 +17,8 @@ export default async function DispositionsPage({
     getDispositionOverview(),
     getDealOverview(),
   ]);
-  const selectedDeal = params.case
-    ? dealResult.deals?.items.find((item) => item.disposition_case_id === params.case)
-    : null;
   if (params.case) {
-    const query = new URLSearchParams({ display: "queue", tab: "disposition", view: "all" });
-    if (selectedDeal) query.set("deal", selectedDeal.id);
-    redirect(`/os/deals?${query.toString()}`);
+    redirect(`/os/dispositions/${encodeURIComponent(params.case)}`);
   }
 
   const dealIdByTransaction = Object.fromEntries(

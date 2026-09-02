@@ -208,7 +208,7 @@ test("legacy routes preserve record context without competing navigation", () =>
   assert.doesNotMatch(shell, /toolsOpen|Open additional tools|>Tools</);
   assert.match(transactions, /item\.transaction_id === params\.transaction/);
   assert.match(transactions, /redirect\(`\/os\/deals\?/);
-  assert.match(dispositions, /item\.disposition_case_id === params\.case/);
+  assert.match(dispositions, /redirect\(`\/os\/dispositions\/\$\{encodeURIComponent\(params\.case\)\}`\)/);
   assert.match(dispositions, /DispositionSetupWorkspace/);
   assert.match(setup, /router\.push\(/);
   assert.ok(componentNames.every((name) => !name?.includes("journey")));
@@ -260,10 +260,11 @@ test("IA9 canonical records preserve context and load only active specialist dat
   const prospectingPage = readFileSync(resolve(osSourceRoot, "prospecting/page.tsx"), "utf8");
 
   assert.match(dealsPage, /transactionTabs\.has\(params\.tab/);
-  assert.match(dealsPage, /dispositionTabs\.has\(params\.tab/);
+  assert.doesNotMatch(dealsPage, /getDispositionOverview\(\)/);
+  assert.match(dealWorkspace, /Disposition has its own full-width workspace/);
   assert.match(dealWorkspace, /returnTo=/);
   assert.doesNotMatch(transactionWorkspace, /\bembedded\b/);
-  assert.doesNotMatch(dispositionWorkspace, /\bembedded\b/);
+  assert.match(dispositionWorkspace, /variant === "dedicated"/);
   assert.match(leadRecord, /activeTab === "contract"\s*\? getBuyers\(/);
   assert.match(leadRecord, /internalReturnPath/);
   assert.match(buyerPage, /initialBuyerId=\{params\?\.buyer\}/);

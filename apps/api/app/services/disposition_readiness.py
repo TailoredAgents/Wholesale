@@ -49,10 +49,7 @@ OWNER_PERMISSION_KEYS = frozenset(
 
 
 def _href(case: DispositionCase, tab: str, anchor: str | None = None) -> str:
-    value = (
-        f"/os/deals?view=all&display=queue&deal={case.deal_id}"
-        f"&tab=disposition&dispositionTab={tab}"
-    )
+    value = f"/os/dispositions/{case.id}?tab={tab}"
     return f"{value}#{anchor}" if anchor else value
 
 
@@ -400,7 +397,7 @@ def read_case_readiness(
                     anchor="call-queue",
                 )
             ],
-            applicable=active and is_house,
+            applicable=active,
         ),
         _action(
             case,
@@ -433,7 +430,7 @@ def read_case_readiness(
                 ),
             ],
             complete=campaign_count > 0,
-            applicable=active and is_house,
+            applicable=active,
         ),
         _action(
             case,

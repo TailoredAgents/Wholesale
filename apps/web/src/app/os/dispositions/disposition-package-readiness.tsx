@@ -657,11 +657,11 @@ export function DispositionPackageReadiness({
         ) : null}
       </div>
 
-      <section aria-labelledby="package-evidence-heading" className={styles.panel}>
-        <div className={styles.panelHeading}>
+      <details className={`${styles.panel} ${styles.foldPanel}`}>
+        <summary className={styles.panelHeading}>
           <div><span>Claim controls</span><h5 id="package-evidence-heading">Classified evidence</h5></div>
           <strong>{data.evidence_manifest.length} saved items</strong>
-        </div>
+        </summary>
         <div className={styles.evidenceGroups}>
           {classifications.map((classification) => {
             const evidence = evidenceGroups.get(classification) ?? [];
@@ -674,25 +674,25 @@ export function DispositionPackageReadiness({
             );
           })}
         </div>
-      </section>
+      </details>
 
-      <section aria-labelledby="package-summaries-heading" className={styles.panel}>
-        <div className={styles.panelHeading}>
+      <details className={`${styles.panel} ${styles.foldPanel}`}>
+        <summary className={styles.panelHeading}>
           <div><span>{currentApprovedVersion ? "Current approved facts" : "Preliminary - checklist incomplete"}</span><h5 id="package-summaries-heading">Deterministic buyer summaries</h5></div>
           <strong>{currentApprovedVersion ? "Approved" : "Preliminary"}</strong>
-        </div>
+        </summary>
         <div className={styles.summaryGrid}>
           <label><span>Email summary</span><textarea readOnly rows={9} value={data.email_summary} /><button onClick={() => void copySummary("email", data.email_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "email" ? "Copied" : "Copy email"}</button></label>
           <label><span>SMS summary</span><textarea readOnly rows={9} value={data.sms_summary} /><button onClick={() => void copySummary("sms", data.sms_summary)} type="button"><Clipboard aria-hidden="true" size={14} />{copied === "sms" ? "Copied" : "Copy SMS"}</button></label>
         </div>
         {shoppingIsPreliminary ? <p className={styles.permissionNote}>These summaries are Preliminary. Unknown or changed facts remain visible for review while buyer work continues.</p> : null}
-      </section>
+      </details>
 
-      <section aria-labelledby="package-share-heading" className={styles.panel}>
-        <div className={styles.panelHeading}>
+      <details className={`${styles.panel} ${styles.foldPanel}`}>
+        <summary className={styles.panelHeading}>
           <div><span>Recipient-safe delivery</span><h5 id="package-share-heading">Secure investor packet link</h5></div>
           <strong>Revocable - 72-hour expiry</strong>
-        </div>
+        </summary>
         <div className={styles.shareLinkWorkspace}>
           <div className={styles.shareLinkActions}>
             <p>Create a link to the latest available buyer-safe PDF. An incomplete or unapproved version remains visibly Preliminary; seller notes, private economics, and access instructions stay excluded.</p>
@@ -727,7 +727,7 @@ export function DispositionPackageReadiness({
             {!shareLinks.length ? <p className={styles.empty}>No investor package links have been created.</p> : null}
           </div>
         </div>
-      </section>
+      </details>
 
       <div className={styles.actionGrid}>
         {assetClass === "house" ? <form className={styles.buildPanel} id="build-with-stonegate" onSubmit={rebuild}>
@@ -755,7 +755,7 @@ export function DispositionPackageReadiness({
           <button disabled={!approvedVersion || busyAction !== null} onClick={() => approvedVersion && void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${approvedVersion.id}/package.pdf`, approvedVersion.pdf_file_name ?? `stonegate-investor-package-v${approvedVersion.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />Download approved {versionName(approvedVersion)} PDF</button>
           {assetClass === "house"
             ? <p id="release-version-requirement">Find and rank investors in <strong>Find buyers</strong>. Prepare exact bulk recipients in <strong>Bulk outreach</strong>. Both remain available while checklist work continues, and neither action sends a buyer message by itself.</p>
-            : <p>Upload and approve the exact Land packet when useful. Find buyers remains available now for asset-aware matching, independently of package approval. Residential recipient preparation remains unavailable for Land.</p>}
+            : <p>Upload and approve the exact Land packet when useful. Find buyers, the one-to-one dialer, and supervised bulk outreach remain available independently of package approval.</p>}
         </section>
       </div>
 
@@ -785,11 +785,11 @@ export function DispositionPackageReadiness({
         </button>
       </form>
 
-      <section aria-labelledby="package-history-heading" className={styles.panel}>
-        <div className={styles.panelHeading}>
+      <details className={`${styles.panel} ${styles.foldPanel}`}>
+        <summary className={styles.panelHeading}>
           <div><span>Reproducible record</span><h5 id="package-history-heading">Version history</h5></div>
           <History aria-hidden="true" size={18} />
-        </div>
+        </summary>
         <div className={styles.versionList}>
           {data.versions.map((version) => {
             const scanIssue = externalArtifactScanIssue(version);
@@ -836,7 +836,7 @@ export function DispositionPackageReadiness({
           })}
           {!data.versions.length ? <p className={styles.empty}>No package versions have been created.</p> : null}
         </div>
-      </section>
+      </details>
 
       <dialog aria-labelledby="approve-package-title" className={styles.approvalDialog} onCancel={() => approvalDialogRef.current?.close()} ref={approvalDialogRef}>
         <form method="dialog"><button aria-label="Cancel package approval" onClick={() => approvalDialogRef.current?.close()} type="button"><X aria-hidden="true" size={18} /></button></form>

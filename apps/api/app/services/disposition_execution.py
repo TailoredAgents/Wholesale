@@ -91,8 +91,6 @@ def read_workspace(
 
     asset_class = (lead.asset_class or "house").strip().lower()
     blockers: list[str] = []
-    if asset_class != "house":
-        blockers.append("The dispositions call queue is currently available for house deals only.")
     if case.status not in EXECUTION_CASE_STATUSES:
         blockers.append("Move the deal into buyer placement before beginning buyer calls.")
 
@@ -186,25 +184,21 @@ def read_workspace(
             not in {"selected", "backup", "fallout"}
         )
     ]
-    candidates = (
-        [
-            _candidate_read(
-                db,
-                principal,
-                property_record,
-                buyer,
-                candidate_by_buyer.get(buyer.id),
-                ranked_entries_by_buyer.get(buyer.id),
-            )
-            for buyer in visible_buyers
-        ]
-        if asset_class == "house"
-        else []
-    )
+    candidates = [
+        _candidate_read(
+            db,
+            principal,
+            property_record,
+            buyer,
+            candidate_by_buyer.get(buyer.id),
+            ranked_entries_by_buyer.get(buyer.id),
+        )
+        for buyer in visible_buyers
+    ]
     candidate_read_by_buyer = {item.buyer_id: item for item in candidates}
     current = (
         candidate_read_by_buyer.get(available_buyers[0].id)
-        if asset_class == "house" and available_buyers
+        if available_buyers
         else None
     )
     return DispositionExecutionWorkspaceRead(
@@ -237,7 +231,7 @@ def send_pre_call_sms(
     case_id: UUID,
     payload: DispositionExecutionSmsCreate,
 ) -> SmsSendRead:
-    case = _mutable_house_case(db, principal, case_id)
+    case = _mutable_case(db, principal, case_id)
     referenced_buyer_id = _referenced_buyer_id(
         db,
         principal,
@@ -374,7 +368,7 @@ def record_call_outcome(
     case_id: UUID,
     payload: DispositionExecutionOutcomeCreate,
 ) -> DispositionExecutionWorkspaceRead:
-    case = _mutable_house_case(db, principal, case_id)
+    case = _mutable_case(db, principal, case_id)
     referenced_buyer_id = _referenced_buyer_id(
         db,
         principal,
@@ -633,7 +627,7 @@ def update_showing(
     showing_id: UUID,
     payload: DispositionShowingUpdate,
 ) -> DispositionExecutionWorkspaceRead | None:
-    case = _mutable_house_case(db, principal, case_id)
+    case = _mutable_case(db, principal, case_id)
     showing = db.scalar(
         select(BuyerEngagement)
         .where(
@@ -737,7 +731,7 @@ def update_showing(
     return result
 
 
-def _mutable_house_case(
+def _mutable_case(
     db: Session,
     principal: Principal,
     case_id: UUID,
@@ -750,7 +744,6 @@ def _mutable_house_case(
     )
     if case is None:
         raise ValueError("Disposition case not found.")
-    dispositions.require_house_case_workflow(db, case)
     return case
 
 
@@ -762,7 +755,7 @@ def _candidate_for_action(
     candidate_id: UUID | None,
     buyer_id: UUID | None,
 ) -> tuple[DispositionCase, DispositionBuyerPoolCandidate, Buyer]:
-    case = _mutable_house_case(db, principal, case_id)
+    case = _mutable_case(db, principal, case_id)
     candidate = None
     if candidate_id is not None:
         candidate = db.scalar(

@@ -22,7 +22,6 @@ from app.models.foundation import (
     DispositionOutreachRevision,
     DispositionPackageVersion,
     EmailSenderAlias,
-    Lead,
     SuppressionRecord,
     VoiceLine,
 )
@@ -77,7 +76,7 @@ def read_workspace(
     principal: Principal,
     case_id: UUID,
 ) -> DispositionOutreachWorkspaceRead | None:
-    case = _scoped_house_case(db, principal, case_id)
+    case = _scoped_case(db, principal, case_id)
     if case is None:
         return None
 
@@ -156,7 +155,7 @@ def create_draft(
     settings: Settings | None = None,
 ) -> DispositionOutreachRevisionRead | None:
     settings = settings or get_settings()
-    case = _scoped_house_case(db, principal, case_id, lock=True)
+    case = _scoped_case(db, principal, case_id, lock=True)
     if case is None:
         return None
     campaign = db.scalar(
@@ -586,7 +585,7 @@ def retry_failed(
     return _revision_read(db, revision)
 
 
-def _scoped_house_case(
+def _scoped_case(
     db: Session,
     principal: Principal,
     case_id: UUID,
@@ -602,14 +601,6 @@ def _scoped_house_case(
     case = db.scalar(statement)
     if case is None:
         return None
-    lead = db.scalar(
-        select(Lead).where(
-            Lead.id == case.lead_id,
-            Lead.organization_id == principal.organization_id,
-        )
-    )
-    if lead is None or lead.asset_class != "house":
-        raise ValueError("Governed disposition outreach currently supports House deals only.")
     return case
 
 
@@ -1194,7 +1185,7 @@ def _require_revision_package_artifact(
     *,
     action: str,
 ) -> DispositionPackageVersion:
-    case = _scoped_house_case(db, principal, revision.disposition_case_id)
+    case = _scoped_case(db, principal, revision.disposition_case_id)
     if case is None:
         raise ValueError("Disposition case not found.")
     package = require_package_artifact(

@@ -20,11 +20,9 @@ import { ExecutedContractImportForm } from "../../leads/[leadId]/executed-contra
 import type {
   DealOverview,
   DealQueueItem,
-  DispositionOverview,
   TransactionOverview,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
-import { DispositionWorkspace } from "../dispositions/disposition-workspace";
 import { TransactionWorkspace } from "../transactions/transaction-workspace";
 import styles from "./deals.module.css";
 
@@ -105,17 +103,9 @@ function hrefFor(current: { deal?: string; display: Display; tab: DealTab; view:
 }
 
 export function DealsWorkspace({
-  canApproveBuyerSelection,
-  canEditBuyers,
-  canEditDeals,
-  canManageOutreach,
   canRecordExecutedContract,
-  canApproveOutreach,
-  canSendBulk,
   canViewDisposition,
-  canViewOutreach,
   deals,
-  dispositions,
   initialDealId,
   initialDisplay,
   initialDispositionTab,
@@ -123,17 +113,9 @@ export function DealsWorkspace({
   initialView,
   transactions,
 }: {
-  canApproveBuyerSelection: boolean;
-  canEditBuyers: boolean;
-  canEditDeals: boolean;
-  canManageOutreach: boolean;
   canRecordExecutedContract: boolean;
-  canApproveOutreach: boolean;
-  canSendBulk: boolean;
   canViewDisposition: boolean;
-  canViewOutreach: boolean;
   deals: DealOverview;
-  dispositions: DispositionOverview | null;
   initialDealId?: string;
   initialDisplay?: string;
   initialDispositionTab?: string;
@@ -147,9 +129,7 @@ export function DealsWorkspace({
   const requestedDispositionTab = (["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"] as DispositionTab[]).includes(initialDispositionTab as DispositionTab)
     ? initialDispositionTab as DispositionTab
     : "package";
-  const dispositionTab = requestedDispositionTab === "outreach" && !canViewOutreach
-    ? "package"
-    : requestedDispositionTab;
+  const dispositionTab = requestedDispositionTab;
   const filtered = useMemo(() => deals.items.filter((item) => includesView(item, view)), [deals.items, view]);
   const selected = deals.items.find((item) => item.id === initialDealId) ?? filtered[0] ?? null;
   const current = { deal: selected?.id, display, tab, view };
@@ -187,7 +167,7 @@ export function DealsWorkspace({
       {selected ? <section className={styles.record}>
         <header className={styles.recordHeader}>
           <div><span>{labelize(selected.stage_key)}</span><h2>{selected.property_address}</h2><p>{selected.seller_name} - {labelize(selected.property_type ?? "property type not recorded")}</p></div>
-          <div className={styles.recordLinks}><Link href={`/os/leads/${selected.lead_id}?returnTo=${encodeURIComponent(hrefFor(current, {}))}`}>Seller lead</Link><strong>{money(selected.contract_price_cents)}</strong><span>Contract price</span></div>
+          <div className={styles.recordLinks}><Link href={`/os/leads/${selected.lead_id}?returnTo=${encodeURIComponent(hrefFor(current, {}))}`}>Seller lead</Link>{selected.disposition_case_id ? <Link href={`/os/dispositions/${selected.disposition_case_id}`}>Disposition workspace</Link> : null}<strong>{money(selected.contract_price_cents)}</strong><span>Contract price</span></div>
         </header>
         <div className={styles.statusStrip}>
           <Status label="Contract" value={selected.contract_status} />
@@ -219,9 +199,8 @@ export function DealsWorkspace({
           ) : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace assetClass={selected.asset_class} initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
           {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
-          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveBuyerSelection={canApproveBuyerSelection} canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab={dispositionTab} key={`${selected.disposition_case_id}-${dispositionTab}`} /> : null}
-          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace canApproveBuyerSelection={canApproveBuyerSelection} canApproveOutreach={canApproveOutreach} canEditBuyers={canEditBuyers} canEditDeals={canEditDeals} canManageOutreach={canManageOutreach} canSendBulk={canSendBulk} canViewOutreach={canViewOutreach} dealId={selected.id} initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
-          {(tab === "disposition" || tab === "finance") && selected.disposition_case_id && !dispositions ? <SubsystemUnavailable label="Disposition details" /> : null}
+          {tab === "disposition" && selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has its own full-width workspace</strong><p>Open the dedicated deal-marketing screen for the packet, buyer search, one-to-one dialer, bulk outreach, and offers.</p><Link href={`/os/dispositions/${selected.disposition_case_id}?tab=${dispositionTab}`}>Open disposition workspace <ArrowRight size={15} /></Link></div> : null}
+          {tab === "finance" && selected.disposition_case_id ? <div className={styles.contextEmpty}><Banknote size={24} /><strong>Disposition finance moved to the full-width workspace</strong><p>Review buyer selection, closing protection, reconciliation, and payouts without squeezing them into this Deal record.</p><Link href={`/os/dispositions/${selected.disposition_case_id}?tab=reconciliation`}>Open finance reconciliation <ArrowRight size={15} /></Link></div> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions?transaction=${selected.transaction_id}`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>
       </section> : null}

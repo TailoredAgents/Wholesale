@@ -90,10 +90,11 @@ test("the desk exposes six operational queues with truthful scoped work context"
   assert.match(desk, /All checklist issues/);
   assert.match(desk, /Also available now/);
   assert.match(desk, /className=\{styles\.directActions\}/);
-  for (const label of ["Packet", "Find buyers", "Reach out", "Offers"]) {
+  for (const label of ["Packet", "Find buyers", "Dial buyers", "Offers"]) {
     assert.match(desk, new RegExp(`label: "${label}"`));
   }
-  assert.match(desk, /item\.asset_class !== "land"/);
+  assert.match(desk, /dealWorkbenchHref\(item\.disposition_case_id, "execution"\)/);
+  assert.match(desk, /\/os\/dispositions\/\$\{encodeURIComponent\(caseId\)\}/);
   assert.match(desk, /Work this deal/);
 });
 
@@ -120,8 +121,8 @@ test("stale, unavailable, and truncated data remain explicit without disabling c
 
 test("desk actions preserve deal subsection context and can open buyer creation safely", () => {
   assert.match(dealsWorkspace, /type DispositionTab = "package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
-  assert.match(dealsWorkspace, /initialTab=\{dispositionTab\}/);
-  assert.match(dealsWorkspace, /key=\{`\$\{selected\.disposition_case_id\}-\$\{dispositionTab\}`\}/);
+  assert.match(dealsWorkspace, /Disposition workspace/);
+  assert.match(dealsWorkspace, /\/os\/dispositions\/\$\{selected\.disposition_case_id\}/);
   assert.match(desk, /\/os\/buyers\?create=1&returnTo=/);
   assert.match(buyersPage, /firstValue\(rawParams\?\.create\) === "1"/);
   assert.match(buyersPage, /requestedReturnTo\?\.startsWith\("\/os\/"\)/);

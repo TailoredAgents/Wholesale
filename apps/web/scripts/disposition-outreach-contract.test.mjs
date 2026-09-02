@@ -5,7 +5,7 @@ import test from "node:test";
 
 const appRoot = resolve(process.cwd(), "src/app");
 const api = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
-const page = readFileSync(resolve(appRoot, "os/deals/page.tsx"), "utf8");
+const page = readFileSync(resolve(appRoot, "os/dispositions/[caseId]/page.tsx"), "utf8");
 const deals = readFileSync(resolve(appRoot, "os/deals/deals-workspace.tsx"), "utf8");
 const disposition = readFileSync(resolve(appRoot, "os/dispositions/disposition-workspace.tsx"), "utf8");
 const outreach = readFileSync(resolve(appRoot, "os/dispositions/disposition-outreach-workspace.tsx"), "utf8");
@@ -15,7 +15,7 @@ const rbac = readFileSync(resolve(process.cwd(), "../api/app/domain/rbac.py"), "
 test("DS6 outreach lives between the canonical buyer pool and offers tabs", () => {
   assert.match(deals, /"package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
   assert.match(disposition, /primaryWorkspaceTabs: Tab\[\] = \["package", "buyers", "execution", "outreach", "offers"\]/);
-  assert.match(disposition, /workspaceTabs: Tab\[\] = \[\.\.\.primaryWorkspaceTabs, "provider", "reconciliation"\]/);
+  assert.match(disposition, /workspaceTabs: Tab\[\] = \["overview", \.\.\.primaryWorkspaceTabs, "provider", "reconciliation"\]/);
   assert.match(disposition, /<DispositionOutreachWorkspace/);
   assert.match(disposition, /tab === "buyers"\) return "Find buyers"/);
   assert.match(disposition, /tab === "offers"\) return "Offers & closing"/);
@@ -108,7 +108,7 @@ test("buyer and outreach authority both gate the tab, forced URL, and workspace 
   assert.match(page, /profile\?\.permissions\.includes\("buyers:view"\)/);
   assert.match(page, /canManageOutreach \|\| canApproveOutreach/);
   assert.match(page, /canViewOutreach=\{canViewOutreach\}/);
-  assert.match(deals, /requestedDispositionTab === "outreach" && !canViewOutreach/);
+  assert.match(disposition, /initialTab === "outreach" && !canViewOutreach/);
   assert.match(disposition, /item !== "outreach" \|\| canViewOutreach/);
   assert.match(disposition, /activeTab === "outreach" && canViewOutreach/);
   assert.match(outreach, /captured_email/);

@@ -469,6 +469,19 @@ export const currentRouteInventory = [
     baselinePath: "/os/dispositions",
   },
   {
+    routePattern: "/os/dispositions/[caseId]",
+    source: "src/app/os/dispositions/[caseId]/page.tsx",
+    targetWorkspace: "dispositions",
+    targetCanonical: "/os/dispositions/[caseId]",
+    migration: "keep",
+    queryParameters: [
+      { name: "dispositionTab", status: "consumed" },
+      { name: "tab", status: "consumed" },
+    ],
+    helpSections: ["Dispositions"],
+    baselinePath: "/os/dispositions/[caseId]",
+  },
+  {
     routePattern: "/os/buyers",
     source: "src/app/os/buyers/page.tsx",
     targetWorkspace: "buyers",

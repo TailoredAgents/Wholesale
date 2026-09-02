@@ -129,30 +129,32 @@ function toneForSeverity(severity: DispositionDeskItem["severity"]) {
   return "info" as const;
 }
 
-function dealWorkbenchHref(dealId: string, dispositionTab: string) {
-  const query = new URLSearchParams({
-    deal: dealId,
-    display: "queue",
-    dispositionTab,
-    tab: "disposition",
-    view: "all",
-  });
-  return `/os/deals?${query.toString()}`;
+function dealWorkbenchHref(caseId: string, dispositionTab: string) {
+  return `/os/dispositions/${encodeURIComponent(caseId)}?tab=${encodeURIComponent(dispositionTab)}`;
 }
 
 function directDealActions(item: DispositionDeskItem) {
   if (!item.deal_id || !item.disposition_case_id) return [];
   const actions = [
-    { label: "Packet", href: dealWorkbenchHref(item.deal_id, "package") },
-    { label: "Find buyers", href: dealWorkbenchHref(item.deal_id, "buyers") },
+    { label: "Packet", href: dealWorkbenchHref(item.disposition_case_id, "package") },
+    { label: "Find buyers", href: dealWorkbenchHref(item.disposition_case_id, "buyers") },
+    { label: "Dial buyers", href: dealWorkbenchHref(item.disposition_case_id, "execution") },
   ];
   if (item.asset_class !== "land") {
     actions.push(
-      { label: "Reach out", href: dealWorkbenchHref(item.deal_id, "execution") },
-      { label: "Offers", href: dealWorkbenchHref(item.deal_id, "offers") },
+      { label: "Offers", href: dealWorkbenchHref(item.disposition_case_id, "offers") },
     );
   }
   return actions;
+}
+
+function dispositionActionHref(item: DispositionDeskItem, href: string) {
+  if (!item.disposition_case_id || !href.startsWith("/os/deals?")) return href;
+  const target = new URL(href, "https://stonegate.internal");
+  if (target.searchParams.get("tab") !== "disposition") return href;
+  const dispositionTab = target.searchParams.get("dispositionTab") ?? "overview";
+  const anchor = target.hash;
+  return `${dealWorkbenchHref(item.disposition_case_id, dispositionTab)}${anchor}`;
 }
 
 function WorkItem({ item }: { item: DispositionDeskItem }) {
@@ -170,6 +172,10 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
       ? [item.secondary_action]
       : [];
   const workbenchActions = caseWorkbench ? directDealActions(item) : [];
+  const primaryHref = dispositionActionHref(
+    item,
+    caseWorkbench?.best_action_href ?? item.primary_action.href,
+  );
   return (
     <article className={styles.workCard} data-severity={item.severity}>
       <header className={styles.workHeader}>
@@ -240,12 +246,12 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
       <footer className={styles.workActions}>
         <div className={styles.bestActionGroup}>
           {caseWorkbench ? <span>Suggested action (optional)</span> : null}
-          <Link className={styles.primaryAction} href={caseWorkbench?.best_action_href ?? item.primary_action.href}>
+          <Link className={styles.primaryAction} href={primaryHref}>
             {caseWorkbench?.best_action_label ?? item.primary_action.label}
             <ArrowRight aria-hidden="true" size={15} />
           </Link>
         </div>
-        {parallelActions.length ? <div className={styles.parallelActionGroup}><span>{caseWorkbench ? "Also available now" : "Related action"}</span><div>{parallelActions.slice(0, 3).map((action) => <Link className={styles.secondaryAction} href={action.href} key={`${action.href}-${action.label}`}>{action.label}</Link>)}</div></div> : null}
+        {parallelActions.length ? <div className={styles.parallelActionGroup}><span>{caseWorkbench ? "Also available now" : "Related action"}</span><div>{parallelActions.slice(0, 3).map((action) => <Link className={styles.secondaryAction} href={dispositionActionHref(item, action.href)} key={`${action.href}-${action.label}`}>{action.label}</Link>)}</div></div> : null}
         {caseWorkbench && caseWorkbench.parallel_action_keys.length > parallelActions.length ? <small className={styles.moreActions}>{caseWorkbench.parallel_action_keys.length - parallelActions.length} more available action{caseWorkbench.parallel_action_keys.length - parallelActions.length === 1 ? "" : "s"} are shown inside the deal workbench.</small> : null}
       </footer>
     </article>

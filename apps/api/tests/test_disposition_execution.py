@@ -1201,7 +1201,7 @@ def test_completed_showing_creates_one_24_hour_follow_up_task(
     )
 
 
-def test_land_case_is_visible_but_execution_is_blocked(
+def test_land_case_uses_the_same_one_to_one_execution_queue(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -1217,9 +1217,11 @@ def test_land_case_is_visible_but_execution_is_blocked(
         headers=HEADERS,
     )
     assert response.status_code == 200, response.text
-    assert response.json()["ready"] is False
-    assert response.json()["current_candidate"] is None
-    assert any("house deals only" in item for item in response.json()["blockers"])
+    assert response.json()["asset_class"] == "land"
+    assert response.json()["ready"] is True
+    assert response.json()["current_candidate"] is not None
+    assert response.json()["candidates"]
+    assert not any("house deals only" in item for item in response.json()["blockers"])
 
 
 def test_explicit_pass_is_visible_but_not_actionable_until_cleared(
