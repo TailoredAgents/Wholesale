@@ -74,6 +74,7 @@ export function DispositionQueueBuilder({
   caseId,
   onMessage,
   onQueueChanged,
+  quickDialQueueCount,
   request,
 }: {
   assetClass: string;
@@ -82,6 +83,7 @@ export function DispositionQueueBuilder({
   caseId: string;
   onMessage: (message: string | null) => void;
   onQueueChanged: () => Promise<void>;
+  quickDialQueueCount: number;
   request: Requester;
 }) {
   const [pool, setPool] = useState<DispositionBuyerPoolPage | null>(null);
@@ -95,6 +97,7 @@ export function DispositionQueueBuilder({
   const [reviewReason, setReviewReason] = useState("");
   const [manualBuyerOpen, setManualBuyerOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [buyerNetworkCount, setBuyerNetworkCount] = useState<number | null>(null);
   const [relationshipOwners, setRelationshipOwners] = useState<BuyerRelationshipOwner[]>([]);
   const [sourceOptions, setSourceOptions] = useState<string[]>(["manual"]);
 
@@ -128,6 +131,7 @@ export function DispositionQueueBuilder({
   const loadBuyerOptions = useCallback(async () => {
     if (!canEditBuyers) return;
     const result = await request<BuyerListResponse>("/api/v1/buyers?limit=1&offset=0");
+    setBuyerNetworkCount(result.total);
     setRelationshipOwners(result.owner_options);
     setSourceOptions(Array.from(new Set(["manual", ...result.source_options])));
   }, [canEditBuyers, request]);
@@ -168,6 +172,7 @@ export function DispositionQueueBuilder({
     });
     const [nextPool] = await Promise.all([loadPool(), onQueueChanged()]);
     if (nextPool.entries.some((entry) => entry.buyer_id)) setBuilderOpen(false);
+    return nextPool;
   }
 
   async function rerankQueue() {
@@ -176,8 +181,11 @@ export function DispositionQueueBuilder({
     setError(null);
     onMessage(null);
     try {
-      await rebuildQueue();
-      onMessage("The latest explainable ranking is now in the outreach queue. Your current investor and saved progress were preserved.");
+      const nextPool = await rebuildQueue();
+      const loadedCount = nextPool.entries.filter((entry) => entry.buyer_id).length;
+      onMessage(loadedCount
+        ? `${loadedCount} investor${loadedCount === 1 ? " is" : "s are"} now loaded in QuickDial. Your current investor and saved progress were preserved.`
+        : "There are no saved investors to load yet. Add the first investor with a name and phone or email; refreshing alone cannot create a contact.");
     } catch (actionError) {
       const detail = actionError instanceof Error ? actionError.message : "The outreach queue could not be reranked.";
       setError(detail);
@@ -361,6 +369,24 @@ export function DispositionQueueBuilder({
 
   return (
     <>
+      {!loading && quickDialQueueCount === 0 ? (
+        <section className={styles.emptyStarter} aria-label="Start the investor queue">
+          <div>
+            <span>QuickDial is empty</span>
+            <strong>{buyerNetworkCount
+              ? `${buyerNetworkCount} investor${buyerNetworkCount === 1 ? " is" : "s are"} available in Buyer Network`
+              : "No investors have been added yet"}</strong>
+            <p>{buyerNetworkCount
+              ? "Load the existing relationships into this deal, or add someone new and call them immediately."
+              : "Refresh will stay at zero until a real investor is added. Enter a name and phone or email to start outreach."}</p>
+          </div>
+          <div>
+            {buyerNetworkCount ? <button disabled={Boolean(busy) || !canEditDeals} onClick={() => void rerankQueue()} type="button"><UsersRound size={16} />{busy === "rerank" ? "Loading investors…" : `Load ${buyerNetworkCount} into QuickDial`}</button> : null}
+            <button className={buyerNetworkCount ? styles.secondary : undefined} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={16} />Add first investor</button>
+          </div>
+        </section>
+      ) : null}
+
       <details className={styles.builder} onToggle={(event) => setBuilderOpen(event.currentTarget.open)} open={builderOpen}>
         <summary>
           <span className={styles.summaryIcon}><UsersRound size={18} /></span>
@@ -369,7 +395,7 @@ export function DispositionQueueBuilder({
             <small>Pull DealMachine results, add known buyers, and build the outreach list here</small>
           </span>
           <span className={styles.summaryMetrics}>
-            <b>{queueEntries.length} in queue</b>
+            <b>{quickDialQueueCount} in QuickDial</b>
             <small>{stagedEntries.length} awaiting review · {currentRun}</small>
           </span>
         </summary>

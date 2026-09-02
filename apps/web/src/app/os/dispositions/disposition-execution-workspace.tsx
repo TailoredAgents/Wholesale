@@ -1113,7 +1113,9 @@ export function DispositionExecutionWorkspace({
           <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
         </div>
         <div className={styles.heroActions}>
-          <div><strong>{queuePosition || "–"}</strong><span>of {candidates.length || 0}</span><small>queue position</small></div>
+          {candidate
+            ? <div><strong>{queuePosition}</strong><span>of {candidates.length}</span><small>queue position</small></div>
+            : <div><strong>0</strong><span>investors</span><small>loaded in QuickDial</small></div>}
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
           <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button>
           <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span>
@@ -1139,6 +1141,7 @@ export function DispositionExecutionWorkspace({
         caseId={caseId}
         onMessage={onMessage}
         onQueueChanged={refreshQueueBuilderWorkspace}
+        quickDialQueueCount={candidates.length}
         request={request}
       />
 
@@ -1322,7 +1325,7 @@ export function DispositionExecutionWorkspace({
             timeline={visibleBuyerTimeline}
           />
         </div>
-      ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No investors are in this outreach queue yet</strong><span>Use Find and rank investors above to pull DealMachine candidates, rank the Buyer Network, or add a known investor. Deal and packet information can stay incomplete while you build and market the list.</span></div></section>}
+      ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>Add an investor to begin QuickDial</strong><span>Use the action directly above. Once a name and phone or email is saved, that investor becomes the active conversation here—deal and packet information can remain incomplete.</span></div></section>}
 
       {workspace.showings.length ? <details className={styles.secondaryTools}><summary><CalendarClock size={16} /><span><strong>Scheduled showings</strong><small>{workspace.showings.length} access appointment{workspace.showings.length === 1 ? "" : "s"}</small></span></summary><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></details> : null}
     </section>

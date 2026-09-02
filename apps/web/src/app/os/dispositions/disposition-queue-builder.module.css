@@ -1,4 +1,13 @@
 .builder { overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #fff; }
+.emptyStarter { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid #9ab9a5; border-radius: 14px; background: #eef8f1; padding: 16px 18px; }
+.emptyStarter > div:first-child { display: grid; gap: 3px; }
+.emptyStarter span { color: #17633d; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.emptyStarter strong { color: #203027; font-size: 16px; }
+.emptyStarter p { margin: 0; color: #526158; font-size: 12px; line-height: 1.45; }
+.emptyStarter > div:last-child { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.emptyStarter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #17633d; border-radius: 9px; background: #17633d; padding: 10px 13px; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.emptyStarter button:disabled { cursor: not-allowed; opacity: .48; }
+.emptyStarter .secondary { background: #fff; color: #17633d; }
 .builder > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px 15px; cursor: pointer; list-style: none; }
 .builder > summary::-webkit-details-marker { display: none; }
 .builder[open] > summary { border-bottom: 1px solid #dce3dd; background: #f8faf8; }
@@ -93,6 +102,9 @@
 }
 
 @media (max-width: 760px) {
+  .emptyStarter { align-items: stretch; flex-direction: column; }
+  .emptyStarter > div:last-child { justify-content: stretch; }
+  .emptyStarter button { flex: 1; }
   .builder > summary { grid-template-columns: auto minmax(0, 1fr); }
   .summaryMetrics { grid-column: 2; text-align: left; }
   .overview { grid-template-columns: 1fr; }
@@ -111,6 +123,9 @@
 }
 
 @container disposition-detail (max-width: 760px) {
+  .emptyStarter { align-items: stretch; flex-direction: column; }
+  .emptyStarter > div:last-child { justify-content: stretch; }
+  .emptyStarter button { flex: 1; }
   .builder > summary { grid-template-columns: auto minmax(0, 1fr); }
   .summaryMetrics { grid-column: 2; text-align: left; }
   .overview { grid-template-columns: 1fr; }
