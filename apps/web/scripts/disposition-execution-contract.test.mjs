@@ -140,6 +140,11 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /aria-label="Search investor queue"/);
   assert.match(workspace, /draggable=\{busy === null\}/);
   assert.match(workspace, /chooseCandidate\(item\.buyer_id, true\)/);
+  assert.match(workspace, /execution\/session\/cursor/);
+  assert.match(workspace, /selectCandidateLocally\(previousWorkspace, nextCandidate\)/);
+  const chooseCandidateFunction = workspace.match(/async function chooseCandidate\([\s\S]*?(?=\n  async function saveQueueOrder)/)?.[0] ?? "";
+  assert.ok(chooseCandidateFunction);
+  assert.doesNotMatch(chooseCandidateFunction, /updateSession\(/);
   assert.match(workspace, /data-tone="current">Current/);
   assert.match(workspace, /data-tone="next">Next/);
   assert.match(workspace, /selectedQueueItemRef\.current\?\.scrollIntoView/);

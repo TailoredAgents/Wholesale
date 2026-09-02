@@ -57,7 +57,7 @@ from app.services import buyer_discovery, deals, disposition_readiness
 from app.services.disposition_handoff import (
     HANDOFF_PENDING_BLOCKER,
     HANDOFF_SETUP_TASK_TYPE,
-    active_authorized_disposition_user,
+    active_authorized_disposition_user_ids,
 )
 from app.services.dispositions import _proof_is_current_verified
 from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES
@@ -384,16 +384,16 @@ def read_desk(
             )
         ).all()
     )
+    authorized_owner_ids = active_authorized_disposition_user_ids(
+        db,
+        principal.organization_id,
+        {case.owner_user_id for case in case_rows if case.owner_user_id is not None},
+    )
     cases = [
         case
         for case in case_rows
         if (
-            active_authorized_disposition_user(
-                db,
-                principal.organization_id,
-                case.owner_user_id,
-            )
-            is None
+            case.owner_user_id not in authorized_owner_ids
             or _scoped(case.owner_user_id, allowed_user_ids)
         )
     ]

@@ -221,6 +221,24 @@ class DispositionExecutionSessionUpdate(BaseModel):
         return self
 
 
+class DispositionExecutionCursorUpdate(BaseModel):
+    """Small, latency-sensitive update used when an operator selects an investor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_buyer_id: UUID
+    queue_buyer_ids: list[UUID] = Field(min_length=1, max_length=500)
+    skipped_buyer_ids: list[UUID] = Field(default_factory=list, max_length=500)
+
+    @model_validator(mode="after")
+    def require_cursor_in_queue(self) -> "DispositionExecutionCursorUpdate":
+        if self.current_buyer_id not in self.queue_buyer_ids:
+            raise ValueError("The selected investor must be present in the deal queue.")
+        if set(self.skipped_buyer_ids) - set(self.queue_buyer_ids):
+            raise ValueError("Skipped investors must be present in the deal queue.")
+        return self
+
+
 class DispositionShowingCreate(_DispositionExecutionBuyerReference):
     scheduled_at: datetime
     access_status: ShowingAccessStatus = "pending"

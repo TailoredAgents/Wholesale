@@ -28,6 +28,7 @@ import type {
   BuyerProfile,
   BuyerTimelineItem,
   DispositionExecutionCandidate,
+  DispositionExecutionSession,
   DispositionExecutionShowing,
   DispositionExecutionWorkspace,
   DispositionPackageShareLinkIssued,
@@ -310,21 +311,87 @@ export function DispositionExecutionWorkspace({
     setWorkspace(result);
   }, []);
 
+  function selectCandidateLocally(
+    result: DispositionExecutionWorkspace,
+    nextCandidate: DispositionExecutionCandidate,
+  ) {
+    const nextBuyerId = nextCandidate.buyer_id;
+    const buyerState = result.session.buyer_states[nextBuyerId];
+    const lastOutcomeIsWaiting = Boolean(
+      result.session.last_outcome
+      && result.session.last_outcome_buyer_id === nextBuyerId
+      && result.current_candidate?.buyer_id !== nextBuyerId,
+    );
+    buyerIdRef.current = nextBuyerId;
+    setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
+    setActiveChannel(
+      buyerState?.current_step === "call" || buyerState?.current_step === "email"
+        ? buyerState.current_step
+        : "sms",
+    );
+    setResultComposerOpen(Boolean(buyerState?.selected_outcome) || lastOutcomeIsWaiting);
+    setNotes(buyerState?.notes_draft ?? "");
+    setCallbackAt(dateTimeLocalValue(buyerState?.callback_at));
+    setSelectedOutcome((buyerState?.selected_outcome as Outcome | null | undefined) ?? null);
+    setSavedOutcome(lastOutcomeIsWaiting && result.session.last_outcome
+      ? { buyerId: nextBuyerId, label: labelize(result.session.last_outcome) }
+      : null);
+    setSmsDraft(nextCandidate.sms_draft);
+    setEmailSubject(nextCandidate.email_subject);
+    setEmailDraft(nextCandidate.email_draft);
+    setEmailSenderId(buyerState?.email_sender_alias_id ?? "");
+    emailIdempotencyKeyRef.current = null;
+    setSelectedBuyerId(nextBuyerId);
+    setSessionSkippedBuyerIds((current) => current.filter((item) => item !== nextBuyerId));
+    setWorkspace({
+      ...result,
+      session: {
+        ...result.session,
+        state: "active",
+        current_buyer_id: nextBuyerId,
+        skipped_buyer_ids: result.session.skipped_buyer_ids.filter(
+          (item) => item !== nextBuyerId,
+        ),
+      },
+    });
+  }
+
   async function chooseCandidate(buyerId: string, activateSession = false) {
     const nextCandidate = executionCandidates(workspace).find((candidate) => candidate.buyer_id === buyerId);
-    if (!nextCandidate || (buyerIdRef.current === buyerId && !activateSession)) return;
-    const result = await updateSession(
-      {
-        current_buyer_id: buyerId,
-        skipped_buyer_ids: sessionSkippedBuyerIds.filter((item) => item !== buyerId),
-        ...(activateSession ? { state: "active" as const } : {}),
-      },
-      "session-cursor",
-    );
-    if (result) {
+    if (!workspace || !nextCandidate || (buyerIdRef.current === buyerId && !activateSession)) return;
+    const previousWorkspace = workspace;
+    const previousCandidate = selectedCandidate(previousWorkspace, buyerIdRef.current);
+    const isChangingBuyer = buyerIdRef.current !== buyerId;
+    const nextSkippedBuyerIds = sessionSkippedBuyerIds.filter((item) => item !== buyerId);
+    if (isChangingBuyer) selectCandidateLocally(previousWorkspace, nextCandidate);
+    setBusy("session-cursor");
+    setSessionSaveState("saving");
+    try {
+      const session = await request<DispositionExecutionSession>(
+        `/api/v1/dispositions/cases/${caseId}/execution/session/cursor`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            current_buyer_id: buyerId,
+            queue_buyer_ids: executionCandidates(previousWorkspace).map((item) => item.buyer_id),
+            skipped_buyer_ids: nextSkippedBuyerIds,
+          }),
+        },
+      );
+      setWorkspace((current) => current ? { ...current, session } : current);
+      setSessionSkippedBuyerIds(session.skipped_buyer_ids);
+      setSessionSaveState("saved");
       onMessage(activateSession
         ? `${nextCandidate.name} is ready in the outreach console.`
         : `Selected ${nextCandidate.name}. Your queue order and drafts remain saved.`);
+    } catch (error) {
+      if (isChangingBuyer && previousCandidate) {
+        selectCandidateLocally(previousWorkspace, previousCandidate);
+      }
+      setSessionSaveState("idle");
+      onMessage(error instanceof Error ? error.message : "The selected investor could not be saved.");
+    } finally {
+      setBusy(null);
     }
   }
 

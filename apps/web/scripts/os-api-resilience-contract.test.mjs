@@ -64,11 +64,13 @@ test("temporary disposition failures never pretend that the deal disappeared", a
     readFile(dispositionDeskPagePath, "utf8"),
   ]);
 
-  const connectionGuard = dealPage.indexOf("if (!dispositionResult.dispositions || !dispositionResult.apiConnected)");
+  const connectionGuard = dealPage.indexOf("if (!dispositionResult.dispositionCase || !dispositionResult.apiConnected)");
   const missingDealGuard = dealPage.indexOf("if (!dispositionCase)");
   assert.ok(connectionGuard >= 0 && connectionGuard < missingDealGuard);
   assert.match(dealPage, /<WorkspaceRecovery/);
   assert.match(dealPage, /getWorkspaceProfileResult\(\)/);
+  assert.match(dealPage, /getDispositionCase\(caseId\)/);
+  assert.doesNotMatch(dealPage, /getDispositionOverview\(\)/);
   assert.match(deskPage, /<WorkspaceRecovery/);
   assert.match(deskPage, /dispositionDeskResult\.connectionState === "unavailable"/);
 });

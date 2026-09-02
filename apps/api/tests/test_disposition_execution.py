@@ -1544,6 +1544,42 @@ def test_execution_session_restores_operator_position_drafts_and_queue_order(
     assert stored_session.operator_user_id is not None
 
 
+def test_execution_cursor_saves_without_rebuilding_the_workspace(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    case_id, first_buyer_id = _unranked_execution_case(db_session, client)
+    second_buyer_id = create_active_buyer(
+        client,
+        name="Fast Cursor Buyer",
+        email="fast-cursor@example.com",
+    )
+    queue_order = [first_buyer_id, second_buyer_id]
+
+    def fail_on_workspace_rebuild(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cursor updates must not rebuild the execution workspace")
+
+    monkeypatch.setattr(disposition_execution, "read_workspace", fail_on_workspace_rebuild)
+    saved = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session/cursor",
+        headers=HEADERS,
+        json={
+            "current_buyer_id": second_buyer_id,
+            "queue_buyer_ids": queue_order,
+            "skipped_buyer_ids": [first_buyer_id],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    session = saved.json()
+    assert session["persisted"] is True
+    assert session["state"] == "active"
+    assert session["current_buyer_id"] == second_buyer_id
+    assert session["queue_buyer_ids"] == queue_order
+    assert session["skipped_buyer_ids"] == [first_buyer_id]
+
+
 def test_explicit_quickdial_queue_keeps_only_selected_buyers(
     db_session: Session,
     api_db_override: None,

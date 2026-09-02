@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import {
-  getDispositionOverview,
+  getDispositionCase,
   getWorkspaceProfileResult,
 } from "../../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../../_components/page-contracts";
@@ -32,10 +32,9 @@ export default async function DispositionDealPage({
   params: Promise<{ caseId: string }>;
   searchParams: Promise<{ dispositionTab?: string; tab?: string }>;
 }) {
-  const [{ caseId }, query, dispositionResult, profileResult] = await Promise.all([
-    params,
-    searchParams,
-    getDispositionOverview(),
+  const [{ caseId }, query] = await Promise.all([params, searchParams]);
+  const [dispositionResult, profileResult] = await Promise.all([
+    getDispositionCase(caseId),
     getWorkspaceProfileResult(),
   ]);
   const requestedTab = query.tab ?? query.dispositionTab;
@@ -44,7 +43,7 @@ export default async function DispositionDealPage({
     : "execution";
   const profile = profileResult.profile;
 
-  if (!dispositionResult.dispositions || !dispositionResult.apiConnected) {
+  if (!dispositionResult.dispositionCase || !dispositionResult.apiConnected) {
     return (
       <WorkspacePage>
         <PageHeader
@@ -86,7 +85,7 @@ export default async function DispositionDealPage({
     );
   }
 
-  const dispositionCase = dispositionResult.dispositions.cases.find((item) => item.id === caseId) ?? null;
+  const dispositionCase = dispositionResult.dispositionCase;
   const canManageOutreach = Boolean(profile?.permissions.includes("dispositions:manage_outreach"));
   const canApproveOutreach = Boolean(profile?.permissions.includes("dispositions:approve_outreach"));
   const canViewOutreach = Boolean(profile?.permissions.includes("dispositions:view"));
@@ -130,7 +129,20 @@ export default async function DispositionDealPage({
         canViewOutreach={canViewOutreach}
         dealId={dispositionCase.deal_id}
         initialCaseId={caseId}
-        initialData={dispositionResult.dispositions}
+        initialData={{
+          can_view_private_economics: profile.permissions.includes("dispositions:view_private_economics"),
+          metrics: {
+            active_cases: dispositionCase.status === "closed" || dispositionCase.status === "cancelled" ? 0 : 1,
+            packages_pending: dispositionCase.package_status === "approved" ? 0 : 1,
+            buyer_selected: dispositionCase.selected_buyer_id ? 1 : 0,
+            reconciliation_pending: dispositionCase.reconciliation?.status === "draft" ? 1 : 0,
+            below_margin_target: dispositionCase.reconciliation
+              && dispositionCase.reconciliation.company_margin_basis_points
+                < dispositionCase.reconciliation.target_margin_basis_points ? 1 : 0,
+          },
+          eligible_transactions: [],
+          cases: [dispositionCase],
+        }}
         initialTab={initialTab}
         key={`${caseId}-${initialTab}`}
         variant="dedicated"

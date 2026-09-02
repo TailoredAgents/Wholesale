@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from app.models.foundation import (
     DispositionMatch,
     Lead,
     Property,
+    Task,
     Transaction,
     TransactionChecklistItem,
     TransactionDocument,
@@ -31,9 +33,27 @@ from app.schemas.deals import (
     DealOverviewRead,
     DealQueueItemRead,
 )
-from app.services.tasks import get_primary_next_action
+from app.schemas.tasks import PrimaryNextActionRead
+from app.services.tasks import OPEN_TASK_STATUSES, get_due_status, get_primary_next_action
 
 COMPLETED_TRANSACTION_STATUSES = {"funded", "closed", "cancelled"}
+
+
+@dataclass(frozen=True)
+class _DealOverviewContext:
+    leads: dict[UUID, Lead]
+    contacts: dict[UUID, Contact]
+    properties: dict[UUID, Property]
+    packages: dict[UUID, ContractPackage]
+    cases: dict[UUID, DispositionCase]
+    reconciliations: dict[UUID, DealReconciliation]
+    checklists: dict[UUID, list[TransactionChecklistItem]]
+    document_counts: dict[UUID, int]
+    match_counts: dict[UUID, int]
+    offer_counts: dict[UUID, int]
+    buyers: dict[UUID, Buyer]
+    users: dict[UUID, User]
+    primary_actions: dict[UUID, PrimaryNextActionRead]
 
 
 def _utc(value: datetime) -> datetime:
@@ -253,30 +273,39 @@ def _build_item(
     transaction: Transaction,
     *,
     can_view_economics: bool,
+    context: _DealOverviewContext | None = None,
 ) -> DealQueueItemRead:
-    lead = db.get(Lead, transaction.lead_id)
-    contact = db.get(Contact, transaction.contact_id)
-    property_record = db.get(Property, transaction.property_id)
-    package = db.scalar(
+    lead = context.leads.get(transaction.lead_id) if context else db.get(Lead, transaction.lead_id)
+    contact = (
+        context.contacts.get(transaction.contact_id)
+        if context
+        else db.get(Contact, transaction.contact_id)
+    )
+    property_record = (
+        context.properties.get(transaction.property_id)
+        if context
+        else db.get(Property, transaction.property_id)
+    )
+    package = context.packages.get(transaction.id) if context else db.scalar(
         select(ContractPackage)
         .where(ContractPackage.transaction_id == transaction.id)
         .order_by(ContractPackage.version_number.desc())
         .limit(1)
     )
-    case = db.scalar(
+    case = context.cases.get(transaction.id) if context else db.scalar(
         select(DispositionCase).where(DispositionCase.transaction_id == transaction.id)
     )
-    reconciliation = db.scalar(
+    reconciliation = context.reconciliations.get(transaction.id) if context else db.scalar(
         select(DealReconciliation).where(DealReconciliation.transaction_id == transaction.id)
     )
-    checklist = list(
+    checklist = context.checklists.get(transaction.id, []) if context else list(
         db.scalars(
             select(TransactionChecklistItem).where(
                 TransactionChecklistItem.transaction_id == transaction.id
             )
         ).all()
     )
-    document_count = (
+    document_count = context.document_counts.get(transaction.id, 0) if context else (
         db.scalar(
             select(func.count(TransactionDocument.id)).where(
                 TransactionDocument.transaction_id == transaction.id,
@@ -290,7 +319,7 @@ def _build_item(
     selected_buyer = None
     disposition_owner = None
     if case is not None:
-        match_count = (
+        match_count = context.match_counts.get(case.id, 0) if context else (
             db.scalar(
                 select(func.count(DispositionMatch.id)).where(
                     DispositionMatch.disposition_case_id == case.id
@@ -298,24 +327,39 @@ def _build_item(
             )
             or 0
         )
-        offer_count = (
+        offer_count = context.offer_counts.get(case.id, 0) if context else (
             db.scalar(
                 select(func.count(BuyerOffer.id)).where(BuyerOffer.disposition_case_id == case.id)
             )
             or 0
         )
-        selected_buyer = db.get(Buyer, case.selected_buyer_id) if case.selected_buyer_id else None
-        disposition_owner = db.get(User, case.owner_user_id)
-    owner = db.get(User, transaction.owner_user_id) if transaction.owner_user_id else None
+        selected_buyer = (
+            context.buyers.get(case.selected_buyer_id) if context and case.selected_buyer_id
+            else db.get(Buyer, case.selected_buyer_id) if case.selected_buyer_id
+            else None
+        )
+        disposition_owner = (
+            context.users.get(case.owner_user_id)
+            if context and case.owner_user_id
+            else db.get(User, case.owner_user_id)
+        )
+    owner = (
+        context.users.get(transaction.owner_user_id)
+        if context and transaction.owner_user_id
+        else db.get(User, transaction.owner_user_id) if transaction.owner_user_id
+        else None
+    )
     coordinator = (
-        db.get(User, transaction.coordinator_user_id) if transaction.coordinator_user_id else None
+        context.users.get(transaction.coordinator_user_id)
+        if context and transaction.coordinator_user_id
+        else db.get(User, transaction.coordinator_user_id)
+        if transaction.coordinator_user_id
+        else None
     )
     required = [item for item in checklist if item.is_required]
     complete = sum(item.status in {"complete", "not_applicable"} for item in required)
-    primary = get_primary_next_action(
-        db,
-        organization_id=principal.organization_id,
-        deal_id=deal.id,
+    primary = context.primary_actions.get(deal.id) if context else get_primary_next_action(
+        db, organization_id=principal.organization_id, deal_id=deal.id
     )
     blockers = _blockers(
         transaction,
@@ -367,6 +411,203 @@ def _build_item(
     )
 
 
+def _overview_context(
+    db: Session,
+    principal: Principal,
+    rows: list[tuple[Deal, Transaction]],
+) -> _DealOverviewContext:
+    transactions = [transaction for _, transaction in rows]
+    transaction_ids = {transaction.id for transaction in transactions}
+    deal_ids = {deal.id for deal, _ in rows}
+    lead_ids = {transaction.lead_id for transaction in transactions}
+    contact_ids = {transaction.contact_id for transaction in transactions}
+    property_ids = {transaction.property_id for transaction in transactions}
+
+    leads = {
+        item.id: item
+        for item in db.scalars(
+            select(Lead).where(
+                Lead.organization_id == principal.organization_id,
+                Lead.id.in_(lead_ids),
+            )
+        ).all()
+    } if lead_ids else {}
+    contacts = {
+        item.id: item
+        for item in db.scalars(
+            select(Contact).where(
+                Contact.organization_id == principal.organization_id,
+                Contact.id.in_(contact_ids),
+            )
+        ).all()
+    } if contact_ids else {}
+    properties = {
+        item.id: item
+        for item in db.scalars(
+            select(Property).where(
+                Property.organization_id == principal.organization_id,
+                Property.id.in_(property_ids),
+            )
+        ).all()
+    } if property_ids else {}
+
+    package_rows = list(
+        db.scalars(
+            select(ContractPackage)
+            .where(ContractPackage.transaction_id.in_(transaction_ids))
+            .order_by(
+                ContractPackage.transaction_id,
+                ContractPackage.version_number.desc(),
+                ContractPackage.created_at.desc(),
+            )
+        ).all()
+    ) if transaction_ids else []
+    packages: dict[UUID, ContractPackage] = {}
+    for package in package_rows:
+        packages.setdefault(package.transaction_id, package)
+
+    case_rows = list(
+        db.scalars(
+            select(DispositionCase).where(
+                DispositionCase.organization_id == principal.organization_id,
+                DispositionCase.transaction_id.in_(transaction_ids),
+            )
+        ).all()
+    ) if transaction_ids else []
+    cases = {item.transaction_id: item for item in case_rows}
+    case_ids = {item.id for item in case_rows}
+    reconciliations = {
+        item.transaction_id: item
+        for item in db.scalars(
+            select(DealReconciliation).where(
+                DealReconciliation.organization_id == principal.organization_id,
+                DealReconciliation.transaction_id.in_(transaction_ids),
+            )
+        ).all()
+    } if transaction_ids else {}
+
+    checklist_rows = list(
+        db.scalars(
+            select(TransactionChecklistItem).where(
+                TransactionChecklistItem.organization_id == principal.organization_id,
+                TransactionChecklistItem.transaction_id.in_(transaction_ids),
+            )
+        ).all()
+    ) if transaction_ids else []
+    checklists: dict[UUID, list[TransactionChecklistItem]] = {}
+    for item in checklist_rows:
+        checklists.setdefault(item.transaction_id, []).append(item)
+
+    document_counts = {
+        transaction_id: int(count)
+        for transaction_id, count in db.execute(
+            select(TransactionDocument.transaction_id, func.count(TransactionDocument.id))
+            .where(
+                TransactionDocument.transaction_id.in_(transaction_ids),
+                TransactionDocument.deleted_at.is_(None),
+            )
+            .group_by(TransactionDocument.transaction_id)
+        ).all()
+    } if transaction_ids else {}
+    match_counts = {
+        disposition_case_id: int(count)
+        for disposition_case_id, count in db.execute(
+            select(DispositionMatch.disposition_case_id, func.count(DispositionMatch.id))
+            .where(DispositionMatch.disposition_case_id.in_(case_ids))
+            .group_by(DispositionMatch.disposition_case_id)
+        ).all()
+    } if case_ids else {}
+    offer_counts = {
+        disposition_case_id: int(count)
+        for disposition_case_id, count in db.execute(
+            select(BuyerOffer.disposition_case_id, func.count(BuyerOffer.id))
+            .where(BuyerOffer.disposition_case_id.in_(case_ids))
+            .group_by(BuyerOffer.disposition_case_id)
+        ).all()
+    } if case_ids else {}
+
+    primary_task_rows = list(
+        db.scalars(
+            select(Task)
+            .where(
+                Task.organization_id == principal.organization_id,
+                Task.deal_id.in_(deal_ids),
+                Task.work_kind == "primary_next_action",
+                Task.status.in_(OPEN_TASK_STATUSES),
+            )
+            .order_by(Task.created_at.desc())
+        ).all()
+    ) if deal_ids else []
+    primary_task_by_deal: dict[UUID, Task] = {}
+    for task in primary_task_rows:
+        if task.deal_id is not None:
+            primary_task_by_deal.setdefault(task.deal_id, task)
+
+    user_ids = {
+        user_id
+        for user_id in (
+            *(transaction.owner_user_id for transaction in transactions),
+            *(transaction.coordinator_user_id for transaction in transactions),
+            *(case.owner_user_id for case in case_rows),
+            *(task.responsible_user_id for task in primary_task_by_deal.values()),
+        )
+        if user_id is not None
+    }
+    users = {
+        item.id: item
+        for item in db.scalars(
+            select(User).where(
+                User.organization_id == principal.organization_id,
+                User.id.in_(user_ids),
+            )
+        ).all()
+    } if user_ids else {}
+    selected_buyer_ids = {
+        case.selected_buyer_id for case in case_rows if case.selected_buyer_id is not None
+    }
+    buyers = {
+        item.id: item
+        for item in db.scalars(
+            select(Buyer).where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.id.in_(selected_buyer_ids),
+            )
+        ).all()
+    } if selected_buyer_ids else {}
+    now = datetime.now(UTC)
+    primary_actions = {
+        deal_id: PrimaryNextActionRead(
+            task_id=task.id,
+            title=task.title,
+            action_type=task.task_type,
+            due_at=task.due_at,
+            responsible_user_id=task.responsible_user_id,
+            responsible_user_email=(
+                users[task.responsible_user_id].email
+                if task.responsible_user_id in users
+                else None
+            ),
+            due_status=get_due_status(task, now),
+        )
+        for deal_id, task in primary_task_by_deal.items()
+    }
+    return _DealOverviewContext(
+        leads=leads,
+        contacts=contacts,
+        properties=properties,
+        packages=packages,
+        cases=cases,
+        reconciliations=reconciliations,
+        checklists=checklists,
+        document_counts=document_counts,
+        match_counts=match_counts,
+        offer_counts=offer_counts,
+        buyers=buyers,
+        users=users,
+        primary_actions=primary_actions,
+    )
+
+
 def overview(
     db: Session,
     principal: Principal,
@@ -387,9 +628,17 @@ def overview(
         statement = statement.where(
             Deal.id.in_(deal_ids) if deal_ids else Deal.id.is_(None)
         )
-    rows = db.execute(statement).all()
+    rows = list(db.execute(statement).tuples().all())
+    context = _overview_context(db, principal, rows)
     items = [
-        _build_item(db, principal, deal, transaction, can_view_economics=can_view_economics)
+        _build_item(
+            db,
+            principal,
+            deal,
+            transaction,
+            can_view_economics=can_view_economics,
+            context=context,
+        )
         for deal, transaction in rows
     ]
     active = [item for item in items if item.closing_status not in {"funded", "cancelled"}]

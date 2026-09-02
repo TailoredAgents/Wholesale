@@ -33,6 +33,7 @@ from app.schemas.disposition_execution import (
     DispositionExecutionBuyerStateRead,
     DispositionExecutionCallCreate,
     DispositionExecutionCandidateRead,
+    DispositionExecutionCursorUpdate,
     DispositionExecutionEmailCreate,
     DispositionExecutionOutcomeCreate,
     DispositionExecutionPermissionRead,
@@ -53,8 +54,9 @@ from app.schemas.voice import VoiceCallIntentCreate, VoiceCallIntentRead
 from app.services import buyers as buyer_service
 from app.services import disposition_buyer_pool, disposition_packages, dispositions
 from app.services.communication_compliance import (
-    evaluate_sms_eligibility,
-    evaluate_voice_eligibility,
+    SmsEligibility,
+    VoiceEligibility,
+    evaluate_contact_eligibility_batch,
 )
 from app.services.disposition_state import ACTIVE_DISPOSITION_CASE_STATUSES
 from app.services.email import send_conversation_email
@@ -223,15 +225,43 @@ def read_workspace(
             not in {"selected", "backup", "fallout"}
         )
     ]
+    conversations_by_buyer = _buyer_conversations(db, principal, buyer_ids)
+    contact_ids = {
+        conversation.contact_id for conversation in conversations_by_buyer.values()
+    }
+    contacts_by_id = {
+        contact.id: contact
+        for contact in (
+            db.scalars(
+                select(Contact).where(
+                    Contact.organization_id == principal.organization_id,
+                    Contact.id.in_(contact_ids),
+                )
+            ).all()
+            if contact_ids
+            else []
+        )
+    }
+    eligibility_by_contact = evaluate_contact_eligibility_batch(
+        db,
+        contacts_by_id.values(),
+        require_permission=False,
+    )
+    sender_name = _sender_name(db, principal.user_id)
     candidates = [
         _candidate_read(
-            db,
-            principal,
             property_record,
             buyer,
             candidate_by_buyer.get(buyer.id),
             ranked_entries_by_buyer.get(buyer.id),
             _session_buyer_state(session, buyer.id),
+            conversation=conversations_by_buyer.get(buyer.id),
+            eligibility=(
+                eligibility_by_contact.get(conversations_by_buyer[buyer.id].contact_id)
+                if buyer.id in conversations_by_buyer
+                else None
+            ),
+            sender_name=sender_name,
         )
         for buyer in visible_buyers
     ]
@@ -499,6 +529,120 @@ def update_execution_session(
     if result is None:
         raise ValueError("The disposition case is unavailable.")
     return result
+
+
+def update_execution_cursor(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    payload: DispositionExecutionCursorUpdate,
+) -> DispositionExecutionSessionRead:
+    """Persist a selected investor without rebuilding the full execution workspace."""
+
+    case = _mutable_case(db, principal, case_id)
+    requested_buyer_ids = list(dict.fromkeys(payload.queue_buyer_ids))
+    visible_buyer_ids = set(
+        db.scalars(
+            select(Buyer.id).where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.archived_at.is_(None),
+                Buyer.status != "archived",
+                Buyer.id.in_(requested_buyer_ids),
+            )
+        ).all()
+    )
+    if visible_buyer_ids != set(requested_buyer_ids):
+        raise ValueError("One or more investors are unavailable in the Buyer Network.")
+
+    session = _execution_session(db, principal, case.id, lock=True)
+    if session is None:
+        now = datetime.now(UTC)
+        session = DispositionExecutionSession(
+            organization_id=principal.organization_id,
+            disposition_case_id=case.id,
+            operator_user_id=principal.user_id,
+            buyer_pool_run_id=db.scalar(
+                select(DispositionBuyerPoolRun.id)
+                .where(
+                    DispositionBuyerPoolRun.organization_id == principal.organization_id,
+                    DispositionBuyerPoolRun.disposition_case_id == case.id,
+                )
+                .order_by(
+                    DispositionBuyerPoolRun.version_number.desc(),
+                    DispositionBuyerPoolRun.created_at.desc(),
+                )
+                .limit(1)
+            ),
+            current_buyer_id=payload.current_buyer_id,
+            state="active",
+            queue_mode="automatic",
+            queue_buyer_ids=[str(buyer_id) for buyer_id in requested_buyer_ids],
+            skipped_buyer_ids=[],
+            buyer_states={},
+            last_outcome=None,
+            last_outcome_buyer_id=None,
+            last_outcome_at=None,
+            follow_up_at=None,
+            started_at=now,
+            paused_at=None,
+            resumed_at=None,
+            lock_version=1,
+        )
+        try:
+            with db.begin_nested():
+                db.add(session)
+                db.flush()
+        except IntegrityError:
+            winner = _execution_session(db, principal, case.id, lock=True)
+            if winner is None:
+                raise
+            session = winner
+
+    before = _execution_session_audit_value(session)
+    if session.queue_mode == "explicit":
+        selectable_buyer_ids = {
+            UUID(buyer_id) for buyer_id in session.queue_buyer_ids
+        } & visible_buyer_ids
+    else:
+        session.queue_buyer_ids = _merged_queue_buyer_ids(
+            session.queue_buyer_ids,
+            requested_buyer_ids,
+        )
+        selectable_buyer_ids = visible_buyer_ids
+    if payload.current_buyer_id not in selectable_buyer_ids:
+        raise ValueError("The saved investor is no longer available in this deal queue.")
+
+    session.current_buyer_id = payload.current_buyer_id
+    if session.state == "paused":
+        session.state = "active"
+        session.resumed_at = datetime.now(UTC)
+    session.skipped_buyer_ids = [
+        str(buyer_id)
+        for buyer_id in dict.fromkeys(payload.skipped_buyer_ids)
+        if buyer_id in selectable_buyer_ids and buyer_id != payload.current_buyer_id
+    ]
+    session.lock_version += 1
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="disposition.execution.cursor_update",
+            entity_type="disposition_execution_session",
+            entity_id=session.id,
+            previous_value=before,
+            new_value=_execution_session_audit_value(session),
+            reason="Disposition outreach investor selection updated.",
+        )
+    )
+    db.commit()
+    db.refresh(session)
+    return _execution_session_read(
+        session,
+        default_current_buyer_id=payload.current_buyer_id,
+        queue_buyer_ids=requested_buyer_ids,
+        latest_buyer_pool_run_id=session.buyer_pool_run_id,
+    )
 
 
 def _execution_session(
@@ -1575,13 +1719,15 @@ def _case_candidate(
 
 
 def _candidate_read(
-    db: Session,
-    principal: Principal,
     property_record: Property,
     buyer: Buyer,
     candidate: DispositionBuyerPoolCandidate | None,
     entry: Any | None,
     session_buyer_state: dict[str, Any] | None = None,
+    *,
+    conversation: Conversation | None,
+    eligibility: tuple[SmsEligibility, VoiceEligibility] | None,
+    sender_name: str,
 ) -> DispositionExecutionCandidateRead:
     action_blockers: list[str] = []
     if _candidate_is_passed(candidate):
@@ -1590,11 +1736,8 @@ def _candidate_read(
         )
     if _buyer_is_do_not_contact(buyer):
         action_blockers.append(BUYER_DO_NOT_CONTACT_BLOCKER)
-    conversation = _buyer_conversation(db, principal, buyer.id)
-    contact = db.get(Contact, conversation.contact_id) if conversation is not None else None
-    if contact is not None:
-        sms = evaluate_sms_eligibility(db, contact, require_permission=False)
-        voice = evaluate_voice_eligibility(db, contact, require_permission=False)
+    if eligibility is not None:
+        sms, voice = eligibility
         sms_read = DispositionExecutionPermissionRead(
             status=sms.consent_status,
             allowed=sms.can_send,
@@ -1651,7 +1794,7 @@ def _candidate_read(
                 buyer.name,
                 property_record,
                 reference,
-                sender_name=_sender_name(db, principal.user_id),
+                sender_name=sender_name,
             )
         ),
         email_subject=(
@@ -1665,7 +1808,7 @@ def _candidate_read(
             else _email_draft(
                 buyer.name,
                 property_record,
-                sender_name=_sender_name(db, principal.user_id),
+                sender_name=sender_name,
             )
         ),
     )
@@ -1699,24 +1842,28 @@ def _blocked_permission_read(
     )
 
 
-def _buyer_conversation(
+def _buyer_conversations(
     db: Session,
     principal: Principal,
-    buyer_id: UUID,
-) -> Conversation | None:
-    return db.scalar(
-        select(Conversation)
-        .join(
-            ConversationContextLink,
-            ConversationContextLink.conversation_id == Conversation.id,
-        )
+    buyer_ids: set[UUID],
+) -> dict[UUID, Conversation]:
+    if not buyer_ids:
+        return {}
+    rows = db.execute(
+        select(ConversationContextLink.buyer_id, Conversation)
+        .join(Conversation, Conversation.id == ConversationContextLink.conversation_id)
         .where(
             Conversation.organization_id == principal.organization_id,
             ConversationContextLink.organization_id == principal.organization_id,
             ConversationContextLink.context_type == "buyer",
-            ConversationContextLink.buyer_id == buyer_id,
+            ConversationContextLink.buyer_id.in_(buyer_ids),
         )
-    )
+    ).all()
+    result: dict[UUID, Conversation] = {}
+    for buyer_id, conversation in rows:
+        if buyer_id is not None:
+            result.setdefault(buyer_id, conversation)
+    return result
 
 
 def _candidate_queue_state(
@@ -1739,12 +1886,35 @@ def _candidate_queue_state(
     latest_by_buyer: dict[UUID, BuyerEngagement] = {}
     for engagement in engagements:
         latest_by_buyer[engagement.buyer_id] = engagement
+    follow_up_task_id_by_engagement: dict[UUID, UUID] = {}
+    for engagement in latest_by_buyer.values():
+        raw_task_id = (engagement.engagement_metadata or {}).get("follow_up_task_id")
+        if not raw_task_id:
+            continue
+        try:
+            follow_up_task_id_by_engagement[engagement.id] = UUID(str(raw_task_id))
+        except ValueError:
+            continue
+    follow_up_tasks = {
+        task.id: task
+        for task in (
+            db.scalars(
+                select(Task).where(
+                    Task.organization_id == case.organization_id,
+                    Task.id.in_(follow_up_task_id_by_engagement.values()),
+                )
+            ).all()
+            if follow_up_task_id_by_engagement
+            else []
+        )
+    }
     now = datetime.now(UTC)
     for buyer_id, engagement in latest_by_buyer.items():
         if engagement.status not in {"callback", "no_answer", "voicemail"}:
             handled.add(buyer_id)
             continue
-        task = _engagement_follow_up_task(db, engagement)
+        task_id = follow_up_task_id_by_engagement.get(engagement.id)
+        task = follow_up_tasks.get(task_id) if task_id is not None else None
         if task is not None:
             if task.status == "open" and task.due_at is not None:
                 task_due_at = _aware_utc(task.due_at)

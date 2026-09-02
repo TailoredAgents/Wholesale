@@ -7888,6 +7888,31 @@ export async function getDispositionOverview(): Promise<{
   }
 }
 
+export async function getDispositionCase(caseId: string): Promise<{
+  dispositionCase: DispositionCase | null;
+  apiConnected: boolean;
+  connectionState: ApiConnectionState;
+  errorMessage: string | null;
+}> {
+  try {
+    const response = await fetchServerApiRead(`/api/v1/dispositions/cases/${caseId}`);
+    if (!response.ok) throw await apiError(response);
+    return {
+      dispositionCase: (await response.json()) as DispositionCase,
+      apiConnected: true,
+      connectionState: "connected",
+      errorMessage: null,
+    };
+  } catch (error) {
+    return {
+      dispositionCase: null,
+      apiConnected: false,
+      connectionState: apiConnectionState(error),
+      errorMessage: error instanceof Error ? error.message : "Disposition deal request failed.",
+    };
+  }
+}
+
 export async function getDispositionDesk(
   scope: DispositionDeskScope = "team",
   section?: DispositionDeskCategory,

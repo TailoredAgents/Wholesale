@@ -20,6 +20,7 @@ import type {
   BuyerListResponse,
   DispositionBuyerPoolEntry,
   DispositionBuyerPoolPage,
+  DispositionCase,
   DispositionCopilotOverview,
   DispositionCopilotQualityEvaluation,
   DispositionCopilotRecommendation,
@@ -395,6 +396,14 @@ export function DispositionWorkspace({
   }
 
   async function reloadOverview(preferredId = selectedId) {
+    if (variant === "dedicated" && preferredId) {
+      const dispositionCase = await request<DispositionCase>(
+        `/api/v1/dispositions/cases/${preferredId}`,
+      );
+      setData((current) => ({ ...current, cases: [dispositionCase] }));
+      setSelectedId(dispositionCase.id);
+      return dispositionCase.id;
+    }
     const next = await request<DispositionOverview>("/api/v1/dispositions");
     setData(next);
     const nextId = preferredId ?? next.cases[0]?.id ?? null;

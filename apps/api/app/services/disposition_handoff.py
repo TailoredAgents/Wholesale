@@ -1160,6 +1160,40 @@ def active_authorized_disposition_user(
     return _active_authorized_disposition_user(db, organization_id, user_id)
 
 
+def active_authorized_disposition_user_ids(
+    db: Session,
+    organization_id: UUID,
+    user_ids: set[UUID],
+) -> set[UUID]:
+    """Resolve many eligible disposition owners without repeating RBAC queries per case."""
+
+    if not user_ids:
+        return set()
+    permission_keys_by_user: dict[UUID, set[str]] = {}
+    for user_id, permission_key in db.execute(
+        select(User.id, Permission.key)
+        .join(RoleAssignment, RoleAssignment.user_id == User.id)
+        .join(Role, Role.id == RoleAssignment.role_id)
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(
+            User.organization_id == organization_id,
+            User.id.in_(user_ids),
+            User.is_active.is_(True),
+            RoleAssignment.organization_id == organization_id,
+            RolePermission.organization_id == organization_id,
+            Role.organization_id == organization_id,
+            Permission.key.in_(REQUIRED_DISPOSITION_OWNER_PERMISSION_KEYS),
+        )
+    ).all():
+        permission_keys_by_user.setdefault(user_id, set()).add(permission_key)
+    return {
+        user_id
+        for user_id, permission_keys in permission_keys_by_user.items()
+        if REQUIRED_DISPOSITION_OWNER_PERMISSION_KEYS.issubset(permission_keys)
+    }
+
+
 def _active_users_with_role_key(
     db: Session,
     organization_id: UUID,

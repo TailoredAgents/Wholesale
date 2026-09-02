@@ -1,5 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -35,6 +37,115 @@ class VoiceEligibility:
     provider_configured: bool
     within_allowed_hours: bool
     blockers: tuple[str, ...]
+
+
+def evaluate_contact_eligibility_batch(
+    db: Session,
+    contacts: Iterable[Contact],
+    *,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+    require_permission: bool = True,
+) -> dict[UUID, tuple[SmsEligibility, VoiceEligibility]]:
+    """Evaluate a contact collection with three shared queries instead of six per contact."""
+
+    contact_list = list(contacts)
+    if not contact_list:
+        return {}
+    settings = settings or get_settings()
+    organization_id = contact_list[0].organization_id
+    contact_ids = {contact.id for contact in contact_list}
+    if any(contact.organization_id != organization_id for contact in contact_list):
+        raise ValueError("Communication eligibility contacts must share an organization.")
+
+    phone_methods = list(
+        db.scalars(
+            select(ContactMethod)
+            .where(
+                ContactMethod.organization_id == organization_id,
+                ContactMethod.contact_id.in_(contact_ids),
+                ContactMethod.method_type == "phone",
+            )
+            .order_by(
+                ContactMethod.contact_id.asc(),
+                ContactMethod.is_primary.desc(),
+                ContactMethod.created_at.asc(),
+            )
+        ).all()
+    )
+    recipients: dict[UUID, str | None] = dict.fromkeys(contact_ids)
+    for method in phone_methods:
+        if recipients[method.contact_id] is None:
+            recipients[method.contact_id] = format_e164(method.normalized_value)
+
+    consent_records = list(
+        db.scalars(
+            select(ConsentRecord)
+            .where(
+                ConsentRecord.organization_id == organization_id,
+                ConsentRecord.contact_id.in_(contact_ids),
+                ConsentRecord.channel.in_(("sms", "phone")),
+            )
+            .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
+        ).all()
+    )
+    consent_statuses: dict[tuple[UUID, str], str] = {}
+    for consent in consent_records:
+        key = (consent.contact_id, consent.channel)
+        if key in consent_statuses:
+            continue
+        recipient = recipients[consent.contact_id]
+        if consent.normalized_address in (None, recipient):
+            consent_statuses[key] = consent.status
+
+    normalized_recipients = {recipient for recipient in recipients.values() if recipient}
+    suppressions = (
+        list(
+            db.scalars(
+                select(SuppressionRecord).where(
+                    SuppressionRecord.organization_id == organization_id,
+                    SuppressionRecord.channel.in_(("sms", "phone", "all")),
+                    SuppressionRecord.normalized_address.in_(normalized_recipients),
+                    SuppressionRecord.status == "active",
+                )
+            ).all()
+        )
+        if normalized_recipients
+        else []
+    )
+    suppression_keys = {
+        (suppression.channel, suppression.normalized_address)
+        for suppression in suppressions
+    }
+    sms_within_hours = is_within_sms_allowed_hours(settings, now=now)
+    voice_within_hours = is_within_voice_allowed_hours(settings, now=now)
+    return {
+        contact.id: (
+            _sms_eligibility_from_state(
+                settings=settings,
+                recipient=recipients[contact.id],
+                consent_status=consent_statuses.get((contact.id, "sms"), "missing"),
+                is_suppressed=(
+                    ("sms", recipients[contact.id]) in suppression_keys
+                    or ("all", recipients[contact.id]) in suppression_keys
+                ),
+                within_allowed_hours=sms_within_hours,
+                require_permission=require_permission,
+            ),
+            _voice_eligibility_from_state(
+                settings=settings,
+                recipient=recipients[contact.id],
+                consent_status=consent_statuses.get((contact.id, "phone"), "missing"),
+                is_suppressed=(
+                    ("phone", recipients[contact.id]) in suppression_keys
+                    or ("all", recipients[contact.id]) in suppression_keys
+                ),
+                within_allowed_hours=voice_within_hours,
+                require_permission=require_permission,
+            ),
+        )
+        for contact in contact_list
+    }
 
 
 def evaluate_sms_eligibility(
@@ -83,12 +194,31 @@ def evaluate_sms_eligibility(
         else None
     )
     within_allowed_hours = is_within_sms_allowed_hours(settings, now=now)
+    return _sms_eligibility_from_state(
+        settings=settings,
+        recipient=recipient,
+        consent_status=consent_status,
+        is_suppressed=suppression is not None,
+        within_allowed_hours=within_allowed_hours,
+        require_permission=require_permission,
+    )
+
+
+def _sms_eligibility_from_state(
+    *,
+    settings: Settings,
+    recipient: str | None,
+    consent_status: str,
+    is_suppressed: bool,
+    within_allowed_hours: bool,
+    require_permission: bool,
+) -> SmsEligibility:
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid recipient mobile number is required.")
     if require_permission and consent_status != "granted":
         blockers.append("Recorded SMS consent is required.")
-    if suppression is not None:
+    if is_suppressed:
         blockers.append("This number is suppressed from text messaging.")
     if not within_allowed_hours:
         blockers.append("Text messaging is outside Stonegate's allowed contact hours.")
@@ -99,7 +229,7 @@ def evaluate_sms_eligibility(
         can_send=not blockers,
         recipient=recipient,
         consent_status=consent_status,
-        is_suppressed=suppression is not None,
+        is_suppressed=is_suppressed,
         provider_configured=settings.twilio_sms_configured,
         within_allowed_hours=within_allowed_hours,
         blockers=tuple(blockers),
@@ -183,12 +313,31 @@ def evaluate_voice_eligibility(
         else None
     )
     within_allowed_hours = is_within_voice_allowed_hours(settings, now=now)
+    return _voice_eligibility_from_state(
+        settings=settings,
+        recipient=recipient,
+        consent_status=consent_status,
+        is_suppressed=suppression is not None,
+        within_allowed_hours=within_allowed_hours,
+        require_permission=require_permission,
+    )
+
+
+def _voice_eligibility_from_state(
+    *,
+    settings: Settings,
+    recipient: str | None,
+    consent_status: str,
+    is_suppressed: bool,
+    within_allowed_hours: bool,
+    require_permission: bool,
+) -> VoiceEligibility:
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller phone number is required.")
     if require_permission and consent_status != "granted":
         blockers.append("Recorded phone contact permission is required.")
-    if suppression is not None:
+    if is_suppressed:
         blockers.append("This number is suppressed from phone calls.")
     # Voice calls launched here are deliberate, human-initiated calls from an assigned Inbox
     # conversation. Keep suppression, provider, and line-authorization gates, but do not prevent
@@ -202,7 +351,7 @@ def evaluate_voice_eligibility(
         can_call=not blockers,
         recipient=recipient,
         consent_status=consent_status,
-        is_suppressed=suppression is not None,
+        is_suppressed=is_suppressed,
         provider_configured=settings.twilio_voice_configured,
         within_allowed_hours=within_allowed_hours,
         blockers=tuple(blockers),
