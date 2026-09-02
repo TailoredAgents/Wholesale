@@ -688,14 +688,14 @@ export function DispositionWorkspace({
                   </div>
                   {dedicatedSection === "outreach" ? <div className={styles.workspaceSecondaryNav}>
                     <button aria-current={activeTab === "execution" ? "page" : undefined} onClick={() => selectWorkspaceTab("execution")} type="button"><PhoneCall aria-hidden="true" size={15} />Outreach queue</button>
-                    <button aria-current={activeTab === "buyers" ? "page" : undefined} onClick={() => selectWorkspaceTab("buyers")} type="button"><UsersRound aria-hidden="true" size={15} />Find / pull investors</button>
-                    {(canViewOutreach || selected.asset_class === "house") ? <details className={styles.workspaceMoreTools}>
+                    <details className={styles.workspaceMoreTools}>
                       <summary>More tools</summary>
                       <div>
+                        <button aria-current={activeTab === "buyers" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("buyers"); }} type="button"><UsersRound aria-hidden="true" size={15} />Full buyer pool &amp; evidence</button>
                         {canViewOutreach ? <button aria-current={activeTab === "outreach" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("outreach"); }} type="button"><Send aria-hidden="true" size={15} />Bulk campaigns</button> : null}
                         {selected.asset_class === "house" ? <button aria-current={activeTab === "provider" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("provider"); }} type="button">External distribution</button> : null}
                       </div>
-                    </details> : null}
+                    </details>
                   </div> : null}
                   {dedicatedSection === "deal" ? <div className={styles.workspaceSecondaryNav}>
                     <button aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectWorkspaceTab("overview")} type="button">Deal summary</button>

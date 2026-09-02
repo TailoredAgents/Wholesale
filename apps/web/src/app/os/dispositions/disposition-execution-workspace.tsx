@@ -1294,7 +1294,7 @@ export function DispositionExecutionWorkspace({
             </section>
           </aside>
         </div>
-      ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No buyer is available for one-to-one work</strong><span>Review the visible Buyer Network records and their contact controls, or add another canonical buyer.</span></div></section>}
+      ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No investors are in this outreach queue yet</strong><span>Use Find and rank investors above to pull DealMachine candidates, rank the Buyer Network, or add a known investor. Deal and packet information can stay incomplete while you build and market the list.</span></div></section>}
 
       {workspace.showings.length ? <details className={styles.secondaryTools}><summary><CalendarClock size={16} /><span><strong>Scheduled showings</strong><small>{workspace.showings.length} access appointment{workspace.showings.length === 1 ? "" : "s"}</small></span></summary><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></details> : null}
     </section>

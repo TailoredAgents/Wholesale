@@ -106,8 +106,9 @@ test("investors can be discovered, reviewed, reranked, added, and pinned inside 
   assert.match(parent, /canEditBuyers=\{canEditBuyers\}/);
   assert.match(workspace, /<DispositionQueueBuilder/);
   assert.match(workspace, /assetClass=\{workspace\.asset_class\}/);
-  assert.match(queueBuilder, /Build this investor queue/);
-  assert.match(queueBuilder, /Find, review, add, rerank, or pin investors without leaving Outreach/);
+  assert.match(queueBuilder, /Find and rank investors/);
+  assert.match(queueBuilder, /Pull DealMachine results, add known buyers, and build the outreach list here/);
+  assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| !result\.entries\.some/);
   assert.match(queueBuilder, /\/api\/v1\/buyers\/discovery-runs\/estimate/);
   assert.match(queueBuilder, /confirmed_estimated_credits: estimate\.estimated_credits/);
   assert.match(queueBuilder, /confirmed_request_fingerprint: estimate\.request_fingerprint/);

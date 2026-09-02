@@ -1,7 +1,7 @@
 .workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
 .dedicatedWorkspace { gap: 12px; }
-.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
+.body.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .landMarketNotice { margin: 0; padding: 10px 14px; border: 1px solid #d8c58e; border-radius: 8px; background: #fff9e9; color: #684e1c; font-size: 11px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
 .metrics > div { min-height: 76px; padding: 14px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-right: 1px solid var(--line-soft); }

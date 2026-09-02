@@ -94,6 +94,7 @@ export function DispositionQueueBuilder({
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState("");
   const [manualBuyerOpen, setManualBuyerOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(false);
   const [relationshipOwners, setRelationshipOwners] = useState<BuyerRelationshipOwner[]>([]);
   const [sourceOptions, setSourceOptions] = useState<string[]>(["manual"]);
 
@@ -103,6 +104,7 @@ export function DispositionQueueBuilder({
       { cache: "no-store" },
     );
     setPool(result);
+    setBuilderOpen((current) => current || !result.entries.some((entry) => entry.buyer_id));
     return result;
   }, [caseId, request]);
 
@@ -357,12 +359,12 @@ export function DispositionQueueBuilder({
 
   return (
     <>
-      <details className={styles.builder}>
+      <details className={styles.builder} onToggle={(event) => setBuilderOpen(event.currentTarget.open)} open={builderOpen}>
         <summary>
           <span className={styles.summaryIcon}><UsersRound size={18} /></span>
           <span className={styles.summaryCopy}>
-            <strong>Build this investor queue</strong>
-            <small>Find, review, add, rerank, or pin investors without leaving Outreach</small>
+            <strong>Find and rank investors</strong>
+            <small>Pull DealMachine results, add known buyers, and build the outreach list here</small>
           </span>
           <span className={styles.summaryMetrics}>
             <b>{queueEntries.length} in queue</b>
