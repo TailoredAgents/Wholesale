@@ -1,0 +1,38 @@
+.builder { display: grid; gap: 14px; min-width: 0; }
+.builder nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.builder nav button, .previewButton, .builder footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #b8c5bb; border-radius: 9px; background: #fff; padding: 10px 12px; color: #34453b; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.builder nav button[aria-pressed="true"] { border-color: #17633d; background: #eef8f1; color: #17633d; box-shadow: inset 0 0 0 1px #17633d; }
+.builder nav button span { margin-left: auto; padding: 2px 7px; border-radius: 999px; background: #e5eee7; font-size: 10px; }
+.sourcePanel { display: grid; gap: 10px; min-width: 0; }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid #cbd3cc; border-radius: 9px; padding: 0 10px; color: #68756d; }
+.search input { width: 100%; border: 0; outline: 0; padding: 11px 0; color: #203027; font: inherit; }
+.buyerList, .contactPreview { display: grid; max-height: 420px; overflow-y: auto; border: 1px solid #dce3dd; border-radius: 10px; }
+.buyerList label, .contactPreview label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 10px 11px; border-bottom: 1px solid #e5e8e5; cursor: pointer; }
+.buyerList label:last-child, .contactPreview label:last-child { border-bottom: 0; }
+.buyerList label[data-selected="true"], .contactPreview label[data-selected="true"] { background: #eef8f1; }
+.buyerList label > span, .contactPreview label > span { display: grid; min-width: 0; gap: 2px; }
+.buyerList strong, .contactPreview strong { overflow: hidden; color: #203027; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.buyerList small, .contactPreview small, .uploadRow small { overflow: hidden; color: #68756d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.uploadRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px dashed #9eb4a3; border-radius: 10px; background: #f7faf7; }
+.uploadRow label { display: inline-flex; align-items: center; gap: 7px; color: #17633d; font-size: 12px; font-weight: 800; cursor: pointer; }
+.uploadRow input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.paste { display: grid; gap: 6px; color: #34453b; font-size: 11px; font-weight: 800; }
+.paste textarea { box-sizing: border-box; width: 100%; resize: vertical; border: 1px solid #cbd3cc; border-radius: 9px; padding: 10px; color: #203027; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.previewButton { justify-self: start; border-color: #17633d; color: #17633d; }
+.contactPreview header { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; background: #f7f9f7; color: #526158; font-size: 11px; }
+.contactPreview label b { padding: 3px 6px; border-radius: 999px; background: #e5eee7; color: #17633d; font-size: 9px; text-transform: uppercase; }
+.contactPreview label[data-error="true"] { background: #fff4f0; }
+.contactPreview label[data-error="true"] b { background: #f8d9d2; color: #8b3026; }
+.empty, .error { margin: 0; padding: 18px; border-radius: 9px; color: #68756d; font-size: 12px; text-align: center; }
+.error { background: #fff0ed; color: #8b3026; text-align: left; }
+.builder footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #dce3dd; background: #fff; padding-top: 12px; }
+.builder footer span { color: #607067; font-size: 12px; }
+.builder footer span strong { color: #17633d; font-size: 18px; }
+.builder footer button { border-color: #17633d; background: #17633d; color: #fff; }
+.builder footer button:disabled { cursor: not-allowed; opacity: .45; }
+
+@media (max-width: 560px) {
+  .builder nav { grid-template-columns: 1fr; }
+  .uploadRow, .builder footer { align-items: stretch; flex-direction: column; }
+  .builder footer button { width: 100%; }
+}

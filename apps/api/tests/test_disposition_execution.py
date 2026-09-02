@@ -1413,6 +1413,16 @@ def test_disposition_execution_migration_is_linear_and_reversible() -> None:
     )
     assert migration["revision"] == "0122_disposition_execution"
     assert migration["down_revision"] == "0121_dealmachine_buyer_tiers"
+    explicit_queue_migration = run_path(
+        str(
+            Path(__file__).parents[1]
+            / "alembic"
+            / "versions"
+            / "0125_disposition_explicit_queues.py"
+        )
+    )
+    assert explicit_queue_migration["revision"] == "0125_disposition_explicit_queues"
+    assert explicit_queue_migration["down_revision"] == "0124_disposition_sessions"
 
 
 def test_execution_session_restores_operator_position_drafts_and_queue_order(
@@ -1532,6 +1542,79 @@ def test_execution_session_restores_operator_position_drafts_and_queue_order(
     )
     assert stored_session is not None
     assert stored_session.operator_user_id is not None
+
+
+def test_explicit_quickdial_queue_keeps_only_selected_buyers(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, first_buyer_id = _unranked_execution_case(db_session, client)
+    second_buyer_id = create_active_buyer(
+        client,
+        name="Selected Explicit Queue Buyer",
+        email="selected-explicit-queue@example.com",
+    )
+    omitted_buyer_id = create_active_buyer(
+        client,
+        name="Omitted Explicit Queue Buyer",
+        email="omitted-explicit-queue@example.com",
+    )
+
+    saved = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={
+            "queue_buyer_ids": [second_buyer_id, first_buyer_id],
+            "current_buyer_id": second_buyer_id,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["session"]["queue_mode"] == "explicit"
+    assert saved.json()["session"]["queue_buyer_ids"] == [
+        second_buyer_id,
+        first_buyer_id,
+    ]
+    assert [item["buyer_id"] for item in saved.json()["candidates"]] == [
+        second_buyer_id,
+        first_buyer_id,
+    ]
+    assert omitted_buyer_id not in {
+        item["buyer_id"] for item in saved.json()["candidates"]
+    }
+
+    create_active_buyer(
+        client,
+        name="Later Buyer Must Not Leak Into Explicit Queue",
+        email="later-explicit-queue@example.com",
+    )
+    restored = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert restored.status_code == 200, restored.text
+    assert [item["buyer_id"] for item in restored.json()["candidates"]] == [
+        second_buyer_id,
+        first_buyer_id,
+    ]
+
+
+def test_explicit_quickdial_queue_rejects_unavailable_buyers(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, _ = _unranked_execution_case(db_session, client)
+    missing_buyer_id = "00000000-0000-0000-0000-000000000001"
+    response = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={"queue_buyer_ids": [missing_buyer_id]},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == (
+        "One or more investors are unavailable in the Buyer Network."
+    )
 
 
 def test_execution_outcome_updates_durable_last_result_and_follow_up(

@@ -14,6 +14,10 @@ const queueBuilderPath = new URL(
   "../src/app/os/dispositions/disposition-queue-builder.tsx",
   import.meta.url,
 );
+const listBuilderPath = new URL(
+  "../src/app/os/dispositions/disposition-list-builder.tsx",
+  import.meta.url,
+);
 const apiPath = new URL("../src/app/lib/api.ts", import.meta.url);
 
 test("the disposition workspace mounts a permission-aware one-to-one call queue", async () => {
@@ -85,6 +89,9 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /candidates\.map\(\(item\) =>/);
   assert.match(workspace, /key=\{item\.buyer_id\}/);
   assert.match(workspace, /chooseCandidate\(item\.buyer_id\)/);
+  assert.match(workspace, /moveCandidate\(item\.buyer_id, -1\)/);
+  assert.match(workspace, /moveCandidate\(item\.buyer_id, 1\)/);
+  assert.match(workspace, /removeCandidate\(item\.buyer_id\)/);
   assert.match(workspace, /Ranking is guidance\. Choose any investor/);
   assert.match(workspace, /Buyer Network \/ Unranked/);
   assert.match(workspace, /hasRankedFit\(candidate\)/);
@@ -96,11 +103,12 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.doesNotMatch(workspace, /packageApproved|qualifiedBuyerCount/);
 });
 
-test("investors can be discovered, reviewed, reranked, added, and pinned inside Outreach", async () => {
-  const [workspace, parent, queueBuilder] = await Promise.all([
+test("investors can be selected, imported, discovered, and pinned inside Outreach", async () => {
+  const [workspace, parent, queueBuilder, listBuilder] = await Promise.all([
     readFile(workspacePath, "utf8"),
     readFile(parentPath, "utf8"),
     readFile(queueBuilderPath, "utf8"),
+    readFile(listBuilderPath, "utf8"),
   ]);
 
   assert.match(parent, /canEditBuyers=\{canEditBuyers\}/);
@@ -117,15 +125,23 @@ test("investors can be discovered, reviewed, reranked, added, and pinned inside 
   assert.match(queueBuilder, /<BuyerForm compact/);
   assert.match(queueBuilder, /QuickDial is empty/);
   assert.match(queueBuilder, /Refresh will stay at zero until a real investor is added/);
-  assert.match(queueBuilder, /Load \$\{buyerNetworkCount\} into QuickDial/);
-  assert.match(queueBuilder, /Add first investor/);
+  assert.match(queueBuilder, /Build investor list/);
+  assert.match(queueBuilder, /Quick add one/);
+  assert.match(queueBuilder, /<DispositionListBuilder/);
+  assert.match(listBuilder, /Buyer Network/);
+  assert.match(listBuilder, /Upload or paste/);
+  assert.match(listBuilder, /Choose CSV file/);
+  assert.match(listBuilder, /paste rows from a spreadsheet/);
+  assert.match(listBuilder, /Preview contacts/);
+  assert.match(listBuilder, /queue_buyer_ids: queueIds/);
+  assert.match(listBuilder, /Save \$\{totalSelected\} to QuickDial/);
   assert.match(queueBuilder, /\/api\/v1\/buyers\/discovery-runs\/estimate/);
   assert.match(queueBuilder, /confirmed_estimated_credits: estimate\.estimated_credits/);
   assert.match(queueBuilder, /confirmed_request_fingerprint: estimate\.request_fingerprint/);
   assert.match(queueBuilder, /buyer-pool\/candidates\/\$\{entry\.candidate_id\}\/conversion/);
   assert.match(queueBuilder, /<BuyerForm/);
-  assert.match(queueBuilder, /rerank_queue: true/);
-  assert.match(queueBuilder, /current_buyer_id: pinBuyerId/);
+  assert.match(queueBuilder, /queue_buyer_ids: nextQueueBuyerIds/);
+  assert.match(queueBuilder, /current_buyer_id: buyerId/);
   assert.match(queueBuilder, /Pin for outreach/);
   assert.match(queueBuilder, /Land-safe queue building is active/);
   assert.match(queueBuilder, /current search is residential/);

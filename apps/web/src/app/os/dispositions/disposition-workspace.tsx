@@ -214,8 +214,15 @@ export function DispositionWorkspace({
       headers: { ...(await headers(!(options.body instanceof Blob))), ...(options.headers ?? {}) },
     });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(payload.detail ?? "Request failed.");
+      const payload = (await response.json().catch(() => ({}))) as {
+        detail?: string | { message?: string } | Array<{ msg?: string }>;
+      };
+      const detail = typeof payload.detail === "string"
+        ? payload.detail
+        : Array.isArray(payload.detail)
+          ? payload.detail.map((item) => item.msg).filter(Boolean).join(" ")
+          : payload.detail?.message;
+      throw new Error(detail || "Request failed.");
     }
     return response.json() as Promise<T>;
   }, [apiBase, headers]);

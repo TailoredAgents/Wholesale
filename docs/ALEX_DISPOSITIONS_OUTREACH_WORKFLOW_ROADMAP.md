@@ -74,9 +74,10 @@ The repository already contains much of the hard backend and governance work:
   offers, primary and backup selection, deadlines, and closing checkpoints;
 - permissions, communication consent and suppression, evidence provenance, and audit history.
 
-The main gap is not a missing collection of features. It is the operator experience: those
-capabilities are currently split across too many equally prominent tabs, long pages, and readiness
-surfaces, so the simple outreach job is hard to recognize and resume.
+The remaining gaps are concentrated in the operator experience: relationship follow-up work and
+provider-specific Land discovery still need expansion, but the deal outreach path is now centered
+on building an explicit list and working it in QuickDial instead of navigating equally prominent
+tabs, long pages, or readiness surfaces.
 
 ## Phase 1 — Make The Job Obvious
 
@@ -129,11 +130,12 @@ or completed out of order. Recording a result does not force an immediate advanc
 
 ## Phase 3 — Durable Sessions And Exact Resume
 
-**Repository status:** Implemented September 1, 2026. Each operator now has one canonical saved
-session per deal. The service preserves queue order across ranking refreshes, appends newly found
-investors, and restores the current investor, skipped list, pause state, message/result drafts,
-channel progress, last outcome, and scheduled follow-up. Session changes are tenant-scoped and
-audited. Operator acceptance across logout and a production-equivalent deal remains outstanding.
+**Repository status:** Implemented September 2, 2026. Each operator now has one canonical saved
+session per deal. The service supports an explicit deal list that preserves only the investors Alex
+selected or imported, in his chosen order, while retaining legacy automatic queues. It restores the
+current investor, skipped list, pause state, message/result drafts, channel progress, last outcome,
+and scheduled follow-up. Session changes are tenant-scoped and audited. Operator acceptance across
+logout and a production-equivalent deal remains outstanding.
 
 Goal: let Alex stop and return without reconstructing what happened.
 
@@ -166,17 +168,18 @@ Goal: add first-class one-to-one email to the existing SMS and calling experienc
 
 ## Phase 5 — Pull And Rank Investors In Place
 
-**Repository status:** Implemented September 1, 2026. The Outreach Desk now contains a compact,
-collapsible **Build this investor queue** workspace. Alex can rerank the owned network, preview the
-exact scope and estimated DealMachine credits before a House search, reuse saved searches, review
-staged external candidates, approve or link them into the canonical Buyer Network, reject them,
-manually add a relationship, and pin any canonical investor without leaving the active outreach
-session. Reranking adopts the latest explainable order while preserving the pinned investor,
-per-investor drafts, channel progress, outcomes, skips, and follow-ups. DealMachine results preserve
-their external provenance and never trigger outreach automatically. Land uses the asset-aware owned
-network matcher and manual additions; the residential DealMachine search remains visibly unavailable
-for Land so House assumptions cannot leak into that workflow. Production acceptance with a connected
-DealMachine account and production-equivalent House and Land deals remains outstanding.
+**Repository status:** Implemented September 2, 2026. The primary **Build investor list** flow lets
+Alex search and select any existing Buyer Network relationships, upload a CSV, or paste rows from a
+spreadsheet. It previews and validates contacts, reuses matching buyer records, creates new records
+without inventing contact consent, and saves the chosen membership as this deal's durable QuickDial
+queue. Alex can remove or reorder investors from the queue. The secondary ranking workspace still
+supports owned-network reranking, cost previews and DealMachine House discovery, staged-candidate
+review, canonical Buyer Network approval/linking, rejection, manual addition, and pinning.
+DealMachine results preserve external provenance and never trigger outreach automatically. Land
+can use Buyer Network selection, CSV/paste imports, and manual additions now; residential
+DealMachine search remains visibly unavailable for Land so House assumptions cannot leak into that
+workflow. Production acceptance with a connected DealMachine account and production-equivalent
+House and Land deals remains outstanding.
 
 Goal: make the external-to-owned buyer pool feel like one part of the outreach job.
 
@@ -237,17 +240,18 @@ production-equivalent deal:
 2. Alex can start outreach even when readiness items remain incomplete.
 3. Alex can upload, replace, or inspect the investor packet without leaving the deal workspace.
 4. Alex can pull authorized DealMachine candidates from the deal.
-5. The system presents one explainable most-likely-to-least-likely investor queue.
-6. Alex can review, edit, and send the drafted SMS to an eligible investor.
-7. Alex can call that investor from the same workspace.
-8. Alex can record the call result without being forced away from the investor.
-9. Alex can review, edit, and send the follow-up email.
-10. Alex can advance to the next investor and repeat the cadence.
-11. Alex can pause and later resume at the exact investor and unfinished step.
-12. Replies, prior conversations, notes, preferences, and follow-ups remain visible in the
+5. Alex can select Buyer Network contacts or upload/paste a spreadsheet into an explicit deal queue.
+6. The system presents one explainable most-likely-to-least-likely investor queue when ranking is useful.
+7. Alex can review, edit, and send the drafted SMS to an eligible investor.
+8. Alex can call that investor from the same workspace.
+9. Alex can record the call result without being forced away from the investor.
+10. Alex can review, edit, and send the follow-up email.
+11. Alex can advance to the next investor and repeat the cadence.
+12. Alex can pause and later resume at the exact investor and unfinished step.
+13. Replies, prior conversations, notes, preferences, and follow-ups remain visible in the
     relationship history.
-13. Alex can record interest, showing activity, and an offer from the outreach context.
-14. Alex can select a primary/backup buyer and reopen outreach cleanly if that buyer falls out.
+14. Alex can record interest, showing activity, and an offer from the outreach context.
+15. Alex can select a primary/backup buyer and reopen outreach cleanly if that buyer falls out.
 
 ## Implementation Discipline
 

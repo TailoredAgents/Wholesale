@@ -65,8 +65,13 @@
 .queueMetrics dd { margin: 0; color: #17633d; font-size: 16px; font-weight: 850; }
 .queueGuidance { margin: 0; padding: 10px 12px 3px; color: #68756d; font-size: 11px; line-height: 1.45; }
 .queuePanel .rankedPool { grid-column: auto; grid-template-columns: 1fr; gap: 6px; max-height: 560px; padding: 8px; }
+.queuePanel .rankedPool > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
 .queuePanel .rankedBuyer { min-height: 60px; padding: 8px; }
 .queuePanel .rankedBuyer[data-skipped="true"] { opacity: .62; }
+.queueRowActions { display: grid; gap: 3px; }
+.queueRowActions button { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid #cbd5cd; border-radius: 6px; background: #fff; padding: 0; color: #526158; cursor: pointer; }
+.queueRowActions button:last-child { color: #8b3026; }
+.queueRowActions button:disabled { cursor: not-allowed; opacity: .35; }
 .queuePanel > footer { display: grid; gap: 2px; padding: 11px 13px; border-top: 1px solid #dce3dd; background: #fff; }
 .queuePanel > footer strong { overflow: hidden; color: #203027; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .relationshipPanel { grid-column: 3; grid-row: 1; position: sticky; top: 178px; min-width: 0; overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #fff; }

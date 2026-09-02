@@ -6244,6 +6244,9 @@ class DispositionExecutionSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     state: Mapped[str] = mapped_column(
         String(40), nullable=False, default="active", server_default="active"
     )
+    queue_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="automatic", server_default="automatic"
+    )
     queue_buyer_ids: Mapped[list[str]] = mapped_column(
         JSON, nullable=False, default=list, server_default="[]"
     )

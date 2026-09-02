@@ -28,6 +28,7 @@ DispositionExecutionSmsStatus = Literal["not_started", "drafted", "sent"]
 DispositionExecutionCallStatus = Literal["not_started", "started", "completed"]
 DispositionExecutionEmailStatus = Literal["not_started", "drafted", "sent"]
 DispositionExecutionSessionState = Literal["active", "paused"]
+DispositionExecutionQueueMode = Literal["automatic", "explicit"]
 
 
 class DispositionExecutionPermissionRead(BaseModel):
@@ -96,6 +97,7 @@ class DispositionExecutionSessionRead(BaseModel):
     id: UUID | None
     persisted: bool
     state: DispositionExecutionSessionState
+    queue_mode: DispositionExecutionQueueMode
     current_buyer_id: UUID | None
     buyer_pool_run_id: UUID | None
     queue_buyer_ids: list[UUID]
@@ -172,6 +174,7 @@ class DispositionExecutionSessionUpdate(BaseModel):
     current_buyer_id: UUID | None = None
     advance_to_next: bool = False
     rerank_queue: bool = False
+    queue_buyer_ids: list[UUID] | None = Field(default=None, max_length=500)
     skipped_buyer_ids: list[UUID] | None = None
     buyer_id: UUID | None = None
     sms_draft: str | None = Field(default=None, max_length=1600)
@@ -203,6 +206,7 @@ class DispositionExecutionSessionUpdate(BaseModel):
                 "current_buyer_id",
                 "advance_to_next",
                 "rerank_queue",
+                "queue_buyer_ids",
                 "skipped_buyer_ids",
                 *buyer_fields,
             }
@@ -212,6 +216,8 @@ class DispositionExecutionSessionUpdate(BaseModel):
             raise ValueError("Choose an exact investor or advance to the next one, not both.")
         if self.advance_to_next and self.rerank_queue:
             raise ValueError("Rerank the queue or advance to the next investor, not both.")
+        if self.rerank_queue and "queue_buyer_ids" in self.model_fields_set:
+            raise ValueError("Replace the queue or rerank it, not both.")
         return self
 
 

@@ -3204,6 +3204,7 @@ export type DispositionExecutionSession = {
   id: string | null;
   persisted: boolean;
   state: "active" | "paused";
+  queue_mode: "automatic" | "explicit";
   current_buyer_id: string | null;
   buyer_pool_run_id: string | null;
   queue_buyer_ids: string[];

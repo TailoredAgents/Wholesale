@@ -181,7 +181,14 @@ def read_workspace(
             str(buyer.id),
         )
     )
-    if session is not None and session.queue_buyer_ids:
+    if session is not None and session.queue_mode == "explicit":
+        buyer_by_id = {str(buyer.id): buyer for buyer in visible_buyers}
+        visible_buyers = [
+            buyer_by_id[buyer_id]
+            for buyer_id in session.queue_buyer_ids
+            if buyer_id in buyer_by_id
+        ]
+    elif session is not None and session.queue_buyer_ids:
         queue_positions = {
             buyer_id: position
             for position, buyer_id in enumerate(session.queue_buyer_ids)
@@ -280,6 +287,31 @@ def update_execution_session(
     now = datetime.now(UTC)
     fields = payload.model_fields_set
 
+    if "queue_buyer_ids" in fields:
+        requested_buyer_ids = list(dict.fromkeys(payload.queue_buyer_ids or []))
+        valid_buyer_ids = set(
+            db.scalars(
+                select(Buyer.id).where(
+                    Buyer.organization_id == principal.organization_id,
+                    Buyer.archived_at.is_(None),
+                    Buyer.status != "archived",
+                    Buyer.id.in_(requested_buyer_ids),
+                )
+            ).all()
+        ) if requested_buyer_ids else set()
+        invalid_buyer_ids = set(requested_buyer_ids) - valid_buyer_ids
+        if invalid_buyer_ids:
+            raise ValueError("One or more investors are unavailable in the Buyer Network.")
+        session.queue_mode = "explicit"
+        session.queue_buyer_ids = [str(buyer_id) for buyer_id in requested_buyer_ids]
+        visible_buyer_ids = set(requested_buyer_ids)
+        session.skipped_buyer_ids = [
+            buyer_id for buyer_id in session.skipped_buyer_ids
+            if UUID(buyer_id) in visible_buyer_ids
+        ]
+        if session.current_buyer_id not in visible_buyer_ids:
+            session.current_buyer_id = requested_buyer_ids[0] if requested_buyer_ids else None
+
     if payload.rerank_queue:
         ranked_queue = sorted(
             workspace.candidates,
@@ -315,7 +347,7 @@ def update_execution_session(
             )
             .limit(1)
         )
-    else:
+    elif session.queue_mode != "explicit":
         session.queue_buyer_ids = _merged_queue_buyer_ids(
             session.queue_buyer_ids,
             [candidate.buyer_id for candidate in workspace.candidates],
@@ -480,6 +512,7 @@ def _ensure_execution_session(
             else None
         ),
         state="active",
+        queue_mode="automatic",
         queue_buyer_ids=[str(candidate.buyer_id) for candidate in current_workspace.candidates],
         skipped_buyer_ids=[],
         buyer_states={},
@@ -558,9 +591,16 @@ def _execution_session_read(
     queue_buyer_ids: list[UUID],
     latest_buyer_pool_run_id: UUID | None,
 ) -> DispositionExecutionSessionRead:
-    merged_queue_ids = _merged_queue_buyer_ids(
-        session.queue_buyer_ids if session is not None else [],
-        queue_buyer_ids,
+    merged_queue_ids = (
+        [
+            buyer_id for buyer_id in session.queue_buyer_ids
+            if buyer_id in {str(item) for item in queue_buyer_ids}
+        ]
+        if session is not None and session.queue_mode == "explicit"
+        else _merged_queue_buyer_ids(
+            session.queue_buyer_ids if session is not None else [],
+            queue_buyer_ids,
+        )
     )
     visible_buyer_ids = {UUID(value) for value in merged_queue_ids}
     current_buyer_id = (
@@ -588,6 +628,7 @@ def _execution_session_read(
             if session is not None
             else "active"
         ),
+        queue_mode=session.queue_mode if session is not None else "automatic",
         current_buyer_id=current_buyer_id,
         buyer_pool_run_id=(
             session.buyer_pool_run_id if session is not None else latest_buyer_pool_run_id

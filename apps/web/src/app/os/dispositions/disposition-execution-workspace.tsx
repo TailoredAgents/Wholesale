@@ -2,6 +2,8 @@
 
 import {
   ArrowRight,
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   CheckCircle2,
   Download,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   ShieldAlert,
   SkipForward,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -57,6 +60,7 @@ type SessionUpdate = {
   current_buyer_id?: string | null;
   advance_to_next?: boolean;
   rerank_queue?: boolean;
+  queue_buyer_ids?: string[];
   skipped_buyer_ids?: string[];
   buyer_id?: string;
   sms_draft?: string | null;
@@ -325,6 +329,31 @@ export function DispositionExecutionWorkspace({
     if (result) {
       onMessage(`Working ${nextCandidate.name}. This position will resume across visits.`);
     }
+  }
+
+  async function moveCandidate(buyerId: string, direction: -1 | 1) {
+    const buyerIds = executionCandidates(workspace).map((item) => item.buyer_id);
+    const currentIndex = buyerIds.indexOf(buyerId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= buyerIds.length) return;
+    [buyerIds[currentIndex], buyerIds[nextIndex]] = [buyerIds[nextIndex], buyerIds[currentIndex]];
+    const result = await updateSession({ queue_buyer_ids: buyerIds }, "queue-order");
+    if (result) onMessage("QuickDial order saved.");
+  }
+
+  async function removeCandidate(buyerId: string) {
+    const candidates = executionCandidates(workspace);
+    const currentIndex = candidates.findIndex((item) => item.buyer_id === buyerId);
+    if (currentIndex < 0) return;
+    const buyerIds = candidates.filter((item) => item.buyer_id !== buyerId).map((item) => item.buyer_id);
+    const nextCurrentBuyerId = buyerIdRef.current === buyerId
+      ? buyerIds[Math.min(currentIndex, buyerIds.length - 1)] ?? null
+      : buyerIdRef.current;
+    const result = await updateSession({
+      queue_buyer_ids: buyerIds,
+      current_buyer_id: nextCurrentBuyerId,
+    }, "queue-remove");
+    if (result) onMessage("Investor removed from this deal's QuickDial list. Their Buyer Network relationship was kept.");
   }
 
   const load = useCallback(async () => {
@@ -1139,6 +1168,7 @@ export function DispositionExecutionWorkspace({
         canEditBuyers={canEditBuyers}
         canEditDeals={canEditDeals}
         caseId={caseId}
+        currentQueueBuyerIds={candidates.map((item) => item.buyer_id)}
         onMessage={onMessage}
         onQueueChanged={refreshQueueBuilderWorkspace}
         quickDialQueueCount={candidates.length}
@@ -1299,7 +1329,7 @@ export function DispositionExecutionWorkspace({
             </dl>
             <p className={styles.queueGuidance}>Ranking is guidance. Choose any investor to pin this session at that relationship; unavailable channel controls remain enforced individually.</p>
             <ol className={styles.rankedPool}>
-              {candidates.map((item) => {
+              {candidates.map((item, index) => {
                 const selected = item.buyer_id === candidate.buyer_id;
                 const skipped = skippedBuyerIds.has(item.buyer_id);
                 return (
@@ -1309,6 +1339,11 @@ export function DispositionExecutionWorkspace({
                       <span className={styles.rankedBuyerIdentity}><strong>{item.name}</strong><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
                       <strong className={styles.rankedBuyerScore} data-ranked={hasRankedFit(item)}>{candidateFitLabel(item)}</strong>
                     </button>
+                    <span className={styles.queueRowActions}>
+                      <button aria-label={`Move ${item.name} earlier`} disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={13} /></button>
+                      <button aria-label={`Move ${item.name} later`} disabled={busy !== null || index === candidates.length - 1} onClick={() => void moveCandidate(item.buyer_id, 1)} type="button"><ArrowDown size={13} /></button>
+                      <button aria-label={`Remove ${item.name} from QuickDial`} disabled={busy !== null} onClick={() => void removeCandidate(item.buyer_id)} type="button"><Trash2 size={13} /></button>
+                    </span>
                   </li>
                 );
               })}

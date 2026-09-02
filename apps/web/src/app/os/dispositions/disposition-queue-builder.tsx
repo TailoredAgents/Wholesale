@@ -30,6 +30,7 @@ import type {
 import { Drawer } from "../_components/design-system";
 import { BuyerForm } from "../buyers/buyer-form";
 import { labelize } from "../os-utils";
+import { DispositionListBuilder } from "./disposition-list-builder";
 import styles from "./disposition-queue-builder.module.css";
 
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -72,6 +73,7 @@ export function DispositionQueueBuilder({
   canEditBuyers,
   canEditDeals,
   caseId,
+  currentQueueBuyerIds,
   onMessage,
   onQueueChanged,
   quickDialQueueCount,
@@ -81,6 +83,7 @@ export function DispositionQueueBuilder({
   canEditBuyers: boolean;
   canEditDeals: boolean;
   caseId: string;
+  currentQueueBuyerIds: string[];
   onMessage: (message: string | null) => void;
   onQueueChanged: () => Promise<void>;
   quickDialQueueCount: number;
@@ -96,8 +99,10 @@ export function DispositionQueueBuilder({
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState("");
   const [manualBuyerOpen, setManualBuyerOpen] = useState(false);
+  const [listBuilderOpen, setListBuilderOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [buyerNetworkCount, setBuyerNetworkCount] = useState<number | null>(null);
+  const [buyerNetwork, setBuyerNetwork] = useState<BuyerListItem[]>([]);
   const [relationshipOwners, setRelationshipOwners] = useState<BuyerRelationshipOwner[]>([]);
   const [sourceOptions, setSourceOptions] = useState<string[]>(["manual"]);
 
@@ -132,10 +137,22 @@ export function DispositionQueueBuilder({
 
   const loadBuyerOptions = useCallback(async () => {
     if (!canEditBuyers) return;
-    const result = await request<BuyerListResponse>("/api/v1/buyers?limit=1&offset=0");
-    setBuyerNetworkCount(result.total);
-    setRelationshipOwners(result.owner_options);
-    setSourceOptions(Array.from(new Set(["manual", ...result.source_options])));
+    const buyers: BuyerListItem[] = [];
+    let offset = 0;
+    let total = 1;
+    let firstPage: BuyerListResponse | null = null;
+    while (offset < total) {
+      const result = await request<BuyerListResponse>(`/api/v1/buyers?limit=200&offset=${offset}`, { cache: "no-store" });
+      firstPage ??= result;
+      buyers.push(...result.items.filter((buyer) => buyer.archived_at === null && buyer.status !== "archived"));
+      total = result.total;
+      if (!result.items.length) break;
+      offset = result.offset + result.items.length;
+    }
+    setBuyerNetworkCount(buyers.length);
+    setBuyerNetwork(buyers);
+    setRelationshipOwners(firstPage?.owner_options ?? []);
+    setSourceOptions(Array.from(new Set(["manual", ...(firstPage?.source_options ?? [])])));
   }, [canEditBuyers, request]);
 
   useEffect(() => {
@@ -161,20 +178,41 @@ export function DispositionQueueBuilder({
   }, [loadBuyerOptions, loadDiscovery, loadPool]);
 
   async function rebuildQueue(pinBuyerId?: string) {
-    await request(`/api/v1/dispositions/cases/${caseId}/buyer-pool/runs`, {
+    const rankedPool = await request<DispositionBuyerPoolPage>(`/api/v1/dispositions/cases/${caseId}/buyer-pool/runs`, {
       method: "POST",
       body: "{}",
     });
+    const rankedBuyerIds = rankedPool.entries.flatMap((entry) => entry.buyer_id ? [entry.buyer_id] : []);
+    const nextQueueBuyerIds = pinBuyerId
+      ? [pinBuyerId, ...rankedBuyerIds.filter((buyerId) => buyerId !== pinBuyerId)]
+      : rankedBuyerIds;
     await request(`/api/v1/dispositions/cases/${caseId}/execution/session`, {
       method: "PATCH",
       body: JSON.stringify({
-        rerank_queue: true,
+        queue_buyer_ids: nextQueueBuyerIds,
         ...(pinBuyerId ? { current_buyer_id: pinBuyerId } : {}),
       }),
     });
     const [nextPool] = await Promise.all([loadPool(), onQueueChanged()]);
     if (nextPool.entries.some((entry) => entry.buyer_id)) setBuilderOpen(false);
     return nextPool;
+  }
+
+  async function addBuyerToQueue(buyerId: string) {
+    const nextQueueBuyerIds = [
+      ...currentQueueBuyerIds.filter((currentBuyerId) => currentBuyerId !== buyerId),
+      buyerId,
+    ];
+    await request(`/api/v1/dispositions/cases/${caseId}/execution/session`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        queue_buyer_ids: nextQueueBuyerIds,
+        current_buyer_id: buyerId,
+        state: "active",
+      }),
+    });
+    await Promise.all([loadPool(), loadBuyerOptions(), onQueueChanged()]);
+    setBuilderOpen(false);
   }
 
   async function rerankQueue() {
@@ -203,12 +241,7 @@ export function DispositionQueueBuilder({
     setError(null);
     onMessage(null);
     try {
-      await request(`/api/v1/dispositions/cases/${caseId}/execution/session`, {
-        method: "PATCH",
-        body: JSON.stringify({ current_buyer_id: buyerId }),
-      });
-      await onQueueChanged();
-      setBuilderOpen(false);
+      await addBuyerToQueue(buyerId);
       onMessage(`${buyerName} is pinned as the current investor. This position will resume across visits.`);
     } catch (actionError) {
       const detail = actionError instanceof Error ? actionError.message : "The investor could not be pinned.";
@@ -351,8 +384,8 @@ export function DispositionQueueBuilder({
     setError(null);
     onMessage(null);
     try {
-      await rebuildQueue(buyer.id);
-      onMessage(`${buyer.name} was added to the Buyer Network, reranked, and pinned for outreach. Verify criteria whenever useful; nothing was sent.`);
+      await addBuyerToQueue(buyer.id);
+      onMessage(`${buyer.name} was added to QuickDial and selected for outreach. Verify criteria whenever useful; nothing was sent.`);
     } catch (actionError) {
       const detail = actionError instanceof Error ? actionError.message : "The buyer was added, but the outreach queue could not be refreshed.";
       setError(detail);
@@ -360,6 +393,13 @@ export function DispositionQueueBuilder({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function listBuilt(count: number) {
+    setListBuilderOpen(false);
+    await Promise.all([loadPool(), loadBuyerOptions(), onQueueChanged()]);
+    setBuilderOpen(false);
+    onMessage(`${count} investor${count === 1 ? " is" : "s are"} loaded in this deal's QuickDial queue. Nothing was sent.`);
   }
 
   const entries = pool?.entries ?? [];
@@ -383,8 +423,8 @@ export function DispositionQueueBuilder({
               : "Refresh will stay at zero until a real investor is added. Enter a name and phone or email to start outreach."}</p>
           </div>
           <div>
-            {buyerNetworkCount ? <button disabled={Boolean(busy) || !canEditDeals} onClick={() => void rerankQueue()} type="button"><UsersRound size={16} />{busy === "rerank" ? "Loading investors…" : `Load ${buyerNetworkCount} into QuickDial`}</button> : null}
-            <button className={buyerNetworkCount ? styles.secondary : undefined} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={16} />Add first investor</button>
+            <button disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setListBuilderOpen(true)} type="button"><UsersRound size={16} />Build investor list</button>
+            <button className={styles.secondary} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={16} />Quick add one</button>
           </div>
         </section>
       ) : null}
@@ -417,6 +457,7 @@ export function DispositionQueueBuilder({
             </dl>
             <div className={styles.primaryActions}>
               <button disabled={Boolean(busy) || loading || !canEditDeals} onClick={() => void rerankQueue()} type="button"><RefreshCw size={15} />{busy === "rerank" ? "Reranking…" : "Rerank queue"}</button>
+              <button className={styles.secondary} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setListBuilderOpen(true)} type="button"><UsersRound size={15} />Build investor list</button>
               <button className={styles.secondary} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={15} />Quick add investor</button>
             </div>
           </header>
@@ -500,8 +541,12 @@ export function DispositionQueueBuilder({
         </div>
       </details>
 
+      <Drawer description="Choose existing relationships or upload and paste spreadsheet contacts. Review the list before adding anyone to this deal." onClose={() => setListBuilderOpen(false)} open={listBuilderOpen} size="wide" title="Build investor list">
+        <DispositionListBuilder buyers={buyerNetwork} caseId={caseId} currentBuyerIds={currentQueueBuyerIds} key={currentQueueBuyerIds.join(",")} onComplete={listBuilt} request={request} />
+      </Drawer>
+
       <Drawer description="Enter a name and phone or email, record the contact permission you know, and start working this investor. Complete the rest of the profile later." onClose={() => setManualBuyerOpen(false)} open={manualBuyerOpen} title="Quick add investor">
-        <BuyerForm compact onCancel={() => setManualBuyerOpen(false)} onSaved={(buyer) => void manualBuyerSaved(buyer)} onUseExisting={(buyerId) => { setManualBuyerOpen(false); void rebuildQueue(buyerId).then(() => onMessage("The existing Buyer Network relationship was pinned for outreach.")).catch((actionError: unknown) => onMessage(actionError instanceof Error ? actionError.message : "The existing buyer could not be pinned.")); }} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
+        <BuyerForm compact onCancel={() => setManualBuyerOpen(false)} onSaved={(buyer) => void manualBuyerSaved(buyer)} onUseExisting={(buyerId) => { setManualBuyerOpen(false); void addBuyerToQueue(buyerId).then(() => onMessage("The existing Buyer Network relationship was added and selected for outreach.")).catch((actionError: unknown) => onMessage(actionError instanceof Error ? actionError.message : "The existing buyer could not be added.")); }} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
       </Drawer>
     </>
   );
