@@ -91,19 +91,20 @@
 .relationshipNotes p { display: -webkit-box; overflow: hidden; margin: 0; color: #526158; font-size: 10px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .relationshipTags { display: flex; flex-wrap: wrap; gap: 4px; padding: 9px 12px; border-bottom: 1px solid #e5e8e5; }
 .relationshipTags span { padding: 3px 6px; border-radius: 999px; background: #e5eee7; color: #17633d; font-size: 8px; font-weight: 800; }
-.relationshipActivity { display: grid; gap: 9px; padding: 12px; background: #fff; }
-.relationshipActivity > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.relationshipActivity > header div { display: grid; gap: 2px; }
-.relationshipActivity > header span { color: #607067; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-.relationshipActivity > header strong { color: #203027; font-size: 13px; }
-.relationshipActivity > header b { padding: 3px 6px; border-radius: 999px; background: #fff0d4; color: #795108; font-size: 9px; text-transform: uppercase; }
-.relationshipActivity ol { display: grid; gap: 6px; max-height: 280px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.relationshipActivity li { display: grid; gap: 2px; min-width: 0; padding: 8px; border: 1px solid #e1e6e2; border-radius: 8px; background: #f8faf8; }
-.relationshipActivity li[data-inbound="true"] { border-color: #e6c678; background: #fffaf0; }
-.relationshipActivity li span, .relationshipActivity li small { color: #68756d; font-size: 9px; }
-.relationshipActivity li strong { display: -webkit-box; overflow: hidden; color: #2f4035; font-size: 11px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.relationshipActivity > p { margin: 0; color: #68756d; font-size: 11px; }
-.relationshipActivity > a { display: inline-flex; align-items: center; gap: 4px; color: #17633d; font-size: 11px; font-weight: 800; text-decoration: none; }
+.conversationTimeline { display: grid; gap: 12px; min-width: 0; padding: 16px; }
+.conversationTimeline > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.conversationTimeline > header div { display: grid; gap: 3px; }
+.conversationTimeline > header span { color: #607067; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.conversationTimeline > header h4 { margin: 0; color: #15241b; font-size: 16px; }
+.conversationTimeline > header b { padding: 4px 8px; border-radius: 999px; background: #fff0d4; color: #795108; font-size: 10px; text-transform: uppercase; }
+.conversationTimeline ol { display: grid; gap: 8px; max-height: 360px; margin: 0; padding: 2px; overflow-y: auto; list-style: none; }
+.conversationTimeline li { display: grid; gap: 3px; width: min(86%, 560px); padding: 10px 12px; border: 1px solid #dfe5e0; border-radius: 12px 12px 12px 4px; background: #f7f9f7; }
+.conversationTimeline li[data-direction="outbound"] { justify-self: end; border-color: #b9d4c1; border-radius: 12px 12px 4px; background: #eef8f1; }
+.conversationTimeline li[data-direction="inbound"] { border-color: #e6c678; background: #fffaf0; }
+.conversationTimeline li span, .conversationTimeline li small { color: #68756d; font-size: 10px; }
+.conversationTimeline li strong { color: #2f4035; font-size: 12px; line-height: 1.45; }
+.conversationTimeline > p, .conversationTimeline > footer { margin: 0; color: #68756d; font-size: 11px; }
+.conversationTimeline > footer { padding-top: 2px; border-top: 1px solid #edf0ed; }
 .blockers { display: flex; gap: 12px; padding: 14px 16px; border: 1px solid #e8c981; border-radius: 12px; background: #fff8e8; color: #694b09; }
 .blockers div { display: grid; gap: 3px; }
 .blockers span { font-size: 13px; }

@@ -1125,7 +1125,7 @@ export function DispositionExecutionWorkspace({
   const emailHasPacketLink = emailDraft.includes("/api/v1/public/investor-packages/");
   const visibleBuyerTimeline = buyerTimeline.filter(
     (item) => item.category !== "relationship" || !["sms", "email"].includes(item.event_type),
-  ).slice(0, 6);
+  ).slice(0, 12).reverse();
   const inboundReplyCount = buyerTimeline.filter(
     (item) => item.category === "communication" && item.direction === "inbound",
   ).length;
@@ -1208,6 +1208,13 @@ export function DispositionExecutionWorkspace({
                 {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
               </div>
             </section>
+
+            <InvestorConversation
+              candidate={candidate}
+              inboundReplyCount={inboundReplyCount}
+              loading={buyerTimelineLoading}
+              timeline={visibleBuyerTimeline}
+            />
 
             <section className={`${styles.panel} ${styles.cadencePanel}`}>
               <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Investor cadence</span><h4>Text, call, then follow up</h4></div></div>
@@ -1354,10 +1361,8 @@ export function DispositionExecutionWorkspace({
           <RelationshipContext
             assetClass={workspace.asset_class}
             candidate={candidate}
-            inboundReplyCount={inboundReplyCount}
             loading={buyerTimelineLoading}
             profile={activeBuyerProfile}
-            timeline={visibleBuyerTimeline}
           />
         </div>
       ) : null}
@@ -1367,20 +1372,47 @@ export function DispositionExecutionWorkspace({
   );
 }
 
-function RelationshipContext({
-  assetClass,
+function InvestorConversation({
   candidate,
   inboundReplyCount,
   loading,
-  profile,
   timeline,
 }: {
-  assetClass: string;
   candidate: DispositionExecutionCandidate;
   inboundReplyCount: number;
   loading: boolean;
-  profile: BuyerProfile | null;
   timeline: BuyerTimelineItem[];
+}) {
+  return (
+    <section aria-label={`Conversation with ${candidate.name}`} className={`${styles.panel} ${styles.conversationTimeline}`}>
+      <header>
+        <div><span>Investor conversation</span><h4>Back-and-forth with {candidate.name}</h4></div>
+        {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
+      </header>
+      {loading ? <p>Loading conversation…</p> : timeline.length ? (
+        <ol>{timeline.map((item) => (
+          <li data-direction={item.direction ?? "activity"} key={`${item.category}-${item.id}`}>
+            <span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span>
+            <strong>{item.summary}</strong>
+            <small>{item.direction ? labelize(item.direction) : item.status ? labelize(item.status) : "Relationship update"}{item.status && item.direction ? ` · ${labelize(item.status)}` : ""}</small>
+          </li>
+        ))}</ol>
+      ) : <p>No conversation has been recorded yet. Use the controls below to start one.</p>}
+      <footer>Shared with the canonical buyer relationship and Inbox history.</footer>
+    </section>
+  );
+}
+
+function RelationshipContext({
+  assetClass,
+  candidate,
+  loading,
+  profile,
+}: {
+  assetClass: string;
+  candidate: DispositionExecutionCandidate;
+  loading: boolean;
+  profile: BuyerProfile | null;
 }) {
   const buyer = profile?.buyer;
   const buyBox = buyer?.buy_boxes.find((item) => item.asset_class === assetClass)
@@ -1399,7 +1431,6 @@ function RelationshipContext({
     <aside aria-label={`Relationship context for ${candidate.name}`} className={styles.relationshipPanel}>
       <header>
         <div><span>Investor relationship</span><h4>Know who you’re contacting</h4></div>
-        {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
       </header>
       {loading && !buyer ? <p className={styles.relationshipLoading}>Loading relationship context…</p> : (
         <>
@@ -1418,12 +1449,6 @@ function RelationshipContext({
           {buyer?.tags.length ? <div className={styles.relationshipTags}>{buyer.tags.slice(0, 6).map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
         </>
       )}
-      <section className={styles.relationshipActivity} aria-label={`Recent relationship activity for ${candidate.name}`}>
-        <header><div><span>Conversation history</span><strong>Recent contact</strong></div></header>
-        {loading ? <p>Loading activity…</p> : timeline.length ? (
-          <ol>{timeline.map((item) => <li data-inbound={item.direction === "inbound"} key={`${item.category}-${item.id}`}><span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span><strong>{item.summary}</strong><small>{item.direction ? labelize(item.direction) : item.status ? labelize(item.status) : "Relationship update"}{item.status && item.direction ? ` · ${labelize(item.status)}` : ""}</small></li>)}</ol>
-        ) : <p>No relationship activity has been recorded yet.</p>}
-      </section>
       <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open and update full relationship <ArrowRight size={13} /></Link>
     </aside>
   );

@@ -167,6 +167,11 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /styles\.currentInvestor/);
   assert.match(workspace, /styles\.queuePanel/);
   assert.match(workspace, /styles\.relationshipPanel/);
+  assert.match(workspace, /styles\.conversationTimeline/);
+  assert.match(workspace, /Back-and-forth with \{candidate\.name\}/);
+  assert.match(workspace, /slice\(0, 12\)\.reverse\(\)/);
+  assert.match(workspace, /data-direction=\{item\.direction \?\? "activity"\}/);
+  assert.match(workspace, /Shared with the canonical buyer relationship and Inbox history/);
   assert.match(workspace, /styles\.quickContactBar/);
   assert.match(workspace, /Current investor/);
   assert.match(workspace, /<dt>Position<\/dt>/);
