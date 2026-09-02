@@ -177,7 +177,11 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /document\.visibilityState === "visible"/);
   assert.match(workspace, /30_000/);
   assert.match(workspace, /loadBuyerTimeline\(activeTimelineBuyerId\)/);
-  assert.match(workspace, /styles\.quickContactBar/);
+  assert.match(workspace, /Continue conversation with \$\{candidate\.name\}/);
+  assert.match(workspace, /onClick=\{onSms\}/);
+  assert.match(workspace, /onClick=\{onCall\}/);
+  assert.match(workspace, /onClick=\{onEmail\}/);
+  assert.doesNotMatch(workspace, /styles\.quickContactBar/);
   assert.match(workspace, /Current investor/);
   assert.match(workspace, /<dt>Position<\/dt>/);
   assert.match(workspace, /workspace\.remaining_candidate_count/);

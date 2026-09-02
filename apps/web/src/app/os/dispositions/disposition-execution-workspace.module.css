@@ -25,8 +25,6 @@
 .outreachLayout { display: grid; grid-template-columns: minmax(230px, 280px) minmax(480px, 1fr) minmax(270px, 330px); align-items: start; gap: 14px; min-width: 0; }
 .currentInvestor { grid-column: 2; grid-row: 1 / span 2; display: grid; gap: 14px; min-width: 0; }
 .investorOverview, .cadencePanel, .outcomePanel { min-width: 0; }
-.quickContactBar { display: grid; grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(88px, 1fr)); gap: 8px; margin: 14px 0; padding: 10px; border: 1px solid #bcd2c3; border-radius: 11px; background: #eef8f1; }
-.quickContactBar button { min-width: 0; padding: 10px; white-space: nowrap; }
 .fitEvidence { border-top: 1px solid #e5e8e5; }
 .fitEvidence summary { padding-top: 12px; color: #17633d; font-size: 13px; font-weight: 800; cursor: pointer; }
 .fitEvidence[open] summary { padding-bottom: 10px; }
@@ -104,7 +102,9 @@
 .conversationTimeline li span, .conversationTimeline li small { color: #68756d; font-size: 10px; }
 .conversationTimeline li strong { color: #2f4035; font-size: 12px; line-height: 1.45; }
 .conversationTimeline > p, .conversationTimeline > footer { margin: 0; color: #68756d; font-size: 11px; }
-.conversationTimeline > footer { padding-top: 2px; border-top: 1px solid #edf0ed; }
+.conversationTimeline > footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #edf0ed; }
+.conversationTimeline > footer > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.conversationTimeline > footer button { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 7px 10px; }
 .blockers { display: flex; gap: 12px; padding: 14px 16px; border: 1px solid #e8c981; border-radius: 12px; background: #fff8e8; color: #694b09; }
 .blockers div { display: grid; gap: 3px; }
 .blockers span { font-size: 13px; }

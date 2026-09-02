@@ -1194,12 +1194,6 @@ export function DispositionExecutionWorkspace({
                 <div><span>Current investor</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
                 <div className={styles.score} data-ranked={hasRankedFit(candidate)}><strong>{candidateFitLabel(candidate)}</strong><span>{hasRankedFit(candidate) ? "fit score" : "Unranked"}</span></div>
               </div>
-              <div aria-label={`Contact ${candidate.name}`} className={styles.quickContactBar} role="group">
-                <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={17} />{browserCallActive ? "Call in progress" : `Call ${candidate.name}`}</button>
-                <button className={styles.secondary} disabled={smsUnavailable} onClick={() => { setSmsComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-sms")?.scrollIntoView({ behavior: "smooth", block: "center" })); }} type="button"><MessageSquareText size={16} />Text</button>
-                <button className={styles.secondary} disabled={emailUnavailable} onClick={() => { setEmailComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-email")?.scrollIntoView({ behavior: "smooth", block: "center" })); }} type="button"><Mail size={16} />Email</button>
-                <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={16} />Skip to next</button>
-              </div>
               {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
               <dl className={styles.profile}>
                 <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
@@ -1220,9 +1214,15 @@ export function DispositionExecutionWorkspace({
             </section>
 
             <InvestorConversation
+              callDisabled={voiceUnavailable}
               candidate={candidate}
+              emailDisabled={emailUnavailable}
               inboundReplyCount={inboundReplyCount}
               loading={buyerTimelineLoading}
+              onCall={() => void startBrowserCall()}
+              onEmail={() => { setEmailComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-email")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}
+              onSms={() => { setSmsComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-sms")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}
+              smsDisabled={smsUnavailable}
               timeline={visibleBuyerTimeline}
             />
 
@@ -1383,14 +1383,26 @@ export function DispositionExecutionWorkspace({
 }
 
 function InvestorConversation({
+  callDisabled,
   candidate,
+  emailDisabled,
   inboundReplyCount,
   loading,
+  onCall,
+  onEmail,
+  onSms,
+  smsDisabled,
   timeline,
 }: {
+  callDisabled: boolean;
   candidate: DispositionExecutionCandidate;
+  emailDisabled: boolean;
   inboundReplyCount: number;
   loading: boolean;
+  onCall: () => void;
+  onEmail: () => void;
+  onSms: () => void;
+  smsDisabled: boolean;
   timeline: BuyerTimelineItem[];
 }) {
   const timelineRef = useRef<HTMLOListElement>(null);
@@ -1415,7 +1427,14 @@ function InvestorConversation({
           </li>
         ))}</ol>
       ) : <p>No conversation has been recorded yet. Use the controls below to start one.</p>}
-      <footer>Shared with the canonical buyer relationship and Inbox history.</footer>
+      <footer>
+        <span>Shared with the canonical buyer relationship and Inbox history.</span>
+        <div aria-label={`Continue conversation with ${candidate.name}`} role="group">
+          <button disabled={smsDisabled} onClick={onSms} type="button"><MessageSquareText size={15} />Text</button>
+          <button disabled={callDisabled} onClick={onCall} type="button"><Headphones size={15} />Call</button>
+          <button disabled={emailDisabled} onClick={onEmail} type="button"><Mail size={15} />Email</button>
+        </div>
+      </footer>
     </section>
   );
 }
