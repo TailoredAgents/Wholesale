@@ -444,8 +444,37 @@ def update_execution_session(
         advanced_workspace = read_workspace(db, principal, case.id)
         if advanced_workspace is None:
             raise ValueError("The disposition case is unavailable.")
-        if advanced_workspace.current_candidate is not None:
-            session.current_buyer_id = advanced_workspace.current_candidate.buyer_id
+        handled_buyer_ids, deferred_buyer_ids = _candidate_queue_state(db, case)
+        skipped_buyer_ids = set(advanced_workspace.session.skipped_buyer_ids)
+        available_candidates = [
+            candidate
+            for candidate in advanced_workspace.candidates
+            if candidate.buyer_id not in handled_buyer_ids
+            and candidate.buyer_id not in deferred_buyer_ids
+            and candidate.buyer_id not in skipped_buyer_ids
+            and candidate.actionable
+            and candidate.lifecycle_stage not in {"selected", "backup", "fallout"}
+        ]
+        current_index = next(
+            (
+                index
+                for index, candidate in enumerate(advanced_workspace.candidates)
+                if candidate.buyer_id == session.current_buyer_id
+            ),
+            -1,
+        )
+        queue_position = {
+            candidate.buyer_id: index
+            for index, candidate in enumerate(advanced_workspace.candidates)
+        }
+        available_candidates.sort(
+            key=lambda candidate: (
+                queue_position[candidate.buyer_id] <= current_index,
+                queue_position[candidate.buyer_id],
+            )
+        )
+        if available_candidates:
+            session.current_buyer_id = available_candidates[0].buyer_id
 
     session.lock_version += 1
     db.add(

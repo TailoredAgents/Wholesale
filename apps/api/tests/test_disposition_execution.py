@@ -1617,6 +1617,51 @@ def test_explicit_quickdial_queue_rejects_unavailable_buyers(
     )
 
 
+def test_execution_session_advances_from_the_manual_queue_cursor(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, first_buyer_id = _unranked_execution_case(db_session, client)
+    second_buyer_id = create_active_buyer(
+        client,
+        name="Manual Queue Current Buyer",
+        email="manual-queue-current@example.com",
+    )
+    third_buyer_id = create_active_buyer(
+        client,
+        name="Manual Queue Next Buyer",
+        email="manual-queue-next@example.com",
+    )
+    queue_order = [first_buyer_id, second_buyer_id, third_buyer_id]
+
+    saved = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={
+            "queue_buyer_ids": queue_order,
+            "current_buyer_id": second_buyer_id,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    advanced = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={"advance_to_next": True},
+    )
+    assert advanced.status_code == 200, advanced.text
+    assert advanced.json()["session"]["current_buyer_id"] == third_buyer_id
+
+    wrapped = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={"advance_to_next": True},
+    )
+    assert wrapped.status_code == 200, wrapped.text
+    assert wrapped.json()["session"]["current_buyer_id"] == first_buyer_id
+
+
 def test_execution_outcome_updates_durable_last_result_and_follow_up(
     db_session: Session,
     api_db_override: None,

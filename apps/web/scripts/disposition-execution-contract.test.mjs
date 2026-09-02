@@ -42,6 +42,9 @@ test("the outreach desk uses compact, professional workspace controls", async ()
   assert.match(workspaceStyles, /\.hero, \.panel \{[^}]*border-radius: 4px/);
   assert.match(workspaceStyles, /\.panel button, \.hero button \{[^}]*min-height: 30px/);
   assert.match(workspaceStyles, /\.queuePanel \{[^}]*border-radius: 4px/);
+  assert.match(workspaceStyles, /\.queueSearch \{[^}]*display: flex/);
+  assert.match(workspaceStyles, /\.queueRowMenu > div \{[^}]*position: absolute/);
+  assert.match(workspaceStyles, /\.queueRowActions \.queueContactAction \{[^}]*background: #17633d/);
   assert.match(workspaceStyles, /\.outreachConsole \{[^}]*padding: 0/);
   assert.match(workspaceStyles, /\.channelTabs \{[^}]*grid-template-columns: repeat\(3/);
   assert.match(workspaceStyles, /\.outcomePanel \{[^}]*position: sticky/);
@@ -124,7 +127,17 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /moveCandidate\(item\.buyer_id, -1\)/);
   assert.match(workspace, /moveCandidate\(item\.buyer_id, 1\)/);
   assert.match(workspace, /removeCandidate\(item\.buyer_id\)/);
-  assert.match(workspace, /Ranking is guidance\. Choose any investor/);
+  assert.match(workspace, /makeCandidateNext\(item\.buyer_id\)/);
+  assert.match(workspace, /moveCandidateToTop\(item\.buyer_id\)/);
+  assert.match(workspace, /moveCandidateBefore\(draggedBuyerId, item\.buyer_id\)/);
+  assert.match(workspace, /aria-label="Search investor queue"/);
+  assert.match(workspace, /draggable=\{busy === null\}/);
+  assert.match(workspace, /chooseCandidate\(item\.buyer_id, true\)/);
+  assert.match(workspace, /data-tone="current">Current/);
+  assert.match(workspace, /data-tone="next">Next/);
+  assert.match(workspace, /selectedQueueItemRef\.current\?\.scrollIntoView/);
+  assert.doesNotMatch(workspace, /serverRecommendedCandidate/);
+  assert.doesNotMatch(workspace, /disabled=\{busy !== null \|\| sessionPaused\} onClick=\{\(\) => void chooseCandidate/);
   assert.match(workspace, /Ranking details/);
   assert.doesNotMatch(workspace, />Unranked</);
   assert.match(workspace, /hasRankedFit\(candidate\)/);

@@ -7,6 +7,8 @@ import {
   CalendarClock,
   CheckCircle2,
   Download,
+  EllipsisVertical,
+  GripVertical,
   Headphones,
   Mail,
   MessageSquareText,
@@ -14,6 +16,7 @@ import {
   PhoneCall,
   Play,
   RefreshCw,
+  Search,
   ShieldAlert,
   SkipForward,
   Trash2,
@@ -247,8 +250,11 @@ export function DispositionExecutionWorkspace({
   const [sessionPaused, setSessionPaused] = useState(false);
   const [sessionSkippedBuyerIds, setSessionSkippedBuyerIds] = useState<string[]>([]);
   const [sessionSaveState, setSessionSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [queueSearch, setQueueSearch] = useState("");
+  const [draggingBuyerId, setDraggingBuyerId] = useState<string | null>(null);
   const callCountdownTimer = useRef<number | null>(null);
   const buyerIdRef = useRef<string | null>(null);
+  const selectedQueueItemRef = useRef<HTMLLIElement>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
   const browserCallActive = webPhone.status.callActive;
@@ -318,9 +324,9 @@ export function DispositionExecutionWorkspace({
     setWorkspace(result);
   }, []);
 
-  async function chooseCandidate(buyerId: string) {
+  async function chooseCandidate(buyerId: string, activateSession = false) {
     const nextCandidate = executionCandidates(workspace).find((candidate) => candidate.buyer_id === buyerId);
-    if (!nextCandidate || buyerIdRef.current === buyerId) return;
+    if (!nextCandidate || (buyerIdRef.current === buyerId && (!activateSession || !sessionPaused))) return;
     if (callCountdownTimer.current !== null) {
       window.clearInterval(callCountdownTimer.current);
       callCountdownTimer.current = null;
@@ -329,13 +335,20 @@ export function DispositionExecutionWorkspace({
       {
         current_buyer_id: buyerId,
         skipped_buyer_ids: sessionSkippedBuyerIds.filter((item) => item !== buyerId),
-        state: "active",
+        ...(activateSession ? { state: "active" as const } : {}),
       },
       "session-cursor",
     );
     if (result) {
-      onMessage(`Working ${nextCandidate.name}. This position will resume across visits.`);
+      onMessage(activateSession
+        ? `${nextCandidate.name} is ready in the outreach console.`
+        : `Selected ${nextCandidate.name}. Queue planning remains ${sessionPaused ? "paused" : "active"}.`);
     }
+  }
+
+  async function saveQueueOrder(buyerIds: string[], message = "QuickDial order saved.") {
+    const result = await updateSession({ queue_buyer_ids: buyerIds }, "queue-order");
+    if (result) onMessage(message);
   }
 
   async function moveCandidate(buyerId: string, direction: -1 | 1) {
@@ -344,8 +357,32 @@ export function DispositionExecutionWorkspace({
     const nextIndex = currentIndex + direction;
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= buyerIds.length) return;
     [buyerIds[currentIndex], buyerIds[nextIndex]] = [buyerIds[nextIndex], buyerIds[currentIndex]];
-    const result = await updateSession({ queue_buyer_ids: buyerIds }, "queue-order");
-    if (result) onMessage("QuickDial order saved.");
+    await saveQueueOrder(buyerIds);
+  }
+
+  async function makeCandidateNext(buyerId: string) {
+    if (buyerId === buyerIdRef.current) return;
+    const buyerIds = executionCandidates(workspace).map((item) => item.buyer_id);
+    const withoutBuyer = buyerIds.filter((item) => item !== buyerId);
+    const currentIndex = withoutBuyer.indexOf(buyerIdRef.current ?? "");
+    withoutBuyer.splice(currentIndex >= 0 ? currentIndex + 1 : 0, 0, buyerId);
+    await saveQueueOrder(withoutBuyer, "Next investor saved.");
+  }
+
+  async function moveCandidateToTop(buyerId: string) {
+    const buyerIds = executionCandidates(workspace).map((item) => item.buyer_id);
+    const nextOrder = [buyerId, ...buyerIds.filter((item) => item !== buyerId)];
+    await saveQueueOrder(nextOrder, "Investor moved to the top of QuickDial.");
+  }
+
+  async function moveCandidateBefore(buyerId: string, targetBuyerId: string) {
+    if (buyerId === targetBuyerId) return;
+    const buyerIds = executionCandidates(workspace).map((item) => item.buyer_id);
+    const nextOrder = buyerIds.filter((item) => item !== buyerId);
+    const targetIndex = nextOrder.indexOf(targetBuyerId);
+    if (targetIndex < 0) return;
+    nextOrder.splice(targetIndex, 0, buyerId);
+    await saveQueueOrder(nextOrder, "QuickDial order saved by drag and drop.");
   }
 
   async function removeCandidate(buyerId: string) {
@@ -458,6 +495,10 @@ export function DispositionExecutionWorkspace({
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [activeTimelineBuyerId, loadBuyerTimeline]);
+
+  useEffect(() => {
+    selectedQueueItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedBuyerId]);
 
   async function refreshOutreachWorkspace() {
     await load();
@@ -1127,14 +1168,14 @@ export function DispositionExecutionWorkspace({
   const contactedCount = candidates.filter((item) => contactedStages.has(item.lifecycle_stage)).length;
   const interestedCount = candidates.filter((item) => interestedStages.has(item.lifecycle_stage)).length;
   const skippedBuyerIds = new Set(sessionSkippedBuyerIds);
-  const serverRecommendedCandidate = workspace.current_candidate
-    && workspace.current_candidate.buyer_id !== candidate?.buyer_id
-    && !skippedBuyerIds.has(workspace.current_candidate.buyer_id)
-    ? workspace.current_candidate
-    : null;
-  const nextCandidate = serverRecommendedCandidate ?? (candidate
+  const nextCandidate = candidate
     ? nextActionableCandidate(candidates, candidate.buyer_id, skippedBuyerIds)
-    : null);
+    : candidates.find((item) => item.actionable && !skippedBuyerIds.has(item.buyer_id)) ?? null;
+  const normalizedQueueSearch = queueSearch.trim().toLocaleLowerCase();
+  const visibleCandidates = normalizedQueueSearch
+    ? candidates.filter((item) => [item.name, item.company_name, item.phone, item.email]
+      .some((value) => value?.toLocaleLowerCase().includes(normalizedQueueSearch)))
+    : candidates;
   const buyerProgress = candidate
     ? workspace.session.buyer_states[candidate.buyer_id]
     : null;
@@ -1338,28 +1379,41 @@ export function DispositionExecutionWorkspace({
               <div><dt>Interested</dt><dd>{interestedCount}</dd></div>
               <div><dt>Skipped</dt><dd>{sessionSkippedBuyerIds.length}</dd></div>
             </dl>
-            <p className={styles.queueGuidance}>Ranking is guidance. Choose any investor to pin this session at that relationship; unavailable channel controls remain enforced individually.</p>
+            <label className={styles.queueSearch}><Search aria-hidden="true" size={14} /><input aria-label="Search investor queue" onChange={(event) => setQueueSearch(event.target.value)} placeholder="Search investors" type="search" value={queueSearch} /></label>
+            <p className={styles.queueGuidance}>Select anyone to review them, use Contact to begin, or drag rows into your preferred order.</p>
             <ol className={styles.rankedPool}>
-              {candidates.map((item, index) => {
+              {visibleCandidates.map((item) => {
+                const index = candidates.findIndex((candidateItem) => candidateItem.buyer_id === item.buyer_id);
                 const selected = item.buyer_id === candidate.buyer_id;
+                const isNext = item.buyer_id === nextCandidate?.buyer_id;
                 const skipped = skippedBuyerIds.has(item.buyer_id);
                 return (
-                  <li key={item.buyer_id}>
-                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-ranked={hasRankedFit(item)} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
+                  <li data-dragging={draggingBuyerId === item.buyer_id} draggable={busy === null} key={item.buyer_id} onDragEnd={() => setDraggingBuyerId(null)} onDragOver={(event) => { if (draggingBuyerId) event.preventDefault(); }} onDragStart={(event) => { setDraggingBuyerId(item.buyer_id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.buyer_id); }} onDrop={(event) => { event.preventDefault(); const draggedBuyerId = draggingBuyerId ?? event.dataTransfer.getData("text/plain"); setDraggingBuyerId(null); if (draggedBuyerId) void moveCandidateBefore(draggedBuyerId, item.buyer_id); }} ref={selected ? selectedQueueItemRef : undefined}>
+                    <span aria-hidden="true" className={styles.queueDragHandle}><GripVertical size={13} /></span>
+                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-ranked={hasRankedFit(item)} data-selected={selected} data-skipped={skipped} disabled={busy !== null} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
                       {hasRankedFit(item) ? <span className={styles.rankedBuyerRank}>{candidateRankLabel(item)}</span> : null}
-                      <span className={styles.rankedBuyerIdentity}><strong>{item.name}</strong><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
+                      <span className={styles.rankedBuyerIdentity}><span className={styles.queueIdentityHeader}><strong>{item.name}</strong><span className={styles.queueBadges}>{selected ? <b data-tone="current">Current</b> : null}{isNext ? <b data-tone="next">Next</b> : null}</span></span><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
                       {hasRankedFit(item) ? <strong className={styles.rankedBuyerScore}>{candidateFitLabel(item)}</strong> : null}
                     </button>
-                    <span className={styles.queueRowActions}>
-                      <button aria-label={`Move ${item.name} earlier`} disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={13} /></button>
-                      <button aria-label={`Move ${item.name} later`} disabled={busy !== null || index === candidates.length - 1} onClick={() => void moveCandidate(item.buyer_id, 1)} type="button"><ArrowDown size={13} /></button>
-                      <button aria-label={`Remove ${item.name} from QuickDial`} disabled={busy !== null} onClick={() => void removeCandidate(item.buyer_id)} type="button"><Trash2 size={13} /></button>
-                    </span>
+                    <div className={styles.queueRowActions}>
+                      <button className={styles.queueContactAction} disabled={busy !== null || !item.actionable} onClick={() => void chooseCandidate(item.buyer_id, true)} type="button"><PhoneCall size={12} />Contact</button>
+                      <details className={styles.queueRowMenu}>
+                        <summary aria-label={`More queue actions for ${item.name}`}><EllipsisVertical size={14} /></summary>
+                        <div>
+                          <button disabled={busy !== null || selected || !item.actionable} onClick={() => void makeCandidateNext(item.buyer_id)} type="button">Make next</button>
+                          <button disabled={busy !== null || index === 0} onClick={() => void moveCandidateToTop(item.buyer_id)} type="button">Move to top</button>
+                          <button disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={12} />Move earlier</button>
+                          <button disabled={busy !== null || index === candidates.length - 1} onClick={() => void moveCandidate(item.buyer_id, 1)} type="button"><ArrowDown size={12} />Move later</button>
+                          <button data-danger="true" disabled={busy !== null} onClick={() => void removeCandidate(item.buyer_id)} type="button"><Trash2 size={12} />Remove</button>
+                        </div>
+                      </details>
+                    </div>
                   </li>
                 );
               })}
+              {!visibleCandidates.length ? <li className={styles.queueEmpty}>No investors match your search.</li> : null}
             </ol>
-            <footer><span>Next up</span><strong>{nextCandidate?.name ?? "Choose anyone in the queue"}</strong></footer>
+            <footer><div><span>Current</span><strong>{candidate.name}</strong></div><div><span>Next</span><strong>{nextCandidate?.name ?? "Choose anyone in the queue"}</strong></div></footer>
           </aside>
 
           <RelationshipContext
