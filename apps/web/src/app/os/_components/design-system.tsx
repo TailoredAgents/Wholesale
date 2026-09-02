@@ -346,7 +346,7 @@ function OverlayDialog({
         onClose();
       }}
       onClick={(event) => {
-        if (event.currentTarget === event.target) onClose();
+        if (variant === "dialog" && event.currentTarget === event.target) onClose();
       }}
       ref={ref}
     >
