@@ -18,6 +18,7 @@ type SaveStatus = "idle" | "checking" | "saving" | "error";
 
 type BuyerFormProps = {
   buyer?: BuyerListItem | null;
+  compact?: boolean;
   onCancel?: () => void;
   onSaved?: (buyer: BuyerListItem) => void;
   onUseExisting?: (buyerId: string) => void;
@@ -72,6 +73,7 @@ async function responseError(response: Response) {
 
 export function BuyerForm({
   buyer,
+  compact = false,
   onCancel,
   onSaved,
   onUseExisting,
@@ -225,8 +227,8 @@ export function BuyerForm({
   return (
     <form className={formStyles.buyerForm} onSubmit={handleSubmit}>
       <div className={styles.formIntro}>
-        <strong>{buyer ? "Update the relationship record" : "Start in Needs review"}</strong>
-        <p>{buyer ? "Identity and relationship changes are audited." : "Add the relationship first, then verify each House or Land buy box before matching."}</p>
+        <strong>{buyer ? "Update the relationship record" : compact ? "Quick add this investor" : "Start in Needs review"}</strong>
+        <p>{buyer ? "Identity and relationship changes are audited." : compact ? "Enter the contact information you have now. Buying criteria and relationship details can be completed later." : "Add the relationship first, then verify each House or Land buy box before matching."}</p>
       </div>
       <label><span>Buyer name</span><input defaultValue={buyer?.name} name="name" maxLength={255} placeholder="Jordan Smith" required /></label>
       <label><span>Company</span><input defaultValue={buyer?.company_name ?? ""} name="company_name" maxLength={255} placeholder="Smith Investments" /></label>
@@ -241,6 +243,15 @@ export function BuyerForm({
         <label><span>Text messages</span><select defaultValue={buyer ? "preserve" : "not_recorded"} name="sms_permission_action">{buyer ? <option value="preserve">Keep current: {labelize(buyer.sms_permission.status)}</option> : <option value="not_recorded">Not recorded</option>}<option value="grant">Record permission granted</option>{buyer ? <option value="revoke">Record permission not granted</option> : null}</select></label>
         <label><span>Permission source</span><select defaultValue={buyer?.phone_permission.source ?? buyer?.sms_permission.source ?? "buyer_crm_manual"} name="permission_evidence_source"><option value="buyer_crm_manual">Recorded manually in Buyer CRM</option><option value="written_form">Written form</option><option value="phone_call">Phone conversation</option><option value="in_person">In person</option><option value="provider_import">Imported provider evidence</option></select></label>
       </fieldset>
+      {compact && !buyer ? <>
+        <input name="buyer_type" type="hidden" value="cash_buyer" />
+        <input name="status" type="hidden" value="needs_review" />
+        <input name="relationship_status" type="hidden" value="new" />
+        <input name="tier" type="hidden" value="unclassified" />
+        <input name="temperature" type="hidden" value="unknown" />
+        <input name="source_key" type="hidden" value="manual" />
+        <label><span>Quick note</span><textarea name="notes" maxLength={2000} placeholder="What do you know about this investor?" rows={2} /></label>
+      </> : <>
       <div className={formStyles.formGrid}>
         <label><span>Type</span><select defaultValue={buyer?.buyer_type ?? "cash_buyer"} name="buyer_type"><option value="cash_buyer">Cash buyer</option><option value="landlord">Landlord</option><option value="flipper">Flipper</option><option value="builder">Builder</option><option value="hedge_fund">Fund</option><option value="agent">Agent</option></select></label>
         {buyer ? <label><span>Status</span><select defaultValue={buyer.status === "archived" ? "needs_review" : buyer.status} name="status"><option value="needs_review">Needs review</option><option value="active">Active</option><option value="paused">Paused</option><option value="do_not_contact">Do not contact</option></select></label> : <label><span>Status</span><input aria-describedby="new-buyer-status-help" readOnly value="Needs review" /><input name="status" type="hidden" value="needs_review" /><small id="new-buyer-status-help">Activate after verifying the buyer.</small></label>}
@@ -262,6 +273,7 @@ export function BuyerForm({
       </div>
       <label><span>External source ID (optional)</span><input defaultValue={buyer?.source_external_key ?? ""} name="source_external_key" maxLength={255} placeholder="Original system record ID" /></label>
       <label><span>Buyer notes</span><textarea defaultValue={buyer?.notes ?? ""} name="notes" maxLength={2000} rows={3} /></label>
+      </>}
 
       {duplicateMatches.length ? (
         <section aria-labelledby="duplicate-title" className={styles.duplicateReview}>
@@ -283,7 +295,7 @@ export function BuyerForm({
       {error ? <p aria-live="polite" className={styles.formError}>{error}</p> : null}
       <div className={styles.formActions}>
         {onCancel ? <button className={styles.secondaryAction} onClick={onCancel} type="button">Cancel</button> : null}
-        <button disabled={status === "checking" || status === "saving"} type="submit">{status === "checking" ? "Checking duplicates..." : status === "saving" ? "Saving..." : buyer ? "Save buyer" : "Add buyer"}</button>
+        <button disabled={status === "checking" || status === "saving"} type="submit">{status === "checking" ? "Checking duplicates..." : status === "saving" ? "Saving..." : buyer ? "Save buyer" : compact ? "Add to outreach" : "Add buyer"}</button>
       </div>
       <span aria-live="polite" className={styles.srOnly}>{status === "checking" ? "Checking for duplicate buyers" : status === "saving" ? "Saving buyer" : ""}</span>
     </form>

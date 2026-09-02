@@ -1,12 +1,17 @@
 # Alex Dispositions Outreach Workflow Roadmap
 
-Last updated: September 1, 2026
+Last updated: September 2, 2026
 
 ## Product Decision
 
 The Dispositions experience is built around Alex's real job: take a contracted deal, put the
 available deal information in front of likely investors, work those investors one at a time, and
 maintain the relationships that make future deals easier to sell.
+
+**Interaction priority:** Investor QuickDial is the primary product surface. The deal record,
+packet, buyer discovery, relationship intelligence, bulk distribution, and offers support the
+selected investor conversation; they must not compete with it for attention or force Alex into a
+separate workflow before he can call, text, email, or move to the next investor.
 
 The default operating path is:
 
@@ -184,6 +189,14 @@ Goal: make the external-to-owned buyer pool feel like one part of the outreach j
   applied to Land.
 
 ## Phase 6 — Make Relationship Knowledge Useful During Outreach
+
+**Repository status:** Partially implemented September 2, 2026. The full-width Outreach Desk now
+uses an inbox-style three-pane layout: selectable investor queue, dominant QuickDial conversation,
+and relationship context. The relationship pane loads the canonical owner, buy box, markets, price
+range, strategy, proof status, prior performance, notes, tags, follow-up dates, and recent contact
+history. Zero-buyer deals open discovery automatically, and Quick Add accepts the contact details
+available now while leaving profile enrichment for later. The separate daily relationship queue
+for replies, due follow-ups, and stale relationships remains outstanding.
 
 Goal: support the second half of Alex's job—knowing investors and staying in touch.
 

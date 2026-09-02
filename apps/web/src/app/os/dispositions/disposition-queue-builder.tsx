@@ -166,7 +166,8 @@ export function DispositionQueueBuilder({
         ...(pinBuyerId ? { current_buyer_id: pinBuyerId } : {}),
       }),
     });
-    await Promise.all([loadPool(), onQueueChanged()]);
+    const [nextPool] = await Promise.all([loadPool(), onQueueChanged()]);
+    if (nextPool.entries.some((entry) => entry.buyer_id)) setBuilderOpen(false);
   }
 
   async function rerankQueue() {
@@ -197,6 +198,7 @@ export function DispositionQueueBuilder({
         body: JSON.stringify({ current_buyer_id: buyerId }),
       });
       await onQueueChanged();
+      setBuilderOpen(false);
       onMessage(`${buyerName} is pinned as the current investor. This position will resume across visits.`);
     } catch (actionError) {
       const detail = actionError instanceof Error ? actionError.message : "The investor could not be pinned.";
@@ -387,7 +389,7 @@ export function DispositionQueueBuilder({
             </dl>
             <div className={styles.primaryActions}>
               <button disabled={Boolean(busy) || loading || !canEditDeals} onClick={() => void rerankQueue()} type="button"><RefreshCw size={15} />{busy === "rerank" ? "Reranking…" : "Rerank queue"}</button>
-              <button className={styles.secondary} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={15} />Add buyer</button>
+              <button className={styles.secondary} disabled={Boolean(busy) || !canEditBuyers || !canEditDeals} onClick={() => setManualBuyerOpen(true)} type="button"><UserPlus size={15} />Quick add investor</button>
             </div>
           </header>
 
@@ -470,8 +472,8 @@ export function DispositionQueueBuilder({
         </div>
       </details>
 
-      <Drawer description="Create the relationship now, then verify House or Land criteria whenever useful. The buyer will be reranked and pinned without losing this outreach session." onClose={() => setManualBuyerOpen(false)} open={manualBuyerOpen} title="Add an investor to this queue">
-        <BuyerForm onCancel={() => setManualBuyerOpen(false)} onSaved={(buyer) => void manualBuyerSaved(buyer)} onUseExisting={(buyerId) => { setManualBuyerOpen(false); void rebuildQueue(buyerId).then(() => onMessage("The existing Buyer Network relationship was pinned for outreach.")).catch((actionError: unknown) => onMessage(actionError instanceof Error ? actionError.message : "The existing buyer could not be pinned.")); }} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
+      <Drawer description="Enter a name and phone or email, record the contact permission you know, and start working this investor. Complete the rest of the profile later." onClose={() => setManualBuyerOpen(false)} open={manualBuyerOpen} title="Quick add investor">
+        <BuyerForm compact onCancel={() => setManualBuyerOpen(false)} onSaved={(buyer) => void manualBuyerSaved(buyer)} onUseExisting={(buyerId) => { setManualBuyerOpen(false); void rebuildQueue(buyerId).then(() => onMessage("The existing Buyer Network relationship was pinned for outreach.")).catch((actionError: unknown) => onMessage(actionError instanceof Error ? actionError.message : "The existing buyer could not be pinned.")); }} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} />
       </Drawer>
     </>
   );

@@ -81,7 +81,7 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /workspace\.candidates\.length/);
   assert.match(workspace, /canonical Buyer Network record/);
   assert.match(workspace, /Investor queue/);
-  assert.match(workspace, /Who is next/);
+  assert.match(workspace, /Choose who to contact/);
   assert.match(workspace, /candidates\.map\(\(item\) =>/);
   assert.match(workspace, /key=\{item\.buyer_id\}/);
   assert.match(workspace, /chooseCandidate\(item\.buyer_id\)/);
@@ -109,6 +109,8 @@ test("investors can be discovered, reviewed, reranked, added, and pinned inside 
   assert.match(queueBuilder, /Find and rank investors/);
   assert.match(queueBuilder, /Pull DealMachine results, add known buyers, and build the outreach list here/);
   assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| !result\.entries\.some/);
+  assert.match(queueBuilder, /Quick add investor/);
+  assert.match(queueBuilder, /<BuyerForm compact/);
   assert.match(queueBuilder, /\/api\/v1\/buyers\/discovery-runs\/estimate/);
   assert.match(queueBuilder, /confirmed_estimated_credits: estimate\.estimated_credits/);
   assert.match(queueBuilder, /confirmed_request_fingerprint: estimate\.request_fingerprint/);
@@ -125,9 +127,12 @@ test("investors can be discovered, reviewed, reranked, added, and pinned inside 
 test("the outreach session keeps result recording operator-led", async () => {
   const workspace = await readFile(workspacePath, "utf8");
 
-  assert.match(workspace, /Outreach session/);
+  assert.match(workspace, /Investor QuickDial/);
+  assert.match(workspace, /Contact an investor, then move to the next/);
   assert.match(workspace, /styles\.currentInvestor/);
   assert.match(workspace, /styles\.queuePanel/);
+  assert.match(workspace, /styles\.relationshipPanel/);
+  assert.match(workspace, /styles\.quickContactBar/);
   assert.match(workspace, /Current investor/);
   assert.match(workspace, /<dt>Position<\/dt>/);
   assert.match(workspace, /workspace\.remaining_candidate_count/);
@@ -194,7 +199,7 @@ test("one-to-one email is editable, permission-aware, durable, and relationship-
   assert.match(workspace, /relationship activity/i);
   assert.match(workspace, /\/api\/v1\/buyers\/\$\{buyerId\}\/profile/);
   assert.match(workspace, /item\.direction === "inbound"/);
-  assert.match(workspace, /Open full relationship history/);
+  assert.match(workspace, /Open and update full relationship/);
   assert.doesNotMatch(workspace, /composer arrives in Phase 4/i);
 });
 

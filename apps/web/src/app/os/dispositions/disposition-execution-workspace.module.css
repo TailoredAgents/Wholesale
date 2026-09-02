@@ -22,9 +22,11 @@
 .advisoryDetails summary strong { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: #f7e5b7; }
 .advisoryDetails > div { display: grid; gap: 6px; padding: 0 14px 14px 38px; font-size: 13px; }
 .advisoryDetails small { margin-top: 4px; color: #7a6737; }
-.outreachLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 350px); align-items: start; gap: 14px; min-width: 0; }
-.currentInvestor { display: grid; gap: 14px; min-width: 0; }
+.outreachLayout { display: grid; grid-template-columns: minmax(230px, 280px) minmax(480px, 1fr) minmax(270px, 330px); align-items: start; gap: 14px; min-width: 0; }
+.currentInvestor { grid-column: 2; grid-row: 1 / span 2; display: grid; gap: 14px; min-width: 0; }
 .investorOverview, .cadencePanel, .outcomePanel { min-width: 0; }
+.quickContactBar { display: grid; grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(88px, 1fr)); gap: 8px; margin: 14px 0; padding: 10px; border: 1px solid #bcd2c3; border-radius: 11px; background: #eef8f1; }
+.quickContactBar button { min-width: 0; padding: 10px; white-space: nowrap; }
 .fitEvidence { border-top: 1px solid #e5e8e5; }
 .fitEvidence summary { padding-top: 12px; color: #17633d; font-size: 13px; font-weight: 800; cursor: pointer; }
 .fitEvidence[open] summary { padding-bottom: 10px; }
@@ -50,7 +52,7 @@
 .secondaryTools summary small { color: #68756d; font-weight: 500; }
 .secondaryTools[open] summary { border-bottom: 1px solid #e5e8e5; }
 .secondaryTools form, .secondaryTools > div { margin: 14px; }
-.queuePanel { position: sticky; top: 178px; min-width: 0; overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #f8faf8; }
+.queuePanel { grid-column: 1; grid-row: 1; position: sticky; top: 178px; min-width: 0; overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #f8faf8; }
 .queuePanel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 15px; border-bottom: 1px solid #dce3dd; background: #fff; }
 .queuePanel > header div { display: grid; gap: 3px; }
 .queuePanel > header span, .queuePanel > footer span { color: #607067; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
@@ -67,7 +69,24 @@
 .queuePanel .rankedBuyer[data-skipped="true"] { opacity: .62; }
 .queuePanel > footer { display: grid; gap: 2px; padding: 11px 13px; border-top: 1px solid #dce3dd; background: #fff; }
 .queuePanel > footer strong { overflow: hidden; color: #203027; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.relationshipActivity { display: grid; gap: 9px; padding: 12px; border-top: 1px solid #dce3dd; background: #fff; }
+.relationshipPanel { grid-column: 3; grid-row: 1; position: sticky; top: 178px; min-width: 0; overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #fff; }
+.relationshipPanel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 14px; border-bottom: 1px solid #dce3dd; background: #f8faf8; }
+.relationshipPanel > header div { display: grid; gap: 3px; }
+.relationshipPanel > header span, .relationshipNotes > span { color: #607067; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.relationshipPanel > header h4 { margin: 0; color: #15241b; font-size: 14px; }
+.relationshipPanel > header b { padding: 3px 6px; border-radius: 999px; background: #fff0d4; color: #795108; font-size: 9px; text-transform: uppercase; }
+.relationshipPanel > a { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 12px 14px; border-top: 1px solid #dce3dd; color: #17633d; font-size: 11px; font-weight: 800; text-decoration: none; }
+.relationshipLoading { margin: 0; padding: 16px 14px; color: #68756d; font-size: 11px; }
+.relationshipFacts { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+.relationshipFacts div { min-width: 0; padding: 9px 10px; border-bottom: 1px solid #e5e8e5; }
+.relationshipFacts div:nth-child(even) { border-left: 1px solid #e5e8e5; }
+.relationshipFacts dt { color: #68756d; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.relationshipFacts dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #26372d; font-size: 10px; font-weight: 750; line-height: 1.35; }
+.relationshipNotes { display: grid; gap: 4px; padding: 10px 12px; border-bottom: 1px solid #e5e8e5; background: #fffaf0; }
+.relationshipNotes p { display: -webkit-box; overflow: hidden; margin: 0; color: #526158; font-size: 10px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.relationshipTags { display: flex; flex-wrap: wrap; gap: 4px; padding: 9px 12px; border-bottom: 1px solid #e5e8e5; }
+.relationshipTags span { padding: 3px 6px; border-radius: 999px; background: #e5eee7; color: #17633d; font-size: 8px; font-weight: 800; }
+.relationshipActivity { display: grid; gap: 9px; padding: 12px; background: #fff; }
 .relationshipActivity > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .relationshipActivity > header div { display: grid; gap: 2px; }
 .relationshipActivity > header span { color: #607067; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
@@ -172,20 +191,33 @@
 .empty { display: grid; justify-items: center; gap: 6px; padding: 26px; color: #617067; text-align: center; }
 .empty strong { color: #24342a; }
 
-@media (max-width: 1050px) {
-  .outreachLayout { grid-template-columns: minmax(0, 1fr) minmax(260px, 310px); }
+@media (max-width: 1280px) {
+  .outreachLayout { grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); }
+  .currentInvestor { grid-column: 2; grid-row: 1 / span 2; }
+  .queuePanel { grid-column: 1; grid-row: 1; }
+  .relationshipPanel { grid-column: 1; grid-row: 2; position: static; }
+}
+
+@container disposition-detail (max-width: 1280px) {
+  .outreachLayout { grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); }
+  .currentInvestor { grid-column: 2; grid-row: 1 / span 2; }
+  .queuePanel { grid-column: 1; grid-row: 1; }
+  .relationshipPanel { grid-column: 1; grid-row: 2; position: static; }
 }
 
 @media (max-width: 850px) {
   .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
   .rankedPool { grid-column: auto; grid-template-columns: 1fr; max-height: 360px; }
   .heroActions { justify-content: flex-start; text-align: left; }
-  .queuePanel { position: static; }
+  .currentInvestor { grid-column: 1; grid-row: 2; }
+  .queuePanel { grid-column: 1; grid-row: 1; position: static; }
+  .relationshipPanel { grid-column: 1; grid-row: 3; position: static; }
   .queuePanel .rankedPool { max-height: 320px; }
   .fullWidth { grid-column: auto; }
   .profile, .outcomeInputs, .showingForm, .messageContext { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }
+  .quickContactBar { grid-template-columns: 1fr 1fr; }
   .composerActions, .callActions, .countdownActions { display: grid; grid-template-columns: 1fr; }
   .composerActions button, .callActions button, .countdownActions button { width: 100%; }
 }
@@ -194,12 +226,15 @@
   .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
   .rankedPool { grid-column: auto; grid-template-columns: 1fr; max-height: 360px; }
   .heroActions { justify-content: flex-start; text-align: left; }
-  .queuePanel { position: static; }
+  .currentInvestor { grid-column: 1; grid-row: 2; }
+  .queuePanel { grid-column: 1; grid-row: 1; position: static; }
+  .relationshipPanel { grid-column: 1; grid-row: 3; position: static; }
   .queuePanel .rankedPool { max-height: 320px; }
   .fullWidth { grid-column: auto; }
   .profile, .outcomeInputs, .showingForm, .messageContext { grid-template-columns: 1fr; }
   .showingForm .wide { grid-column: auto; }
   .showingList article { grid-template-columns: 1fr; }
+  .quickContactBar { grid-template-columns: 1fr 1fr; }
   .composerActions, .callActions, .countdownActions { display: grid; grid-template-columns: 1fr; }
   .composerActions button, .callActions button, .countdownActions button { width: 100%; }
 }
@@ -212,6 +247,8 @@
   .outcomeActions, .savedOutcome, .pausedBanner { align-items: stretch; flex-direction: column; }
   .outcomeActions > span { display: none; }
   .outcomeActions button, .savedOutcome button, .pausedBanner button { width: 100%; }
+  .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
+  .relationshipFacts div:nth-child(even) { border-left: 0; }
 }
 
 @container disposition-detail (max-width: 560px) {
@@ -222,4 +259,6 @@
   .outcomeActions, .savedOutcome, .pausedBanner { align-items: stretch; flex-direction: column; }
   .outcomeActions > span { display: none; }
   .outcomeActions button, .savedOutcome button, .pausedBanner button { width: 100%; }
+  .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
+  .relationshipFacts div:nth-child(even) { border-left: 0; }
 }

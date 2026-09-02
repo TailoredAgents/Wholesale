@@ -109,6 +109,15 @@ function localDateTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : "Not scheduled";
 }
 
+function money(value: number | null) {
+  if (value === null) return "Not recorded";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value / 100);
+}
+
 function dateTimeLocalValue(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
@@ -219,6 +228,7 @@ export function DispositionExecutionWorkspace({
   const [emailSenderId, setEmailSenderId] = useState("");
   const [emailProviderConfigured, setEmailProviderConfigured] = useState<boolean | null>(null);
   const [emailConfigurationBlockers, setEmailConfigurationBlockers] = useState<string[]>([]);
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile | null>(null);
   const [buyerTimeline, setBuyerTimeline] = useState<BuyerTimelineItem[]>([]);
   const [buyerTimelineLoading, setBuyerTimelineLoading] = useState(false);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
@@ -377,9 +387,15 @@ export function DispositionExecutionWorkspace({
       const result = await request<BuyerProfile>(
         `/api/v1/buyers/${buyerId}/profile?timeline_limit=12`,
       );
-      if (buyerIdRef.current === buyerId) setBuyerTimeline(result.timeline.items);
+      if (buyerIdRef.current === buyerId) {
+        setBuyerProfile(result);
+        setBuyerTimeline(result.timeline.items);
+      }
     } catch {
-      if (buyerIdRef.current === buyerId) setBuyerTimeline([]);
+      if (buyerIdRef.current === buyerId) {
+        setBuyerProfile(null);
+        setBuyerTimeline([]);
+      }
     } finally {
       if (buyerIdRef.current === buyerId) setBuyerTimelineLoading(false);
     }
@@ -390,6 +406,7 @@ export function DispositionExecutionWorkspace({
   useEffect(() => {
     if (!activeTimelineBuyerId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBuyerProfile(null);
       setBuyerTimeline([]);
       return;
     }
@@ -1083,14 +1100,17 @@ export function DispositionExecutionWorkspace({
   const inboundReplyCount = buyerTimeline.filter(
     (item) => item.category === "communication" && item.direction === "inbound",
   ).length;
+  const activeBuyerProfile = candidate && buyerProfile?.buyer.id === candidate.buyer_id
+    ? buyerProfile
+    : null;
 
   return (
-    <section aria-label="Disposition call queue" className={styles.workspace} id="call-queue" tabIndex={-1}>
+    <section aria-label="Investor outreach desk" className={styles.workspace} id="call-queue" tabIndex={-1}>
       <header className={styles.hero}>
         <div>
-          <span>One-to-one investor outreach</span>
-          <h3>Outreach session</h3>
-          <p>Your investor, drafts, progress, and queue position now resume across visits.</p>
+          <span>Investor QuickDial</span>
+          <h3>Contact an investor, then move to the next</h3>
+          <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
         </div>
         <div className={styles.heroActions}>
           <div><strong>{queuePosition || "–"}</strong><span>of {candidates.length || 0}</span><small>queue position</small></div>
@@ -1131,6 +1151,12 @@ export function DispositionExecutionWorkspace({
                 <div><span>Current investor</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
                 <div className={styles.score} data-ranked={hasRankedFit(candidate)}><strong>{candidateFitLabel(candidate)}</strong><span>{hasRankedFit(candidate) ? "fit score" : "Unranked"}</span></div>
               </div>
+              <div aria-label={`Contact ${candidate.name}`} className={styles.quickContactBar} role="group">
+                <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={17} />{browserCallActive ? "Call in progress" : `Call ${candidate.name}`}</button>
+                <button className={styles.secondary} disabled={smsUnavailable} onClick={() => { setSmsComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-sms")?.scrollIntoView({ behavior: "smooth", block: "center" })); }} type="button"><MessageSquareText size={16} />Text</button>
+                <button className={styles.secondary} disabled={emailUnavailable} onClick={() => { setEmailComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-email")?.scrollIntoView({ behavior: "smooth", block: "center" })); }} type="button"><Mail size={16} />Email</button>
+                <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={16} />Skip to next</button>
+              </div>
               {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
               <dl className={styles.profile}>
                 <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
@@ -1158,7 +1184,7 @@ export function DispositionExecutionWorkspace({
                 <li data-ready={Boolean(candidate.email && emailProviderConfigured && emailSenderId)}><span>3</span><div><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent · saved" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email ? emailProviderConfigured === null ? "Checking sender…" : emailProviderConfigured ? "Ready to review" : "Sender unavailable" : "No email recorded"}</small></div></li>
               </ol>
 
-              <div className={styles.channelSection}>
+              <div className={styles.channelSection} id="investor-sms">
                 <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Step 1</span><h4>Review the introduction SMS</h4></div></div>
                 <p className={styles.help}>Nothing sends automatically. Personalize the draft and confirm the final message.</p>
                 <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
@@ -1190,7 +1216,7 @@ export function DispositionExecutionWorkspace({
                 ) : null}
               </div>
 
-              <div className={styles.channelSection}>
+              <div className={styles.channelSection} id="investor-call">
                 <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
                 <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
                 <div className={styles.callActions}>
@@ -1199,7 +1225,7 @@ export function DispositionExecutionWorkspace({
                 </div>
               </div>
 
-              <div className={styles.channelSection}>
+              <div className={styles.channelSection} id="investor-email">
                 <div className={styles.sectionTitle}><Mail size={17} /><div><span>Step 3</span><h4>Email follow-up</h4></div></div>
                 <p className={styles.help}>{candidate.email ? `Review the deal-aware starting draft for ${candidate.email}. Nothing sends until you approve it.` : "Add an email to the relationship profile before sending follow-up."}</p>
                 {emailProviderConfigured === false ? <div className={styles.permissionBlocked}><span>Email sender unavailable</span><small>{emailConfigurationBlockers.join(" ") || "Configure an authorized Stonegate sender."}</small></div> : null}
@@ -1261,7 +1287,7 @@ export function DispositionExecutionWorkspace({
           </div>
 
           <aside aria-labelledby="investor-queue-heading" className={styles.queuePanel}>
-            <header><div><span>Investor queue</span><h4 id="investor-queue-heading">Who is next</h4></div><strong>{workspace.remaining_candidate_count} available</strong></header>
+            <header><div><span>Investor queue</span><h4 id="investor-queue-heading">Choose who to contact</h4></div><strong>{workspace.remaining_candidate_count} available</strong></header>
             <dl className={styles.queueMetrics}>
               <div><dt>Position</dt><dd>{queuePosition || "–"}/{candidates.length}</dd></div>
               <div><dt>Contacted</dt><dd>{contactedCount}</dd></div>
@@ -1285,19 +1311,83 @@ export function DispositionExecutionWorkspace({
               })}
             </ol>
             <footer><span>Next up</span><strong>{nextCandidate?.name ?? "Choose anyone in the queue"}</strong></footer>
-            <section className={styles.relationshipActivity} aria-label={`Recent relationship activity for ${candidate.name}`}>
-              <header><div><span>Relationship activity</span><strong>Recent contact</strong></div>{inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}</header>
-              {buyerTimelineLoading ? <p>Loading activity…</p> : visibleBuyerTimeline.length ? (
-                <ol>{visibleBuyerTimeline.map((item) => <li data-inbound={item.direction === "inbound"} key={`${item.category}-${item.id}`}><span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span><strong>{item.summary}</strong><small>{item.direction ? labelize(item.direction) : item.status ? labelize(item.status) : "Relationship update"}{item.status && item.direction ? ` · ${labelize(item.status)}` : ""}</small></li>)}</ol>
-              ) : <p>No relationship activity has been recorded yet.</p>}
-              <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open full relationship history <ArrowRight size={13} /></Link>
-            </section>
           </aside>
+
+          <RelationshipContext
+            assetClass={workspace.asset_class}
+            candidate={candidate}
+            inboundReplyCount={inboundReplyCount}
+            loading={buyerTimelineLoading}
+            profile={activeBuyerProfile}
+            timeline={visibleBuyerTimeline}
+          />
         </div>
       ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>No investors are in this outreach queue yet</strong><span>Use Find and rank investors above to pull DealMachine candidates, rank the Buyer Network, or add a known investor. Deal and packet information can stay incomplete while you build and market the list.</span></div></section>}
 
       {workspace.showings.length ? <details className={styles.secondaryTools}><summary><CalendarClock size={16} /><span><strong>Scheduled showings</strong><small>{workspace.showings.length} access appointment{workspace.showings.length === 1 ? "" : "s"}</small></span></summary><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></details> : null}
     </section>
+  );
+}
+
+function RelationshipContext({
+  assetClass,
+  candidate,
+  inboundReplyCount,
+  loading,
+  profile,
+  timeline,
+}: {
+  assetClass: string;
+  candidate: DispositionExecutionCandidate;
+  inboundReplyCount: number;
+  loading: boolean;
+  profile: BuyerProfile | null;
+  timeline: BuyerTimelineItem[];
+}) {
+  const buyer = profile?.buyer;
+  const buyBox = buyer?.buy_boxes.find((item) => item.asset_class === assetClass)
+    ?? buyer?.buy_boxes[0];
+  const markets = buyBox?.criteria.geographies
+    .slice(0, 3)
+    .map((item) => item.state && !item.value.includes(item.state) ? `${item.value}, ${item.state}` : item.value)
+    .join(" · ");
+  const priceRange = buyBox
+    ? `${money(buyBox.criteria.min_price_cents)} – ${money(buyBox.criteria.max_price_cents)}`
+    : buyer?.criteria
+      ? `${money(buyer.criteria.min_price_cents)} – ${money(buyer.criteria.max_price_cents)}`
+      : "Not recorded";
+
+  return (
+    <aside aria-label={`Relationship context for ${candidate.name}`} className={styles.relationshipPanel}>
+      <header>
+        <div><span>Investor relationship</span><h4>Know who you’re contacting</h4></div>
+        {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
+      </header>
+      {loading && !buyer ? <p className={styles.relationshipLoading}>Loading relationship context…</p> : (
+        <>
+          <dl className={styles.relationshipFacts}>
+            <div><dt>Owner</dt><dd>{buyer?.relationship_owner_name ?? "Unassigned"}</dd></div>
+            <div><dt>Priority</dt><dd>{buyer ? `${buyer.tier === "unclassified" ? "Unclassified" : `Tier ${buyer.tier.toUpperCase()}`} · ${labelize(buyer.temperature)}` : "Not recorded"}</dd></div>
+            <div><dt>Markets</dt><dd>{markets || buyer?.criteria?.markets || "Not recorded"}</dd></div>
+            <div><dt>Price range</dt><dd>{priceRange}</dd></div>
+            <div><dt>Strategies</dt><dd>{buyBox?.criteria.strategies.length ? buyBox.criteria.strategies.map(labelize).join(", ") : "Not recorded"}</dd></div>
+            <div><dt>Proof of funds</dt><dd>{buyer ? labelize(buyer.proof_of_funds_status) : "Not recorded"}</dd></div>
+            <div><dt>Last contact</dt><dd>{buyer?.last_contact_at ? localDateTime(buyer.last_contact_at) : "No contact recorded"}</dd></div>
+            <div><dt>Next follow-up</dt><dd>{buyer?.next_follow_up_at ? localDateTime(buyer.next_follow_up_at) : "None scheduled"}</dd></div>
+            <div><dt>Performance</dt><dd>{buyer ? `${buyer.completed_deals} closed · ${buyer.failed_deals} failed` : "Not recorded"}</dd></div>
+          </dl>
+          {buyer?.notes ? <section className={styles.relationshipNotes}><span>Relationship notes</span><p>{buyer.notes}</p></section> : null}
+          {buyer?.tags.length ? <div className={styles.relationshipTags}>{buyer.tags.slice(0, 6).map((tag) => <span key={tag}>{tag}</span>)}</div> : null}
+        </>
+      )}
+      <section className={styles.relationshipActivity} aria-label={`Recent relationship activity for ${candidate.name}`}>
+        <header><div><span>Conversation history</span><strong>Recent contact</strong></div></header>
+        {loading ? <p>Loading activity…</p> : timeline.length ? (
+          <ol>{timeline.map((item) => <li data-inbound={item.direction === "inbound"} key={`${item.category}-${item.id}`}><span>{item.channel ? labelize(item.channel) : labelize(item.event_type)} · {localDateTime(item.occurred_at)}</span><strong>{item.summary}</strong><small>{item.direction ? labelize(item.direction) : item.status ? labelize(item.status) : "Relationship update"}{item.status && item.direction ? ` · ${labelize(item.status)}` : ""}</small></li>)}</ol>
+        ) : <p>No relationship activity has been recorded yet.</p>}
+      </section>
+      <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open and update full relationship <ArrowRight size={13} /></Link>
+    </aside>
   );
 }
 
