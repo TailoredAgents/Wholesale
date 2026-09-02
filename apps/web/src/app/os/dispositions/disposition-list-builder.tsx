@@ -9,10 +9,13 @@ import styles from "./disposition-list-builder.module.css";
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
 type ImportedContact = {
   id: string;
+  rank: number | null;
   name: string;
   company: string;
   phone: string;
   email: string;
+  notes: string;
+  sourceExternalKey: string | null;
   error: string | null;
   existingBuyerId: string | null;
 };
@@ -60,16 +63,30 @@ function parseContacts(source: string, buyers: BuyerListItem[]) {
   const delimiter = lines[0].includes("\t") ? "\t" : ",";
   const headers = splitDelimitedRow(lines[0], delimiter).map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
   const column = (...names: string[]) => headers.findIndex((header) => names.includes(header));
-  const nameIndex = column("name", "full_name", "contact", "contact_name", "buyer", "buyer_name");
-  const companyIndex = column("company", "company_name", "business", "business_name");
-  const phoneIndex = column("phone", "phone_number", "mobile", "cell", "cell_phone");
+  const nameIndex = column("name", "full_name", "contact", "contact_name", "buyer", "buyer_name", "primary_contact_name");
+  const companyIndex = column("company", "company_name", "business", "business_name", "buyer_entity_names", "associated_buyer_entities");
+  const phoneIndex = column("phone", "phone_number", "mobile", "cell", "cell_phone", "phone_1");
+  const phone2Index = column("phone_2");
+  const phone3Index = column("phone_3");
   const emailIndex = column("email", "email_address");
+  const rankIndex = column("outreach_rank", "rank");
+  const classIndex = column("outreach_class");
+  const scoreIndex = column("outreach_score");
+  const contactKeyIndex = column("outreach_contact_key");
+  const whyIndex = column("why_this_person_should_be_called");
+  const qcIndex = column("qc_notes");
+  const closestPurchaseIndex = column("closest_relevant_purchase");
+  const distanceIndex = column("distance");
+  const recentAcquisitionIndex = column("most_recent_acquisition");
+  const pricesIndex = column("relevant_purchase_prices");
+  const acreagesIndex = column("relevant_acreages");
   if (nameIndex < 0 || (phoneIndex < 0 && emailIndex < 0)) {
     return { contacts: [] as ImportedContact[], error: "Use headers for Name and at least one of Phone or Email. Company is optional." };
   }
   const buyerByPhone = new Map(buyers.filter((buyer) => buyer.normalized_phone || buyer.phone).map((buyer) => [normalizedPhone(buyer.normalized_phone ?? buyer.phone), buyer.id]));
   const buyerByEmail = new Map(buyers.filter((buyer) => buyer.normalized_email || buyer.email).map((buyer) => [normalizedEmail(buyer.normalized_email ?? buyer.email), buyer.id]));
   const buyerByCompany = new Map(buyers.filter((buyer) => buyer.company_name).map((buyer) => [normalizedCompany(buyer.company_name), buyer.id]));
+  const buyerBySourceKey = new Map(buyers.filter((buyer) => buyer.source_external_key).map((buyer) => [buyer.source_external_key!, buyer.id]));
   const seen = new Set<string>();
   const seenCompanies = new Set<string>();
   const contacts = lines.slice(1).map((line, index): ImportedContact => {
@@ -77,26 +94,46 @@ function parseContacts(source: string, buyers: BuyerListItem[]) {
     const name = values[nameIndex]?.trim() ?? "";
     const company = companyIndex >= 0 ? values[companyIndex]?.trim() ?? "" : "";
     const phone = phoneIndex >= 0 ? values[phoneIndex]?.trim() ?? "" : "";
-    const email = emailIndex >= 0 ? values[emailIndex]?.trim() ?? "" : "";
+    const phone2 = phone2Index >= 0 ? values[phone2Index]?.trim() ?? "" : "";
+    const phone3 = phone3Index >= 0 ? values[phone3Index]?.trim() ?? "" : "";
+    const emails = (emailIndex >= 0 ? values[emailIndex] ?? "" : "").split(";").map((value) => value.trim()).filter(Boolean);
+    const email = emails[0] ?? "";
+    const rankValue = rankIndex >= 0 ? Number(values[rankIndex]) : Number.NaN;
+    const rank = Number.isFinite(rankValue) ? rankValue : null;
+    const sourceExternalKey = contactKeyIndex >= 0 ? values[contactKeyIndex]?.trim() || null : null;
     const phoneKey = normalizedPhone(phone);
     const emailKey = normalizedEmail(email);
     const companyKey = normalizedCompany(company);
     const identityKey = emailKey || phoneKey;
-    const existingBuyerId = (emailKey ? buyerByEmail.get(emailKey) : null)
+    const existingBuyerId = (sourceExternalKey ? buyerBySourceKey.get(sourceExternalKey) : null)
+      ?? (emailKey ? buyerByEmail.get(emailKey) : null)
       ?? (phoneKey ? buyerByPhone.get(phoneKey) : null)
-      ?? (companyKey ? buyerByCompany.get(companyKey) : null)
+      ?? (!sourceExternalKey && companyKey ? buyerByCompany.get(companyKey) : null)
       ?? null;
+    const researchNotes = [
+      rank !== null ? `DealMachine outreach rank: ${rank}` : "",
+      classIndex >= 0 && values[classIndex] ? `Outreach class: ${values[classIndex]}` : "",
+      scoreIndex >= 0 && values[scoreIndex] ? `Outreach score: ${values[scoreIndex]}` : "",
+      whyIndex >= 0 && values[whyIndex] ? `Why call: ${values[whyIndex]}` : "",
+      closestPurchaseIndex >= 0 && values[closestPurchaseIndex] ? `Closest purchase: ${values[closestPurchaseIndex]}${distanceIndex >= 0 && values[distanceIndex] ? ` (${values[distanceIndex]} miles)` : ""}` : "",
+      recentAcquisitionIndex >= 0 && values[recentAcquisitionIndex] ? `Most recent acquisition: ${values[recentAcquisitionIndex]}` : "",
+      pricesIndex >= 0 && values[pricesIndex] ? `Relevant prices: ${values[pricesIndex]}` : "",
+      acreagesIndex >= 0 && values[acreagesIndex] ? `Relevant acreages: ${values[acreagesIndex]}` : "",
+      [phone2, phone3].filter(Boolean).length ? `Alternate phones: ${[phone2, phone3].filter(Boolean).join("; ")}` : "",
+      emails.length > 1 ? `Alternate emails: ${emails.slice(1).join("; ")}` : "",
+      qcIndex >= 0 && values[qcIndex] ? `QC notes: ${values[qcIndex]}` : "",
+    ].filter(Boolean).join("\n").slice(0, 2000);
     let error: string | null = null;
     if (!name) error = "Name is required";
     else if (!phone && !email) error = "Phone or email is required";
     else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) error = "Email format is invalid";
     else if (phone && phoneKey.length !== 10) error = "Use a 10-digit US phone number";
     else if (identityKey && seen.has(identityKey)) error = "Duplicate row in this upload";
-    else if (!existingBuyerId && companyKey && seenCompanies.has(companyKey)) error = "Company is repeated in this upload";
+    else if (!sourceExternalKey && !existingBuyerId && companyKey && seenCompanies.has(companyKey)) error = "Company is repeated in this upload";
     if (identityKey) seen.add(identityKey);
     if (companyKey) seenCompanies.add(companyKey);
-    return { id: `${index}-${identityKey || name}`, name, company, phone, email, error, existingBuyerId };
-  });
+    return { id: `${index}-${sourceExternalKey || identityKey || name}`, rank, name, company, phone, email, notes: researchNotes, sourceExternalKey, error, existingBuyerId };
+  }).sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER));
   return { contacts, error: null as string | null };
 }
 
@@ -170,11 +207,14 @@ export function DispositionListBuilder({
             email: contact.email || null,
             buyer_type: "cash_buyer",
             status: "needs_review",
-            source_key: "csv_import",
-            source_detail: "Disposition QuickDial list import",
+            source_key: contact.sourceExternalKey ? "dealmachine_research" : "csv_import",
+            source_detail: contact.sourceExternalKey ? "DealMachine investor research export" : "Disposition QuickDial list import",
+            source_external_key: contact.sourceExternalKey,
             relationship_status: "new",
             tier: "unclassified",
             temperature: "unknown",
+            tags: contact.sourceExternalKey ? ["dealmachine-research"] : [],
+            notes: contact.notes || null,
             phone_contact_permission: false,
             sms_consent: false,
             permission_evidence_source: "buyer_list_import",
@@ -217,12 +257,12 @@ export function DispositionListBuilder({
         </section>
       ) : (
         <section className={styles.sourcePanel}>
-          <div className={styles.uploadRow}><label><FileUp size={16} /><span>Choose CSV file</span><input accept=".csv,text/csv,text/tab-separated-values" onChange={(event) => void loadFile(event)} type="file" /></label><small>Headers: Name plus Phone or Email. Company is optional.</small></div>
+          <div className={styles.uploadRow}><label><FileUp size={16} /><span>Choose CSV file</span><input accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values" onChange={(event) => void loadFile(event)} type="file" /></label><small>Accepts your DealMachine research export as-is, plus standard Name/Phone/Email files.</small></div>
           <label className={styles.paste}><span>Or paste rows from a spreadsheet</span><textarea onChange={(event) => setSource(event.target.value)} rows={7} value={source} /></label>
           <button className={styles.previewButton} onClick={() => previewContacts()} type="button">Preview contacts</button>
           {contacts.length ? <div className={styles.contactPreview}><header><strong>{contacts.length} rows found</strong><span>{selectedImportCount} selected</span></header>{contacts.map((contact) => {
             const selected = selectedContactIds.has(contact.id);
-            return <label data-error={Boolean(contact.error)} data-selected={selected} key={contact.id}><input checked={selected} disabled={Boolean(contact.error)} onChange={() => setSelectedContactIds((current) => { const next = new Set(current); if (next.has(contact.id)) next.delete(contact.id); else next.add(contact.id); return next; })} type="checkbox" /><span><strong>{contact.name || "Missing name"}</strong><small>{contact.phone || contact.email || "Missing contact information"}</small></span><b>{contact.error ?? (contact.existingBuyerId ? "Existing" : "New")}</b></label>;
+            return <label data-error={Boolean(contact.error)} data-selected={selected} key={contact.id}><input checked={selected} disabled={Boolean(contact.error)} onChange={() => setSelectedContactIds((current) => { const next = new Set(current); if (next.has(contact.id)) next.delete(contact.id); else next.add(contact.id); return next; })} type="checkbox" /><span><strong>{contact.name || "Missing name"}</strong><small>{contact.phone || contact.email || "Missing contact information"}</small></span><b>{contact.error ?? `${contact.rank !== null ? `#${contact.rank} · ` : ""}${contact.existingBuyerId ? "Existing" : "New"}`}</b></label>;
           })}</div> : null}
         </section>
       )}

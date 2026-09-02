@@ -172,7 +172,9 @@ Goal: add first-class one-to-one email to the existing SMS and calling experienc
 Alex search and select any existing Buyer Network relationships, upload a CSV, or paste rows from a
 spreadsheet. It previews and validates contacts, reuses matching buyer records, creates new records
 without inventing contact consent, and saves the chosen membership as this deal's durable QuickDial
-queue. Alex can remove or reorder investors from the queue. The secondary ranking workspace still
+queue. The importer accepts the local DealMachine research agent's ranked export without reformatting,
+preserving its contact key, rank, score, class, alternate contact details, purchase context, rationale,
+and QC notes. Alex can remove or reorder investors from the queue. The secondary ranking workspace still
 supports owned-network reranking, cost previews and DealMachine House discovery, staged-candidate
 review, canonical Buyer Network approval/linking, rejection, manual addition, and pinning.
 DealMachine results preserve external provenance and never trigger outreach automatically. Land

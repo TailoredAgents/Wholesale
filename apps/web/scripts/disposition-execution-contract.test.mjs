@@ -131,6 +131,15 @@ test("investors can be selected, imported, discovered, and pinned inside Outreac
   assert.match(listBuilder, /Buyer Network/);
   assert.match(listBuilder, /Upload or paste/);
   assert.match(listBuilder, /Choose CSV file/);
+  assert.match(listBuilder, /primary_contact_name/);
+  assert.match(listBuilder, /buyer_entity_names/);
+  assert.match(listBuilder, /phone_1/);
+  assert.match(listBuilder, /outreach_rank/);
+  assert.match(listBuilder, /outreach_contact_key/);
+  assert.match(listBuilder, /DealMachine investor research export/);
+  assert.match(listBuilder, /source_external_key: contact\.sourceExternalKey/);
+  assert.match(listBuilder, /Alternate phones/);
+  assert.match(listBuilder, /Alternate emails/);
   assert.match(listBuilder, /paste rows from a spreadsheet/);
   assert.match(listBuilder, /Preview contacts/);
   assert.match(listBuilder, /queue_buyer_ids: queueIds/);
