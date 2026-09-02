@@ -55,6 +55,7 @@ type Outcome =
   | "not_interested"
   | "wrong_number"
   | "do_not_contact";
+type OutreachChannel = "sms" | "call" | "email";
 type SessionUpdate = {
   state?: "active" | "paused";
   current_buyer_id?: string | null;
@@ -165,7 +166,7 @@ function hasRankedFit(
 }
 
 function candidateRankLabel(candidate: DispositionExecutionCandidate) {
-  return hasRankedFit(candidate) ? `#${candidate.rank}` : "Unranked";
+  return hasRankedFit(candidate) ? `#${candidate.rank}` : "Not ranked";
 }
 
 function candidateFitLabel(candidate: DispositionExecutionCandidate) {
@@ -228,6 +229,7 @@ export function DispositionExecutionWorkspace({
   const [emailSubject, setEmailSubject] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
   const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [activeChannel, setActiveChannel] = useState<OutreachChannel>("sms");
   const [emailSenderAliases, setEmailSenderAliases] = useState<EmailSenderAlias[]>([]);
   const [emailSenderId, setEmailSenderId] = useState("");
   const [emailProviderConfigured, setEmailProviderConfigured] = useState<boolean | null>(null);
@@ -285,6 +287,11 @@ export function DispositionExecutionWorkspace({
       );
       setEmailComposerOpen(
         buyerState?.current_step === "email" && buyerState.email_status === "drafted",
+      );
+      setActiveChannel(
+        buyerState?.current_step === "call" || buyerState?.current_step === "email"
+          ? buyerState.current_step
+          : "sms",
       );
       setCallCountdown(null);
       setCountdownBuyerId(null);
@@ -719,6 +726,7 @@ export function DispositionExecutionWorkspace({
     await refreshSessionSnapshot();
     await loadBuyerTimeline(candidate.buyer_id);
     setSmsComposerOpen(false);
+    setActiveChannel("call");
     if (candidate.voice.allowed) {
       if (result.headsetReady) {
         beginCallCountdown(candidate.buyer_id);
@@ -1152,9 +1160,6 @@ export function DispositionExecutionWorkspace({
           <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
         </div>
         <div className={styles.heroActions}>
-          {candidate
-            ? <div><strong>{queuePosition}</strong><span>of {candidates.length}</span><small>queue position</small></div>
-            : <div><strong>0</strong><span>investors</span><small>loaded in QuickDial</small></div>}
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
           {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
           {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span> : null}
@@ -1190,9 +1195,8 @@ export function DispositionExecutionWorkspace({
           <div className={styles.currentInvestor}>
             <section className={`${styles.panel} ${styles.investorOverview}`}>
               <div className={styles.candidateHeader}>
-                <div className={styles.rank} data-ranked={hasRankedFit(candidate)}>{candidateRankLabel(candidate)}</div>
-                <div><span>Current investor</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
-                <div className={styles.score} data-ranked={hasRankedFit(candidate)}><strong>{candidateFitLabel(candidate)}</strong><span>{hasRankedFit(candidate) ? "fit score" : "Unranked"}</span></div>
+                <div><span>Current investor{hasRankedFit(candidate) ? ` · ${candidateRankLabel(candidate)}` : ""}</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
+                {hasRankedFit(candidate) ? <div className={styles.score}><strong>{candidateFitLabel(candidate)}</strong><span>fit score</span></div> : null}
               </div>
               {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
               <dl className={styles.profile}>
@@ -1202,40 +1206,30 @@ export function DispositionExecutionWorkspace({
                 <div><dt>Nearby purchase</dt><dd>{candidate.recent_purchase_reference ?? "No address-level reference saved"}</dd></div>
               </dl>
               <details className={styles.fitEvidence}>
-                <summary>{hasRankedFit(candidate) ? "Why this investor ranks here" : "Buyer Network / Unranked"}</summary>
+                <summary>{hasRankedFit(candidate) ? "Why this investor ranks here" : "Ranking details"}</summary>
                 <div className={styles.evidence}>{hasRankedFit(candidate)
                   ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
                   : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}</div>
               </details>
-              <div className={styles.investorUtilities}>
-                <Link href={`/os/buyers?buyer=${encodeURIComponent(candidate.buyer_id)}`}>Open relationship profile <ArrowRight size={14} /></Link>
-                {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
-              </div>
+              {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <div className={styles.investorUtilities}><button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button></div> : null}
             </section>
 
-            <InvestorConversation
-              callDisabled={voiceUnavailable}
-              candidate={candidate}
-              emailDisabled={emailUnavailable}
-              inboundReplyCount={inboundReplyCount}
-              loading={buyerTimelineLoading}
-              onCall={() => void startBrowserCall()}
-              onEmail={() => { setEmailComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-email")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}
-              onSms={() => { setSmsComposerOpen(true); window.requestAnimationFrame(() => document.getElementById("investor-sms")?.scrollIntoView({ behavior: "smooth", block: "center" })); }}
-              smsDisabled={smsUnavailable}
-              timeline={visibleBuyerTimeline}
-            />
+            <section className={`${styles.panel} ${styles.outreachConsole}`}>
+              <InvestorConversation
+                candidate={candidate}
+                inboundReplyCount={inboundReplyCount}
+                loading={buyerTimelineLoading}
+                timeline={visibleBuyerTimeline}
+              />
+              <div aria-label="Outreach channel" className={styles.channelTabs} role="tablist">
+                <button aria-controls="investor-sms" aria-selected={activeChannel === "sms"} id="outreach-text-tab" onClick={() => { setActiveChannel("sms"); void saveCurrentBuyerState({ current_step: "sms" }); }} role="tab" type="button"><MessageSquareText size={15} /><span><strong>Text</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready" : "Unavailable"}</small></span></button>
+                <button aria-controls="investor-call" aria-selected={activeChannel === "call"} id="outreach-call-tab" onClick={() => { setActiveChannel("call"); void saveCurrentBuyerState({ current_step: "call" }); }} role="tab" type="button"><Headphones size={15} /><span><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Completed" : buyerProgress?.call_status === "started" ? "Started" : candidate.voice.allowed ? "Ready" : "Unavailable"}</small></span></button>
+                <button aria-controls="investor-email" aria-selected={activeChannel === "email"} id="outreach-email-tab" onClick={() => { setActiveChannel("email"); void saveCurrentBuyerState({ current_step: "email" }); }} role="tab" type="button"><Mail size={15} /><span><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email && emailProviderConfigured ? "Ready" : "Unavailable"}</small></span></button>
+              </div>
+              <div className={styles.channelWorkspace}>
 
-            <section className={`${styles.panel} ${styles.cadencePanel}`}>
-              <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Investor cadence</span><h4>Text, call, then follow up</h4></div></div>
-              <ol className={styles.cadenceSteps}>
-                <li data-ready={candidate.actionable && candidate.sms.allowed}><span>1</span><div><strong>SMS</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent · saved" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready to review" : "Unavailable"}</small></div></li>
-                <li data-ready={candidate.actionable && candidate.voice.allowed}><span>2</span><div><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Result saved" : buyerProgress?.call_status === "started" ? "Started · saved" : candidate.voice.allowed ? "Browser or cellphone" : "Unavailable"}</small></div></li>
-                <li data-ready={Boolean(candidate.email && emailProviderConfigured && emailSenderId)}><span>3</span><div><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent · saved" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email ? emailProviderConfigured === null ? "Checking sender…" : emailProviderConfigured ? "Ready to review" : "Sender unavailable" : "No email recorded"}</small></div></li>
-              </ol>
-
-              <div className={styles.channelSection} id="investor-sms">
-                <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Step 1</span><h4>Review the introduction SMS</h4></div></div>
+              {activeChannel === "sms" ? <div aria-labelledby="outreach-text-tab" className={styles.channelSection} id="investor-sms" role="tabpanel">
+                <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Text</span><h4>Review the introduction SMS</h4></div></div>
                 <p className={styles.help}>Nothing sends automatically. Personalize the draft and confirm the final message.</p>
                 <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
 
@@ -1245,7 +1239,7 @@ export function DispositionExecutionWorkspace({
                   <div className={styles.smsComposer}>
                     <div className={styles.messageContext}>
                       <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
-                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked investor ${candidateRankLabel(candidate)}` : "Buyer Network / Unranked"}</small></div>
+                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked investor ${candidateRankLabel(candidate)}` : "Not ranked yet"}</small></div>
                     </div>
                     <label><span>Editable message</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
                     <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
@@ -1257,6 +1251,11 @@ export function DispositionExecutionWorkspace({
                   </div>
                 )}
 
+              </div> : null}
+
+              {activeChannel === "call" ? <div aria-labelledby="outreach-call-tab" className={styles.channelSection} id="investor-call" role="tabpanel">
+                <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Call</span><h4>Call from the Stonegate line</h4></div></div>
+                <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
                 {callCountdown !== null && countdownBuyerId === candidate.buyer_id ? (
                   <div aria-live="polite" className={styles.callCountdown} role="status">
                     <div className={styles.countdownNumber}>{callCountdown}</div>
@@ -1264,19 +1263,14 @@ export function DispositionExecutionWorkspace({
                     <div className={styles.countdownActions}><button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button">Call now</button><button className={styles.secondary} disabled={busy !== null} onClick={cancelPreparedCall} type="button">Cancel</button></div>
                   </div>
                 ) : null}
-              </div>
-
-              <div className={styles.channelSection} id="investor-call">
-                <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Step 2</span><h4>Call from the Stonegate line</h4></div></div>
-                <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
                 <div className={styles.callActions}>
                   <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={16} />{busy === "browser-call" || webPhone.busy ? "Starting browser call…" : browserCallActive ? "Browser call in progress" : `Call ${candidate.name} in browser`}</button>
                   <button className={styles.secondary} disabled={voiceUnavailable} onClick={() => void startCellphoneCall()} type="button"><PhoneCall size={16} />{busy === "cellphone-call" ? "Calling your cellphone…" : "Use my cellphone"}</button>
                 </div>
-              </div>
+              </div> : null}
 
-              <div className={styles.channelSection} id="investor-email">
-                <div className={styles.sectionTitle}><Mail size={17} /><div><span>Step 3</span><h4>Email follow-up</h4></div></div>
+              {activeChannel === "email" ? <div aria-labelledby="outreach-email-tab" className={styles.channelSection} id="investor-email" role="tabpanel">
+                <div className={styles.sectionTitle}><Mail size={17} /><div><span>Email</span><h4>Email follow-up</h4></div></div>
                 <p className={styles.help}>{candidate.email ? `Review the deal-aware starting draft for ${candidate.email}. Nothing sends until you approve it.` : "Add an email to the relationship profile before sending follow-up."}</p>
                 {emailProviderConfigured === false ? <div className={styles.permissionBlocked}><span>Email sender unavailable</span><small>{emailConfigurationBlockers.join(" ") || "Configure an authorized Stonegate sender."}</small></div> : null}
                 {emailProviderConfigured === true && !emailSenderAliases.length ? <div className={styles.permissionBlocked}><span>No authorized email sender</span><small>Ask an email administrator to grant this user access to an active Stonegate sender.</small></div> : null}
@@ -1302,21 +1296,21 @@ export function DispositionExecutionWorkspace({
                     </div>
                   </div>
                 ) : null}
+              </div> : null}
               </div>
             </section>
 
             <section className={`${styles.panel} ${styles.outcomePanel}`}>
-              <div className={styles.sectionTitle}><SkipForward size={18} /><div><span>Record result</span><h4>Choose the outcome, then choose what happens next</h4></div></div>
-              <div className={styles.outcomeInputs}>
-                <label><span>Call notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, buy box, objections, requested next step…" rows={3} value={notes} /></label>
-                <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required for Callback. No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></label>
-              </div>
+              <div className={`${styles.sectionTitle} ${styles.resultHeader}`}><SkipForward size={18} /><div><span>Record result</span><h4>What happened?</h4></div><small>No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></div>
               <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); void saveCurrentBuyerState({ selected_outcome: outcome.value, current_step: "outcome" }); }} type="button">{outcome.label}</button>)}</div>
+              <div className={styles.outcomeInputs} data-callback={selectedOutcome === "callback"}>
+                <label><span>Notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, objections, or requested next step…" rows={2} value={notes} /></label>
+                {selectedOutcome === "callback" ? <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required before saving Callback.</small></label> : null}
+              </div>
               {outcomeSavedForCurrent ? (
                 <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. This exact position will resume until you continue.</span></div><button onClick={() => void continueToNextBuyer()} type="button">Next investor <ArrowRight size={15} /></button></div>
               ) : (
                 <div className={styles.outcomeActions}>
-                  <button className={styles.secondary} disabled={roleOrBusyDisabled || !callbackAt} onClick={() => { setSelectedOutcome("callback"); void recordOutcome("callback", "stay"); }} type="button"><CalendarClock size={15} />Schedule follow-up</button>
                   <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={15} />Skip for now</button>
                   <span />
                   <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
@@ -1351,10 +1345,10 @@ export function DispositionExecutionWorkspace({
                 const skipped = skippedBuyerIds.has(item.buyer_id);
                 return (
                   <li key={item.buyer_id}>
-                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
-                      <span className={styles.rankedBuyerRank} data-ranked={hasRankedFit(item)}>{candidateRankLabel(item)}</span>
+                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-ranked={hasRankedFit(item)} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
+                      {hasRankedFit(item) ? <span className={styles.rankedBuyerRank}>{candidateRankLabel(item)}</span> : null}
                       <span className={styles.rankedBuyerIdentity}><strong>{item.name}</strong><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
-                      <strong className={styles.rankedBuyerScore} data-ranked={hasRankedFit(item)}>{candidateFitLabel(item)}</strong>
+                      {hasRankedFit(item) ? <strong className={styles.rankedBuyerScore}>{candidateFitLabel(item)}</strong> : null}
                     </button>
                     <span className={styles.queueRowActions}>
                       <button aria-label={`Move ${item.name} earlier`} disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={13} /></button>
@@ -1383,26 +1377,14 @@ export function DispositionExecutionWorkspace({
 }
 
 function InvestorConversation({
-  callDisabled,
   candidate,
-  emailDisabled,
   inboundReplyCount,
   loading,
-  onCall,
-  onEmail,
-  onSms,
-  smsDisabled,
   timeline,
 }: {
-  callDisabled: boolean;
   candidate: DispositionExecutionCandidate;
-  emailDisabled: boolean;
   inboundReplyCount: number;
   loading: boolean;
-  onCall: () => void;
-  onEmail: () => void;
-  onSms: () => void;
-  smsDisabled: boolean;
   timeline: BuyerTimelineItem[];
 }) {
   const timelineRef = useRef<HTMLOListElement>(null);
@@ -1413,7 +1395,7 @@ function InvestorConversation({
   }, [candidate.buyer_id, timeline]);
 
   return (
-    <section aria-label={`Conversation with ${candidate.name}`} className={`${styles.panel} ${styles.conversationTimeline}`}>
+    <section aria-label={`Conversation with ${candidate.name}`} className={styles.conversationTimeline}>
       <header>
         <div><span>Investor conversation</span><h4>Back-and-forth with {candidate.name}</h4></div>
         {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
@@ -1429,11 +1411,6 @@ function InvestorConversation({
       ) : <p>No conversation has been recorded yet. Use the controls below to start one.</p>}
       <footer>
         <span>Shared with the canonical buyer relationship and Inbox history.</span>
-        <div aria-label={`Continue conversation with ${candidate.name}`} role="group">
-          <button disabled={smsDisabled} onClick={onSms} type="button"><MessageSquareText size={15} />Text</button>
-          <button disabled={callDisabled} onClick={onCall} type="button"><Headphones size={15} />Call</button>
-          <button disabled={emailDisabled} onClick={onEmail} type="button"><Mail size={15} />Email</button>
-        </div>
       </footer>
     </section>
   );
