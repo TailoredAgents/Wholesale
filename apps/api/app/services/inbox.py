@@ -1648,6 +1648,7 @@ def get_conversation_detail(
                         filename=attachment.filename,
                         content_type=attachment.content_type,
                         size_bytes=attachment.size_bytes,
+                        malware_scan_status=attachment.malware_scan_status,
                         content_url=(
                             f"/api/v1/inbox/attachments/{attachment.id}/content"
                             if attachment.storage_provider

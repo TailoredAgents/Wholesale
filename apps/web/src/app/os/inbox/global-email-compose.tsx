@@ -36,6 +36,8 @@ type ComposeResult = {
   };
 };
 
+const MAX_EMAIL_ATTACHMENT_BYTES = 10_000_000;
+
 function displayError(payload: unknown, fallback: string) {
   if (
     payload &&
@@ -129,6 +131,9 @@ export function GlobalEmailCompose({
   const [error, setError] = useState("");
   const selectedSender = senders.find((alias) => alias.id === senderId) ?? null;
   const primaryRecipients = parseRecipients(to);
+  const hasProfessionalSignature = Boolean(selectedSender?.signature_text?.trim());
+  const attachmentBytes = attachments.reduce((total, file) => total + file.size, 0);
+  const attachmentsWithinLimit = attachmentBytes <= MAX_EMAIL_ATTACHMENT_BYTES;
 
   useEffect(() => {
     const query = activeRecipientQuery(to);
@@ -177,7 +182,16 @@ export function GlobalEmailCompose({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!senderId || primaryRecipients.length === 0 || !subject.trim() || !body.trim()) return;
+    if (
+      !senderId ||
+      primaryRecipients.length === 0 ||
+      !subject.trim() ||
+      !body.trim() ||
+      !hasProfessionalSignature ||
+      !attachmentsWithinLimit
+    ) {
+      return;
+    }
     setStatus("sending");
     setError("");
     idempotencyKeyRef.current ??= window.crypto.randomUUID();
@@ -390,6 +404,11 @@ export function GlobalEmailCompose({
                 <span>Signature</span>
                 <p>{selectedSender.signature_text}</p>
               </div>
+            ) : selectedSender ? (
+              <p className={styles.configurationNote}>
+                <CircleAlert size={14} aria-hidden="true" />
+                Add a professional signature to this sender before emailing.
+              </p>
             ) : null}
           </div>
 
@@ -417,6 +436,8 @@ export function GlobalEmailCompose({
                 status === "sending" ||
                 !providerConfigured ||
                 !senderId ||
+                !hasProfessionalSignature ||
+                !attachmentsWithinLimit ||
                 primaryRecipients.length === 0 ||
                 !subject.trim() ||
                 !body.trim()
@@ -435,6 +456,13 @@ export function GlobalEmailCompose({
             <p className={styles.configurationNote}>
               <CircleAlert size={14} aria-hidden="true" />
               {configurationBlockers.join(" ") || "Email delivery is not configured."}
+            </p>
+          ) : null}
+          {!attachmentsWithinLimit ? (
+            <p className={styles.configurationNote}>
+              <CircleAlert size={14} aria-hidden="true" />
+              Attachments total {(attachmentBytes / (1024 * 1024)).toFixed(1)} MB. Keep the
+              combined total at or below 10 MB.
             </p>
           ) : null}
           {error ? (

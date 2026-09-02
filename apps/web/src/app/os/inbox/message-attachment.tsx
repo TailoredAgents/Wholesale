@@ -12,6 +12,7 @@ export type MessageAttachmentData = {
   content_type: string;
   size_bytes: number;
   content_url: string | null;
+  malware_scan_status: string | null;
 };
 
 const previewableImageTypes = new Set([
@@ -35,6 +36,12 @@ export function MessageAttachment({
   senderLabel: string;
 }) {
   const previewable = previewableImageTypes.has(attachment.content_type.toLowerCase());
+  const scanVerified = attachment.malware_scan_status === "clean";
+  const scanLabel = scanVerified
+    ? formatSize(attachment.size_bytes)
+    : attachment.malware_scan_status === "scan_error"
+      ? "Scan unavailable"
+      : "Not malware-scanned";
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">(
     previewable ? "loading" : "idle",
@@ -78,6 +85,14 @@ export function MessageAttachment({
   }, [apiBaseUrl, attachment.content_url, getHeaders, previewable, retryKey]);
 
   async function downloadAttachment() {
+    if (
+      !scanVerified &&
+      !window.confirm(
+        "Stonegate has not malware-scanned this attachment. Only open it if you recognize the sender and expected the file.",
+      )
+    ) {
+      return;
+    }
     setLoadState((current) => (previewable ? current : "loading"));
     try {
       const downloadUrl = objectUrl ?? (await loadDownloadUrl());
@@ -117,7 +132,7 @@ export function MessageAttachment({
           <Paperclip size={13} aria-hidden="true" />
         )}
         <span>{attachment.filename}</span>
-        <small>{loadState === "error" ? "Retry" : formatSize(attachment.size_bytes)}</small>
+        <small>{loadState === "error" ? "Retry" : scanLabel}</small>
       </button>
     );
   }
@@ -153,6 +168,16 @@ export function MessageAttachment({
       <a
         className={styles.messageMediaPreview}
         href={objectUrl}
+        onClick={(event) => {
+          if (
+            !scanVerified &&
+            !window.confirm(
+              "Stonegate has not malware-scanned this attachment. Only open it if you recognize the sender and expected the file.",
+            )
+          ) {
+            event.preventDefault();
+          }
+        }}
         rel="noreferrer"
         target="_blank"
         title={`Open ${attachment.filename} full size`}
@@ -170,6 +195,7 @@ export function MessageAttachment({
         <span>
           <ImageIcon size={13} aria-hidden="true" />
           {attachment.filename}
+          {!scanVerified ? <small>Not scanned</small> : null}
         </span>
         <button
           onClick={() => void downloadAttachment()}

@@ -819,6 +819,13 @@
   white-space: nowrap;
 }
 
+.messageMediaAttachment figcaption > span small {
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 .messageMediaAttachment figcaption button {
   width: 26px;
   height: 26px;

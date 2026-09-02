@@ -585,6 +585,10 @@ def send_conversation_email(
         sender_email = account.email_address
         sender_signature = account.signature_text
         sender_metadata = {"email_account_id": str(account.id)}
+    if not (sender_signature or "").strip():
+        raise EmailConfigurationError(
+            "The selected Stonegate sender needs a professional signature before email can be sent."
+        )
     contact = db.get(Contact, conversation.contact_id)
     lead = active_lead
     if contact is None:
@@ -1261,6 +1265,7 @@ def get_attachment_content(
             filename=attachment.filename,
             content_type=attachment.content_type,
             size_bytes=attachment.size_bytes,
+            malware_scan_status=attachment.malware_scan_status,
         ),
         content,
     )

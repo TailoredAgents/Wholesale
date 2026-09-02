@@ -22,6 +22,7 @@ from app.models.foundation import (
     Contact,
     ContactMethod,
     Conversation,
+    EmailSenderAlias,
 )
 from app.services.bootstrap import bootstrap_foundation
 
@@ -288,6 +289,34 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
     assert next(
         participant for participant in participants if participant.participant_role == "from"
     ).email_sender_alias_id == UUID(alias_id)
+
+
+def test_resend_refuses_to_send_without_a_professional_signature(
+    db_session: Session,
+    api_db_override: None,
+    resend_settings: None,
+) -> None:
+    client = TestClient(app)
+    alias_id, conversation = create_alias_and_conversation(db_session, client)
+    alias = db_session.get(EmailSenderAlias, UUID(alias_id))
+    assert alias is not None
+    alias.signature_text = None
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/email/conversations/{conversation.id}/messages",
+        headers=OWNER_HEADERS,
+        json={
+            "email_sender_alias_id": alias_id,
+            "subject": "Attorney correspondence",
+            "body": "Please review the attached matter.",
+            "idempotency_key": "missing-signature-1",
+        },
+    )
+
+    assert response.status_code == 503, response.text
+    assert "professional signature" in response.json()["detail"]
+    assert db_session.scalar(select(CommunicationDispatch)) is None
 
 
 def test_global_compose_creates_general_conversation_and_reuses_idempotency(

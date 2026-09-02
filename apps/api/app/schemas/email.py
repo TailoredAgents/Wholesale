@@ -318,3 +318,4 @@ class EmailAttachmentRead(BaseModel):
     content_type: str
     size_bytes: int
     content_url: str | None = None
+    malware_scan_status: str | None = None

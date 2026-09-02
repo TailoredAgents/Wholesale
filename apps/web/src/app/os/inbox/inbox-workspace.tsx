@@ -865,6 +865,26 @@ function CallTranscriptPanel({
   );
 }
 
+const EMAIL_INBOX_REFRESH_INTERVAL_MS = 15_000;
+const MAX_EMAIL_ATTACHMENT_BYTES = 10_000_000;
+
+function replySubjectForTimeline(timeline: TimelineItem[]) {
+  const latestEmailSubject = [...timeline]
+    .reverse()
+    .find(
+      (item) =>
+        item.item_type === "communication" &&
+        item.channel === "email" &&
+        Boolean(item.subject?.trim()),
+    )
+    ?.subject?.trim();
+  if (!latestEmailSubject) return "";
+  return (/^re:/i.test(latestEmailSubject)
+    ? latestEmailSubject
+    : `Re: ${latestEmailSubject}`
+  ).slice(0, 255);
+}
+
 export function InboxWorkspace({
   initialFilter = "team",
   initialConversationId = null,
@@ -885,6 +905,9 @@ export function InboxWorkspace({
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
+  const composerConversationIdRef = useRef<string | null>(null);
+  const detailRequestSequenceRef = useRef(0);
+  const inboxRefreshInFlightRef = useRef(false);
   const recordingPlayerRefs = useRef<Record<string, CallRecordingPlayerHandle | null>>({});
   const initialSelectionAppliedRef = useRef(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -1037,12 +1060,26 @@ export function InboxWorkspace({
   }, [initialConversationId, initialLeadId, request]);
 
   const loadDetail = useCallback(
-    async (conversationId: string) => {
-      setDetailLoading(true);
+    async (conversationId: string, options: { silent?: boolean } = {}) => {
+      const requestSequence = ++detailRequestSequenceRef.current;
+      if (!options.silent) setDetailLoading(true);
       try {
         const item = await request<ConversationDetail>(
           `/api/v1/inbox/conversations/${conversationId}`,
         );
+        if (requestSequence !== detailRequestSequenceRef.current) return;
+        if (composerConversationIdRef.current !== item.id) {
+          composerConversationIdRef.current = item.id;
+          setSubject(replySubjectForTimeline(item.timeline));
+          setBody("");
+          setEmailAttachments([]);
+          setEmailCc("");
+          setEmailBcc("");
+          setEmailSettingsOpen(false);
+          setComposerStatus("idle");
+          smsIdempotencyKeyRef.current = null;
+          emailIdempotencyKeyRef.current = null;
+        }
         setDetail(item);
         if (item.conversation_type === "general") {
           setChannel(
@@ -1057,6 +1094,7 @@ export function InboxWorkspace({
           await request<Conversation>(`/api/v1/inbox/conversations/${conversationId}/read`, {
             method: "PATCH",
           });
+          if (requestSequence !== detailRequestSequenceRef.current) return;
           setConversations((current) =>
             current.map((conversation) =>
               conversation.id === conversationId
@@ -1069,10 +1107,14 @@ export function InboxWorkspace({
           );
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Unable to load conversation.");
-        setDetail(null);
+        if (requestSequence === detailRequestSequenceRef.current && !options.silent) {
+          setError(loadError instanceof Error ? loadError.message : "Unable to load conversation.");
+          setDetail(null);
+        }
       } finally {
-        setDetailLoading(false);
+        if (requestSequence === detailRequestSequenceRef.current && !options.silent) {
+          setDetailLoading(false);
+        }
       }
     },
     [initialChannel, initialConversationId, request],
@@ -1260,10 +1302,31 @@ export function InboxWorkspace({
   useEffect(() => {
     const handle = window.setTimeout(() => {
       if (selectedId) void loadDetail(selectedId);
-      else setDetail(null);
+      else {
+        composerConversationIdRef.current = null;
+        setDetail(null);
+      }
     }, 0);
     return () => window.clearTimeout(handle);
   }, [loadDetail, selectedId]);
+
+  useEffect(() => {
+    const handle = window.setInterval(() => {
+      if (
+        document.visibilityState !== "visible" ||
+        inboxRefreshInFlightRef.current
+      ) {
+        return;
+      }
+      inboxRefreshInFlightRef.current = true;
+      const refreshes: Promise<unknown>[] = [loadConversations()];
+      if (selectedId) refreshes.push(loadDetail(selectedId, { silent: true }));
+      void Promise.allSettled(refreshes).finally(() => {
+        inboxRefreshInFlightRef.current = false;
+      });
+    }, EMAIL_INBOX_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(handle);
+  }, [loadConversations, loadDetail, selectedId]);
 
   useEffect(() => {
     if (!openConversationId || !pendingSmsDeliveryKey) return;
@@ -1416,6 +1479,9 @@ export function InboxWorkspace({
   const selectedEmailAlias =
     emailAliases.find((alias) => alias.id === emailAliasId && alias.can_send) ?? null;
   const emailSignature = selectedEmailAlias?.signature_text ?? "";
+  const hasEmailSignature = Boolean(emailSignature.trim());
+  const emailAttachmentBytes = emailAttachments.reduce((total, file) => total + file.size, 0);
+  const emailAttachmentsWithinLimit = emailAttachmentBytes <= MAX_EMAIL_ATTACHMENT_BYTES;
   const nextAppointment = detail?.appointments.find((appointment) =>
     ["scheduled", "rescheduled"].includes(appointment.status),
   );
@@ -1460,10 +1526,23 @@ export function InboxWorkspace({
     (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send)) &&
     (!isLiveEmail ||
       Boolean(
-        canUseEmail && primaryEmail && selectedEmailAlias?.can_send && subject.trim(),
+        canUseEmail &&
+          primaryEmail &&
+          emailProviderConfigured &&
+          selectedEmailAlias?.can_send &&
+          hasEmailSignature &&
+          emailAttachmentsWithinLimit &&
+          subject.trim(),
       ));
 
   function selectConversation(conversationId: string) {
+    if (conversationId === selectedId) {
+      setMobilePane("thread");
+      setError(null);
+      return;
+    }
+    detailRequestSequenceRef.current += 1;
+    setDetail(null);
     setSelectedId(conversationId);
     setMobilePane("thread");
     setError(null);
@@ -1663,7 +1742,7 @@ export function InboxWorkspace({
           }),
         });
       }
-      setSubject("");
+      if (!isLiveEmail) setSubject("");
       setBody("");
       setEmailAttachments([]);
       setEmailCc("");
@@ -2539,12 +2618,22 @@ export function InboxWorkspace({
                   <>
                     <div
                       className={
-                        canUseEmail && primaryEmail && selectedEmailAlias
+                        canUseEmail &&
+                        primaryEmail &&
+                        emailProviderConfigured &&
+                        selectedEmailAlias &&
+                        hasEmailSignature &&
+                        emailAttachmentsWithinLimit
                           ? styles.emailReady
                           : styles.emailBlocked
                       }
                     >
-                      {canUseEmail && primaryEmail && selectedEmailAlias ? (
+                      {canUseEmail &&
+                      primaryEmail &&
+                      emailProviderConfigured &&
+                      selectedEmailAlias &&
+                      hasEmailSignature &&
+                      emailAttachmentsWithinLimit ? (
                         <ShieldCheck size={15} aria-hidden="true" />
                       ) : (
                         <ShieldAlert size={15} aria-hidden="true" />
@@ -2554,11 +2643,16 @@ export function InboxWorkspace({
                           ? "Your role cannot send seller email."
                           : !primaryEmail
                             ? "This seller does not have an email address."
-                            : selectedEmailAlias
-                              ? `Ready to email ${primaryEmail.value} from ${selectedEmailAlias.email_address}`
-                              : emailProviderConfigured
+                            : !emailProviderConfigured
+                              ? emailConfigurationBlockers.join(" ") ||
+                                "Email delivery is not configured."
+                              : !selectedEmailAlias
                                 ? "Select an authorized Stonegate sender."
-                                : emailConfigurationBlockers.join(" ")}
+                                : !hasEmailSignature
+                                  ? "Add a professional signature to this sender before emailing."
+                                  : !emailAttachmentsWithinLimit
+                                    ? `Attachments total ${formatFileSize(emailAttachmentBytes)}. Keep the combined total at or below 10 MB.`
+                                    : `Ready to email ${primaryEmail.value} from ${selectedEmailAlias.email_address}. Your signature will be appended.`}
                       </span>
                     </div>
                     <div className={styles.emailAttachmentRow}>

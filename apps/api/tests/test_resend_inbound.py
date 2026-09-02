@@ -387,7 +387,19 @@ def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
     attachment = db_session.scalar(select(EmailAttachment))
     assert attachment is not None
     assert attachment.storage_provider == "database"
+    assert attachment.malware_scan_status == "not_configured"
     assert attachment.content_data == b"%PDF seller file"
+    inbox = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=OWNER_HEADERS,
+    )
+    assert inbox.status_code == 200
+    inbound_timeline_item = next(
+        item
+        for item in inbox.json()["timeline"]
+        if item["channel"] == "email" and item["direction"] == "inbound"
+    )
+    assert inbound_timeline_item["attachments"][0]["malware_scan_status"] == "not_configured"
     download = client.get(
         f"/api/v1/email/attachments/{attachment.id}",
         headers=OWNER_HEADERS,

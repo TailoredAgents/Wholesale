@@ -582,6 +582,23 @@ test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {
   assert.match(inbox, /window\.clearTimeout\(timer\)/);
 });
 
+test("Inbox protects professional email drafts, signatures, and inbound attachments", () => {
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const compose = readFileSync(resolve(osSourceRoot, "inbox/global-email-compose.tsx"), "utf8");
+  const attachment = readFileSync(resolve(osSourceRoot, "inbox/message-attachment.tsx"), "utf8");
+
+  assert.match(inbox, /composerConversationIdRef\.current !== item\.id/);
+  assert.match(inbox, /setSubject\(replySubjectForTimeline\(item\.timeline\)\)/);
+  assert.match(inbox, /detailRequestSequenceRef/);
+  assert.match(inbox, /EMAIL_INBOX_REFRESH_INTERVAL_MS = 15_000/);
+  assert.match(inbox, /loadDetail\(selectedId, \{ silent: true \}\)/);
+  assert.match(inbox, /hasEmailSignature/);
+  assert.match(compose, /hasProfessionalSignature/);
+  assert.match(compose, /MAX_EMAIL_ATTACHMENT_BYTES = 10_000_000/);
+  assert.match(attachment, /malware_scan_status/);
+  assert.match(attachment, /Stonegate has not malware-scanned this attachment/);
+});
+
 test("Lead contact permission control manages calls and SMS without a typed note", () => {
   const control = readFileSync(
     resolve(osSourceRoot, "_components/sms-permission-control.tsx"),
