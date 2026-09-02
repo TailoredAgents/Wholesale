@@ -30,6 +30,7 @@ import type {
 import { useWebPhone } from "../_components/web-phone-provider";
 import { labelize } from "../os-utils";
 import styles from "./disposition-execution-workspace.module.css";
+import { DispositionQueueBuilder } from "./disposition-queue-builder";
 
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
 type VoiceCallIntent = {
@@ -55,6 +56,7 @@ type SessionUpdate = {
   state?: "active" | "paused";
   current_buyer_id?: string | null;
   advance_to_next?: boolean;
+  rerank_queue?: boolean;
   skipped_buyer_ids?: string[];
   buyer_id?: string;
   sms_draft?: string | null;
@@ -189,6 +191,7 @@ function nextActionableCandidate(
 }
 
 export function DispositionExecutionWorkspace({
+  canEditBuyers,
   canEditDeals,
   caseId,
   downloadPackage,
@@ -196,6 +199,7 @@ export function DispositionExecutionWorkspace({
   onWorkspaceChanged,
   request,
 }: {
+  canEditBuyers: boolean;
   canEditDeals: boolean;
   caseId: string;
   downloadPackage: (path: string) => Promise<void>;
@@ -397,6 +401,17 @@ export function DispositionExecutionWorkspace({
     const buyerId = buyerIdRef.current;
     if (buyerId) await loadBuyerTimeline(buyerId);
     await loadEmailConfiguration();
+  }
+
+  async function refreshQueueBuilderWorkspace() {
+    await load();
+    const buyerId = buyerIdRef.current;
+    if (buyerId) await loadBuyerTimeline(buyerId);
+    try {
+      await onWorkspaceChanged();
+    } catch {
+      // Queue changes are already durable; parent readiness can refresh independently.
+    }
   }
 
   useEffect(() => {
@@ -1097,6 +1112,16 @@ export function DispositionExecutionWorkspace({
         </details>
       ) : null}
 
+      <DispositionQueueBuilder
+        assetClass={workspace.asset_class}
+        canEditBuyers={canEditBuyers}
+        canEditDeals={canEditDeals}
+        caseId={caseId}
+        onMessage={onMessage}
+        onQueueChanged={refreshQueueBuilderWorkspace}
+        request={request}
+      />
+
       {candidate ? (
         <div className={styles.outreachLayout}>
           <div className={styles.currentInvestor}>
@@ -1243,7 +1268,7 @@ export function DispositionExecutionWorkspace({
               <div><dt>Interested</dt><dd>{interestedCount}</dd></div>
               <div><dt>Skipped</dt><dd>{sessionSkippedBuyerIds.length}</dd></div>
             </dl>
-            <p className={styles.queueGuidance}>Ranking is guidance. Choose any investor; unavailable channel controls remain enforced individually.</p>
+            <p className={styles.queueGuidance}>Ranking is guidance. Choose any investor to pin this session at that relationship; unavailable channel controls remain enforced individually.</p>
             <ol className={styles.rankedPool}>
               {candidates.map((item) => {
                 const selected = item.buyer_id === candidate.buyer_id;

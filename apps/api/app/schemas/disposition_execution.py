@@ -171,6 +171,7 @@ class DispositionExecutionSessionUpdate(BaseModel):
     state: DispositionExecutionSessionState | None = None
     current_buyer_id: UUID | None = None
     advance_to_next: bool = False
+    rerank_queue: bool = False
     skipped_buyer_ids: list[UUID] | None = None
     buyer_id: UUID | None = None
     sms_draft: str | None = Field(default=None, max_length=1600)
@@ -197,11 +198,20 @@ class DispositionExecutionSessionUpdate(BaseModel):
         if self.model_fields_set.intersection(buyer_fields) and self.buyer_id is None:
             raise ValueError("Provide a buyer when saving investor-specific session state.")
         if not self.model_fields_set.intersection(
-            {"state", "current_buyer_id", "advance_to_next", "skipped_buyer_ids", *buyer_fields}
+            {
+                "state",
+                "current_buyer_id",
+                "advance_to_next",
+                "rerank_queue",
+                "skipped_buyer_ids",
+                *buyer_fields,
+            }
         ):
             raise ValueError("Provide at least one session field to update.")
         if self.advance_to_next and "current_buyer_id" in self.model_fields_set:
             raise ValueError("Choose an exact investor or advance to the next one, not both.")
+        if self.advance_to_next and self.rerank_queue:
+            raise ValueError("Rerank the queue or advance to the next investor, not both.")
         return self
 
 

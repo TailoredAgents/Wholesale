@@ -807,6 +807,7 @@ export function DispositionWorkspace({
 
               {activeTab === "execution" ? (
                 <DispositionExecutionWorkspace
+                  canEditBuyers={canEditBuyers}
                   canEditDeals={canEditDeals}
                   caseId={selected.id}
                   downloadPackage={(path) =>

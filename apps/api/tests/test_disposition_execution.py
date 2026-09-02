@@ -1494,6 +1494,37 @@ def test_execution_session_restores_operator_position_drafts_and_queue_order(
     assert expanded_order[:2] == initial_order
     assert expanded_order[-1] == third_buyer_id
     assert [item["buyer_id"] for item in expanded.json()["candidates"]] == expanded_order
+
+    latest_ranked_order = [
+        item["buyer_id"]
+        for item in sorted(
+            expanded.json()["candidates"],
+            key=lambda item: (
+                0 if item["ranking_status"] == "ranked" else 1,
+                item["rank"] or 0,
+                item["name"].casefold(),
+                item["buyer_id"],
+            ),
+        )
+    ]
+    reranked = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={"rerank_queue": True},
+    )
+    assert reranked.status_code == 200, reranked.text
+    reranked_session = reranked.json()["session"]
+    expected_reranked_order = [
+        active_buyer_id,
+        *(buyer_id for buyer_id in latest_ranked_order if buyer_id != active_buyer_id),
+    ]
+    assert reranked_session["queue_buyer_ids"] == expected_reranked_order
+    assert [item["buyer_id"] for item in reranked.json()["candidates"]] == expected_reranked_order
+    assert reranked_session["current_buyer_id"] == active_buyer_id
+    assert reranked_session["skipped_buyer_ids"] == [skipped_buyer_id]
+    assert reranked_session["buyer_states"][active_buyer_id]["sms_draft"] == (
+        "Saved private one-to-one investor draft."
+    )
     stored_session = db_session.scalar(
         select(DispositionExecutionSession).where(
             DispositionExecutionSession.disposition_case_id == UUID(case_id)

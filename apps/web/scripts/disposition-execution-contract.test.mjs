@@ -10,6 +10,10 @@ const parentPath = new URL(
   "../src/app/os/dispositions/disposition-workspace.tsx",
   import.meta.url,
 );
+const queueBuilderPath = new URL(
+  "../src/app/os/dispositions/disposition-queue-builder.tsx",
+  import.meta.url,
+);
 const apiPath = new URL("../src/app/lib/api.ts", import.meta.url);
 
 test("the disposition workspace mounts a permission-aware one-to-one call queue", async () => {
@@ -90,6 +94,31 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /candidate\.voice\.allowed/);
   assert.match(workspace, /disabled=\{roleOrBusyDisabled\}/);
   assert.doesNotMatch(workspace, /packageApproved|qualifiedBuyerCount/);
+});
+
+test("investors can be discovered, reviewed, reranked, added, and pinned inside Outreach", async () => {
+  const [workspace, parent, queueBuilder] = await Promise.all([
+    readFile(workspacePath, "utf8"),
+    readFile(parentPath, "utf8"),
+    readFile(queueBuilderPath, "utf8"),
+  ]);
+
+  assert.match(parent, /canEditBuyers=\{canEditBuyers\}/);
+  assert.match(workspace, /<DispositionQueueBuilder/);
+  assert.match(workspace, /assetClass=\{workspace\.asset_class\}/);
+  assert.match(queueBuilder, /Build this investor queue/);
+  assert.match(queueBuilder, /Find, review, add, rerank, or pin investors without leaving Outreach/);
+  assert.match(queueBuilder, /\/api\/v1\/buyers\/discovery-runs\/estimate/);
+  assert.match(queueBuilder, /confirmed_estimated_credits: estimate\.estimated_credits/);
+  assert.match(queueBuilder, /confirmed_request_fingerprint: estimate\.request_fingerprint/);
+  assert.match(queueBuilder, /buyer-pool\/candidates\/\$\{entry\.candidate_id\}\/conversion/);
+  assert.match(queueBuilder, /<BuyerForm/);
+  assert.match(queueBuilder, /rerank_queue: true/);
+  assert.match(queueBuilder, /current_buyer_id: pinBuyerId/);
+  assert.match(queueBuilder, /Pin for outreach/);
+  assert.match(queueBuilder, /Land-safe queue building is active/);
+  assert.match(queueBuilder, /current search is residential/);
+  assert.match(queueBuilder, /Never sends outreach automatically/);
 });
 
 test("the outreach session keeps result recording operator-led", async () => {

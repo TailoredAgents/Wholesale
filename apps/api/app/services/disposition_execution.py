@@ -20,6 +20,7 @@ from app.models.foundation import (
     Conversation,
     ConversationContextLink,
     DispositionBuyerPoolCandidate,
+    DispositionBuyerPoolRun,
     DispositionCase,
     DispositionExecutionSession,
     Lead,
@@ -279,10 +280,46 @@ def update_execution_session(
     now = datetime.now(UTC)
     fields = payload.model_fields_set
 
-    session.queue_buyer_ids = _merged_queue_buyer_ids(
-        session.queue_buyer_ids,
-        [candidate.buyer_id for candidate in workspace.candidates],
-    )
+    if payload.rerank_queue:
+        ranked_queue = sorted(
+            workspace.candidates,
+            key=lambda candidate: (
+                0 if candidate.ranking_status == "ranked" else 1,
+                candidate.rank if candidate.rank is not None else 0,
+                candidate.name.casefold(),
+                str(candidate.buyer_id),
+            ),
+        )
+        ranked_buyer_ids = [candidate.buyer_id for candidate in ranked_queue]
+        pinned_buyer_id = (
+            payload.current_buyer_id
+            if "current_buyer_id" in fields
+            and payload.current_buyer_id in visible_buyer_ids
+            else session.current_buyer_id
+        )
+        if pinned_buyer_id in visible_buyer_ids:
+            ranked_buyer_ids = [
+                pinned_buyer_id,
+                *(buyer_id for buyer_id in ranked_buyer_ids if buyer_id != pinned_buyer_id),
+            ]
+        session.queue_buyer_ids = [str(buyer_id) for buyer_id in ranked_buyer_ids]
+        session.buyer_pool_run_id = db.scalar(
+            select(DispositionBuyerPoolRun.id)
+            .where(
+                DispositionBuyerPoolRun.organization_id == principal.organization_id,
+                DispositionBuyerPoolRun.disposition_case_id == case.id,
+            )
+            .order_by(
+                DispositionBuyerPoolRun.version_number.desc(),
+                DispositionBuyerPoolRun.created_at.desc(),
+            )
+            .limit(1)
+        )
+    else:
+        session.queue_buyer_ids = _merged_queue_buyer_ids(
+            session.queue_buyer_ids,
+            [candidate.buyer_id for candidate in workspace.candidates],
+        )
     if "state" in fields and payload.state is not None:
         session.state = payload.state
         if payload.state == "paused":
@@ -389,7 +426,11 @@ def update_execution_session(
             entity_id=session.id,
             previous_value=before,
             new_value=_execution_session_audit_value(session),
-            reason="Durable disposition outreach session updated.",
+            reason=(
+                "Disposition outreach queue reranked without clearing investor progress."
+                if payload.rerank_queue
+                else "Durable disposition outreach session updated."
+            ),
         )
     )
     db.commit()
@@ -594,10 +635,14 @@ def _execution_session_audit_value(
     }
     return {
         "state": session.state,
+        "buyer_pool_run_id": (
+            str(session.buyer_pool_run_id) if session.buyer_pool_run_id is not None else None
+        ),
         "current_buyer_id": (
             str(session.current_buyer_id) if session.current_buyer_id is not None else None
         ),
         "skipped_buyer_ids": list(session.skipped_buyer_ids),
+        "queue_buyer_ids": list(session.queue_buyer_ids),
         "buyer_state_summary": buyer_state_summary,
         "last_outcome": session.last_outcome,
         "last_outcome_buyer_id": (

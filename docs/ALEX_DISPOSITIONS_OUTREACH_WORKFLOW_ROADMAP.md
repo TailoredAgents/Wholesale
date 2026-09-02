@@ -161,6 +161,18 @@ Goal: add first-class one-to-one email to the existing SMS and calling experienc
 
 ## Phase 5 — Pull And Rank Investors In Place
 
+**Repository status:** Implemented September 1, 2026. The Outreach Desk now contains a compact,
+collapsible **Build this investor queue** workspace. Alex can rerank the owned network, preview the
+exact scope and estimated DealMachine credits before a House search, reuse saved searches, review
+staged external candidates, approve or link them into the canonical Buyer Network, reject them,
+manually add a relationship, and pin any canonical investor without leaving the active outreach
+session. Reranking adopts the latest explainable order while preserving the pinned investor,
+per-investor drafts, channel progress, outcomes, skips, and follow-ups. DealMachine results preserve
+their external provenance and never trigger outreach automatically. Land uses the asset-aware owned
+network matcher and manual additions; the residential DealMachine search remains visibly unavailable
+for Land so House assumptions cannot leak into that workflow. Production acceptance with a connected
+DealMachine account and production-equivalent House and Land deals remains outstanding.
+
 Goal: make the external-to-owned buyer pool feel like one part of the outreach job.
 
 - Run DealMachine discovery from the Outreach Desk without leaving the deal.
