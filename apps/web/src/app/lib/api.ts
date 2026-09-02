@@ -3174,6 +3174,47 @@ export type DispositionExecutionShowing = {
   notes: string | null;
 };
 
+export type DispositionExecutionBuyerState = {
+  sms_draft: string;
+  notes_draft: string;
+  callback_at: string | null;
+  selected_outcome:
+    | "interested"
+    | "showing_scheduled"
+    | "offer_expected"
+    | "callback"
+    | "no_answer"
+    | "voicemail"
+    | "not_interested"
+    | "wrong_number"
+    | "do_not_contact"
+    | null;
+  current_step: "sms" | "call" | "email" | "outcome";
+  sms_status: "not_started" | "drafted" | "sent";
+  call_status: "not_started" | "started" | "completed";
+  email_status: "not_started" | "drafted" | "sent";
+};
+
+export type DispositionExecutionSession = {
+  id: string | null;
+  persisted: boolean;
+  state: "active" | "paused";
+  current_buyer_id: string | null;
+  buyer_pool_run_id: string | null;
+  queue_buyer_ids: string[];
+  skipped_buyer_ids: string[];
+  buyer_states: Record<string, DispositionExecutionBuyerState>;
+  last_outcome: DispositionExecutionBuyerState["selected_outcome"];
+  last_outcome_buyer_id: string | null;
+  last_outcome_at: string | null;
+  follow_up_at: string | null;
+  started_at: string | null;
+  paused_at: string | null;
+  resumed_at: string | null;
+  updated_at: string | null;
+  lock_version: number | null;
+};
+
 export type DispositionExecutionWorkspace = {
   case_id: string;
   deal_id: string;
@@ -3187,6 +3228,7 @@ export type DispositionExecutionWorkspace = {
   remaining_candidate_count: number;
   candidates: DispositionExecutionCandidate[];
   current_candidate: DispositionExecutionCandidate | null;
+  session: DispositionExecutionSession;
   showings: DispositionExecutionShowing[];
 };
 

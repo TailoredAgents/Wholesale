@@ -49,6 +49,18 @@ type Outcome =
   | "not_interested"
   | "wrong_number"
   | "do_not_contact";
+type SessionUpdate = {
+  state?: "active" | "paused";
+  current_buyer_id?: string | null;
+  advance_to_next?: boolean;
+  skipped_buyer_ids?: string[];
+  buyer_id?: string;
+  sms_draft?: string | null;
+  notes_draft?: string | null;
+  callback_at?: string | null;
+  selected_outcome?: Outcome | null;
+  current_step?: "sms" | "call" | "email" | "outcome";
+};
 
 const OUTCOMES: Array<{ value: Outcome; label: string; tone: "positive" | "neutral" | "negative" }> = [
   { value: "interested", label: "Interested", tone: "positive" },
@@ -68,6 +80,13 @@ function idempotency(prefix: string) {
 
 function localDateTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : "Not scheduled";
+}
+
+function dateTimeLocalValue(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function executionCandidates(workspace: DispositionExecutionWorkspace | null) {
@@ -173,6 +192,7 @@ export function DispositionExecutionWorkspace({
   const [savedOutcome, setSavedOutcome] = useState<{ buyerId: string; label: string } | null>(null);
   const [sessionPaused, setSessionPaused] = useState(false);
   const [sessionSkippedBuyerIds, setSessionSkippedBuyerIds] = useState<string[]>([]);
+  const [sessionSaveState, setSessionSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const callCountdownTimer = useRef<number | null>(null);
   const buyerIdRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
@@ -182,59 +202,73 @@ export function DispositionExecutionWorkspace({
     idempotency("dispo-outcome"),
   );
 
-  const applyWorkspace = useCallback((
-    result: DispositionExecutionWorkspace,
-    { advance = false }: { advance?: boolean } = {},
-  ) => {
+  const applyWorkspace = useCallback((result: DispositionExecutionWorkspace) => {
     const candidates = executionCandidates(result);
-    const nextCandidate = (!advance
+    const persistedCandidate = result.session.current_buyer_id
       ? candidates.find(
+        (candidate) => candidate.buyer_id === result.session.current_buyer_id,
+      )
+      : null;
+    const nextCandidate = persistedCandidate
+      ?? candidates.find(
         (candidate) => candidate.buyer_id === buyerIdRef.current && candidate.actionable,
       )
-      : null)
       ?? (result.current_candidate?.actionable ? result.current_candidate : null)
       ?? candidates.find((candidate) => candidate.actionable)
       ?? null;
     const nextBuyerId = nextCandidate?.buyer_id ?? null;
+    const buyerState = nextBuyerId ? result.session.buyer_states[nextBuyerId] : null;
+    const lastOutcomeIsWaiting = Boolean(
+      nextBuyerId
+      && result.session.last_outcome
+      && result.session.last_outcome_buyer_id === nextBuyerId
+      && result.current_candidate?.buyer_id !== nextBuyerId,
+    );
     if (buyerIdRef.current !== nextBuyerId) {
       buyerIdRef.current = nextBuyerId;
       setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
-      setSmsComposerOpen(false);
+      setSmsComposerOpen(
+        buyerState?.current_step === "sms" && buyerState.sms_status === "drafted",
+      );
       setCallCountdown(null);
       setCountdownBuyerId(null);
-      setNotes("");
-      setCallbackAt("");
-      setSelectedOutcome(null);
-      setSavedOutcome(null);
+      setNotes(buyerState?.notes_draft ?? "");
+      setCallbackAt(dateTimeLocalValue(buyerState?.callback_at));
+      setSelectedOutcome((buyerState?.selected_outcome as Outcome | null | undefined) ?? null);
+      setSavedOutcome(lastOutcomeIsWaiting && result.session.last_outcome
+        ? { buyerId: nextBuyerId!, label: labelize(result.session.last_outcome) }
+        : null);
       setSmsDraft(nextCandidate?.sms_draft ?? "");
       if (callCountdownTimer.current !== null) {
         window.clearInterval(callCountdownTimer.current);
         callCountdownTimer.current = null;
       }
     }
+    setSessionPaused(result.session.state === "paused");
+    setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
+    setSessionSaveState(result.session.persisted ? "saved" : "idle");
     setSelectedBuyerId(nextBuyerId);
     setWorkspace(result);
   }, []);
 
-  function chooseCandidate(buyerId: string) {
+  async function chooseCandidate(buyerId: string) {
     const nextCandidate = executionCandidates(workspace).find((candidate) => candidate.buyer_id === buyerId);
     if (!nextCandidate || buyerIdRef.current === buyerId) return;
     if (callCountdownTimer.current !== null) {
       window.clearInterval(callCountdownTimer.current);
       callCountdownTimer.current = null;
     }
-    buyerIdRef.current = buyerId;
-    setSelectedBuyerId(buyerId);
-    setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
-    setSmsComposerOpen(false);
-    setCallCountdown(null);
-    setCountdownBuyerId(null);
-    setNotes("");
-    setCallbackAt("");
-    setSelectedOutcome(null);
-    setSavedOutcome(null);
-    setSmsDraft(nextCandidate.sms_draft);
-    onMessage(`Working ${nextCandidate.name}. Buyer Network context remains visible.`);
+    const result = await updateSession(
+      {
+        current_buyer_id: buyerId,
+        skipped_buyer_ids: sessionSkippedBuyerIds.filter((item) => item !== buyerId),
+        state: "active",
+      },
+      "session-cursor",
+    );
+    if (result) {
+      onMessage(`Working ${nextCandidate.name}. This position will resume across visits.`);
+    }
   }
 
   const load = useCallback(async () => {
@@ -289,6 +323,88 @@ export function DispositionExecutionWorkspace({
     }
   }
 
+  async function updateSession(payload: SessionUpdate, key = "session") {
+    setBusy(key);
+    setSessionSaveState("saving");
+    try {
+      const result = await request<DispositionExecutionWorkspace>(
+        `/api/v1/dispositions/cases/${caseId}/execution/session`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+      );
+      applyWorkspace(result);
+      setSessionSaveState("saved");
+      return result;
+    } catch (error) {
+      setSessionSaveState("idle");
+      onMessage(error instanceof Error ? error.message : "The outreach session could not be saved.");
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveCurrentBuyerState(overrides: Partial<SessionUpdate> = {}) {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (!candidate || !canEditDeals) return null;
+    setSessionSaveState("saving");
+    try {
+      const result = await request<DispositionExecutionWorkspace>(
+        `/api/v1/dispositions/cases/${caseId}/execution/session`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            buyer_id: candidate.buyer_id,
+            sms_draft: smsDraft,
+            notes_draft: notes,
+            callback_at: callbackAt ? new Date(callbackAt).toISOString() : null,
+            selected_outcome: selectedOutcome,
+            current_step: "outcome",
+            ...overrides,
+          }),
+        },
+      );
+      setWorkspace(result);
+      setSessionPaused(result.session.state === "paused");
+      setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
+      setSessionSaveState("saved");
+      return result;
+    } catch (error) {
+      setSessionSaveState("idle");
+      onMessage(error instanceof Error ? error.message : "The investor draft could not be saved.");
+      return null;
+    }
+  }
+
+  async function refreshSessionSnapshot() {
+    try {
+      const result = await request<DispositionExecutionWorkspace>(
+        `/api/v1/dispositions/cases/${caseId}/execution`,
+      );
+      setWorkspace(result);
+      setSessionPaused(result.session.state === "paused");
+      setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
+      setSessionSaveState(result.session.persisted ? "saved" : "idle");
+    } catch {
+      // The completed outreach action remains canonical; the next refresh restores session state.
+    }
+  }
+
+  async function discardCurrentSmsDraft() {
+    const candidate = selectedCandidate(workspace, buyerIdRef.current);
+    if (!candidate) return;
+    const result = await saveCurrentBuyerState({ sms_draft: null, current_step: "sms" });
+    if (!result) return;
+    const restoredCandidate = executionCandidates(result).find(
+      (item) => item.buyer_id === candidate.buyer_id,
+    );
+    setSmsDraft(restoredCandidate?.sms_draft ?? "");
+    setSmsComposerOpen(false);
+    onMessage(`The saved SMS draft for ${candidate.name} was discarded. A fresh deal-aware draft is available.`);
+  }
+
   async function sendSms() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals || !candidate.sms.allowed) return;
@@ -297,6 +413,7 @@ export function DispositionExecutionWorkspace({
       onMessage("Review the introduction and enter a message before sending it.");
       return;
     }
+    await saveCurrentBuyerState({ sms_draft: body, current_step: "sms" });
     const result = await action(
       "sms",
       async () => {
@@ -324,6 +441,7 @@ export function DispositionExecutionWorkspace({
     );
     if (!result) return;
 
+    await refreshSessionSnapshot();
     setSmsComposerOpen(false);
     if (candidate.voice.allowed) {
       if (result.headsetReady) {
@@ -382,7 +500,7 @@ export function DispositionExecutionWorkspace({
     }
     setCallCountdown(null);
     setCountdownBuyerId(null);
-    await action(
+    const result = await action(
       "browser-call",
       async () => {
         const intent = await request<VoiceCallIntent>(
@@ -407,6 +525,7 @@ export function DispositionExecutionWorkspace({
       },
       `Browser call started for ${candidate.name}.`,
     );
+    if (result) await refreshSessionSnapshot();
   }
 
   async function startCellphoneCall() {
@@ -418,7 +537,7 @@ export function DispositionExecutionWorkspace({
     }
     setCallCountdown(null);
     setCountdownBuyerId(null);
-    await action(
+    const result = await action(
       "cellphone-call",
       async () => {
         const callKey = idempotency("dispo-cellphone-call");
@@ -435,6 +554,7 @@ export function DispositionExecutionWorkspace({
       },
       `Stonegate is calling your cellphone first, then connecting ${candidate.name}.`,
     );
+    if (result) await refreshSessionSnapshot();
   }
 
   function cancelPreparedCall() {
@@ -488,6 +608,10 @@ export function DispositionExecutionWorkspace({
       onMessage("Choose the requested callback date and time first.");
       return;
     }
+    await saveCurrentBuyerState({
+      selected_outcome: outcome,
+      current_step: "outcome",
+    });
     const result = await action(
       `outcome-${outcome}`,
       () => request<DispositionExecutionWorkspace>(
@@ -509,51 +633,78 @@ export function DispositionExecutionWorkspace({
     );
     if (result) {
       if (advance === "next") {
-        applyWorkspace(result, { advance: true });
+        const advanced = await updateSession(
+          { advance_to_next: true, state: "active" },
+          "session-advance",
+        );
+        if (!advanced) {
+          setWorkspace(result);
+          setSavedOutcome({ buyerId: candidate.buyer_id, label: labelize(outcome) });
+        } else if (advanced.session.current_buyer_id === candidate.buyer_id) {
+          onMessage(`${labelize(outcome)} saved for ${candidate.name}. No other unskipped investor is currently available.`);
+        } else {
+          onMessage(`${labelize(outcome)} saved. The next investor and queue position are saved.`);
+        }
       } else {
         setWorkspace(result);
+        setSessionSaveState("saved");
         setSavedOutcome({ buyerId: candidate.buyer_id, label: labelize(outcome) });
       }
     }
   }
 
-  function continueToNextBuyer() {
+  async function continueToNextBuyer() {
     if (!workspace || !savedOutcome) return;
-    applyWorkspace(workspace, { advance: true });
+    const result = await updateSession(
+      { advance_to_next: true, state: "active" },
+      "session-advance",
+    );
+    if (result) {
+      onMessage(result.session.current_buyer_id === savedOutcome.buyerId
+        ? "No other unskipped investor is currently available. This completed position remains saved."
+        : "Moved to the next available investor. Your new position is saved.");
+    }
   }
 
-  function skipCurrentBuyer() {
+  async function skipCurrentBuyer() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !workspace) return;
     const skippedBuyerIds = new Set([...sessionSkippedBuyerIds, candidate.buyer_id]);
-    const nextCandidate = nextActionableCandidate(
-      executionCandidates(workspace),
-      candidate.buyer_id,
-      skippedBuyerIds,
+    const result = await updateSession(
+      {
+        skipped_buyer_ids: [...skippedBuyerIds],
+        advance_to_next: true,
+      },
+      "session-skip",
     );
-    setSessionSkippedBuyerIds([...skippedBuyerIds]);
-    if (!nextCandidate) {
-      onMessage("No other unskipped investor is available in this browser session. You can choose anyone directly from the queue.");
-      return;
+    if (result) {
+      onMessage(result.session.current_buyer_id === candidate.buyer_id
+        ? `${candidate.name} is saved as skipped, but no other investor is currently available. No buyer outcome was changed.`
+        : `${candidate.name} was skipped and the saved session moved forward. No buyer outcome was changed.`);
     }
-    chooseCandidate(nextCandidate.buyer_id);
-    onMessage(`${candidate.name} was skipped for this browser session. No buyer record or outcome was changed.`);
   }
 
-  function pauseSession() {
+  async function pauseSession() {
     if (callCountdownTimer.current !== null) {
       window.clearInterval(callCountdownTimer.current);
       callCountdownTimer.current = null;
     }
     setCallCountdown(null);
     setCountdownBuyerId(null);
-    setSessionPaused(true);
-    onMessage("Outreach is paused in this open browser session. No message, call, or buyer outcome was changed.");
+    const result = await updateSession(
+      {
+        state: "paused",
+        current_buyer_id: buyerIdRef.current,
+        skipped_buyer_ids: sessionSkippedBuyerIds,
+      },
+      "session-pause",
+    );
+    if (result) onMessage("Outreach is paused and saved. You can resume this exact investor after leaving or logging back in.");
   }
 
-  function resumeSession() {
-    setSessionPaused(false);
-    onMessage("Outreach resumed at the same investor in this open browser session.");
+  async function resumeSession() {
+    const result = await updateSession({ state: "active" }, "session-resume");
+    if (result) onMessage("Outreach resumed at the saved investor and unfinished step.");
   }
 
   async function createShowing(event: FormEvent<HTMLFormElement>) {
@@ -671,9 +822,18 @@ export function DispositionExecutionWorkspace({
   const contactedCount = candidates.filter((item) => contactedStages.has(item.lifecycle_stage)).length;
   const interestedCount = candidates.filter((item) => interestedStages.has(item.lifecycle_stage)).length;
   const skippedBuyerIds = new Set(sessionSkippedBuyerIds);
-  const nextCandidate = candidate
-    ? nextActionableCandidate(candidates, candidate.buyer_id, skippedBuyerIds)
+  const serverRecommendedCandidate = workspace.current_candidate
+    && workspace.current_candidate.buyer_id !== candidate?.buyer_id
+    && !skippedBuyerIds.has(workspace.current_candidate.buyer_id)
+    ? workspace.current_candidate
     : null;
+  const nextCandidate = serverRecommendedCandidate ?? (candidate
+    ? nextActionableCandidate(candidates, candidate.buyer_id, skippedBuyerIds)
+    : null);
+  const buyerProgress = candidate
+    ? workspace.session.buyer_states[candidate.buyer_id]
+    : null;
+  const currentStep = buyerProgress?.current_step ?? "sms";
   const outcomeNeedsCallback = selectedOutcome === "callback" && !callbackAt;
 
   return (
@@ -682,19 +842,20 @@ export function DispositionExecutionWorkspace({
         <div>
           <span>One-to-one investor outreach</span>
           <h3>Outreach session</h3>
-          <p>SMS, call, record the result, then decide whether to stay, advance, skip, or pause.</p>
+          <p>Your investor, drafts, progress, and queue position now resume across visits.</p>
         </div>
         <div className={styles.heroActions}>
           <div><strong>{queuePosition || "–"}</strong><span>of {candidates.length || 0}</span><small>queue position</small></div>
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
           <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void load()} type="button"><RefreshCw size={15} />Refresh</button>
+          <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span>
           {sessionPaused
-            ? <button onClick={resumeSession} type="button"><Play size={15} />Resume session</button>
-            : <button className={styles.secondary} disabled={busy !== null} onClick={pauseSession} type="button"><Pause size={15} />Pause session</button>}
+            ? <button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume session</button>
+            : <button className={styles.secondary} disabled={busy !== null} onClick={() => void pauseSession()} type="button"><Pause size={15} />Pause session</button>}
         </div>
       </header>
 
-      {sessionPaused ? <div className={styles.pausedBanner} role="status"><Pause size={18} /><div><strong>Session paused at {candidate?.name ?? "the current queue position"}</strong><span>This pause lasts while this screen stays open. Durable resume across visits is Phase 3.</span></div><button onClick={resumeSession} type="button"><Play size={15} />Resume</button></div> : null}
+      {sessionPaused ? <div className={styles.pausedBanner} role="status"><Pause size={18} /><div><strong>Session paused at {candidate?.name ?? "the current queue position"}</strong><span>Your investor, drafts, skipped list, and unfinished step are saved across visits.</span></div><button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume</button></div> : null}
 
       {workspace.blockers.length ? (
         <details className={styles.advisoryDetails}>
@@ -734,9 +895,9 @@ export function DispositionExecutionWorkspace({
             <section className={`${styles.panel} ${styles.cadencePanel}`}>
               <div className={styles.sectionTitle}><MessageSquareText size={18} /><div><span>Investor cadence</span><h4>Text, call, then follow up</h4></div></div>
               <ol className={styles.cadenceSteps}>
-                <li data-ready={candidate.actionable && candidate.sms.allowed}><span>1</span><div><strong>SMS</strong><small>{candidate.sms.allowed ? "Ready to review" : "Unavailable"}</small></div></li>
-                <li data-ready={candidate.actionable && candidate.voice.allowed}><span>2</span><div><strong>Call</strong><small>{candidate.voice.allowed ? "Browser or cellphone" : "Unavailable"}</small></div></li>
-                <li data-ready={Boolean(candidate.email)}><span>3</span><div><strong>Email</strong><small>{candidate.email ? "Address ready; composer arrives in Phase 4" : "No email recorded"}</small></div></li>
+                <li data-ready={candidate.actionable && candidate.sms.allowed}><span>1</span><div><strong>SMS</strong><small>{buyerProgress?.sms_status === "sent" ? "Sent · saved" : buyerProgress?.sms_status === "drafted" ? "Draft saved" : candidate.sms.allowed ? "Ready to review" : "Unavailable"}</small></div></li>
+                <li data-ready={candidate.actionable && candidate.voice.allowed}><span>2</span><div><strong>Call</strong><small>{buyerProgress?.call_status === "completed" ? "Result saved" : buyerProgress?.call_status === "started" ? "Started · saved" : candidate.voice.allowed ? "Browser or cellphone" : "Unavailable"}</small></div></li>
+                <li data-ready={Boolean(candidate.email)}><span>3</span><div><strong>Email</strong><small>{buyerProgress?.email_status === "sent" ? "Sent · saved" : buyerProgress?.email_status === "drafted" ? "Draft saved" : candidate.email ? "Address ready; composer arrives in Phase 4" : "No email recorded"}</small></div></li>
               </ol>
 
               <div className={styles.channelSection}>
@@ -752,10 +913,11 @@ export function DispositionExecutionWorkspace({
                       <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
                       <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked investor ${candidateRankLabel(candidate)}` : "Buyer Network / Unranked"}</small></div>
                     </div>
-                    <label><span>Editable message</span><textarea aria-label="Introduction SMS draft" onChange={(event) => setSmsDraft(event.target.value)} rows={5} value={smsDraft} /></label>
+                    <label><span>Editable message</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
                     <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
                     <div className={styles.composerActions}>
-                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => setSmsComposerOpen(false)} type="button">Cancel</button>
+                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => void discardCurrentSmsDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Discard saved draft</button>
+                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => setSmsComposerOpen(false)} type="button">Close draft</button>
                       <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send SMS and prepare call"}</button>
                     </div>
                   </div>
@@ -789,16 +951,16 @@ export function DispositionExecutionWorkspace({
             <section className={`${styles.panel} ${styles.outcomePanel}`}>
               <div className={styles.sectionTitle}><SkipForward size={18} /><div><span>Record result</span><h4>Choose the outcome, then choose what happens next</h4></div></div>
               <div className={styles.outcomeInputs}>
-                <label><span>Call notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onChange={(event) => setNotes(event.target.value)} placeholder="Interest, buy box, objections, requested next step…" rows={3} value={notes} /></label>
-                <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onChange={(event) => setCallbackAt(event.target.value)} type="datetime-local" value={callbackAt} /><small>Required for Callback. No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></label>
+                <label><span>Call notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, buy box, objections, requested next step…" rows={3} value={notes} /></label>
+                <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required for Callback. No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></label>
               </div>
-              <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => setSelectedOutcome(outcome.value)} type="button">{outcome.label}</button>)}</div>
+              <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); void saveCurrentBuyerState({ selected_outcome: outcome.value, current_step: "outcome" }); }} type="button">{outcome.label}</button>)}</div>
               {outcomeSavedForCurrent ? (
-                <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. Continue when you are ready.</span></div><button onClick={continueToNextBuyer} type="button">Next investor <ArrowRight size={15} /></button></div>
+                <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. This exact position will resume until you continue.</span></div><button onClick={() => void continueToNextBuyer()} type="button">Next investor <ArrowRight size={15} /></button></div>
               ) : (
                 <div className={styles.outcomeActions}>
                   <button className={styles.secondary} disabled={roleOrBusyDisabled || !callbackAt} onClick={() => { setSelectedOutcome("callback"); void recordOutcome("callback", "stay"); }} type="button"><CalendarClock size={15} />Schedule follow-up</button>
-                  <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={skipCurrentBuyer} type="button"><SkipForward size={15} />Skip for now</button>
+                  <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={15} />Skip for now</button>
                   <span />
                   <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
                   <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
@@ -832,7 +994,7 @@ export function DispositionExecutionWorkspace({
                 const skipped = skippedBuyerIds.has(item.buyer_id);
                 return (
                   <li key={item.buyer_id}>
-                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => chooseCandidate(item.buyer_id)} type="button">
+                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-selected={selected} data-skipped={skipped} disabled={busy !== null || sessionPaused} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
                       <span className={styles.rankedBuyerRank} data-ranked={hasRankedFit(item)}>{candidateRankLabel(item)}</span>
                       <span className={styles.rankedBuyerIdentity}><strong>{item.name}</strong><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
                       <strong className={styles.rankedBuyerScore} data-ranked={hasRankedFit(item)}>{candidateFitLabel(item)}</strong>

@@ -23,6 +23,11 @@ ShowingAccessStatus = Literal[
     "shared_privately",
     "not_required",
 ]
+DispositionExecutionStep = Literal["sms", "call", "email", "outcome"]
+DispositionExecutionSmsStatus = Literal["not_started", "drafted", "sent"]
+DispositionExecutionCallStatus = Literal["not_started", "started", "completed"]
+DispositionExecutionEmailStatus = Literal["not_started", "drafted", "sent"]
+DispositionExecutionSessionState = Literal["active", "paused"]
 
 
 class DispositionExecutionPermissionRead(BaseModel):
@@ -71,6 +76,37 @@ class DispositionShowingRead(BaseModel):
     notes: str | None
 
 
+class DispositionExecutionBuyerStateRead(BaseModel):
+    sms_draft: str = ""
+    notes_draft: str = ""
+    callback_at: datetime | None = None
+    selected_outcome: DispositionCallOutcome | None = None
+    current_step: DispositionExecutionStep = "sms"
+    sms_status: DispositionExecutionSmsStatus = "not_started"
+    call_status: DispositionExecutionCallStatus = "not_started"
+    email_status: DispositionExecutionEmailStatus = "not_started"
+
+
+class DispositionExecutionSessionRead(BaseModel):
+    id: UUID | None
+    persisted: bool
+    state: DispositionExecutionSessionState
+    current_buyer_id: UUID | None
+    buyer_pool_run_id: UUID | None
+    queue_buyer_ids: list[UUID]
+    skipped_buyer_ids: list[UUID]
+    buyer_states: dict[str, DispositionExecutionBuyerStateRead]
+    last_outcome: DispositionCallOutcome | None
+    last_outcome_buyer_id: UUID | None
+    last_outcome_at: datetime | None
+    follow_up_at: datetime | None
+    started_at: datetime | None
+    paused_at: datetime | None
+    resumed_at: datetime | None
+    updated_at: datetime | None
+    lock_version: int | None
+
+
 class DispositionExecutionWorkspaceRead(BaseModel):
     case_id: UUID
     deal_id: UUID
@@ -84,6 +120,7 @@ class DispositionExecutionWorkspaceRead(BaseModel):
     remaining_candidate_count: int
     current_candidate: DispositionExecutionCandidateRead | None
     candidates: list[DispositionExecutionCandidateRead]
+    session: DispositionExecutionSessionRead
     showings: list[DispositionShowingRead]
 
 
@@ -114,6 +151,40 @@ class DispositionExecutionOutcomeCreate(_DispositionExecutionBuyerReference):
     notes: str | None = Field(default=None, max_length=1000)
     follow_up_at: datetime | None = None
     idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class DispositionExecutionSessionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: DispositionExecutionSessionState | None = None
+    current_buyer_id: UUID | None = None
+    advance_to_next: bool = False
+    skipped_buyer_ids: list[UUID] | None = None
+    buyer_id: UUID | None = None
+    sms_draft: str | None = Field(default=None, max_length=1600)
+    notes_draft: str | None = Field(default=None, max_length=1000)
+    callback_at: datetime | None = None
+    selected_outcome: DispositionCallOutcome | None = None
+    current_step: DispositionExecutionStep | None = None
+
+    @model_validator(mode="after")
+    def require_buyer_for_draft_state(self) -> "DispositionExecutionSessionUpdate":
+        buyer_fields = {
+            "sms_draft",
+            "notes_draft",
+            "callback_at",
+            "selected_outcome",
+            "current_step",
+        }
+        if self.model_fields_set.intersection(buyer_fields) and self.buyer_id is None:
+            raise ValueError("Provide a buyer when saving investor-specific session state.")
+        if not self.model_fields_set.intersection(
+            {"state", "current_buyer_id", "advance_to_next", "skipped_buyer_ids", *buyer_fields}
+        ):
+            raise ValueError("Provide at least one session field to update.")
+        if self.advance_to_next and "current_buyer_id" in self.model_fields_set:
+            raise ValueError("Choose an exact investor or advance to the next one, not both.")
+        return self
 
 
 class DispositionShowingCreate(_DispositionExecutionBuyerReference):

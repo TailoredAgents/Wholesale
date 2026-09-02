@@ -21,16 +21,22 @@ from app.models.foundation import (
     ConversationContextLink,
     DispositionBuyerPoolCandidate,
     DispositionCase,
+    DispositionExecutionSession,
     Lead,
     Property,
     Task,
     User,
 )
 from app.schemas.disposition_execution import (
+    DispositionCallOutcome,
+    DispositionExecutionBuyerStateRead,
     DispositionExecutionCallCreate,
     DispositionExecutionCandidateRead,
     DispositionExecutionOutcomeCreate,
     DispositionExecutionPermissionRead,
+    DispositionExecutionSessionRead,
+    DispositionExecutionSessionState,
+    DispositionExecutionSessionUpdate,
     DispositionExecutionSmsCreate,
     DispositionExecutionWorkspaceRead,
     DispositionShowingCreate,
@@ -90,6 +96,7 @@ def read_workspace(
         raise ValueError("The disposition property is unavailable.")
 
     asset_class = (lead.asset_class or "house").strip().lower()
+    session = _execution_session(db, principal, case.id)
     blockers: list[str] = []
     if case.status not in EXECUTION_CASE_STATUSES:
         blockers.append("Move the deal into buyer placement before beginning buyer calls.")
@@ -170,12 +177,33 @@ def read_workspace(
             str(buyer.id),
         )
     )
+    if session is not None and session.queue_buyer_ids:
+        queue_positions = {
+            buyer_id: position
+            for position, buyer_id in enumerate(session.queue_buyer_ids)
+        }
+        initial_positions = {
+            str(buyer.id): position for position, buyer in enumerate(visible_buyers)
+        }
+        visible_buyers.sort(
+            key=lambda buyer: (
+                0 if str(buyer.id) in queue_positions else 1,
+                queue_positions.get(
+                    str(buyer.id),
+                    len(queue_positions) + initial_positions[str(buyer.id)],
+                ),
+            )
+        )
     handled_buyer_ids, deferred_buyer_ids = _candidate_queue_state(db, case)
+    skipped_buyer_ids = {
+        UUID(value) for value in (session.skipped_buyer_ids if session is not None else [])
+    }
     available_buyers = [
         buyer
         for buyer in visible_buyers
         if buyer.id not in handled_buyer_ids
         and buyer.id not in deferred_buyer_ids
+        and buyer.id not in skipped_buyer_ids
         and not _candidate_is_passed(candidate_by_buyer.get(buyer.id))
         and not _buyer_is_do_not_contact(buyer)
         and (
@@ -192,6 +220,7 @@ def read_workspace(
             buyer,
             candidate_by_buyer.get(buyer.id),
             ranked_entries_by_buyer.get(buyer.id),
+            _session_buyer_state(session, buyer.id),
         )
         for buyer in visible_buyers
     ]
@@ -221,8 +250,361 @@ def read_workspace(
         remaining_candidate_count=len(available_buyers),
         current_candidate=current,
         candidates=candidates,
+        session=_execution_session_read(
+            session,
+            default_current_buyer_id=current.buyer_id if current is not None else None,
+            queue_buyer_ids=[buyer.id for buyer in visible_buyers],
+            latest_buyer_pool_run_id=pool.run.id if pool is not None and pool.run else None,
+        ),
         showings=_showing_reads(db, case),
     )
+
+
+def update_execution_session(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    payload: DispositionExecutionSessionUpdate,
+) -> DispositionExecutionWorkspaceRead:
+    case = _mutable_case(db, principal, case_id)
+    workspace = read_workspace(db, principal, case.id)
+    if workspace is None:
+        raise ValueError("The disposition case is unavailable.")
+    session = _ensure_execution_session(db, principal, case, workspace=workspace)
+    visible_buyer_ids = {candidate.buyer_id for candidate in workspace.candidates}
+    before = _execution_session_audit_value(session)
+    now = datetime.now(UTC)
+    fields = payload.model_fields_set
+
+    session.queue_buyer_ids = _merged_queue_buyer_ids(
+        session.queue_buyer_ids,
+        [candidate.buyer_id for candidate in workspace.candidates],
+    )
+    if "state" in fields and payload.state is not None:
+        session.state = payload.state
+        if payload.state == "paused":
+            session.paused_at = now
+        else:
+            session.resumed_at = now
+    if "current_buyer_id" in fields:
+        if (
+            payload.current_buyer_id is not None
+            and payload.current_buyer_id not in visible_buyer_ids
+        ):
+            raise ValueError("The saved investor is no longer available in this deal queue.")
+        session.current_buyer_id = payload.current_buyer_id
+    if "skipped_buyer_ids" in fields and payload.skipped_buyer_ids is not None:
+        invalid_skips = set(payload.skipped_buyer_ids) - visible_buyer_ids
+        if invalid_skips:
+            raise ValueError("A skipped investor is no longer available in this deal queue.")
+        session.skipped_buyer_ids = list(
+            dict.fromkeys(str(buyer_id) for buyer_id in payload.skipped_buyer_ids)
+        )
+
+    buyer_fields = {
+        "sms_draft",
+        "notes_draft",
+        "callback_at",
+        "selected_outcome",
+        "current_step",
+    }
+    if fields.intersection(buyer_fields):
+        if payload.buyer_id is None or payload.buyer_id not in visible_buyer_ids:
+            raise ValueError("The investor draft is no longer available in this deal queue.")
+        buyer_state = _session_buyer_state(session, payload.buyer_id)
+        if "sms_draft" in fields:
+            previous_sms_draft = buyer_state["sms_draft"]
+            previous_sms_status = buyer_state["sms_status"]
+            buyer_state["sms_draft"] = payload.sms_draft or ""
+            buyer_state["sms_status"] = (
+                "sent"
+                if previous_sms_status == "sent"
+                and previous_sms_draft == buyer_state["sms_draft"]
+                else "drafted" if buyer_state["sms_draft"] else "not_started"
+            )
+        if "notes_draft" in fields:
+            buyer_state["notes_draft"] = payload.notes_draft or ""
+        if "callback_at" in fields:
+            buyer_state["callback_at"] = (
+                payload.callback_at.isoformat() if payload.callback_at is not None else None
+            )
+        if "selected_outcome" in fields:
+            buyer_state["selected_outcome"] = payload.selected_outcome
+        if "current_step" in fields and payload.current_step is not None:
+            buyer_state["current_step"] = payload.current_step
+        _set_session_buyer_state(session, payload.buyer_id, buyer_state)
+
+    if payload.advance_to_next:
+        db.flush()
+        advanced_workspace = read_workspace(db, principal, case.id)
+        if advanced_workspace is None:
+            raise ValueError("The disposition case is unavailable.")
+        if advanced_workspace.current_candidate is not None:
+            session.current_buyer_id = advanced_workspace.current_candidate.buyer_id
+
+    session.lock_version += 1
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="disposition.execution.session_update",
+            entity_type="disposition_execution_session",
+            entity_id=session.id,
+            previous_value=before,
+            new_value=_execution_session_audit_value(session),
+            reason="Durable disposition outreach session updated.",
+        )
+    )
+    db.commit()
+    result = read_workspace(db, principal, case.id)
+    if result is None:
+        raise ValueError("The disposition case is unavailable.")
+    return result
+
+
+def _execution_session(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    *,
+    lock: bool = False,
+) -> DispositionExecutionSession | None:
+    statement = select(DispositionExecutionSession).where(
+        DispositionExecutionSession.organization_id == principal.organization_id,
+        DispositionExecutionSession.disposition_case_id == case_id,
+        DispositionExecutionSession.operator_user_id == principal.user_id,
+    )
+    return db.scalar(statement.with_for_update() if lock else statement)
+
+
+def _ensure_execution_session(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    *,
+    workspace: DispositionExecutionWorkspaceRead | None = None,
+) -> DispositionExecutionSession:
+    session = _execution_session(db, principal, case.id, lock=True)
+    if session is not None:
+        return session
+    current_workspace = workspace or read_workspace(db, principal, case.id)
+    if current_workspace is None:
+        raise ValueError("The disposition case is unavailable.")
+    now = datetime.now(UTC)
+    session = DispositionExecutionSession(
+        organization_id=principal.organization_id,
+        disposition_case_id=case.id,
+        operator_user_id=principal.user_id,
+        buyer_pool_run_id=current_workspace.session.buyer_pool_run_id,
+        current_buyer_id=(
+            current_workspace.current_candidate.buyer_id
+            if current_workspace.current_candidate is not None
+            else None
+        ),
+        state="active",
+        queue_buyer_ids=[str(candidate.buyer_id) for candidate in current_workspace.candidates],
+        skipped_buyer_ids=[],
+        buyer_states={},
+        last_outcome=None,
+        last_outcome_buyer_id=None,
+        last_outcome_at=None,
+        follow_up_at=None,
+        started_at=now,
+        paused_at=None,
+        resumed_at=None,
+        lock_version=1,
+    )
+    try:
+        with db.begin_nested():
+            db.add(session)
+            db.flush()
+    except IntegrityError:
+        winner = _execution_session(db, principal, case.id, lock=True)
+        if winner is None:
+            raise
+        return winner
+    return session
+
+
+def _merged_queue_buyer_ids(
+    stored_buyer_ids: list[str],
+    visible_buyer_ids: list[UUID],
+) -> list[str]:
+    visible = {str(buyer_id) for buyer_id in visible_buyer_ids}
+    merged = [buyer_id for buyer_id in stored_buyer_ids if buyer_id in visible]
+    merged.extend(
+        str(buyer_id) for buyer_id in visible_buyer_ids if str(buyer_id) not in merged
+    )
+    return merged
+
+
+def _session_buyer_state(
+    session: DispositionExecutionSession | None,
+    buyer_id: UUID,
+) -> dict[str, Any]:
+    defaults: dict[str, Any] = {
+        "sms_draft": "",
+        "notes_draft": "",
+        "callback_at": None,
+        "selected_outcome": None,
+        "current_step": "sms",
+        "sms_status": "not_started",
+        "call_status": "not_started",
+        "email_status": "not_started",
+    }
+    if session is None:
+        return defaults
+    stored = (session.buyer_states or {}).get(str(buyer_id), {})
+    if not isinstance(stored, dict):
+        return defaults
+    return {**defaults, **stored}
+
+
+def _set_session_buyer_state(
+    session: DispositionExecutionSession,
+    buyer_id: UUID,
+    buyer_state: dict[str, Any],
+) -> None:
+    buyer_states = dict(session.buyer_states or {})
+    buyer_states[str(buyer_id)] = buyer_state
+    session.buyer_states = buyer_states
+
+
+def _execution_session_read(
+    session: DispositionExecutionSession | None,
+    *,
+    default_current_buyer_id: UUID | None,
+    queue_buyer_ids: list[UUID],
+    latest_buyer_pool_run_id: UUID | None,
+) -> DispositionExecutionSessionRead:
+    merged_queue_ids = _merged_queue_buyer_ids(
+        session.queue_buyer_ids if session is not None else [],
+        queue_buyer_ids,
+    )
+    visible_buyer_ids = {UUID(value) for value in merged_queue_ids}
+    current_buyer_id = (
+        session.current_buyer_id
+        if session is not None and session.current_buyer_id in visible_buyer_ids
+        else default_current_buyer_id
+    )
+    skipped_buyer_ids = [
+        UUID(value)
+        for value in (session.skipped_buyer_ids if session is not None else [])
+        if UUID(value) in visible_buyer_ids
+    ]
+    buyer_states = {
+        str(buyer_id): DispositionExecutionBuyerStateRead.model_validate(
+            _session_buyer_state(session, buyer_id)
+        )
+        for buyer_id in visible_buyer_ids
+        if session is not None and str(buyer_id) in (session.buyer_states or {})
+    }
+    return DispositionExecutionSessionRead(
+        id=session.id if session is not None else None,
+        persisted=session is not None,
+        state=(
+            cast(DispositionExecutionSessionState, session.state)
+            if session is not None
+            else "active"
+        ),
+        current_buyer_id=current_buyer_id,
+        buyer_pool_run_id=(
+            session.buyer_pool_run_id if session is not None else latest_buyer_pool_run_id
+        ),
+        queue_buyer_ids=[UUID(value) for value in merged_queue_ids],
+        skipped_buyer_ids=skipped_buyer_ids,
+        buyer_states=buyer_states,
+        last_outcome=(
+            cast(DispositionCallOutcome | None, session.last_outcome)
+            if session is not None
+            else None
+        ),
+        last_outcome_buyer_id=(
+            session.last_outcome_buyer_id if session is not None else None
+        ),
+        last_outcome_at=session.last_outcome_at if session is not None else None,
+        follow_up_at=session.follow_up_at if session is not None else None,
+        started_at=session.started_at if session is not None else None,
+        paused_at=session.paused_at if session is not None else None,
+        resumed_at=session.resumed_at if session is not None else None,
+        updated_at=session.updated_at if session is not None else None,
+        lock_version=session.lock_version if session is not None else None,
+    )
+
+
+def _execution_session_audit_value(
+    session: DispositionExecutionSession,
+) -> dict[str, Any]:
+    buyer_state_summary = {
+        buyer_id: {
+            "current_step": state.get("current_step"),
+            "sms_status": state.get("sms_status"),
+            "call_status": state.get("call_status"),
+            "email_status": state.get("email_status"),
+            "has_sms_draft": bool(state.get("sms_draft")),
+            "has_notes_draft": bool(state.get("notes_draft")),
+            "selected_outcome": state.get("selected_outcome"),
+            "has_callback_at": bool(state.get("callback_at")),
+        }
+        for buyer_id, state in (session.buyer_states or {}).items()
+        if isinstance(state, dict)
+    }
+    return {
+        "state": session.state,
+        "current_buyer_id": (
+            str(session.current_buyer_id) if session.current_buyer_id is not None else None
+        ),
+        "skipped_buyer_ids": list(session.skipped_buyer_ids),
+        "buyer_state_summary": buyer_state_summary,
+        "last_outcome": session.last_outcome,
+        "last_outcome_buyer_id": (
+            str(session.last_outcome_buyer_id)
+            if session.last_outcome_buyer_id is not None
+            else None
+        ),
+        "follow_up_at": (
+            session.follow_up_at.isoformat() if session.follow_up_at is not None else None
+        ),
+        "lock_version": session.lock_version,
+    }
+
+
+def _mark_session_channel(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+    buyer: Buyer,
+    *,
+    channel: str,
+    status: str,
+    sms_draft: str | None = None,
+    outcome: str | None = None,
+    notes: str | None = None,
+    follow_up_at: datetime | None = None,
+) -> None:
+    session = _ensure_execution_session(db, principal, case)
+    buyer_state = _session_buyer_state(session, buyer.id)
+    buyer_state[f"{channel}_status"] = status
+    buyer_state["current_step"] = (
+        "call" if channel == "sms" or status == "started" else "outcome"
+    )
+    if sms_draft is not None:
+        buyer_state["sms_draft"] = sms_draft
+    if outcome is not None:
+        now = datetime.now(UTC)
+        buyer_state["selected_outcome"] = outcome
+        buyer_state["notes_draft"] = notes or ""
+        buyer_state["callback_at"] = (
+            follow_up_at.isoformat() if follow_up_at is not None else None
+        )
+        session.last_outcome = outcome
+        session.last_outcome_buyer_id = buyer.id
+        session.last_outcome_at = now
+        session.follow_up_at = follow_up_at
+    _set_session_buyer_state(session, buyer.id, buyer_state)
+    session.current_buyer_id = buyer.id
+    session.lock_version += 1
 
 
 def send_pre_call_sms(
@@ -285,6 +667,15 @@ def send_pre_call_sms(
             "request_fingerprint": request_fingerprint,
         },
     )
+    _mark_session_channel(
+        db,
+        principal,
+        case,
+        buyer,
+        channel="sms",
+        status="sent",
+        sms_draft=payload.body,
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -307,7 +698,7 @@ def start_candidate_call(
     case_id: UUID,
     payload: DispositionExecutionCallCreate,
 ) -> VoiceCallIntentRead:
-    _, _, buyer = _candidate_for_action(
+    case, _, buyer = _candidate_for_action(
         db,
         principal,
         case_id,
@@ -326,6 +717,15 @@ def start_candidate_call(
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
+    _mark_session_channel(
+        db,
+        principal,
+        case,
+        buyer,
+        channel="call",
+        status="started",
+    )
+    db.commit()
     return result
 
 
@@ -342,7 +742,7 @@ def start_candidate_forwarded_call(
     cellphone bridge fallback.
     """
 
-    _, _, buyer = _candidate_for_action(
+    case, _, buyer = _candidate_for_action(
         db,
         principal,
         case_id,
@@ -359,6 +759,15 @@ def start_candidate_forwarded_call(
     )
     if result is None:
         raise ValueError("The buyer conversation is unavailable.")
+    _mark_session_channel(
+        db,
+        principal,
+        case,
+        buyer,
+        channel="call",
+        status="started",
+    )
+    db.commit()
     return result
 
 
@@ -452,6 +861,17 @@ def record_call_outcome(
                 else None
             ),
         },
+    )
+    _mark_session_channel(
+        db,
+        principal,
+        case,
+        buyer,
+        channel="call",
+        status="completed",
+        outcome=payload.outcome,
+        notes=payload.notes,
+        follow_up_at=follow_up_task.due_at if follow_up_task is not None else None,
     )
     db.add(
         AuditEvent(
@@ -905,6 +1325,7 @@ def _candidate_read(
     buyer: Buyer,
     candidate: DispositionBuyerPoolCandidate | None,
     entry: Any | None,
+    session_buyer_state: dict[str, Any] | None = None,
 ) -> DispositionExecutionCandidateRead:
     action_blockers: list[str] = []
     if _candidate_is_passed(candidate):
@@ -967,11 +1388,15 @@ def _candidate_read(
         recent_purchase_reference=reference,
         sms=sms_read,
         voice=voice_read,
-        sms_draft=_sms_draft(
-            buyer.name,
-            property_record,
-            reference,
-            sender_name=_sender_name(db, principal.user_id),
+        sms_draft=(
+            str(session_buyer_state.get("sms_draft"))
+            if session_buyer_state and session_buyer_state.get("sms_draft")
+            else _sms_draft(
+                buyer.name,
+                property_record,
+                reference,
+                sender_name=_sender_name(db, principal.user_id),
+            )
         ),
     )
 

@@ -9,6 +9,8 @@
 .heroActions > div small { grid-column: 1 / -1; color: #68756d; font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .heroActions strong { color: #17633d; font-size: 28px; }
 .heroActions button { white-space: nowrap; }
+.heroActions .sessionSave { padding: 5px 8px; border-radius: 999px; background: #e5eee7; color: #17633d; font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.heroActions .sessionSave[data-saving="true"] { background: #fff3d5; color: #76520b; }
 .pausedBanner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #8bb79c; border-radius: 12px; background: #eef8f1; color: #155f38; }
 .pausedBanner > div { display: grid; flex: 1; gap: 2px; }
 .pausedBanner span { font-size: 12px; }

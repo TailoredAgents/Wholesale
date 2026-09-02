@@ -6192,6 +6192,85 @@ class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000))
 
 
+class DispositionExecutionSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_execution_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "disposition_case_id",
+            "operator_user_id",
+            name="uq_disposition_execution_sessions_operator_case",
+        ),
+        CheckConstraint(
+            "state IN ('active', 'paused')",
+            name="ck_disposition_execution_sessions_state",
+        ),
+        CheckConstraint(
+            "lock_version > 0",
+            name="ck_disposition_execution_sessions_lock_positive",
+        ),
+        Index(
+            "ix_disposition_execution_sessions_org_operator_state",
+            "organization_id",
+            "operator_user_id",
+            "state",
+        ),
+        Index(
+            "ix_disposition_execution_sessions_case_updated",
+            "disposition_case_id",
+            "updated_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), nullable=False
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    operator_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False
+    )
+    buyer_pool_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_buyer_pool_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    current_buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    state: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="active", server_default="active"
+    )
+    queue_buyer_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    skipped_buyer_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    buyer_states: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    last_outcome: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_outcome_buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="SET NULL"), nullable=True
+    )
+    last_outcome_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    follow_up_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
 class DispositionPackageVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "disposition_package_versions"
     __table_args__ = (

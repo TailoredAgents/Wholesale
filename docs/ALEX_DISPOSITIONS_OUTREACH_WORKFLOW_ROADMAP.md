@@ -106,8 +106,8 @@ or update readiness and packet details without any gate.
 **Repository status:** Implemented September 1, 2026. The desk now keeps the current investor,
 editable channel cadence, result controls, and compact queue in one responsive workbench. Result
 selection and queue movement are separate operator decisions. Skip and pause are intentionally
-limited to the open browser session until Phase 3 adds durable exact-resume state; the one-to-one
-email composer remains Phase 4. Operator acceptance with a live deal remains outstanding.
+operator-led; Phase 3 now persists them across visits. The one-to-one email composer remains Phase
+4. Operator acceptance with a live deal remains outstanding.
 
 Goal: turn the existing dialer into a focused workbench with three stable areas.
 
@@ -123,6 +123,12 @@ or completed out of order. Recording a result does not force an immediate advanc
 **Save & next**, **Save & stay**, **Schedule follow-up**, **Skip**, or **Pause session**.
 
 ## Phase 3 — Durable Sessions And Exact Resume
+
+**Repository status:** Implemented September 1, 2026. Each operator now has one canonical saved
+session per deal. The service preserves queue order across ranking refreshes, appends newly found
+investors, and restores the current investor, skipped list, pause state, message/result drafts,
+channel progress, last outcome, and scheduled follow-up. Session changes are tenant-scoped and
+audited. Operator acceptance across logout and a production-equivalent deal remains outstanding.
 
 Goal: let Alex stop and return without reconstructing what happened.
 

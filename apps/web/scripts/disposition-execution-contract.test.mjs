@@ -104,18 +104,41 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /Open relationship profile/);
   assert.match(workspace, /Address ready; composer arrives in Phase 4/);
   assert.match(workspace, /async function recordOutcome\(outcome: Outcome, advance: "next" \| "stay"\)/);
-  assert.match(workspace, /onClick=\{\(\) => setSelectedOutcome\(outcome\.value\)\}/);
+  assert.match(workspace, /setSelectedOutcome\(outcome\.value\); void saveCurrentBuyerState/);
   assert.match(workspace, /Save & stay/);
   assert.match(workspace, /Save & next/);
   assert.match(workspace, /Schedule follow-up/);
   assert.match(workspace, /Skip for now/);
   assert.match(workspace, /Pause session/);
-  assert.match(workspace, /advance === "next"[\s\S]*applyWorkspace\(result, \{ advance: true \}\)/);
-  assert.match(workspace, /function continueToNextBuyer\(\)[\s\S]*applyWorkspace\(workspace, \{ advance: true \}\)/);
+  assert.match(workspace, /advance === "next"[\s\S]*advance_to_next: true/);
+  assert.match(workspace, /async function continueToNextBuyer\(\)[\s\S]*advance_to_next: true/);
   assert.match(workspace, /setWorkspace\(result\);[\s\S]*setSavedOutcome/);
-  assert.match(workspace, /No buyer record or outcome was changed/);
-  assert.match(workspace, /This pause lasts while this screen stays open/);
+  assert.match(workspace, /No buyer outcome was changed/);
+  assert.match(workspace, /saved across visits/);
   assert.doesNotMatch(workspace, /onClick=\{\(\) => void recordOutcome\(outcome\.value\)\}/);
+});
+
+test("the execution desk durably restores operator session state", async () => {
+  const [workspace, api] = await Promise.all([
+    readFile(workspacePath, "utf8"),
+    readFile(apiPath, "utf8"),
+  ]);
+
+  assert.match(api, /export type DispositionExecutionSession/);
+  assert.match(api, /buyer_states: Record<string, DispositionExecutionBuyerState>/);
+  assert.match(api, /session: DispositionExecutionSession/);
+  assert.match(workspace, /execution\/session/);
+  assert.match(workspace, /method: "PATCH"/);
+  assert.match(workspace, /result\.session\.current_buyer_id/);
+  assert.match(workspace, /result\.session\.skipped_buyer_ids/);
+  assert.match(workspace, /result\.session\.buyer_states/);
+  assert.match(workspace, /sms_draft: smsDraft/);
+  assert.match(workspace, /notes_draft: notes/);
+  assert.match(workspace, /selected_outcome: selectedOutcome/);
+  assert.match(workspace, /state: "paused"/);
+  assert.match(workspace, /advance_to_next: true/);
+  assert.match(workspace, /This exact position will resume until you continue/);
+  assert.doesNotMatch(workspace, /browser session|while this screen stays open/i);
 });
 
 test("one-to-one actions use a stable buyer reference and passed buyers remain recoverable", async () => {

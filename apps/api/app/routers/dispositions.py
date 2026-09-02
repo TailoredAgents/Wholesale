@@ -19,6 +19,7 @@ from app.schemas.disposition_desk import (
 from app.schemas.disposition_execution import (
     DispositionExecutionCallCreate,
     DispositionExecutionOutcomeCreate,
+    DispositionExecutionSessionUpdate,
     DispositionExecutionSmsCreate,
     DispositionExecutionWorkspaceRead,
     DispositionShowingCreate,
@@ -1272,6 +1273,30 @@ def read_case_execution_workspace(
         raise invalid(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
+    response.headers["Cache-Control"] = "private, no-store"
+    return result
+
+
+@router.patch(
+    "/cases/{case_id}/execution/session",
+    dependencies=[Depends(buyer_edit_dependency)],
+)
+def update_case_execution_session(
+    case_id: UUID,
+    payload: DispositionExecutionSessionUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionExecutionWorkspaceRead:
+    try:
+        result = disposition_execution.update_execution_session(
+            db,
+            principal,
+            case_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
     response.headers["Cache-Control"] = "private, no-store"
     return result
 

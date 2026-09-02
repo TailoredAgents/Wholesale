@@ -24,6 +24,7 @@ from app.models.foundation import (
     DispositionBuyerPoolRun,
     DispositionCampaignRecipient,
     DispositionCase,
+    DispositionExecutionSession,
     Lead,
     SuppressionRecord,
     Task,
@@ -1410,3 +1411,131 @@ def test_disposition_execution_migration_is_linear_and_reversible() -> None:
     )
     assert migration["revision"] == "0122_disposition_execution"
     assert migration["down_revision"] == "0121_dealmachine_buyer_tiers"
+
+
+def test_execution_session_restores_operator_position_drafts_and_queue_order(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, first_buyer_id = _unranked_execution_case(db_session, client)
+    second_buyer_id = create_active_buyer(
+        client,
+        name="Second Durable Session Buyer",
+        email="second-durable-session@example.com",
+    )
+    initial = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert initial.status_code == 200, initial.text
+    initial_order = [item["buyer_id"] for item in initial.json()["candidates"]]
+    assert set(initial_order) == {first_buyer_id, second_buyer_id}
+    active_buyer_id = initial_order[-1]
+    skipped_buyer_id = initial_order[0]
+    callback_at = datetime.now(UTC) + timedelta(days=3)
+
+    saved = client.patch(
+        f"/api/v1/dispositions/cases/{case_id}/execution/session",
+        headers=HEADERS,
+        json={
+            "state": "paused",
+            "current_buyer_id": active_buyer_id,
+            "skipped_buyer_ids": [skipped_buyer_id],
+            "buyer_id": active_buyer_id,
+            "sms_draft": "Saved private one-to-one investor draft.",
+            "notes_draft": "Resume with the requested terms in view.",
+            "callback_at": callback_at.isoformat(),
+            "selected_outcome": "callback",
+            "current_step": "outcome",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    session = saved.json()["session"]
+    assert session["persisted"] is True
+    assert session["state"] == "paused"
+    assert session["current_buyer_id"] == active_buyer_id
+    assert session["skipped_buyer_ids"] == [skipped_buyer_id]
+    assert session["queue_buyer_ids"] == initial_order
+    buyer_state = session["buyer_states"][active_buyer_id]
+    assert buyer_state["sms_draft"] == "Saved private one-to-one investor draft."
+    assert buyer_state["notes_draft"] == "Resume with the requested terms in view."
+    assert buyer_state["selected_outcome"] == "callback"
+    assert buyer_state["current_step"] == "outcome"
+
+    restored = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["session"]["current_buyer_id"] == active_buyer_id
+    restored_candidate = next(
+        item for item in restored.json()["candidates"] if item["buyer_id"] == active_buyer_id
+    )
+    assert restored_candidate["sms_draft"] == "Saved private one-to-one investor draft."
+
+    third_buyer_id = create_active_buyer(
+        client,
+        name="A Newly Ranked Buyer Must Append",
+        email="newly-ranked-append@example.com",
+    )
+    expanded = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert expanded.status_code == 200, expanded.text
+    expanded_order = expanded.json()["session"]["queue_buyer_ids"]
+    assert expanded_order[:2] == initial_order
+    assert expanded_order[-1] == third_buyer_id
+    assert [item["buyer_id"] for item in expanded.json()["candidates"]] == expanded_order
+    stored_session = db_session.scalar(
+        select(DispositionExecutionSession).where(
+            DispositionExecutionSession.disposition_case_id == UUID(case_id)
+        )
+    )
+    assert stored_session is not None
+    assert stored_session.operator_user_id is not None
+
+
+def test_execution_outcome_updates_durable_last_result_and_follow_up(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    case_id, buyer_id = _unranked_execution_case(db_session, client)
+    recorded = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/execution/outcomes",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "outcome": "no_answer",
+            "notes": "Persist this retry across visits.",
+            "idempotency_key": "durable-session-no-answer-001",
+        },
+    )
+    assert recorded.status_code == 200, recorded.text
+    session = recorded.json()["session"]
+    assert session["persisted"] is True
+    assert session["current_buyer_id"] == buyer_id
+    assert session["last_outcome"] == "no_answer"
+    assert session["last_outcome_buyer_id"] == buyer_id
+    assert session["last_outcome_at"] is not None
+    assert session["follow_up_at"] is not None
+    buyer_state = session["buyer_states"][buyer_id]
+    assert buyer_state["call_status"] == "completed"
+    assert buyer_state["current_step"] == "outcome"
+    assert buyer_state["selected_outcome"] == "no_answer"
+    assert buyer_state["notes_draft"] == "Persist this retry across visits."
+
+
+def test_durable_execution_session_migration_follows_advisory_workbench() -> None:
+    migration = run_path(
+        str(
+            Path(__file__).parents[1]
+            / "alembic"
+            / "versions"
+            / "0124_disposition_execution_sessions.py"
+        )
+    )
+    assert migration["revision"] == "0124_disposition_sessions"
+    assert migration["down_revision"] == "0123_disposition_advisory"
