@@ -197,11 +197,14 @@ Goal: make the external-to-owned buyer pool feel like one part of the outreach j
 
 **Repository status:** Partially implemented September 2, 2026. The full-width Outreach Desk now
 uses an inbox-style three-pane layout: selectable investor queue, dominant QuickDial conversation,
-and relationship context. The relationship pane loads the canonical owner, buy box, markets, price
-range, strategy, proof status, prior performance, notes, tags, follow-up dates, and recent contact
-history. Zero-buyer deals open discovery automatically, and Quick Add accepts the contact details
-available now while leaving profile enrichment for later. The separate daily relationship queue
-for replies, due follow-ups, and stale relationships remains outstanding.
+and relationship context. The center pane shows the canonical Inbox-backed buyer timeline as
+chronological inbound/outbound conversation bubbles, refreshes the selected investor every 30
+seconds while visible, and stays positioned at the latest reply without refreshing the surrounding
+workspace. The relationship pane loads the canonical owner, buy box, markets, price range,
+strategy, proof status, prior performance, notes, tags, and follow-up dates. Zero-buyer deals open
+discovery automatically, and Quick Add accepts the contact details available now while leaving
+profile enrichment for later. An inline thread composer and the separate daily relationship queue
+for replies, due follow-ups, and stale relationships remain outstanding.
 
 Goal: support the second half of Alex's job—knowing investors and staying in touch.
 
@@ -225,6 +228,22 @@ Goal: connect outreach to the commercial outcome without forcing Alex into anoth
 - Track deposit, assignment/double-close evidence, buyer deadlines, and closing checkpoints.
 - Finish asset-appropriate offer and closing parity before treating Land as a complete outreach
   lane.
+
+## Next Surgical Releases — Highest Value First
+
+Each item should remain an independently tested, committed, and pushed release.
+
+1. Put the existing SMS and email composers directly under the centered conversation while reusing
+   the canonical Inbox conversation, sender authorization, consent checks, drafts, and idempotency.
+2. Persist CSV/paste/DealMachine imports as server-side list and import-batch records with source,
+   mapping, validation, duplicate decisions, membership, and retry history; keep QuickDial as the
+   selected working order rather than the only record of the imported list.
+3. Build the Investor Relationships daily queue for inbound replies, promised callbacks, overdue
+   follow-ups, stale relationships, and incomplete buyer profiles.
+4. Let QuickDial interest and offer outcomes open the existing Offer Room path with the investor and
+   current deal preselected, without creating a second offer or relationship model.
+5. Run one production-equivalent House list and one Land list through import, outreach, reply,
+   pause/resume, follow-up, and offer handoff before broad operator rollout.
 
 ## Later — Buyer-Facing Deal Page
 
