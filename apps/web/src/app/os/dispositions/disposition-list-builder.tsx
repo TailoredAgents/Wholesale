@@ -3,7 +3,7 @@
 import { Check, CheckCircle2, FileUp, Search, UsersRound } from "lucide-react";
 import { ChangeEvent, useMemo, useState } from "react";
 
-import type { BuyerListItem, DispositionExecutionWorkspace } from "../../lib/api";
+import type { BuyerDuplicatePreflight, BuyerListItem, DispositionExecutionWorkspace } from "../../lib/api";
 import styles from "./disposition-list-builder.module.css";
 
 type Requester = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -158,6 +158,7 @@ export function DispositionListBuilder({
   const [contacts, setContacts] = useState<ImportedContact[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const visibleBuyers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -195,12 +196,27 @@ export function DispositionListBuilder({
         if (!queueIds.includes(buyerId)) queueIds.push(buyerId);
       };
       selectedBuyerIds.forEach(append);
-      for (const contact of contacts) {
+      const selectedContacts = contacts.filter((contact) => selectedContactIds.has(contact.id) && !contact.error);
+      for (const [index, contact] of selectedContacts.entries()) {
+        setProgress(`Checking investor ${index + 1} of ${selectedContacts.length}…`);
         if (!selectedContactIds.has(contact.id) || contact.error) continue;
         if (contact.existingBuyerId) {
           append(contact.existingBuyerId);
           continue;
         }
+        const duplicateCheck = await request<BuyerDuplicatePreflight>("/api/v1/buyers/duplicates/preflight", {
+          method: "POST",
+          body: JSON.stringify({
+            email: contact.email || null,
+            phone: contact.phone || null,
+            company_name: contact.company || null,
+          }),
+        });
+        if (duplicateCheck.matches[0]) {
+          append(duplicateCheck.matches[0].buyer_id);
+          continue;
+        }
+        setProgress(`Adding investor ${index + 1} of ${selectedContacts.length}…`);
         const buyer = await request<BuyerListItem>("/api/v1/buyers", {
           method: "POST",
           body: JSON.stringify({
@@ -240,6 +256,7 @@ export function DispositionListBuilder({
       setError(actionError instanceof Error ? actionError.message : "The investor list could not be added to QuickDial.");
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -272,7 +289,7 @@ export function DispositionListBuilder({
       )}
 
       {error ? <p className={styles.error} role="alert">{error}</p> : null}
-      <footer><span><strong>{totalSelected}</strong> investor{totalSelected === 1 ? "" : "s"} selected</span><button disabled={!totalSelected || busy} onClick={() => void addToQuickDial()} type="button">{busy ? "Building QuickDial…" : `Save ${totalSelected} to QuickDial`}</button></footer>
+      <footer><span>{progress ?? <><strong>{totalSelected}</strong> investor{totalSelected === 1 ? "" : "s"} selected</>}</span><button disabled={!totalSelected || busy} onClick={() => void addToQuickDial()} type="button">{busy ? "Building QuickDial…" : `Save ${totalSelected} to QuickDial`}</button></footer>
     </div>
   );
 }

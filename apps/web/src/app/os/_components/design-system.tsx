@@ -342,6 +342,7 @@ function OverlayDialog({
       aria-labelledby={titleId}
       className={classes(styles.overlay, styles[variant], size === "wide" && styles.overlayWide)}
       onCancel={(event) => {
+        if (event.currentTarget !== event.target) return;
         event.preventDefault();
         onClose();
       }}
