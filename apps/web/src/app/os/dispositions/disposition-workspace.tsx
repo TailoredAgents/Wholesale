@@ -13,7 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   BuyerListItem,
@@ -197,6 +197,28 @@ export function DispositionWorkspace({
       "richardaustindugger@users.noreply.github.com",
     [],
   );
+  const headers = useCallback(async (json = true) => {
+    const token = await getToken().catch(() => null);
+    const value: Record<string, string> = {};
+    if (json) value["Content-Type"] = "application/json";
+    if (token) value.Authorization = `Bearer ${token}`;
+    else value["X-Dev-User-Email"] = devEmail;
+    return value;
+  }, [devEmail, getToken]);
+  const request = useCallback(async function request<T>(
+    path: string,
+    options: RequestInit = {},
+  ): Promise<T> {
+    const response = await fetch(`${apiBase}${path}`, {
+      ...options,
+      headers: { ...(await headers(!(options.body instanceof Blob))), ...(options.headers ?? {}) },
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { detail?: string };
+      throw new Error(payload.detail ?? "Request failed.");
+    }
+    return response.json() as Promise<T>;
+  }, [apiBase, headers]);
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
   const activeTab =
     selected?.asset_class === "land" && landUnavailableTabs.has(tab) ? "package" : tab;
@@ -259,27 +281,6 @@ export function DispositionWorkspace({
   // Buyer-choice hydration follows the selected case and authenticated request helper.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
-
-  async function headers(json = true) {
-    const token = await getToken().catch(() => null);
-    const value: Record<string, string> = {};
-    if (json) value["Content-Type"] = "application/json";
-    if (token) value.Authorization = `Bearer ${token}`;
-    else value["X-Dev-User-Email"] = devEmail;
-    return value;
-  }
-
-  async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${apiBase}${path}`, {
-      ...options,
-      headers: { ...(await headers(!(options.body instanceof Blob))), ...(options.headers ?? {}) },
-    });
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(payload.detail ?? "Request failed.");
-    }
-    return response.json() as Promise<T>;
-  }
 
   async function loadReadiness(caseId = selectedId) {
     if (!caseId) return null;

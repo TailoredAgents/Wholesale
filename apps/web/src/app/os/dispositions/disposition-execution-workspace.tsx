@@ -1105,8 +1105,8 @@ export function DispositionExecutionWorkspace({
     : null;
 
   return (
-    <section aria-label="Investor outreach desk" className={styles.workspace} id="call-queue" tabIndex={-1}>
-      <header className={styles.hero}>
+    <section aria-label="Investor outreach desk" className={styles.workspace} data-empty={!candidate} id="call-queue" tabIndex={-1}>
+      <header className={styles.hero} data-empty={!candidate}>
         <div>
           <span>Investor QuickDial</span>
           <h3>Contact an investor, then move to the next</h3>
@@ -1117,11 +1117,11 @@ export function DispositionExecutionWorkspace({
             ? <div><strong>{queuePosition}</strong><span>of {candidates.length}</span><small>queue position</small></div>
             : <div><strong>0</strong><span>investors</span><small>loaded in QuickDial</small></div>}
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
-          <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button>
-          <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span>
-          {sessionPaused
+          {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
+          {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span> : null}
+          {candidate ? (sessionPaused
             ? <button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume session</button>
-            : <button className={styles.secondary} disabled={busy !== null} onClick={() => void pauseSession()} type="button"><Pause size={15} />Pause session</button>}
+            : <button className={styles.secondary} disabled={busy !== null} onClick={() => void pauseSession()} type="button"><Pause size={15} />Pause session</button>) : null}
         </div>
       </header>
 
@@ -1325,7 +1325,7 @@ export function DispositionExecutionWorkspace({
             timeline={visibleBuyerTimeline}
           />
         </div>
-      ) : <section className={styles.panel}><div className={styles.empty}><UserRound size={28} /><strong>Add an investor to begin QuickDial</strong><span>Use the action directly above. Once a name and phone or email is saved, that investor becomes the active conversation here—deal and packet information can remain incomplete.</span></div></section>}
+      ) : null}
 
       {workspace.showings.length ? <details className={styles.secondaryTools}><summary><CalendarClock size={16} /><span><strong>Scheduled showings</strong><small>{workspace.showings.length} access appointment{workspace.showings.length === 1 ? "" : "s"}</small></span></summary><div className={styles.showingList}>{workspace.showings.map((showing) => <ShowingRow busy={busy === `showing-${showing.id}`} canEdit={canEditDeals} key={showing.id} onUpdate={updateShowing} showing={showing} />)}</div></details> : null}
     </section>

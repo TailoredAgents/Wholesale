@@ -107,7 +107,9 @@ export function DispositionQueueBuilder({
       { cache: "no-store" },
     );
     setPool(result);
-    setBuilderOpen((current) => current || !result.entries.some((entry) => entry.buyer_id));
+    setBuilderOpen((current) => current || result.entries.some(
+      (entry) => entry.source_type === "external" && !entry.buyer_id,
+    ));
     return result;
   }, [caseId, request]);
 
@@ -391,8 +393,8 @@ export function DispositionQueueBuilder({
         <summary>
           <span className={styles.summaryIcon}><UsersRound size={18} /></span>
           <span className={styles.summaryCopy}>
-            <strong>Find and rank investors</strong>
-            <small>Pull DealMachine results, add known buyers, and build the outreach list here</small>
+            <strong>{quickDialQueueCount ? "Find and rank investors" : "More ways to build this list"}</strong>
+            <small>{quickDialQueueCount ? "Pull DealMachine results, add known buyers, and build the outreach list here" : "Buyer Network ranking, provider discovery, and candidate review"}</small>
           </span>
           <span className={styles.summaryMetrics}>
             <b>{quickDialQueueCount} in QuickDial</b>

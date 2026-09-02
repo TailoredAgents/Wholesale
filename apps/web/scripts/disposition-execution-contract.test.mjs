@@ -104,12 +104,15 @@ test("investors can be discovered, reviewed, reranked, added, and pinned inside 
   ]);
 
   assert.match(parent, /canEditBuyers=\{canEditBuyers\}/);
+  assert.match(parent, /const request = useCallback\(async function request<T>/);
+  assert.doesNotMatch(parent, /async function request<T>\(path/);
   assert.match(workspace, /<DispositionQueueBuilder/);
   assert.match(workspace, /assetClass=\{workspace\.asset_class\}/);
   assert.match(workspace, /quickDialQueueCount=\{candidates\.length\}/);
   assert.match(queueBuilder, /Find and rank investors/);
   assert.match(queueBuilder, /Pull DealMachine results, add known buyers, and build the outreach list here/);
-  assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| !result\.entries\.some/);
+  assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| result\.entries\.some/);
+  assert.match(queueBuilder, /entry\.source_type === "external" && !entry\.buyer_id/);
   assert.match(queueBuilder, /Quick add investor/);
   assert.match(queueBuilder, /<BuyerForm compact/);
   assert.match(queueBuilder, /QuickDial is empty/);
