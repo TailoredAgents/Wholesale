@@ -13,11 +13,9 @@ import {
   LoaderCircle,
   LockKeyhole,
   Link2,
-  Megaphone,
   RefreshCw,
   ShieldAlert,
   Upload,
-  UsersRound,
   X,
   XCircle,
 } from "lucide-react";
@@ -755,11 +753,9 @@ export function DispositionPackageReadiness({
           </div>
           <button disabled={!canEditDeals || !data.can_approve || !latestVersion || Boolean(latestArtifactScanIssue) || latestVersion.status === "approved" || busyAction !== null} onClick={openApproval} type="button"><Check aria-hidden="true" size={15} />Approve {versionName(latestVersion)}</button>
           <button disabled={!approvedVersion || busyAction !== null} onClick={() => approvedVersion && void download(`/api/v1/dispositions/cases/${caseId}/package/versions/${approvedVersion.id}/package.pdf`, approvedVersion.pdf_file_name ?? `stonegate-investor-package-v${approvedVersion.version_number}.pdf`)} type="button"><Download aria-hidden="true" size={15} />Download approved {versionName(approvedVersion)} PDF</button>
-          {assetClass === "house" ? <>
-            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || busyAction !== null} onClick={() => void mutate("rank", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/matches`, { method: "POST", body: "{}" }), "Buyer pool refreshed from the latest available deal facts.")} type="button"><UsersRound aria-hidden="true" size={15} />Refresh buyer ranking</button>
-            <button aria-describedby="release-version-requirement" disabled={!canEditDeals || busyAction !== null} onClick={() => void mutate("release", () => requestRef.current(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, { method: "POST", body: "{}" }), "Recipient pool prepared. No buyer messages were sent.")} type="button"><Megaphone aria-hidden="true" size={15} />Prepare recipient pool</button>
-            <p id="release-version-requirement">Ranking and recipient preparation stay available while checklist work continues. Incomplete package, proof, or match evidence is carried forward as a visible warning. No buyer communication is sent by these controls.</p>
-          </> : <p>Upload and approve the exact Land packet when useful. The Buyer pool is available now for asset-aware matching, independently of package approval. Residential recipient preparation remains unavailable for Land.</p>}
+          {assetClass === "house"
+            ? <p id="release-version-requirement">Find and rank investors in <strong>Find buyers</strong>. Prepare exact bulk recipients in <strong>Bulk outreach</strong>. Both remain available while checklist work continues, and neither action sends a buyer message by itself.</p>
+            : <p>Upload and approve the exact Land packet when useful. Find buyers remains available now for asset-aware matching, independently of package approval. Residential recipient preparation remains unavailable for Land.</p>}
         </section>
       </div>
 

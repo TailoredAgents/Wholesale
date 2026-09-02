@@ -43,6 +43,14 @@ approvals remain audited actions, but the standard Disposition representative ha
 permissions, including `dispositions:send_bulk_outreach`, without receiving the global marketing
 permission `communications:send_bulk` or unrelated administrative authority.
 
+Dispositions is a first-class Operations navigation destination at
+`/os/deals?view=disposition`. It requires both Deal and Buyer visibility and remains a desk over the
+canonical Deal/Disposition Case records. Active Deal cards link directly to **Packet**, **Find
+buyers**, **Reach out**, and **Offers**. The House workbench keeps **Packet**, **Find buyers**,
+**One-to-one**, **Bulk outreach**, and **Offers & closing** primary; **External distribution** is
+under **More**, and reconciliation is entered through Deal Finance. Advisory checklists are
+collapsed by default but remain visible and auditable.
+
 ## 3. Current Production Shape
 
 ### 3.1 Repository And Deployment
@@ -692,7 +700,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
   every access and labels the same bytes **Preliminary** when the artifact was preliminary at issue
   or its package/source facts later drift; the public download never exposes private economics.
 - Deal packages, matches, engagement, offers, proof, buyer selection, reconciliation, and
-  Disposition Copilot drafts remain server governed. **Prepare recipient pool** records exact
+  Disposition Copilot drafts remain server governed. In **Bulk outreach**, **Prepare recipient pool** records exact
   `prepared_not_sent` recipients and sends no buyer communication. The separate House **Outreach**
   view can turn selected owned-network recipients into an immutable exact-message revision, but an
   authorized human must approve and release it. The standard Disposition representative is
@@ -701,8 +709,8 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - The House **Offer Room** compares normalized offer terms and execution evidence side by side. It
   keeps immutable offer revisions, negotiation events, selection versions, replacements, and buyer
   outcomes; a score or AI recommendation cannot select a buyer.
-- The House **Buyer pool** shows the full ranked canonical pool and supports work on any appropriate
-  buyer. Its separate **Call queue** presents one ranked buyer at a time for deliberate execution,
+- The House **Find buyers** workbench shows the full ranked canonical pool and supports work on any appropriate
+  buyer. Its separate **One-to-one** workbench presents one ranked buyer at a time for deliberate execution,
   but that presentation does not lock the Buyer pool or another disposition task. The queue shows saved fit evidence,
   uses permission-aware pre-call SMS and Stonegate voice, can text an exact usable packet through a
   72-hour secure link that recomputes **Preliminary** state at each access, records structured

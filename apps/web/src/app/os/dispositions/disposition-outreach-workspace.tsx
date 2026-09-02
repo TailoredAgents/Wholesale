@@ -136,6 +136,7 @@ function DeliveryCard({ delivery }: { delivery: DispositionOutreachDelivery }) {
 
 export function DispositionOutreachWorkspace({
   canApprove,
+  canEditDeals,
   canManage,
   canSendBulk,
   caseId,
@@ -144,6 +145,7 @@ export function DispositionOutreachWorkspace({
   request,
 }: {
   canApprove: boolean;
+  canEditDeals: boolean;
   canManage: boolean;
   canSendBulk: boolean;
   caseId: string;
@@ -236,6 +238,18 @@ export function DispositionOutreachWorkspace({
     } finally {
       setBusyAction(null);
     }
+  }
+
+  async function prepareRecipientPool() {
+    if (!canEditDeals) return;
+    await mutate(
+      "prepare-pool",
+      () => request(`/api/v1/dispositions/cases/${caseId}/campaigns/release`, {
+        method: "POST",
+        body: "{}",
+      }),
+      "Recipient pool prepared from the current Buyer Network. No buyer messages were sent.",
+    );
   }
 
   function toggleChannel(recipientId: string, channel: DispositionOutreachChannel) {
@@ -362,6 +376,14 @@ export function DispositionOutreachWorkspace({
           <strong>{preliminary ? "Preliminary" : "Ready"}</strong>
           <span>{workspace.prepared_recipients.length} prepared buyers</span>
           <small>Hard cap {workspace.hard_recipient_cap} deliveries</small>
+          <button
+            disabled={!canEditDeals || busyAction !== null}
+            onClick={() => void prepareRecipientPool()}
+            type="button"
+          >
+            <UsersRound aria-hidden="true" size={14} />
+            {busyAction === "prepare-pool" ? "Preparing…" : "Prepare recipient pool"}
+          </button>
         </div>
       </header>
 
@@ -398,7 +420,7 @@ export function DispositionOutreachWorkspace({
               </div>
             </article>
           ))}
-          {!workspace.prepared_recipients.length ? <p className={styles.empty}>Prepare a recipient pool from the Package tab. Qualification and proof gaps remain visible warnings rather than hiding buyers.</p> : null}
+          {!workspace.prepared_recipients.length ? <p className={styles.empty}>Use <strong>Prepare recipient pool</strong> above. Qualification and proof gaps remain visible warnings rather than hiding buyers.</p> : null}
         </div>
 
         <div className={styles.copyGrid}>

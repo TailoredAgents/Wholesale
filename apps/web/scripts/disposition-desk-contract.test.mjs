@@ -86,9 +86,15 @@ test("the desk exposes six operational queues with truthful scoped work context"
   assert.match(desk, /data\.coverage_warnings/);
   assert.match(desk, /caseWorkbench\?\.best_action_href \?\? item\.primary_action\.href/);
   assert.match(desk, /Suggested action \(optional\)/);
-  assert.match(desk, /<details className=\{styles\.cardChecklist\} open>/);
+  assert.match(desk, /<details className=\{styles\.cardChecklist\}>/);
   assert.match(desk, /All checklist issues/);
   assert.match(desk, /Also available now/);
+  assert.match(desk, /className=\{styles\.directActions\}/);
+  for (const label of ["Packet", "Find buyers", "Reach out", "Offers"]) {
+    assert.match(desk, new RegExp(`label: "${label}"`));
+  }
+  assert.match(desk, /item\.asset_class !== "land"/);
+  assert.match(desk, /Work this deal/);
 });
 
 test("stale, unavailable, and truncated data remain explicit without disabling canonical work", () => {
@@ -132,8 +138,8 @@ test("buyer follow-ups can be scheduled from the existing disposition record", (
   assert.match(dispositionWorkspace, /Log inquiry, showing, or follow-up/);
 });
 
-test("the existing deal buyer tab hosts one governed, explainable buyer pool", () => {
-  assert.match(dispositionWorkspace, /tab === "buyers"\) return "Buyer pool"/);
+test("the Find buyers workbench hosts one governed, explainable buyer pool", () => {
+  assert.match(dispositionWorkspace, /tab === "buyers"\) return "Find buyers"/);
   assert.match(dispositionWorkspace, /<DispositionBuyerPool/);
   assert.match(buyerPool, /useState<DispositionBuyerPoolSource>/);
   assert.match(buyerPool, /useState<DispositionBuyerPoolStage>/);
@@ -160,6 +166,9 @@ test("the existing deal buyer tab hosts one governed, explainable buyer pool", (
 
 test("the disposition role default and responsive controls use the canonical desk", () => {
   assert.match(navigation, /return "\/os\/deals\?view=disposition"/);
+  assert.match(navigation, /label: "Dispositions"/);
+  assert.match(navigation, /allPermissions: \["deals:view", "buyers:view"\]/);
+  assert.match(navigation, /activePaths: \["\/os\/dispositions"\]/);
   assert.equal((iaContract.match(/defaultRoute: "\/os\/deals\?view=disposition"/g) ?? []).length, 2);
   assert.match(iaContract, /targetCanonical: "\/os\/deals\?view=disposition"/);
   assert.match(deskStyles, /\.coverageList a \{ width: 44px; height: 44px/);

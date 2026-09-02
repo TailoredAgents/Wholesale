@@ -365,7 +365,7 @@ function OsShellContent({ children, pendingApprovalCount = 0, profile }: OsShell
             <StonegateLogo className={styles.osBrandLogo} inverse />
             <div className={styles.brandCopy}>
               <strong className={styles.brandTitle} id="stonegate-workspace-title">Operating System</strong>
-              <span>Acquisitions and deal execution.</span>
+              <span>Acquisitions, dispositions, and deal execution.</span>
             </div>
           </div>
           <button

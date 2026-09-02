@@ -248,7 +248,7 @@ intentional.
 | Lead Manager | Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
 | Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
-| Dispositions Manager / Rep | Deals | Buyer matching, package and outreach preparation, reply review, offers, buyer outcome, and backup |
+| Dispositions Manager / Rep | Dispositions | Buyer matching, package and outreach preparation, reply review, offers, buyer outcome, and backup |
 | Transaction Coordinator | Deals | Contract-to-close checklist, parties, documents, dates, funding, and closing evidence |
 | Finance / Accounting | Finance | Revenue, reconciliation, compensation, payment state, and export |
 | Marketing Manager | Marketing | Attribution, funnel, source economics, and conversion exports |
@@ -283,7 +283,7 @@ is present in Clerk authorized parties and API CORS configuration.
 
 ## Navigation
 
-The desktop sidebar and mobile navigation drawer use four groups and no more than 11 destinations.
+The desktop sidebar and mobile navigation drawer use four groups and no more than 12 destinations.
 The exact list is reduced by role and permission.
 
 ### Work
@@ -297,7 +297,8 @@ The exact list is reduced by role and permission.
 
 - **Prospecting:** Campaign preparation, prospect imports, calling work, and warm handoff.
 - **Leads:** Warm-lead qualification, seller records, pipeline, follow-up, and underwriting.
-- **Deals:** Contract, approval, closing, and disposition entry point.
+- **Dispositions:** Buyer-placement queues, investor packets, buyer search, outreach, and offers.
+- **Deals:** Shared contract, approval, and closing records.
 - **Buyers:** Buyer CRM, criteria, proof of funds, and reliability.
 
 ### Business
@@ -2234,7 +2235,7 @@ the assistant.
 
 ### Disposition Desk
 
-Open **Deals**, then select **Disposition desk**. The URL is `/os/deals?view=disposition`.
+Select **Dispositions** in the left menu. The URL is `/os/deals?view=disposition`.
 
 The desk has six views:
 
@@ -2260,8 +2261,9 @@ package is not ready, a deal lacks enough matched buyers or offers, or a selecte
 coverage. These are attention signals, not workflow locks. An external-provider warning does not
 mean the owned Buyer Network or manual work is unavailable.
 
-Use **Add buyer** for a new relationship. Use **Open deal** for package, matching, follow-up, offer,
-or deadline work. Use **Open reply** for the actual buyer conversation. Refresh the page if the
+Use **Add buyer** for a new relationship. On an Active Deal card, use **Packet**, **Find buyers**,
+**Reach out**, or **Offers** to enter the needed workbench directly; these actions remain available
+while checklist items are open. Use **Open reply** for the actual buyer conversation. Refresh the page if the
 desk reports stale data; cached owned records remain usable when an outside provider is unavailable.
 The route shows a loading state during navigation. If Stonegate cannot verify your access profile,
 the standard Deal queue stays readable where possible but editing and disposition navigation are
@@ -2362,17 +2364,19 @@ Stonegate's Resend or Twilio configuration.
 
 ### Disposition Case
 
-Open the property in **Deals**, then select **Disposition** after the seller contract is executed.
-For an existing House case, the embedded tabs are:
+Select **Dispositions**, open the active property, and choose the workbench you need. The Deal still
+owns the shared record. For an existing House case, the primary workbenches are:
 
-- **Package**
-- **Buyers**
-- **Outreach**
-- **InvestorLift**
-- **Offer Room**
-- **Reconciliation**
+- **Packet**
+- **Find buyers**
+- **One-to-one**
+- **Bulk outreach**
+- **Offers & closing**
 
-Land cases expose **Package**, the asset-aware **Buyers** pool, and supported pre-close engagement
+Use **More > External distribution** for the manual InvestorLift handoff. Open **Deal Finance** for
+finance reconciliation; its context bar returns to Dispositions.
+
+Land cases expose **Packet**, the asset-aware **Find buyers** pool, and supported pre-close engagement
 work only. Land outreach, call queue, Offer Room, buyer selection/funding,
 Reconciliation/closing, InvestorLift, and generated packets are not active.
 
@@ -2385,9 +2389,9 @@ with private-economics access may override those starting values, but missing ow
 optional economics never prevents the shell from opening. Return to Deals afterward; the case will
 appear in the same Deal record.
 
-### Package
+### Packet
 
-The Package workspace supports contracted House and Land deals. House can use either packet path;
+The Packet workspace supports contracted House and Land deals. House can use either packet path;
 Land uses **Use existing PDF** until Stonegate's generated Land packet is released:
 
 1. At **Choose your packet path**, select **Build with Stonegate** or **Use existing PDF** for a
@@ -2419,9 +2423,10 @@ Land uses **Use existing PDF** until Stonegate's generated Land packet is releas
    facts later drift, the current download also receives the **Preliminary** label while returning
    the same frozen bytes. Use **Download approved vN PDF** to retrieve the approved version, not to
    override that live currentness warning.
-9. **Refresh buyer ranking** remains available from current case facts even when package or setup
-   checklist items are open. **Prepare recipient pool** records the recipients and exact artifact
-   selected for a governed release; it does not contact anyone.
+9. Open **Find buyers** and select **Refresh buyer ranking** whenever current case facts are useful,
+   even when package or setup checklist items are open. For governed House bulk delivery, open
+   **Bulk outreach** and select **Prepare recipient pool**; it records recipients and the exact
+   artifact but contacts nobody.
 
 Creating either draft requires `deals:edit`; changing private economics also requires the private-
 economics permission. Reviewing or downloading an unapproved external PDF requires `deals:edit` or
@@ -2440,11 +2445,11 @@ have since drifted. That label change never rewrites the artifact; governed outr
 House-only release.
 
 Preparation binds each recipient to that exact version and stored artifact hash. Its status is
-`prepared_not_sent`: **Prepare recipient pool** sends no email or SMS. The separate **Outreach** tab
+`prepared_not_sent`: **Prepare recipient pool** in **Bulk outreach** sends no email or SMS. That workbench
 uses this reviewed pool for governed House delivery. Land uses the asset-aware Buyer pool, while
 residential Outreach, Offer Room, InvestorLift, and the call queue remain unavailable.
 
-### Buyers
+### Find Buyers
 
 Use Stonegate's existing Buyer CRM first:
 
@@ -2500,11 +2505,15 @@ outside the Buyer CRM until a person makes an explicit conversion decision. The 
 configured for the governed DS11 workflow, but DS12 real-deal result and credit acceptance is still
 required before routine dependence. DealMachine underwriting comps remain disabled.
 
-### Outreach
+### Bulk Outreach
 
-Use **Outreach** for a governed House message revision. Package and launch-readiness findings remain
+Use **Bulk outreach** for a governed House message revision. Package and launch-readiness findings remain
 visible, but they do not prevent authorized staff from shopping the deal through the buyer pool,
 one-to-one calls, follow-up, activity, and offers:
+
+At the top of the workbench, select **Prepare recipient pool** when you want to refresh the exact
+owned-network recipients and current artifact provenance. This creates `prepared_not_sent` evidence
+only; it does not email or text anyone.
 
 1. Read the readiness findings and state uncertain facts truthfully. If the revision will attach or
    link a package, select an exact usable artifact. Its revision and buyer-facing delivery remain
@@ -2544,13 +2553,13 @@ InvestorLift live transport and Land outreach remain disabled. Repository implem
 establish real Resend/Twilio acceptance; the owner must complete a controlled, capped production
 test before broad use.
 
-### InvestorLift Manual Handoff
+### External Distribution: InvestorLift Manual Handoff
 
-Use the **InvestorLift** view only for a contracted **House** disposition case. This is a guided
+Use **More > External distribution** only for a contracted **House** disposition case. This is a guided
 manual handoff; it does not connect to InvestorLift's servers and does not require an InvestorLift
 credential in Stonegate.
 
-1. Choose the exact usable House **Package** artifact that will be represented by this provider
+1. Choose the exact usable House **Packet** artifact that will be represented by this provider
    handoff. Open setup and readiness items remain visible but are advisory. An incomplete or
    unapproved source is labeled **Preliminary** throughout the handoff. If source facts drift after
    preparation, the workspace and current bundle download also switch to **Preliminary** while the
@@ -2586,10 +2595,10 @@ Do not enter an API key, token, password, or webhook secret in the handoff forms
 or exports. Live transport remains blocked until the verification record in
 `INVESTORLIFT_PROVIDER_VERIFICATION.md` is completed and approved.
 
-### Offer Room
+### Offers And Closing
 
-The Offer Room is available for a contracted **House** disposition case. Open the Deal, select
-**Disposition**, then select **Offer Room**.
+The Offer Room is available for a contracted **House** disposition case. Select **Dispositions**,
+open the active deal, then select **Offers & closing**.
 
 1. Select **Record offer** and save the buyer's amount, earnest money, deposit deadline,
    due-diligence period, contingencies, proposed closing, funding method and confidence, proof of

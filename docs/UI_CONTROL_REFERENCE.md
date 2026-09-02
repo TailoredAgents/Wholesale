@@ -81,6 +81,7 @@ is relevant and the required permission is present.
 | Calendar | Operations Assistant, Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
 | Prospecting | Operations Assistant, Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Analytics requires `operations:manage`; native Dialer Control and Pilot Acceptance are dormant |
 | Leads | Administrator, Operations Assistant, Lead Manager, Acquisitions | `leads:view` |
+| Dispositions | Administrator, Operations Assistant, Dispositions | Both `deals:view` and `buyers:view` |
 | Deals | Operations Assistant, Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
 | Buyers | Operations Assistant, Dispositions | `buyers:view` |
 | Finance | Finance / Accounting | `financials:view` or `compensation:view` |
@@ -1538,9 +1539,12 @@ manual exact-artifact handoff and reviewable evidence workflow described below.
 
 ## Dispositions
 
-The Dispositions workspace opens a case for a contracted property. House uses **Package**,
-**Buyers**, **Outreach**, **InvestorLift**, **Offer Room**, and **Reconciliation** views. Land uses
-**Package**, the asset-aware **Buyers** pool, and supported pre-close engagement controls only.
+Select **Dispositions** in the left menu to open the buyer-placement desk. Active Deal cards expose
+direct **Packet**, **Find buyers**, **Reach out**, and **Offers** navigation. House uses the primary
+**Packet**, **Find buyers**, **One-to-one**, **Bulk outreach**, and **Offers & closing** workbenches.
+Use **More > External distribution** for the manual InvestorLift handoff and **Deal Finance** for
+reconciliation. Land uses **Packet**, the asset-aware **Find buyers** pool, and supported pre-close
+engagement controls only.
 
 ### Case And Package
 
@@ -1562,8 +1566,6 @@ The Dispositions workspace opens a case for a contracted property. House uses **
 | Approval reason and attestation | Records what the approver reviewed and confirms no private or unverified claim is presented as fact | Both are required before **Approve exact version** |
 | **Download approved vN PDF** / version **PDF** | Downloads the exact PDF bytes stored for that version | Approval does not regenerate the artifact. Unapproved use retains the Preliminary label and narrower draft access; if source facts later drift, the current download also labels the unchanged bytes Preliminary |
 | Version history | Shows immutable version number, status, evidence currency, fingerprint, approver, reason, and artifact | A material source change marks the prior approval non-current for buyer-facing artifact use; it does not lock unrelated buyer work |
-| **Refresh buyer ranking** | Scores the asset-aware buyer pool from current case facts | House and Land use their own asset-aware buy-box criteria; missing/stale package and readiness items appear as warnings, not disabled states |
-| **Prepare recipient pool** | Records selected recipients against the exact package version, its approved/Preliminary state, and artifact hash as `prepared_not_sent` | Sends no email or SMS; the separate House Outreach view is required for delivery, and Land remains blocked |
 
 Secure links use the exact saved artifact. Currentness is recomputed on every access: a link issued
 from a Preliminary package stays Preliminary, and an approved/current link downgrades visibly to
@@ -1580,7 +1582,7 @@ Stonegate-generated Land packet controls.
 | --- | --- | --- |
 | Internal match list | Ranks stored buyers against market, property, price, strategy, funding, and performance | Shows the full available pool; readiness and proof gaps are warnings, and the operator may choose any appropriate buyer |
 | Match explanation | Shows why a buyer ranked highly or poorly | Read-only |
-| **Rank buyers** | Refreshes the buyer recommendation using current case facts | Available while setup or package checklist items are incomplete; output is advisory |
+| **Refresh buyer ranking** | Refreshes the buyer recommendation using current case facts | Located in **Find buyers**; available while setup or package checklist items are incomplete; output is advisory |
 | DealMachine plan and credits | Shows live connection, paid plan, reset date, available credits, saved tier results, deal usage, and monthly usage | Discovery is House-only and independent from disabled DealMachine underwriting comps |
 | Best-Fit 10 / Expand Nearby 20 / Search Regional Investors 40 | Progressively widens a deal-specific search for up to 10, 20, or 40 additional net-new candidates | Each tier unlocks only after the prior tier completes; 30/60/120 tier caps, 250 per deal, and 2,000 per month are enforced by the server |
 | **Preview search estimate** | Validates the exact tier request and shows DealMachine's current estimate without consuming credits | Requires buyer-edit and deal-edit permissions, a connected paid plan, and enough authority for the displayed 30/60/120 binding tier ceiling; package/readiness state is shown but is not a gate |
@@ -1595,7 +1597,7 @@ Stonegate-generated Land packet controls.
 | Buyer activity | Logs contact, interest, showing, pass reason, and follow-up | Requires a selected buyer, not a completed package or prior rank-order step |
 | **Log activity** | Saves the buyer touchpoint | Does not send communication unless explicitly using a channel action |
 
-### Buyer Execution And Call Queue
+### One-To-One Buyer Execution
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -1657,14 +1659,15 @@ measures stay unavailable without attributable cost evidence. The report cannot 
 select a Buyer, record an outcome, fund a transaction, post finance, or rewrite historical
 attribution.
 
-### Governed Outreach
+### Bulk Outreach
 
-The **Outreach** view is available only for the current House disposition workflow and buyers in
+The **Bulk outreach** workbench is available only for the current House disposition workflow and buyers in
 Stonegate's owned Buyer Network. Its repository implementation uses existing Resend and Twilio
 configuration; a visible ready state is not evidence that real provider acceptance has passed.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| **Prepare recipient pool** | Records selected recipients against the exact package version, its approved/Preliminary state, and artifact hash as `prepared_not_sent` | Located at the top of **Bulk outreach**; sends no email or SMS and remains available while checklist work continues |
 | Readiness | Shows package, artifact, recipient, evidence, and setup findings for the planned revision | Informational; incomplete/stale items do not lock the desk. If a package will be attached or linked, choose an exact usable artifact and preserve its Preliminary state when applicable |
 | Recipient and channel selection | Selects the exact owned-network buyers and email and/or SMS paths included in the revision | The operator chooses the intended buyers; email plus SMS to one buyer counts as two deliveries |
 | Delivery cap | Shows the number of recipient-channel deliveries in the current selection | Hard maximum of 25 per immutable revision |
@@ -1692,9 +1695,9 @@ revision was prepared or approved, the recipient-visible attachment/current stat
 **Preliminary** while the message, recipients, hash, and PDF bytes remain the approved immutable
 revision.
 
-### InvestorLift Manual Handoff
+### External Distribution: InvestorLift Manual Handoff
 
-The **InvestorLift** view is available for a House disposition case. It is a guided manual handoff,
+The **More > External distribution** view is available for a House disposition case. It is a guided manual handoff,
 not a live integration: no control calls InvestorLift, publishes a campaign, imports a buyer, or
 claims that God Mode or Artemis data is synchronized.
 
@@ -1717,7 +1720,7 @@ An older InvestorLift link may remain visible after a newer revision is prepared
 history only. Staff must publish and record the current approved revision before adding new provider
 activity or status observations.
 
-### Offer Room
+### Offers And Closing
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -1742,7 +1745,10 @@ activity or status observations.
 | Negotiation / selection / outcome history | Shows immutable human and buyer decision history | Read-only |
 | Funded close gate | Atomically records the selected buyer's completed close and history | This hard truth boundary requires the selected buyer, an agreement bound to the same buyer and offer economics, matching assignee identity, executed evidence, and deposit evidence or a documented authorized waiver |
 
-### Reconciliation
+### Deal Finance Reconciliation
+
+Open reconciliation through **Deal Finance** from the Dispositions context. The context bar keeps a
+direct return to the active Dispositions case; reconciliation is not a primary Dispositions tab.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |

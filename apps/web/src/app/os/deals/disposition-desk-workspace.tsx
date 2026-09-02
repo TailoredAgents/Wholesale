@@ -129,6 +129,32 @@ function toneForSeverity(severity: DispositionDeskItem["severity"]) {
   return "info" as const;
 }
 
+function dealWorkbenchHref(dealId: string, dispositionTab: string) {
+  const query = new URLSearchParams({
+    deal: dealId,
+    display: "queue",
+    dispositionTab,
+    tab: "disposition",
+    view: "all",
+  });
+  return `/os/deals?${query.toString()}`;
+}
+
+function directDealActions(item: DispositionDeskItem) {
+  if (!item.deal_id || !item.disposition_case_id) return [];
+  const actions = [
+    { label: "Packet", href: dealWorkbenchHref(item.deal_id, "package") },
+    { label: "Find buyers", href: dealWorkbenchHref(item.deal_id, "buyers") },
+  ];
+  if (item.asset_class !== "land") {
+    actions.push(
+      { label: "Reach out", href: dealWorkbenchHref(item.deal_id, "execution") },
+      { label: "Offers", href: dealWorkbenchHref(item.deal_id, "offers") },
+    );
+  }
+  return actions;
+}
+
 function WorkItem({ item }: { item: DispositionDeskItem }) {
   const caseWorkbench = item.category === "active_deals" && item.checklist
     ? item.checklist
@@ -143,6 +169,7 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
     : item.secondary_action
       ? [item.secondary_action]
       : [];
+  const workbenchActions = caseWorkbench ? directDealActions(item) : [];
   return (
     <article className={styles.workCard} data-severity={item.severity}>
       <header className={styles.workHeader}>
@@ -176,7 +203,7 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
       </dl>
 
       {caseWorkbench ? (
-        <details className={styles.cardChecklist} open>
+        <details className={styles.cardChecklist}>
           <summary><span>All checklist issues</span><strong>{caseWorkbench.warning_count}</strong></summary>
           <div>
             {checklistIssues.map((issue) => (
@@ -197,6 +224,17 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
           item when practical; it is advisory guidance, not a required first step. Use any
           disposition actions available on this card while setup remains incomplete.
         </p>
+      ) : null}
+
+      {workbenchActions.length ? (
+        <nav aria-label={`Work ${item.title}`} className={styles.directActions}>
+          <span>Work this deal</span>
+          <div>
+            {workbenchActions.map((action) => (
+              <Link href={action.href} key={action.label}>{action.label}</Link>
+            ))}
+          </div>
+        </nav>
       ) : null}
 
       <footer className={styles.workActions}>

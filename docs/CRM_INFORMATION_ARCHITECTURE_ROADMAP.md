@@ -206,7 +206,7 @@ must not create unrelated task systems per department.
 
 ### 7.1 Sidebar
 
-The sidebar uses the target 11 destinations. Section labels remain short and stable. An item is
+The sidebar uses the target 12 destinations. Section labels remain short and stable. An item is
 hidden when the signed-in user has neither the role nor permission required to use it.
 
 Do not add integration providers, individual employees, saved filters, or pipeline stages to the
@@ -549,9 +549,10 @@ stage.
 
 ### 8.7 Deals
 
-Deals combines the employee experience currently split between Transactions and Dispositions.
-The underlying Deal, Transaction, Disposition Case, Buyer Offer, Contract Package, document,
-checklist, accounting, and reconciliation records remain separate.
+Deals is the shared Deal record and closing workspace. Dispositions is a dedicated operator desk
+over the same Deal and Disposition Case records. The underlying Deal, Transaction, Disposition
+Case, Buyer Offer, Contract Package, document, checklist, accounting, and reconciliation records
+remain separate.
 
 Default saved views:
 
@@ -610,9 +611,9 @@ Disposition includes package readiness, buyer matches, marketing, engagement, of
 deposits, primary buyer, and backup buyer. Buyer matching may be previewed during Seller Lead
 underwriting, but outbound buyer marketing remains gated by the approved deal workflow.
 
-Transactions and Dispositions may retain nested compatibility routes during development. They
-must not remain competing top-level sidebar destinations after the Deal workspace passes role
-acceptance.
+Transactions may retain a nested compatibility route during development. Dispositions is a
+first-class role desk, but it remains query-backed by the canonical Deal workspace and must not
+create competing business records.
 
 ### 8.8 Buyers
 
@@ -746,7 +747,7 @@ Settings sections remain permission-filtered. Consolidating navigation does not 
 | Acquisitions Closer | Calendar, today's appointments | Home, Inbox, Tasks, Calendar, Leads, Deals when assigned |
 | VA Caller | Prospecting, My Calls | Prospecting and account setup only |
 | Transaction Coordinator | Deals, Closing Exceptions | Home, Inbox, Tasks, Calendar, Deals |
-| Dispositions | Deals, Ready For Disposition | Home, Inbox, Tasks, Calendar, Deals, Buyers |
+| Dispositions | Dispositions, Today | Home, Inbox, Tasks, Calendar, Dispositions, Deals, Buyers |
 | Finance and bookkeeping | Finance | Home, Inbox when granted, Tasks, Calendar when needed, Deals summary, Finance |
 | Marketing | Marketing | Home, Prospecting summary when granted, Marketing |
 
@@ -897,7 +898,7 @@ Scope:
 
 Exit criteria:
 
-- owner sees no more than 11 primary destinations
+- owner sees no more than 12 primary destinations
 - each role sees only authorized destinations
 - every existing page remains reachable
 - active-route highlighting works for nested and compatibility routes
@@ -1125,12 +1126,12 @@ An authorized user can:
 
 ### 14.2 Role Simplicity
 
-- Owner: no more than 11 primary destinations
+- Owner: no more than 12 primary destinations
 - VA: Prospecting plus personal account setup only
 - Lead Manager: normal work does not require Settings, Deals, Buyers, Finance, or AI Control
 - Closer: normal appointment work begins in Calendar
 - Transaction Coordinator: normal closing work begins in Deals
-- Dispositions: normal buyer placement work begins in Deals
+- Dispositions: normal buyer placement work begins in Dispositions; the shared Deal record remains available
 - Finance: company books remain isolated from acquisition roles
 
 ### 14.3 Record Integrity
@@ -1282,7 +1283,7 @@ The check fails when:
 - a static internal OS link or query key has no route owner
 - an API role or permission changes without an IA review
 - a Help control-reference section is added or removed without a future owner
-- the target exceeds 11 destinations or violates the explicit VA and AI-service boundaries
+- the target exceeds 12 destinations or violates the explicit VA and AI-service boundaries
 
 CI runs this contract before the web production build.
 
@@ -1321,7 +1322,7 @@ IA2 was implemented on July 30, 2026.
 
 ### 20.1 Live Navigation
 
-The owner sidebar now contains exactly 11 destinations:
+At the July 30 IA2 release, the owner sidebar contained exactly 11 destinations:
 
 - Work: Home, Inbox, Tasks, Calendar
 - Operations: Prospecting, Leads, Deals, Buyers
@@ -1347,7 +1348,8 @@ Legacy routes activate the correct primary destination:
 - Lead Desk, Seller Pipeline, Underwriting, and Seller records activate Leads.
 - Field Operations activates Calendar.
 - Approvals activates Tasks.
-- Transactions and Dispositions activate Deals.
+- Transactions activates Deals. Disposition case links resolve to the Dispositions desk and its
+  canonical embedded Deal record.
 - My Setup, Operations, Company & Policy, and AI Control activate Settings.
 
 ### 20.3 Global Controls
@@ -1683,7 +1685,7 @@ management journey strips above their actual record controls.
 
 ## 28. IA10 Compatibility And Role Acceptance Implementation
 
-The OS exposes only the approved 11 primary destinations, reduced by role and permission. Focused
+The OS exposes only the approved 12 primary destinations, reduced by role and permission. Focused
 queues are local views inside Prospecting, Leads, Tasks, Calendar, Deals, and Settings.
 My Setup remains permanently available from the signed-in role block.
 
@@ -1698,3 +1700,17 @@ Legacy links preserve context without advertising duplicate workspaces:
 The architecture contract verifies current routes, query parameters, static links, canonical
 navigation, role visibility, default workspace, permission inventory, Help source ownership, and
 retired navigation removal. Current manuals teach only the canonical employee workflow.
+
+## 29. Dispositions Navigation Amendment
+
+The September 1, 2026 navigation amendment adds **Dispositions** under Operations between Leads and
+Deals. It opens `/os/deals?view=disposition`, requires both `deals:view` and `buyers:view`, and is
+visible to authorized Dispositions staff, Operations Assistants, administrators, and owners. The
+legacy `/os/dispositions` route remains a repair/setup and context-preserving entry, not a competing
+record system.
+
+The desk is branded **Dispositions** and gives each active deal direct **Packet**, **Find buyers**,
+**Reach out**, and **Offers** actions. Within a House deal, the primary workbenches are **Packet**,
+**Find buyers**, **One-to-one**, **Bulk outreach**, and **Offers & closing**. Manual InvestorLift
+handoff is labeled **External distribution** under **More**; reconciliation is reached through
+Deal Finance. Checklists remain visible but collapsed by default and never impose task order.

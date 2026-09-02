@@ -14,7 +14,7 @@ const transaction = readFileSync(resolve(appRoot, "os/transactions/transaction-w
 
 test("DS7 replaces the basic offer list with one canonical Offer Room", () => {
   assert.match(disposition, /<DispositionOfferRoom/);
-  assert.match(disposition, /tab === "offers"\) return "Offer Room"/);
+  assert.match(disposition, /tab === "offers"\) return "Offers & closing"/);
   assert.doesNotMatch(disposition, /<h4>Buyer offers<\/h4>/);
   assert.match(deals, /"offers"/);
   assert.match(api, /export type DispositionOfferRoomWorkspace/);

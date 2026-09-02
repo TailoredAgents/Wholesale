@@ -9,6 +9,24 @@
 .heroStatus strong { color: var(--brand); font-size: 12px; text-transform: uppercase; }
 .heroStatus[data-status="blocked"] strong { color: var(--danger); }
 .heroStatus span, .heroStatus small { color: var(--muted); font-size: 9px; }
+.heroStatus button {
+  min-height: 40px;
+  margin-top: 6px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--brand);
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.heroStatus button:disabled { opacity: .45; cursor: not-allowed; }
 .panelHeading { min-height: 58px; padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
 .panelHeading > div { min-width: 0; }
 .panelHeading span:first-child { color: var(--brand-strong); font-size: 9px; font-weight: 850; letter-spacing: .03em; text-transform: uppercase; }
@@ -122,6 +140,7 @@
   .workspace { padding: 12px; }
   .hero { align-items: flex-start; flex-direction: column; }
   .heroStatus { width: 100%; justify-items: start; text-align: left; }
+  .heroStatus button { width: 100%; min-height: 44px; }
   .readinessGrid { grid-template-columns: 1fr; }
   .readinessGrid p { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .recipientList { max-height: none; }

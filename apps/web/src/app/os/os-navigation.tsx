@@ -7,6 +7,7 @@ import {
   Inbox,
   Landmark,
   ListChecks,
+  Megaphone,
   PhoneCall,
   Settings2,
   UsersRound,
@@ -21,6 +22,7 @@ export type OsNavItem = {
   icon: LucideIcon;
   roles: string[];
   anyPermissions: string[];
+  allPermissions?: string[];
   activeHrefs?: string[];
   activePaths?: string[];
   alwaysVisible?: boolean;
@@ -141,6 +143,19 @@ export const osNavGroups: OsNavGroup[] = [
         activePaths: ["/os/lead-manager", "/os/pipeline", "/os/underwriting"],
       },
       {
+        href: "/os/deals?view=disposition",
+        label: "Dispositions",
+        icon: Megaphone,
+        roles: ["administrator", "operations_assistant", ...dispositionRoles],
+        anyPermissions: [],
+        allPermissions: ["deals:view", "buyers:view"],
+        activeHrefs: [
+          "/os/deals?view=disposition",
+          "/os/deals?tab=disposition",
+        ],
+        activePaths: ["/os/dispositions"],
+      },
+      {
         href: "/os/deals",
         label: "Deals",
         icon: Handshake,
@@ -155,7 +170,7 @@ export const osNavGroups: OsNavGroup[] = [
           "restricted_vendor",
         ],
         anyPermissions: ["deals:view"],
-        activePaths: ["/os/transactions", "/os/dispositions"],
+        activePaths: ["/os/transactions"],
       },
       {
         href: "/os/buyers",
@@ -224,7 +239,10 @@ export function canSeeNavItem(profile: WorkspaceProfile, item: OsNavItem) {
   const authorized =
     item.anyPermissions.length === 0 ||
     item.anyPermissions.some((permission) => profile.permissions.includes(permission));
-  return roleRelevant && authorized;
+  const fullyAuthorized =
+    !item.allPermissions ||
+    item.allPermissions.every((permission) => profile.permissions.includes(permission));
+  return roleRelevant && authorized && fullyAuthorized;
 }
 
 export function visibleNavGroups(profile: WorkspaceProfile) {

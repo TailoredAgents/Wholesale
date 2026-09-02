@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   UsersRound,
 } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -43,7 +44,8 @@ type WorkspaceBuyerChoice = {
   buyer_name: string;
   latest_proof_document_id: string | null;
 };
-const workspaceTabs: Tab[] = ["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"];
+const primaryWorkspaceTabs: Tab[] = ["package", "buyers", "execution", "outreach", "offers"];
+const workspaceTabs: Tab[] = [...primaryWorkspaceTabs, "provider", "reconciliation"];
 const tabRootAnchors: Record<Tab, string> = {
   package: "package-versions",
   buyers: "buyer-pool",
@@ -60,10 +62,13 @@ function isWorkspaceTab(value: string | null): value is Tab {
 }
 
 function tabLabel(tab: Tab) {
-  if (tab === "buyers") return "Buyer pool";
-  if (tab === "execution") return "Call queue";
-  if (tab === "offers") return "Offer Room";
-  if (tab === "provider") return "InvestorLift";
+  if (tab === "package") return "Packet";
+  if (tab === "buyers") return "Find buyers";
+  if (tab === "execution") return "One-to-one";
+  if (tab === "outreach") return "Bulk outreach";
+  if (tab === "offers") return "Offers & closing";
+  if (tab === "provider") return "External distribution";
+  if (tab === "reconciliation") return "Finance reconciliation";
   return labelize(tab);
 }
 
@@ -194,6 +199,8 @@ export function DispositionWorkspace({
     ),
     [buyerNetworkCaseId, buyerNetworkEntries, buyerPoolCaseId, buyerPoolEntries, selected],
   );
+  const financeHref = `/os/deals?view=all&display=queue&deal=${encodeURIComponent(dealId)}&tab=finance`;
+  const dispositionHref = `/os/deals?view=all&display=queue&deal=${encodeURIComponent(dealId)}&tab=disposition`;
 
   useEffect(() => {
     if (!selectedId || selected?.asset_class === "land") {
@@ -641,17 +648,43 @@ export function DispositionWorkspace({
                 onRetry={() => void loadReadiness(selected.id)}
                 readiness={activeReadiness}
               />
-              <nav aria-label="Disposition deal sections" className={styles.tabs}>
-                {workspaceTabs.filter((item) => (selected.asset_class !== "land" || !houseOnlyTabs.has(item)) && (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => {
-                  const attention = tabAttention(item);
-                  return (
-                    <button aria-current={activeTab === item ? "page" : undefined} className={activeTab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">
-                      <span>{tabLabel(item)}</span>
-                      {attention ? <small aria-label={`${tabLabel(item)}: ${attention.title}`} className={styles.tabBadge} data-tone={attention.tone}>{attention.label}</small> : null}
-                    </button>
-                  );
-                })}
-              </nav>
+              {activeTab === "reconciliation" ? (
+                <nav aria-label="Disposition and finance sections" className={styles.financeContextNav}>
+                  <Link href={dispositionHref}>Back to Dispositions</Link>
+                  <span>Finance reconciliation</span>
+                </nav>
+              ) : (
+                <nav aria-label="Disposition deal sections" className={styles.tabs}>
+                  {primaryWorkspaceTabs.filter((item) => (selected.asset_class !== "land" || !houseOnlyTabs.has(item)) && (item !== "outreach" || canViewOutreach) && (item !== "offers" || data.can_view_private_economics)).map((item) => {
+                    const attention = tabAttention(item);
+                    return (
+                      <button aria-current={activeTab === item ? "page" : undefined} className={activeTab === item ? styles.activeTab : ""} key={item} onClick={() => selectWorkspaceTab(item)} type="button">
+                        <span>{tabLabel(item)}</span>
+                        {attention ? <small aria-label={`${tabLabel(item)}: ${attention.title}`} className={styles.tabBadge} data-tone={attention.tone}>{attention.label}</small> : null}
+                      </button>
+                    );
+                  })}
+                  {selected.asset_class === "house" ? (
+                    <details className={styles.moreTabs}>
+                      <summary className={activeTab === "provider" ? styles.activeTab : ""}>More</summary>
+                      <div>
+                        <button
+                          aria-current={activeTab === "provider" ? "page" : undefined}
+                          onClick={(event) => {
+                            event.currentTarget.closest("details")?.removeAttribute("open");
+                            selectWorkspaceTab("provider");
+                          }}
+                          type="button"
+                        >
+                          <span><strong>External distribution</strong><small>Manual InvestorLift handoff</small></span>
+                          {tabAttention("provider") ? <small className={styles.tabBadge} data-tone={tabAttention("provider")?.tone}>{tabAttention("provider")?.label}</small> : null}
+                        </button>
+                        <Link href={financeHref}><strong>Finance reconciliation</strong><small>Closing statement and payouts</small></Link>
+                      </div>
+                    </details>
+                  ) : null}
+                </nav>
+              )}
 
               {activeTab === "package" ? (
                 <DispositionPackageReadiness
@@ -701,6 +734,7 @@ export function DispositionWorkspace({
               {activeTab === "outreach" && canViewOutreach ? (
                 <DispositionOutreachWorkspace
                   canApprove={canApproveOutreach}
+                  canEditDeals={canEditDeals}
                   canManage={canManageOutreach}
                   canSendBulk={canSendBulk}
                   caseId={selected.id}

@@ -67,9 +67,9 @@ export default async function DealsPage({
         <WorkspacePage>
           <PageHeader
             description="Understand completed disposition outcomes, buyer reliability, cycle time, source performance, and correction signals."
-            eyebrow="Operations / disposition intelligence"
+            eyebrow="Operations / dispositions / intelligence"
             meta={<StatusBadge tone={intelligenceStatus.tone}>{intelligenceStatus.label}</StatusBadge>}
-            title="Deals"
+            title="Dispositions"
           />
           <DispositionIntelligenceWorkspace
             apiConnected={intelligenceResult.apiConnected}
@@ -109,11 +109,11 @@ export default async function DealsPage({
       <WorkspacePage>
         <PageHeader
           description="Prioritize buyer placement, replies, offers, follow-ups, and deadlines from one daily desk."
-          eyebrow="Operations / disposition"
+          eyebrow="Operations / buyer placement"
           meta={
             <StatusBadge tone={deskStatus.tone}>{deskStatus.label}</StatusBadge>
           }
-          title="Deals"
+          title="Dispositions"
         />
         <DispositionDeskWorkspace
           apiConnected={dispositionDeskResult.apiConnected}

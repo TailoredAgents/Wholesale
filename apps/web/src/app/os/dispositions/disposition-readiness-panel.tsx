@@ -176,7 +176,7 @@ export function DispositionReadinessPanel({
         </div>
       </div>
 
-      <details className={styles.checklist} open>
+      <details className={styles.checklist}>
         <summary>
           <span>All action-specific checks</span>
           <strong>{readiness.warning_count} attention · {readiness.completed_count} complete</strong>

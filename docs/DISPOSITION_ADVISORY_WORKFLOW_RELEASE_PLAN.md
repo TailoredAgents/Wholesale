@@ -29,6 +29,13 @@ including `dispositions:send_bulk_outreach` for governed Dispositions release, w
 marketing permission `communications:send_bulk`, user administration, operating-policy, Finance,
 or unrelated approval authority. No manager wait is part of the normal desk workflow.
 
+The role desk is first-class in the left navigation but remains backed by canonical Deal and
+Disposition Case records. Active Deal cards provide direct **Packet**, **Find buyers**, **Reach
+out**, and **Offers** actions. The checklist is visible but collapsed by default. Buyer ranking is
+performed in **Find buyers**, exact recipient preparation in **Bulk outreach**, one-at-a-time work
+in **One-to-one**, manual InvestorLift handoff under **More > External distribution**, and finance
+reconciliation through Deal Finance.
+
 ## Phased Release And Acceptance
 
 ### 1. Access And Data Foundation

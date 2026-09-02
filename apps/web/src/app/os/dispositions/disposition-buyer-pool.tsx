@@ -212,6 +212,29 @@ export function DispositionBuyerPool({
     return result;
   }
 
+  async function refreshBuyerRanking() {
+    if (!canEditDeals) return;
+    setActionBusy(true);
+    setError(null);
+    onMessage(null);
+    try {
+      await request(`/api/v1/dispositions/cases/${caseId}/matches`, {
+        method: "POST",
+        body: "{}",
+      });
+      await Promise.all([loadPool(1), onLegacyReload()]);
+      onMessage("Buyer ranking refreshed from the latest available deal facts. No outreach was sent.");
+    } catch (rankingError) {
+      const detail = rankingError instanceof Error
+        ? rankingError.message
+        : "Buyer ranking could not be refreshed.";
+      setError(detail);
+      onMessage(detail);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     void request<DispositionBuyerPoolPage>(poolPath())
@@ -607,6 +630,14 @@ export function DispositionBuyerPool({
             <span><UsersRound size={14} />Unified deal buyer pool</span>
             <h4>Owned relationships and staged candidates</h4>
             <p>Shortlisting never sends outreach. Passing applies only to this deal.</p>
+            <button
+              className={styles.refreshRanking}
+              disabled={busy || !canEditDeals}
+              onClick={() => void refreshBuyerRanking()}
+              type="button"
+            >
+              <RefreshCw size={14} />Refresh buyer ranking
+            </button>
           </div>
           <div>
             <strong>{pool?.total ?? 0}</strong>

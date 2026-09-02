@@ -14,11 +14,24 @@ const rbac = readFileSync(resolve(process.cwd(), "../api/app/domain/rbac.py"), "
 
 test("DS6 outreach lives between the canonical buyer pool and offers tabs", () => {
   assert.match(deals, /"package" \| "buyers" \| "execution" \| "outreach" \| "offers" \| "provider" \| "reconciliation"/);
-  assert.match(disposition, /\["package", "buyers", "execution", "outreach", "offers", "provider", "reconciliation"\]/);
+  assert.match(disposition, /primaryWorkspaceTabs: Tab\[\] = \["package", "buyers", "execution", "outreach", "offers"\]/);
+  assert.match(disposition, /workspaceTabs: Tab\[\] = \[\.\.\.primaryWorkspaceTabs, "provider", "reconciliation"\]/);
   assert.match(disposition, /<DispositionOutreachWorkspace/);
-  assert.match(disposition, /tab === "buyers"\) return "Buyer pool"/);
-  assert.match(disposition, /tab === "offers"\) return "Offer Room"/);
+  assert.match(disposition, /tab === "buyers"\) return "Find buyers"/);
+  assert.match(disposition, /tab === "offers"\) return "Offers & closing"/);
+  assert.match(disposition, />More<\/summary>/);
+  assert.match(disposition, /External distribution/);
+  assert.match(disposition, /Finance reconciliation/);
   assert.match(disposition, /aria-label="Disposition deal sections"/);
+});
+
+test("recipient preparation is available where bulk outreach work happens", () => {
+  assert.match(outreach, /canEditDeals: boolean/);
+  assert.match(outreach, /prepareRecipientPool/);
+  assert.match(outreach, /\/api\/v1\/dispositions\/cases\/\$\{caseId\}\/campaigns\/release/);
+  assert.match(outreach, /Prepare recipient pool/);
+  assert.match(outreach, /No buyer messages were sent/);
+  assert.match(disposition, /canEditDeals=\{canEditDeals\}/);
 });
 
 test("workspace enforces supervised preparation, exact approval, and a hard cap", () => {

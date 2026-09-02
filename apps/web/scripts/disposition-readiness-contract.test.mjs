@@ -36,7 +36,7 @@ test("the persistent panel offers guidance and every action-specific check witho
   assert.match(panel, /never forces a tab order or disables an otherwise applicable workflow action/);
   assert.match(panel, /Suggested action \(optional\)/);
   assert.match(panel, /Also available now/);
-  assert.match(panel, /<details className=\{styles\.checklist\} open>/);
+  assert.match(panel, /<details className=\{styles\.checklist\}>/);
   assert.match(panel, /All action-specific checks/);
   assert.match(panel, /readiness\.actions\.filter/);
   assert.match(panel, /actions complete/);
@@ -66,7 +66,11 @@ test("attention badges and remediation links navigate to stable workbench anchor
 test("package, pool, call, and outreach work remain usable while checklist evidence is incomplete", () => {
   assert.doesNotMatch(workspace, /packageApproved=|qualifiedBuyerCount=/);
   assert.match(packageWorkspace, /shoppingVersion = currentApprovedVersion \? approvedVersion : latestVersion/);
-  assert.match(packageWorkspace, /Ranking and recipient preparation stay available while checklist work continues/);
+  assert.match(packageWorkspace, /Find and rank investors in/);
+  assert.match(buyerPool, /Refresh buyer ranking/);
+  assert.match(buyerPool, /\/api\/v1\/dispositions\/cases\/\$\{caseId\}\/matches/);
+  assert.match(outreach, /Prepare recipient pool/);
+  assert.match(outreach, /\/api\/v1\/dispositions\/cases\/\$\{caseId\}\/campaigns\/release/);
   assert.match(buyerPool, /Package, proof-of-funds, and match-readiness gaps remain visible warnings while you shop/);
   assert.match(execution, /These items do not prevent logging work/);
   assert.match(execution, /Contact controls still follow the buyer/);
@@ -139,7 +143,7 @@ test("buyer decisions permit primary-only coverage and warning-bearing replaceme
 test("desk guidance and readiness UI are responsive and preserve explicit role restrictions", () => {
   assert.match(desk, /best_action_href \?\? item\.primary_action\.href/);
   assert.match(desk, /Suggested action \(optional\)/);
-  assert.match(desk, /<details className=\{styles\.cardChecklist\} open>/);
+  assert.match(desk, /<details className=\{styles\.cardChecklist\}>/);
   assert.match(desk, /All checklist issues/);
   assert.match(desk, /Also available now/);
   assert.match(panelStyles, /@media \(max-width: 760px\)/);

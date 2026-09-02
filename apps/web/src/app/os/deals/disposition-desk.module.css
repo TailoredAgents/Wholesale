@@ -231,6 +231,24 @@
 .cardChecklist article span { color: var(--muted); overflow-wrap: anywhere; font-size: 9px; line-height: 1.4; }
 .cardChecklist article a { min-height: 36px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); color: var(--brand-strong); text-decoration: none; font-size: 9px; font-weight: 800; }
 .cardChecklist > div > p { min-height: 48px; margin: 0; padding: 10px; display: flex; align-items: center; gap: 7px; color: var(--brand-strong); font-size: 9px; }
+.directActions { display: grid; gap: 5px; }
+.directActions > span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.directActions > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.directActions a {
+  min-height: 44px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  text-align: center;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 850;
+}
+.directActions a:hover { background: var(--brand); color: #fff; }
 .workActions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
 .bestActionGroup, .parallelActionGroup { display: grid; gap: 4px; }
 .bestActionGroup > span, .parallelActionGroup > span { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
@@ -286,6 +304,7 @@
   .workFacts { grid-template-columns: 1fr; }
   .workFacts > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .workFacts > div:last-child { border-bottom: 0; }
+  .directActions > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sideRail { grid-template-columns: 1fr; }
   .legendPanel { grid-column: auto; }
 }
@@ -296,6 +315,7 @@
   .quickActions .quickPrimary { flex-basis: 100%; }
   .workCard { padding: 11px; }
   .workActions, .bestActionGroup, .parallelActionGroup, .parallelActionGroup > div { width: 100%; }
+  .directActions > div { grid-template-columns: 1fr; }
   .workActions a { width: 100%; }
   .cardChecklist article { grid-template-columns: 16px minmax(0, 1fr); }
   .cardChecklist article a { grid-column: 2; width: 100%; justify-content: center; }

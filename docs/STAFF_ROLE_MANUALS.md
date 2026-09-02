@@ -158,8 +158,8 @@ transaction work.
 
 ## Dispositions
 
-Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for Disposition**, then
-the selected Deal's Disposition section for package, buyer, and offer work.
+Main pages: Dispositions, Buyers, Deals, Inbox, Tasks, and Calendar. Start in **Dispositions**, then
+use the active deal's direct Packet, Find buyers, Reach out, or Offers action.
 
 The standard Disposition representative owns the complete day-to-day workflow. The role includes
 the narrow package, outreach, `dispositions:send_bulk_outreach`, manual provider-handoff, and
@@ -191,7 +191,7 @@ approval authority.
   handoff, and buyer selection. The representative may perform those approvals directly; the
   explicit record preserves intent and audit history rather than imposing a manager queue.
 - Treat **Prepare recipient pool** as an audited `prepared_not_sent` record only. It sends no
-  email or SMS. Use the separate House **Outreach** view for exact-message review, approval, and
+  email or SMS. Use the House **Bulk outreach** workbench for exact-message review, approval, and
   release. Land supports exact external-packet approval and asset-aware buyer-pool matching, while
   Land outreach remains blocked.
 - Confirm every selected recipient, channel, destination, sender, rendered message, exclusion, and
@@ -535,7 +535,7 @@ current human disposition work according to the active compensation policy.
 
 ### When A Deal Enters Dispositions
 
-1. Open or select the contracted House or Land disposition case. Stonegate opens the case shell
+1. Select **Dispositions** and open the contracted House or Land case. Stonegate opens the case shell
    even when the owner, compensation plan, or operating mode still needs setup.
 2. Review the executed contract, closing deadline, transaction, title/file, property identity, and
    asset-specific valuation, diligence, inspection, and photo evidence. Missing facts stay visible;
@@ -560,9 +560,9 @@ current human disposition work according to the active compensation policy.
    If package/source facts later drift, current downloads, link access, outreach delivery state, and
    provider bundle downloads visibly downgrade to **Preliminary** without changing the frozen
    bytes or approval history.
-9. For House outreach, select **Prepare recipient pool** for the selected buyers and artifact. Confirm that the prepared
+9. For House outreach, open **Bulk outreach** and select **Prepare recipient pool** for the selected buyers and artifact. Confirm that the prepared
    recipients and exact version were recorded as `prepared_not_sent`; this step sends nothing.
-10. Open **Outreach**. Select only the intended owned-network buyers and eligible email and/or SMS
+10. Stay in **Bulk outreach**. Select only the intended owned-network buyers and eligible email and/or SMS
     paths. Confirm the active Resend alias or Dispositions buyer-relations Twilio line, and keep the
     total at or below 25 recipient-channel deliveries.
 11. Review the exact subject/body rendered for every delivery. Do not add purchase basis, minimum
@@ -628,7 +628,7 @@ released House **Outreach** revision can do so through Stonegate's existing comm
 
 ### Offers
 
-1. Open the contracted House Deal, select **Disposition**, then **Offer Room**.
+1. Select **Dispositions**, open the contracted House deal, then choose **Offers & closing**.
 2. Record every material offer with amount, EMD, deposit deadline, due diligence, contingencies,
    proposed closing, funding confidence, proof, special terms, and notes. Revise the offer instead of
    overwriting it, and record counters or retrades in negotiation history.

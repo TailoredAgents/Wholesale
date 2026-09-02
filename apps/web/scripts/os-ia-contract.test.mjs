@@ -107,8 +107,8 @@ function loadTypeScriptModule(path) {
   return commonJsModule.exports;
 }
 
-test("target navigation contains exactly 11 unique destinations in approved groups", () => {
-  assert.equal(targetDestinations.length, 11);
+test("target navigation contains exactly 12 unique destinations in approved groups", () => {
+  assert.equal(targetDestinations.length, 12);
   assert.ok(unique(targetDestinations.map((destination) => destination.id)));
   assert.ok(unique(targetDestinations.map((destination) => destination.canonicalRoute)));
   assert.deepEqual(
@@ -125,7 +125,7 @@ test("target role visibility is complete, bounded, and least-privilege for servi
   const destinationIds = new Set(targetDestinations.map((destination) => destination.id));
   assert.ok(unique(targetRoleExperiences.map((experience) => experience.role)));
   for (const experience of targetRoleExperiences) {
-    assert.ok(experience.destinations.length <= 11, `${experience.role} exceeds the destination cap`);
+    assert.ok(experience.destinations.length <= 12, `${experience.role} exceeds the destination cap`);
     assert.ok(unique(experience.destinations), `${experience.role} has duplicate destinations`);
     for (const destination of experience.destinations) {
       assert.ok(destinationIds.has(destination), `${experience.role} references ${destination}`);
@@ -145,7 +145,7 @@ test("target role visibility is complete, bounded, and least-privilege for servi
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "operations_assistant")
       ?.destinations,
-    ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "deals", "buyers"],
+    ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "dispositions", "deals", "buyers"],
   );
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "ai_service")?.destinations,
@@ -174,7 +174,7 @@ test("every current App Router page is represented in the migration inventory", 
   }
 });
 
-test("live primary navigation matches the approved 11-destination target", () => {
+test("live primary navigation matches the approved 12-destination target", () => {
   const source = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
   const primarySource = source.slice(
     source.indexOf("export const osNavGroups"),
@@ -424,7 +424,10 @@ test("RBAC permission and role inventories remain synchronized with the API", ()
   assert.deepEqual(sorted(permissionInventory), sorted(sourcePermissions));
   assert.deepEqual(sorted(roleInventory), sorted(sourceRoles));
   for (const destination of targetDestinations) {
-    for (const permission of destination.anyPermissions) {
+    for (const permission of [
+      ...destination.anyPermissions,
+      ...(destination.allPermissions ?? []),
+    ]) {
       assert.ok(permissionInventory.includes(permission), `${permission} is not a valid permission`);
     }
   }

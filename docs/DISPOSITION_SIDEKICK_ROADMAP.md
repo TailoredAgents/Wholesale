@@ -63,6 +63,12 @@ Last updated: September 1, 2026
 > work. DS6
 > repository completion is not proof of production-provider acceptance; that remains a DS12 gate.
 
+> **September 1 navigation amendment:** Dispositions is now a first-class left-navigation desk at
+> `/os/deals?view=disposition`, while Deal and Disposition Case records remain canonical and shared.
+> Active Deal cards link directly to Packet, Find buyers, Reach out, and Offers; operator controls
+> are organized as Packet, Find buyers, One-to-one, Bulk outreach, and Offers & closing. External
+> distribution is under More, and reconciliation is reached through Deal Finance.
+
 ## 1. Purpose And Authority
 
 This roadmap defines the approved direction for Stonegate's buyer relationship system and the
