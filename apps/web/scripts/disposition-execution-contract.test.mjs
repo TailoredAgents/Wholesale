@@ -47,7 +47,9 @@ test("the outreach desk uses compact, professional workspace controls", async ()
   assert.match(workspaceStyles, /\.queueRowActions \.queueContactAction \{[^}]*background: #17633d/);
   assert.match(workspaceStyles, /\.outreachConsole \{[^}]*padding: 0/);
   assert.match(workspaceStyles, /\.channelTabs \{[^}]*grid-template-columns: repeat\(3/);
-  assert.match(workspaceStyles, /\.outcomePanel \{[^}]*position: sticky/);
+  assert.match(workspaceStyles, /\.conversationTimeline \{[^}]*min-height: 230px/);
+  assert.match(workspaceStyles, /\.resultDock \{[^}]*border-top/);
+  assert.doesNotMatch(workspaceStyles, /\.outcomePanel \{/);
   assert.match(dispositionStyles, /\.workspacePrimaryNav > button \{[^}]*min-height: 50px/);
   assert.match(dispositionStyles, /\.workspaceSecondaryNav button \{[^}]*border-radius: 3px/);
   assert.match(queueBuilderStyles, /\.builder \{[^}]*border-radius: 4px/);
@@ -63,28 +65,23 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(parent, /tab === "execution"\) return "Outreach desk"/);
   assert.match(workspace, /execution\/sms/);
   assert.match(workspace, /!candidate\.sms\.allowed/);
-  assert.match(workspace, /Review the introduction SMS/);
-  assert.match(workspace, /Nothing sends automatically/);
+  assert.match(workspace, /Message \{candidate\.name\}/);
+  assert.match(workspace, /Nothing sends until you choose Send text/);
   assert.match(workspace, /aria-label="Introduction SMS draft"/);
-  assert.match(workspace, /Recipient/);
   assert.match(workspace, /workspace\.property_address/);
-  assert.match(workspace, /Send SMS and prepare call/);
+  assert.match(workspace, /Send text/);
   assert.match(workspace, /execution\/calls/);
   assert.match(workspace, /!candidate\.voice\.allowed/);
   assert.match(workspace, /useWebPhone/);
   assert.match(workspace, /webPhone\.startCall/);
   assert.match(workspace, /callIntentId: intent\.id/);
   assert.match(workspace, /fromNumber: intent\.from_number/);
-  assert.match(workspace, /let remaining = 10/);
-  assert.match(workspace, /startBrowserCall\(buyerId\)/);
-  assert.match(workspace, /setSmsComposerOpen\(false\);\s*setActiveChannel\("call"\)/);
-  assert.match(workspace, /activeChannel === "call" \? <div[\s\S]*className=\{styles\.callCountdown\}/);
-  assert.match(workspace, /Call now/);
-  assert.match(workspace, /cancelPreparedCall/);
-  assert.match(
-    workspace,
-    /async function startCellphoneCall\(\)[\s\S]*window\.clearInterval\(callCountdownTimer\.current\)/,
-  );
+  assert.match(workspace, /A call begins only when you choose one of these options/);
+  assert.doesNotMatch(workspace, /callCountdown|beginCallCountdown|cancelPreparedCall/);
+  assert.doesNotMatch(workspace, /initializeHeadset/);
+  const sendSmsFunction = workspace.match(/async function sendSms\(\)[\s\S]*?(?=\n  async function startBrowserCall)/)?.[0] ?? "";
+  assert.ok(sendSmsFunction);
+  assert.doesNotMatch(sendSmsFunction, /setActiveChannel|startBrowserCall/);
   assert.match(workspace, /Use my cellphone/);
   assert.match(workspace, /execution\/forwarded-calls/);
   assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
@@ -214,7 +211,8 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /styles\.queuePanel/);
   assert.match(workspace, /styles\.relationshipPanel/);
   assert.match(workspace, /styles\.conversationTimeline/);
-  assert.match(workspace, /Back-and-forth with \{candidate\.name\}/);
+  assert.match(workspace, /styles\.conversationHeader/);
+  assert.match(workspace, /styles\.conversationMeta/);
   assert.match(workspace, /slice\(0, 12\)\.reverse\(\)/);
   assert.match(workspace, /data-direction=\{item\.direction \?\? "activity"\}/);
   assert.match(workspace, /Shared with the canonical buyer relationship and Inbox history/);
@@ -237,19 +235,23 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /workspace\.remaining_candidate_count/);
   assert.match(workspace, /Open and update full relationship/);
   assert.doesNotMatch(workspace, /Open relationship profile/);
-  assert.match(workspace, /Review follow-up email/);
+  assert.match(workspace, /aria-label="Investor follow-up email subject"/);
+  assert.doesNotMatch(workspace, /smsComposerOpen|emailComposerOpen/);
+  assert.match(workspace, /className=\{styles\.resultDock\}/);
+  assert.match(workspace, /Finished an interaction\?/);
+  assert.match(workspace, /setResultComposerOpen\(true\)/);
   assert.match(workspace, /async function recordOutcome\(outcome: Outcome, advance: "next" \| "stay"\)/);
   assert.match(workspace, /setSelectedOutcome\(outcome\.value\); void saveCurrentBuyerState/);
   assert.match(workspace, /Save & stay/);
   assert.match(workspace, /Save & next/);
   assert.match(workspace, /selectedOutcome === "callback" \? <label/);
   assert.match(workspace, /Skip for now/);
-  assert.match(workspace, /Pause session/);
+  assert.doesNotMatch(workspace, /Pause session|Resume session|Session paused/);
   assert.match(workspace, /advance === "next"[\s\S]*advance_to_next: true/);
   assert.match(workspace, /async function continueToNextBuyer\(\)[\s\S]*advance_to_next: true/);
   assert.match(workspace, /setWorkspace\(result\);[\s\S]*setSavedOutcome/);
   assert.match(workspace, /No buyer outcome was changed/);
-  assert.match(workspace, /saved across visits/);
+  assert.match(workspace, /queue order and drafts remain saved/);
   assert.doesNotMatch(workspace, /onClick=\{\(\) => void recordOutcome\(outcome\.value\)\}/);
 });
 
@@ -273,7 +275,7 @@ test("the execution desk durably restores operator session state", async () => {
   assert.match(workspace, /email_sender_alias_id: emailSenderId \|\| null/);
   assert.match(workspace, /notes_draft: notes/);
   assert.match(workspace, /selected_outcome: selectedOutcome/);
-  assert.match(workspace, /state: "paused"/);
+  assert.doesNotMatch(workspace, /state: "paused"/);
   assert.match(workspace, /advance_to_next: true/);
   assert.match(workspace, /This exact position will resume until you continue/);
   assert.doesNotMatch(workspace, /browser session|while this screen stays open/i);

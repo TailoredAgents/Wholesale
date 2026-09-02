@@ -12,9 +12,7 @@ import {
   Headphones,
   Mail,
   MessageSquareText,
-  Pause,
   PhoneCall,
-  Play,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -228,10 +226,8 @@ export function DispositionExecutionWorkspace({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [smsDraft, setSmsDraft] = useState("");
-  const [smsComposerOpen, setSmsComposerOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
-  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
   const [activeChannel, setActiveChannel] = useState<OutreachChannel>("sms");
   const [emailSenderAliases, setEmailSenderAliases] = useState<EmailSenderAlias[]>([]);
   const [emailSenderId, setEmailSenderId] = useState("");
@@ -241,24 +237,20 @@ export function DispositionExecutionWorkspace({
   const [buyerTimeline, setBuyerTimeline] = useState<BuyerTimelineItem[]>([]);
   const [buyerTimelineLoading, setBuyerTimelineLoading] = useState(false);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
-  const [callCountdown, setCallCountdown] = useState<number | null>(null);
-  const [countdownBuyerId, setCountdownBuyerId] = useState<string | null>(null);
+  const [resultComposerOpen, setResultComposerOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [callbackAt, setCallbackAt] = useState("");
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome | null>(null);
   const [savedOutcome, setSavedOutcome] = useState<{ buyerId: string; label: string } | null>(null);
-  const [sessionPaused, setSessionPaused] = useState(false);
   const [sessionSkippedBuyerIds, setSessionSkippedBuyerIds] = useState<string[]>([]);
   const [sessionSaveState, setSessionSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [queueSearch, setQueueSearch] = useState("");
   const [draggingBuyerId, setDraggingBuyerId] = useState<string | null>(null);
-  const callCountdownTimer = useRef<number | null>(null);
   const buyerIdRef = useRef<string | null>(null);
   const selectedQueueItemRef = useRef<HTMLLIElement>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
   const webPhone = useWebPhone();
   const browserCallActive = webPhone.status.callActive;
-  const browserCallActiveRef = useRef(browserCallActive);
   const [outcomeIdempotencyKey, setOutcomeIdempotencyKey] = useState(() =>
     idempotency("dispo-outcome"),
   );
@@ -288,19 +280,12 @@ export function DispositionExecutionWorkspace({
     if (buyerIdRef.current !== nextBuyerId) {
       buyerIdRef.current = nextBuyerId;
       setOutcomeIdempotencyKey(idempotency("dispo-outcome"));
-      setSmsComposerOpen(
-        buyerState?.current_step === "sms" && buyerState.sms_status === "drafted",
-      );
-      setEmailComposerOpen(
-        buyerState?.current_step === "email" && buyerState.email_status === "drafted",
-      );
       setActiveChannel(
         buyerState?.current_step === "call" || buyerState?.current_step === "email"
           ? buyerState.current_step
           : "sms",
       );
-      setCallCountdown(null);
-      setCountdownBuyerId(null);
+      setResultComposerOpen(Boolean(buyerState?.selected_outcome) || lastOutcomeIsWaiting);
       setNotes(buyerState?.notes_draft ?? "");
       setCallbackAt(dateTimeLocalValue(buyerState?.callback_at));
       setSelectedOutcome((buyerState?.selected_outcome as Outcome | null | undefined) ?? null);
@@ -312,12 +297,7 @@ export function DispositionExecutionWorkspace({
       setEmailDraft(nextCandidate?.email_draft ?? "");
       setEmailSenderId(buyerState?.email_sender_alias_id ?? "");
       emailIdempotencyKeyRef.current = null;
-      if (callCountdownTimer.current !== null) {
-        window.clearInterval(callCountdownTimer.current);
-        callCountdownTimer.current = null;
-      }
     }
-    setSessionPaused(result.session.state === "paused");
     setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
     setSessionSaveState(result.session.persisted ? "saved" : "idle");
     setSelectedBuyerId(nextBuyerId);
@@ -326,11 +306,7 @@ export function DispositionExecutionWorkspace({
 
   async function chooseCandidate(buyerId: string, activateSession = false) {
     const nextCandidate = executionCandidates(workspace).find((candidate) => candidate.buyer_id === buyerId);
-    if (!nextCandidate || (buyerIdRef.current === buyerId && (!activateSession || !sessionPaused))) return;
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-      callCountdownTimer.current = null;
-    }
+    if (!nextCandidate || (buyerIdRef.current === buyerId && !activateSession)) return;
     const result = await updateSession(
       {
         current_buyer_id: buyerId,
@@ -342,7 +318,7 @@ export function DispositionExecutionWorkspace({
     if (result) {
       onMessage(activateSession
         ? `${nextCandidate.name} is ready in the outreach console.`
-        : `Selected ${nextCandidate.name}. Queue planning remains ${sessionPaused ? "paused" : "active"}.`);
+        : `Selected ${nextCandidate.name}. Your queue order and drafts remain saved.`);
     }
   }
 
@@ -518,18 +494,6 @@ export function DispositionExecutionWorkspace({
     }
   }
 
-  useEffect(() => {
-    browserCallActiveRef.current = browserCallActive;
-  }, [browserCallActive]);
-
-  useEffect(() => {
-    return () => {
-      if (callCountdownTimer.current !== null) {
-        window.clearInterval(callCountdownTimer.current);
-      }
-    };
-  }, []);
-
   async function action<T>(key: string, operation: () => Promise<T>, success: string) {
     setBusy(key);
     onMessage(null);
@@ -597,7 +561,6 @@ export function DispositionExecutionWorkspace({
         },
       );
       setWorkspace(result);
-      setSessionPaused(result.session.state === "paused");
       setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
       setSessionSaveState("saved");
       return result;
@@ -614,7 +577,6 @@ export function DispositionExecutionWorkspace({
         `/api/v1/dispositions/cases/${caseId}/execution`,
       );
       setWorkspace(result);
-      setSessionPaused(result.session.state === "paused");
       setSessionSkippedBuyerIds(result.session.skipped_buyer_ids);
       setSessionSaveState(result.session.persisted ? "saved" : "idle");
     } catch {
@@ -631,7 +593,6 @@ export function DispositionExecutionWorkspace({
       (item) => item.buyer_id === candidate.buyer_id,
     );
     setSmsDraft(restoredCandidate?.sms_draft ?? "");
-    setSmsComposerOpen(false);
     onMessage(`The saved SMS draft for ${candidate.name} was discarded. A fresh deal-aware draft is available.`);
   }
 
@@ -649,7 +610,6 @@ export function DispositionExecutionWorkspace({
     );
     setEmailSubject(restoredCandidate?.email_subject ?? "");
     setEmailDraft(restoredCandidate?.email_draft ?? "");
-    setEmailComposerOpen(false);
     emailIdempotencyKeyRef.current = null;
     onMessage(`The saved email draft for ${candidate.name} was discarded. A fresh deal-aware draft is available.`);
   }
@@ -722,7 +682,7 @@ export function DispositionExecutionWorkspace({
     );
     if (!result) return;
     emailIdempotencyKeyRef.current = null;
-    setEmailComposerOpen(false);
+    setResultComposerOpen(true);
     await refreshSessionSnapshot();
     await loadBuyerTimeline(candidate.buyer_id);
     onMessage(`Follow-up email ${labelize(result.status)} for ${candidate.name}. Delivery and replies will appear in the conversation.`);
@@ -739,92 +699,30 @@ export function DispositionExecutionWorkspace({
     await saveCurrentBuyerState({ sms_draft: body, current_step: "sms" });
     const result = await action(
       "sms",
-      async () => {
-        let headsetReady = false;
-        if (candidate.voice.allowed && !browserCallActiveRef.current) {
-          try {
-            await webPhone.initializeHeadset();
-            headsetReady = true;
-          } catch {
-            // The shared phone reports the exact microphone or configuration problem.
-            // The reviewed text may still be sent and the cellphone fallback stays available.
-          }
-        }
-        await request(`/api/v1/dispositions/cases/${caseId}/execution/sms`, {
+      () => request(`/api/v1/dispositions/cases/${caseId}/execution/sms`, {
           method: "POST",
           body: JSON.stringify({
             ...executionBuyerReference(candidate),
             body,
             idempotency_key: idempotency("dispo-sms"),
           }),
-        });
-        return { headsetReady };
-      },
+        }),
       `Introduction text accepted for ${candidate.name}.`,
     );
     if (!result) return;
 
+    setResultComposerOpen(true);
     await refreshSessionSnapshot();
     await loadBuyerTimeline(candidate.buyer_id);
-    setSmsComposerOpen(false);
-    setActiveChannel("call");
-    if (candidate.voice.allowed) {
-      if (result.headsetReady) {
-        beginCallCountdown(candidate.buyer_id);
-        onMessage(`Introduction text accepted for ${candidate.name}. Browser call starts in 10 seconds unless you cancel.`);
-      } else if (browserCallActiveRef.current) {
-        onMessage(`Introduction text accepted for ${candidate.name}. Finish the current browser call before calling this buyer.`);
-      } else {
-        onMessage(`Introduction text accepted for ${candidate.name}. Browser audio is not ready; use the cellphone fallback if needed.`);
-      }
-    }
   }
 
-  function beginCallCountdown(buyerId: string) {
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-    }
-    let remaining = 10;
-    setCountdownBuyerId(buyerId);
-    setCallCountdown(remaining);
-    callCountdownTimer.current = window.setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        if (callCountdownTimer.current !== null) {
-          window.clearInterval(callCountdownTimer.current);
-          callCountdownTimer.current = null;
-        }
-        setCallCountdown(null);
-        void startBrowserCall(buyerId);
-        return;
-      }
-      setCallCountdown(remaining);
-    }, 1_000);
-  }
-
-  async function startBrowserCall(expectedBuyerId?: string) {
+  async function startBrowserCall() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals || !candidate.voice.allowed) return;
-    if (browserCallActiveRef.current) {
-      setCallCountdown(null);
-      setCountdownBuyerId(null);
+    if (browserCallActive) {
       onMessage("End the current browser call before starting the next buyer call.");
       return;
     }
-    if (
-      (expectedBuyerId && expectedBuyerId !== candidate.buyer_id) ||
-      (countdownBuyerId && countdownBuyerId !== candidate.buyer_id)
-    ) {
-      setCallCountdown(null);
-      setCountdownBuyerId(null);
-      return;
-    }
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-      callCountdownTimer.current = null;
-    }
-    setCallCountdown(null);
-    setCountdownBuyerId(null);
     const result = await action(
       "browser-call",
       async () => {
@@ -851,6 +749,7 @@ export function DispositionExecutionWorkspace({
       `Browser call started for ${candidate.name}.`,
     );
     if (result) {
+      setResultComposerOpen(true);
       await refreshSessionSnapshot();
       await loadBuyerTimeline(candidate.buyer_id);
     }
@@ -859,12 +758,6 @@ export function DispositionExecutionWorkspace({
   async function startCellphoneCall() {
     const candidate = selectedCandidate(workspace, buyerIdRef.current);
     if (!candidate || !candidate.actionable || !canEditDeals || !candidate.voice.allowed) return;
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-      callCountdownTimer.current = null;
-    }
-    setCallCountdown(null);
-    setCountdownBuyerId(null);
     const result = await action(
       "cellphone-call",
       async () => {
@@ -883,19 +776,10 @@ export function DispositionExecutionWorkspace({
       `Stonegate is calling your cellphone first, then connecting ${candidate.name}.`,
     );
     if (result) {
+      setResultComposerOpen(true);
       await refreshSessionSnapshot();
       await loadBuyerTimeline(candidate.buyer_id);
     }
-  }
-
-  function cancelPreparedCall() {
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-      callCountdownTimer.current = null;
-    }
-    setCallCountdown(null);
-    setCountdownBuyerId(null);
-    onMessage("The automatic browser call was cancelled. The introduction text remains in the conversation history.");
   }
 
   async function sendApprovedPacket() {
@@ -926,6 +810,7 @@ export function DispositionExecutionWorkspace({
       `Investor packet text accepted for ${candidate.name}. The secure link expires in 72 hours. If delivery is ever uncertain, check the buyer conversation before retrying.`,
     );
     if (result) {
+      setResultComposerOpen(true);
       const issuedPackageLabel = result.is_preliminary ? "Preliminary" : "Approved";
       onMessage(`${issuedPackageLabel} investor packet text accepted for ${candidate.name}. The secure link expires in 72 hours. If delivery is ever uncertain, check the buyer conversation before retrying.`);
       await load();
@@ -1015,29 +900,6 @@ export function DispositionExecutionWorkspace({
         ? `${candidate.name} is saved as skipped, but no other investor is currently available. No buyer outcome was changed.`
         : `${candidate.name} was skipped and the saved session moved forward. No buyer outcome was changed.`);
     }
-  }
-
-  async function pauseSession() {
-    if (callCountdownTimer.current !== null) {
-      window.clearInterval(callCountdownTimer.current);
-      callCountdownTimer.current = null;
-    }
-    setCallCountdown(null);
-    setCountdownBuyerId(null);
-    const result = await updateSession(
-      {
-        state: "paused",
-        current_buyer_id: buyerIdRef.current,
-        skipped_buyer_ids: sessionSkippedBuyerIds,
-      },
-      "session-pause",
-    );
-    if (result) onMessage("Outreach is paused and saved. You can resume this exact investor after leaving or logging back in.");
-  }
-
-  async function resumeSession() {
-    const result = await updateSession({ state: "active" }, "session-resume");
-    if (result) onMessage("Outreach resumed at the saved investor and unfinished step.");
   }
 
   async function createShowing(event: FormEvent<HTMLFormElement>) {
@@ -1143,7 +1005,6 @@ export function DispositionExecutionWorkspace({
   const roleOrBusyDisabled = busy !== null
     || !canEditDeals
     || !candidate?.actionable
-    || sessionPaused
     || outcomeSavedForCurrent;
   const smsUnavailable = roleOrBusyDisabled || !candidate?.sms.allowed;
   const voiceUnavailable = roleOrBusyDisabled || !candidate?.voice.allowed || webPhone.busy || browserCallActive;
@@ -1151,7 +1012,6 @@ export function DispositionExecutionWorkspace({
     || !canEditDeals
     || !candidate?.actionable
     || !candidate.email
-    || sessionPaused
     || !emailProviderConfigured
     || !emailSenderId;
   const packetUnavailable = smsUnavailable || !workspace.package_pdf_path;
@@ -1179,7 +1039,6 @@ export function DispositionExecutionWorkspace({
   const buyerProgress = candidate
     ? workspace.session.buyer_states[candidate.buyer_id]
     : null;
-  const currentStep = buyerProgress?.current_step ?? "sms";
   const outcomeNeedsCallback = selectedOutcome === "callback" && !callbackAt;
   const emailHasPacketLink = emailDraft.includes("/api/v1/public/investor-packages/");
   const visibleBuyerTimeline = buyerTimeline.filter(
@@ -1203,14 +1062,9 @@ export function DispositionExecutionWorkspace({
         <div className={styles.heroActions}>
           {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
           {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
-          {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving session…" : workspace.session.persisted ? `Saved · ${labelize(currentStep)}` : "Ready to save"}</span> : null}
-          {candidate ? (sessionPaused
-            ? <button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume session</button>
-            : <button className={styles.secondary} disabled={busy !== null} onClick={() => void pauseSession()} type="button"><Pause size={15} />Pause session</button>) : null}
+          {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving…" : workspace.session.persisted ? "Saved" : "Ready to save"}</span> : null}
         </div>
       </header>
-
-      {sessionPaused ? <div className={styles.pausedBanner} role="status"><Pause size={18} /><div><strong>Session paused at {candidate?.name ?? "the current queue position"}</strong><span>Your investor, drafts, skipped list, and unfinished step are saved across visits.</span></div><button onClick={() => void resumeSession()} type="button"><Play size={15} />Resume</button></div> : null}
 
       {workspace.blockers.length ? (
         <details className={styles.advisoryDetails}>
@@ -1234,31 +1088,36 @@ export function DispositionExecutionWorkspace({
       {candidate ? (
         <div className={styles.outreachLayout}>
           <div className={styles.currentInvestor}>
-            <section className={`${styles.panel} ${styles.investorOverview}`}>
-              <div className={styles.candidateHeader}>
-                <div><span>Current investor{hasRankedFit(candidate) ? ` · ${candidateRankLabel(candidate)}` : ""}</span><h4>{candidate.name}</h4><p>{candidate.company_name ?? "Independent investor"}</p></div>
-                {hasRankedFit(candidate) ? <div className={styles.score}><strong>{candidateFitLabel(candidate)}</strong><span>fit score</span></div> : null}
-              </div>
-              {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
-              <dl className={styles.profile}>
-                <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
-                <div><dt>Email</dt><dd>{candidate.email ?? "Not recorded"}</dd></div>
-                <div><dt>Relationship</dt><dd>{labelize(candidate.relationship_status ?? "unknown")}</dd></div>
-                <div><dt>Nearby purchase</dt><dd>{candidate.recent_purchase_reference ?? "No address-level reference saved"}</dd></div>
-              </dl>
-              <details className={styles.fitEvidence}>
-                <summary>{hasRankedFit(candidate) ? "Why this investor ranks here" : "Ranking details"}</summary>
-                <div className={styles.evidence}>{hasRankedFit(candidate)
-                  ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
-                  : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}</div>
-              </details>
-              {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <div className={styles.investorUtilities}><button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button></div> : null}
-            </section>
-
             <section className={`${styles.panel} ${styles.outreachConsole}`}>
+              <header className={styles.conversationHeader}>
+                <div className={styles.conversationIdentity}>
+                  <span>Current investor{hasRankedFit(candidate) ? ` · ${candidateRankLabel(candidate)}` : ""}</span>
+                  <h4>{candidate.name}</h4>
+                  <p>{candidate.company_name ?? "Independent investor"}</p>
+                </div>
+                <dl className={styles.conversationMeta}>
+                  <div><dt>Phone</dt><dd>{candidate.phone ?? "Not recorded"}</dd></div>
+                  <div><dt>Email</dt><dd>{candidate.email ?? "Not recorded"}</dd></div>
+                  <div><dt>Relationship</dt><dd>{labelize(candidate.relationship_status ?? "unknown")}</dd></div>
+                  <div><dt>Nearby purchase</dt><dd>{candidate.recent_purchase_reference ?? "None saved"}</dd></div>
+                </dl>
+                <div className={styles.conversationStatus}>
+                  {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
+                  {hasRankedFit(candidate) ? <div className={styles.score}><strong>{candidateFitLabel(candidate)}</strong><span>fit score</span></div> : null}
+                </div>
+              </header>
+              {!candidate.actionable ? <div className={styles.candidateState} data-dnc={isDoNotContact(candidate)}><strong>{outcomeSavedForCurrent ? `${savedOutcome?.label} saved` : candidateAvailabilityLabel(candidate)}</strong><span>{outcomeSavedForCurrent ? "The result is recorded. Stay here or continue to the next investor when ready." : candidate.action_blockers.join(" ") || "This investor is not currently actionable."}</span></div> : null}
+              <div className={styles.conversationUtilities}>
+                <details className={styles.fitEvidence}>
+                  <summary>{hasRankedFit(candidate) ? "Why this investor ranks here" : "Ranking details"}</summary>
+                  <div className={styles.evidence}>{hasRankedFit(candidate)
+                    ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
+                    : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}</div>
+                </details>
+                {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
+              </div>
               <InvestorConversation
                 candidate={candidate}
-                inboundReplyCount={inboundReplyCount}
                 loading={buyerTimelineLoading}
                 timeline={visibleBuyerTimeline}
               />
@@ -1270,40 +1129,24 @@ export function DispositionExecutionWorkspace({
               <div className={styles.channelWorkspace}>
 
               {activeChannel === "sms" ? <div aria-labelledby="outreach-text-tab" className={styles.channelSection} id="investor-sms" role="tabpanel">
-                <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Text</span><h4>Review the introduction SMS</h4></div></div>
-                <p className={styles.help}>Nothing sends automatically. Personalize the draft and confirm the final message.</p>
+                <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Text</span><h4>Message {candidate.name}</h4></div></div>
+                <p className={styles.help}>Write freely from the deal-aware draft. Nothing sends until you choose Send text.</p>
                 <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
-
-                {!smsComposerOpen ? (
-                  <button disabled={smsUnavailable} onClick={() => setSmsComposerOpen(true)} type="button"><MessageSquareText size={16} />Review introduction SMS</button>
-                ) : (
-                  <div className={styles.smsComposer}>
-                    <div className={styles.messageContext}>
-                      <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.phone ?? "No phone recorded"}</small></div>
-                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{hasRankedFit(candidate) ? `Ranked investor ${candidateRankLabel(candidate)}` : "Not ranked yet"}</small></div>
-                    </div>
-                    <label><span>Editable message</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
-                    <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
-                    <div className={styles.composerActions}>
-                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => void discardCurrentSmsDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Discard saved draft</button>
-                      <button className={styles.secondary} disabled={busy === "sms"} onClick={() => setSmsComposerOpen(false)} type="button">Close draft</button>
-                      <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send SMS and prepare call"}</button>
-                    </div>
+                <div className={styles.smsComposer}>
+                  <label><span>To {candidate.phone ?? "No phone recorded"}</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
+                  <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
+                  <div className={styles.composerActions}>
+                    <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><Download size={15} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet`}</button>
+                    <button className={styles.secondary} disabled={busy === "sms"} onClick={() => void discardCurrentSmsDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Reset draft</button>
+                    <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send text"}</button>
                   </div>
-                )}
-
+                </div>
               </div> : null}
 
               {activeChannel === "call" ? <div aria-labelledby="outreach-call-tab" className={styles.channelSection} id="investor-call" role="tabpanel">
-                <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Call</span><h4>Call from the Stonegate line</h4></div></div>
+                <div className={styles.sectionTitle}><Headphones size={17} /><div><span>Call</span><h4>Choose how to call {candidate.name}</h4></div></div>
+                <p className={styles.help}>A call begins only when you choose one of these options.</p>
                 <PermissionLine allowed={candidate.actionable && candidate.voice.allowed} blockers={[...candidate.action_blockers, ...candidate.voice.blockers]} channel="Call" status={candidate.voice.status} />
-                {callCountdown !== null && countdownBuyerId === candidate.buyer_id ? (
-                  <div aria-live="polite" className={styles.callCountdown} role="status">
-                    <div className={styles.countdownNumber}>{callCountdown}</div>
-                    <div><strong>Introduction accepted</strong><span>Calling {candidate.name} in {callCountdown} second{callCountdown === 1 ? "" : "s"}.</span></div>
-                    <div className={styles.countdownActions}><button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button">Call now</button><button className={styles.secondary} disabled={busy !== null} onClick={cancelPreparedCall} type="button">Cancel</button></div>
-                  </div>
-                ) : null}
                 <div className={styles.callActions}>
                   <button disabled={voiceUnavailable} onClick={() => void startBrowserCall()} type="button"><Headphones size={16} />{busy === "browser-call" || webPhone.busy ? "Starting browser call…" : browserCallActive ? "Browser call in progress" : `Call ${candidate.name} in browser`}</button>
                   <button className={styles.secondary} disabled={voiceUnavailable} onClick={() => void startCellphoneCall()} type="button"><PhoneCall size={16} />{busy === "cellphone-call" ? "Calling your cellphone…" : "Use my cellphone"}</button>
@@ -1315,49 +1158,43 @@ export function DispositionExecutionWorkspace({
                 <p className={styles.help}>{candidate.email ? `Review the deal-aware starting draft for ${candidate.email}. Nothing sends until you approve it.` : "Add an email to the relationship profile before sending follow-up."}</p>
                 {emailProviderConfigured === false ? <div className={styles.permissionBlocked}><span>Email sender unavailable</span><small>{emailConfigurationBlockers.join(" ") || "Configure an authorized Stonegate sender."}</small></div> : null}
                 {emailProviderConfigured === true && !emailSenderAliases.length ? <div className={styles.permissionBlocked}><span>No authorized email sender</span><small>Ask an email administrator to grant this user access to an active Stonegate sender.</small></div> : null}
-                <div className={styles.packetActions}>
-                  <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={16} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet now`}</button>
-                  {!emailComposerOpen ? <button disabled={emailUnavailable} onClick={() => setEmailComposerOpen(true)} type="button"><Mail size={16} />{buyerProgress?.email_status === "sent" ? "Review another email" : "Review follow-up email"}</button> : null}
-                </div>
-                {emailComposerOpen ? (
-                  <div className={`${styles.smsComposer} ${styles.emailComposer}`}>
-                    <div className={styles.messageContext}>
-                      <div><span>Recipient</span><strong>{candidate.name}</strong><small>{candidate.email}</small></div>
-                      <div><span>Property</span><strong>{workspace.property_address}</strong><small>{emailHasPacketLink ? "Secure packet link included" : "Packet link optional"}</small></div>
-                    </div>
-                    <label><span>Stonegate sender</span><select disabled={emailUnavailable} onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSenderId(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} value={emailSenderId}><option value="">Select sender</option>{emailSenderAliases.map((sender) => <option key={sender.id} value={sender.id}>{sender.display_name} · {sender.email_address}</option>)}</select></label>
-                    <label><span>Subject</span><input onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSubject(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} value={emailSubject} /></label>
-                    <label><span>Editable message</span><textarea aria-label="Investor follow-up email draft" onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailDraft(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} rows={9} value={emailDraft} /></label>
-                    <small className={styles.characterCount}>{emailDraft.trim().length} characters · Deal-aware starting draft, not an automatic send</small>
-                    <div className={styles.composerActions}>
-                      <button className={styles.secondary} disabled={busy !== null || !workspace.package_pdf_path || emailHasPacketLink} onClick={() => void insertPacketLinkInEmail()} type="button"><Download size={15} />{emailHasPacketLink ? "Packet link included" : `Insert ${packageLabel} packet link`}</button>
-                      <button className={styles.secondary} disabled={busy === "email"} onClick={() => void discardCurrentEmailDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Discard saved draft</button>
-                      <button className={styles.secondary} disabled={busy === "email"} onClick={() => setEmailComposerOpen(false)} type="button">Close draft</button>
-                      <button disabled={emailUnavailable || !emailSubject.trim() || !emailDraft.trim()} onClick={() => void sendFollowUpEmail()} type="button"><Mail size={16} />{busy === "email" ? "Sending…" : "Send email"}</button>
-                    </div>
+                <div className={`${styles.smsComposer} ${styles.emailComposer}`}>
+                  <label><span>From</span><select disabled={emailUnavailable} onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSenderId(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} value={emailSenderId}><option value="">Select sender</option>{emailSenderAliases.map((sender) => <option key={sender.id} value={sender.id}>{sender.display_name} · {sender.email_address}</option>)}</select></label>
+                  <label><span>To {candidate.email ?? "No email recorded"}</span><input aria-label="Investor follow-up email subject" onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailSubject(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} placeholder="Subject" value={emailSubject} /></label>
+                  <label><span>Message</span><textarea aria-label="Investor follow-up email draft" onBlur={() => void saveCurrentBuyerState({ current_step: "email" })} onChange={(event) => { setEmailDraft(event.target.value); setSessionSaveState("idle"); emailIdempotencyKeyRef.current = null; }} rows={9} value={emailDraft} /></label>
+                  <small className={styles.characterCount}>{emailDraft.trim().length} characters · Deal-aware starting draft</small>
+                  <div className={styles.composerActions}>
+                    <button className={styles.secondary} disabled={busy !== null || !workspace.package_pdf_path || emailHasPacketLink} onClick={() => void insertPacketLinkInEmail()} type="button"><Download size={15} />{emailHasPacketLink ? "Packet link included" : `Insert ${packageLabel} packet link`}</button>
+                    <button className={styles.secondary} disabled={busy === "email"} onClick={() => void discardCurrentEmailDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Reset draft</button>
+                    <button disabled={emailUnavailable || !emailSubject.trim() || !emailDraft.trim()} onClick={() => void sendFollowUpEmail()} type="button"><Mail size={16} />{busy === "email" ? "Sending…" : "Send email"}</button>
                   </div>
-                ) : null}
+                </div>
               </div> : null}
               </div>
-            </section>
-
-            <section className={`${styles.panel} ${styles.outcomePanel}`}>
-              <div className={`${styles.sectionTitle} ${styles.resultHeader}`}><SkipForward size={18} /><div><span>Record result</span><h4>What happened?</h4></div><small>No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small></div>
-              <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); void saveCurrentBuyerState({ selected_outcome: outcome.value, current_step: "outcome" }); }} type="button">{outcome.label}</button>)}</div>
-              <div className={styles.outcomeInputs} data-callback={selectedOutcome === "callback"}>
-                <label><span>Notes</span><textarea disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, objections, or requested next step…" rows={2} value={notes} /></label>
-                {selectedOutcome === "callback" ? <label><span>Callback time</span><input disabled={outcomeSavedForCurrent || sessionPaused} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required before saving Callback.</small></label> : null}
-              </div>
-              {outcomeSavedForCurrent ? (
-                <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. This exact position will resume until you continue.</span></div><button onClick={() => void continueToNextBuyer()} type="button">Next investor <ArrowRight size={15} /></button></div>
-              ) : (
-                <div className={styles.outcomeActions}>
-                  <button className={styles.secondary} disabled={busy !== null || sessionPaused} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={15} />Skip for now</button>
-                  <span />
-                  <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
-                  <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
-                </div>
-              )}
+              <section className={styles.resultDock}>
+                <header>
+                  <div><SkipForward size={17} /><span><strong>Finished an interaction?</strong><small>Record a result only when there is something meaningful to save.</small></span></div>
+                  <button aria-expanded={resultComposerOpen || outcomeSavedForCurrent} className={styles.secondary} disabled={outcomeSavedForCurrent} onClick={() => setResultComposerOpen((current) => !current)} type="button">{resultComposerOpen ? "Hide result" : "Record result"}</button>
+                </header>
+                {resultComposerOpen || outcomeSavedForCurrent ? <div className={styles.resultComposer}>
+                  <small>No answer creates a 4-hour retry; voicemail creates a 24-hour follow-up.</small>
+                  <div className={styles.outcomes}>{OUTCOMES.map((outcome) => <button aria-pressed={selectedOutcome === outcome.value} data-selected={selectedOutcome === outcome.value} data-tone={outcome.tone} disabled={roleOrBusyDisabled} key={outcome.value} onClick={() => { setSelectedOutcome(outcome.value); void saveCurrentBuyerState({ selected_outcome: outcome.value, current_step: "outcome" }); }} type="button">{outcome.label}</button>)}</div>
+                  <div className={styles.outcomeInputs} data-callback={selectedOutcome === "callback"}>
+                    <label><span>Notes</span><textarea disabled={outcomeSavedForCurrent} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setNotes(event.target.value); setSessionSaveState("idle"); }} placeholder="Interest, objections, or requested next step…" rows={2} value={notes} /></label>
+                    {selectedOutcome === "callback" ? <label><span>Callback time</span><input disabled={outcomeSavedForCurrent} onBlur={() => void saveCurrentBuyerState({ current_step: "outcome" })} onChange={(event) => { setCallbackAt(event.target.value); setSessionSaveState("idle"); }} type="datetime-local" value={callbackAt} /><small>Required before saving Callback.</small></label> : null}
+                  </div>
+                  {outcomeSavedForCurrent ? (
+                    <div className={styles.savedOutcome} role="status"><CheckCircle2 size={18} /><div><strong>{savedOutcome?.label} saved</strong><span>You are still on {candidate.name}. This exact position will resume until you continue.</span></div><button onClick={() => void continueToNextBuyer()} type="button">Next investor <ArrowRight size={15} /></button></div>
+                  ) : (
+                    <div className={styles.outcomeActions}>
+                      <button className={styles.secondary} disabled={busy !== null} onClick={() => void skipCurrentBuyer()} type="button"><SkipForward size={15} />Skip for now</button>
+                      <span />
+                      <button className={styles.secondary} disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "stay")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : "Save & stay"}</button>
+                      <button disabled={roleOrBusyDisabled || !selectedOutcome || outcomeNeedsCallback} onClick={() => selectedOutcome && void recordOutcome(selectedOutcome, "next")} type="button">{busy?.startsWith("outcome-") ? "Saving…" : <>Save & next <ArrowRight size={15} /></>}</button>
+                    </div>
+                  )}
+                </div> : null}
+              </section>
             </section>
 
             <details className={styles.secondaryTools}>
@@ -1432,12 +1269,10 @@ export function DispositionExecutionWorkspace({
 
 function InvestorConversation({
   candidate,
-  inboundReplyCount,
   loading,
   timeline,
 }: {
   candidate: DispositionExecutionCandidate;
-  inboundReplyCount: number;
   loading: boolean;
   timeline: BuyerTimelineItem[];
 }) {
@@ -1450,10 +1285,6 @@ function InvestorConversation({
 
   return (
     <section aria-label={`Conversation with ${candidate.name}`} className={styles.conversationTimeline}>
-      <header>
-        <div><span>Investor conversation</span><h4>Back-and-forth with {candidate.name}</h4></div>
-        {inboundReplyCount ? <b>{inboundReplyCount} inbound</b> : null}
-      </header>
       {loading ? <p>Loading conversation…</p> : timeline.length ? (
         <ol aria-live="polite" ref={timelineRef}>{timeline.map((item) => (
           <li data-direction={item.direction ?? "activity"} key={`${item.category}-${item.id}`}>
