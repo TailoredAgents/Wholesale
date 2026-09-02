@@ -130,7 +130,9 @@ test("investors can be selected, imported, discovered, and pinned inside Outreac
   assert.match(queueBuilder, /<DispositionListBuilder/);
   assert.match(listBuilder, /Buyer Network/);
   assert.match(listBuilder, /Upload or paste/);
-  assert.match(listBuilder, /Choose CSV file/);
+  assert.match(listBuilder, /Select CSV file/);
+  assert.match(listBuilder, /contacts read from/);
+  assert.match(listBuilder, /then click Save to QuickDial/);
   assert.match(listBuilder, /primary_contact_name/);
   assert.match(listBuilder, /buyer_entity_names/);
   assert.match(listBuilder, /phone_1/);
@@ -141,7 +143,7 @@ test("investors can be selected, imported, discovered, and pinned inside Outreac
   assert.match(listBuilder, /Alternate phones/);
   assert.match(listBuilder, /Alternate emails/);
   assert.match(listBuilder, /paste rows from a spreadsheet/);
-  assert.match(listBuilder, /Preview contacts/);
+  assert.match(listBuilder, /Preview pasted contacts/);
   assert.match(listBuilder, /queue_buyer_ids: queueIds/);
   assert.match(listBuilder, /Save \$\{totalSelected\} to QuickDial/);
   assert.match(queueBuilder, /\/api\/v1\/buyers\/discovery-runs\/estimate/);

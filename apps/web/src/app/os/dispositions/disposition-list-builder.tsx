@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FileUp, Search, UsersRound } from "lucide-react";
+import { Check, CheckCircle2, FileUp, Search, UsersRound } from "lucide-react";
 import { ChangeEvent, useMemo, useState } from "react";
 
 import type { BuyerListItem, DispositionExecutionWorkspace } from "../../lib/api";
@@ -154,6 +154,7 @@ export function DispositionListBuilder({
   const [search, setSearch] = useState("");
   const [selectedBuyerIds, setSelectedBuyerIds] = useState(() => new Set(currentBuyerIds));
   const [source, setSource] = useState("Name,Phone,Email,Company\n");
+  const [fileName, setFileName] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ImportedContact[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -178,8 +179,10 @@ export function DispositionListBuilder({
     const file = event.target.files?.[0];
     if (!file) return;
     const text = await file.text();
+    setFileName(file.name);
     setSource(text);
     previewContacts(text);
+    window.requestAnimationFrame(() => document.getElementById("investor-import-result")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
   async function addToQuickDial() {
@@ -257,9 +260,10 @@ export function DispositionListBuilder({
         </section>
       ) : (
         <section className={styles.sourcePanel}>
-          <div className={styles.uploadRow}><label><FileUp size={16} /><span>Choose CSV file</span><input accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values" onChange={(event) => void loadFile(event)} type="file" /></label><small>Accepts your DealMachine research export as-is, plus standard Name/Phone/Email files.</small></div>
+          <div className={styles.uploadRow}><label><FileUp size={16} /><span>Select CSV file</span><input accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values" onChange={(event) => void loadFile(event)} type="file" /></label><small>{fileName ?? "Accepts your DealMachine research export as-is, plus standard Name/Phone/Email files."}</small></div>
+          {contacts.length ? <div className={styles.importReady} id="investor-import-result" role="status"><CheckCircle2 size={18} /><div><strong>{contacts.length} contacts read from {fileName ?? "the pasted list"}</strong><span>{selectedImportCount} valid contacts are selected. Review them below, then click Save to QuickDial.</span></div></div> : null}
           <label className={styles.paste}><span>Or paste rows from a spreadsheet</span><textarea onChange={(event) => setSource(event.target.value)} rows={7} value={source} /></label>
-          <button className={styles.previewButton} onClick={() => previewContacts()} type="button">Preview contacts</button>
+          <button className={styles.previewButton} onClick={() => { setFileName(null); previewContacts(); }} type="button">Preview pasted contacts</button>
           {contacts.length ? <div className={styles.contactPreview}><header><strong>{contacts.length} rows found</strong><span>{selectedImportCount} selected</span></header>{contacts.map((contact) => {
             const selected = selectedContactIds.has(contact.id);
             return <label data-error={Boolean(contact.error)} data-selected={selected} key={contact.id}><input checked={selected} disabled={Boolean(contact.error)} onChange={() => setSelectedContactIds((current) => { const next = new Set(current); if (next.has(contact.id)) next.delete(contact.id); else next.add(contact.id); return next; })} type="checkbox" /><span><strong>{contact.name || "Missing name"}</strong><small>{contact.phone || contact.email || "Missing contact information"}</small></span><b>{contact.error ?? `${contact.rank !== null ? `#${contact.rank} · ` : ""}${contact.existingBuyerId ? "Existing" : "New"}`}</b></label>;
