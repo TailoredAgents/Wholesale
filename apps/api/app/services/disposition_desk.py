@@ -32,11 +32,7 @@ from app.models.foundation import (
     DispositionMatch,
     Lead,
     Property,
-    Role,
-    RoleAssignment,
     Task,
-    Team,
-    TeamMembership,
     Transaction,
     TransactionChecklistItem,
     User,
@@ -75,7 +71,6 @@ ACTIVE_CASE_STATUSES = {
 }
 COMPLETE_WORK_STATUSES = {"complete", "completed", "cancelled", "canceled", "not_applicable"}
 INACTIVE_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
-EXECUTIVE_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
 EASTERN = ZoneInfo("America/New_York")
 MAX_SECTION_ITEMS = 100
 DispositionDeskSeverity = Literal["info", "warning", "danger"]
@@ -89,26 +84,11 @@ def _money(cents: int) -> str:
     return f"${cents / 100:,.0f}"
 
 
-def _role_keys(db: Session, principal: Principal) -> set[str]:
-    return set(
-        db.scalars(
-            select(Role.key)
-            .join(RoleAssignment, RoleAssignment.role_id == Role.id)
-            .where(
-                RoleAssignment.organization_id == principal.organization_id,
-                RoleAssignment.user_id == principal.user_id,
-            )
-        ).all()
-    )
-
-
 def _team_scope(
     db: Session,
     principal: Principal,
     requested_scope: DispositionDeskScope,
 ) -> tuple[DispositionDeskScope, set[UUID] | None, str, int, bool, str | None]:
-    roles = _role_keys(db, principal)
-    can_view_team = PermissionKeys.EXPORT_BUYERS in principal.permission_keys
     if requested_scope == "mine":
         user = db.get(User, principal.user_id)
         return (
@@ -116,67 +96,25 @@ def _team_scope(
             {principal.user_id},
             user.display_name if user else "My work",
             1,
-            can_view_team,
+            True,
             "Unassigned active disposition cases are included so setup work stays visible.",
         )
-    if not can_view_team:
-        raise PermissionError("Team disposition scope requires disposition manager access.")
-
-    if roles & EXECUTIVE_ROLE_KEYS:
-        active_count = len(
-            db.scalars(
-                select(User.id).where(
-                    User.organization_id == principal.organization_id,
-                    User.is_active.is_(True),
-                )
-            ).all()
-        )
-        return "team", None, "Organization", active_count, True, None
-
-    membership_team_ids = select(TeamMembership.team_id).where(
-        TeamMembership.organization_id == principal.organization_id,
-        TeamMembership.user_id == principal.user_id,
-    )
-    teams = list(
+    active_count = len(
         db.scalars(
-            select(Team).where(
-                Team.organization_id == principal.organization_id,
-                Team.team_type == "dispositions",
-                Team.is_active.is_(True),
-                or_(
-                    Team.manager_user_id == principal.user_id,
-                    Team.id.in_(membership_team_ids),
-                ),
+            select(User.id).where(
+                User.organization_id == principal.organization_id,
+                User.is_active.is_(True),
             )
         ).all()
     )
-    team_ids = [team.id for team in teams]
-    member_ids = {principal.user_id}
-    if team_ids:
-        member_ids.update(
-            db.scalars(
-                select(TeamMembership.user_id)
-                .join(User, User.id == TeamMembership.user_id)
-                .where(
-                    TeamMembership.organization_id == principal.organization_id,
-                    TeamMembership.team_id.in_(team_ids),
-                    User.organization_id == principal.organization_id,
-                    User.is_active.is_(True),
-                )
-            ).all()
-        )
-        member_ids.update(team.manager_user_id for team in teams if team.manager_user_id)
-    notice = (
-        "Unassigned active disposition cases are included; other unassigned records are "
-        "excluded."
+    return (
+        "team",
+        None,
+        "Company",
+        active_count,
+        True,
+        "Company view includes every active disposition case and investor relationship.",
     )
-    if not teams:
-        notice = (
-            "No active Dispositions team is connected, so Team currently shows only your work. "
-            "Unassigned active disposition cases are included."
-        )
-    label = ", ".join(team.name for team in teams) if teams else "My work"
-    return "team", member_ids, label, len(member_ids), True, notice
 
 
 def _scoped(user_id: UUID | None, allowed_user_ids: set[UUID] | None) -> bool:
@@ -431,9 +369,6 @@ def read_desk(
         raise ValueError("Disposition Desk offset cannot be negative.")
     if selected_section is None and offset:
         raise ValueError("Disposition Desk section is required when offset is greater than zero.")
-    if PermissionKeys.VIEW_BUYERS not in principal.permission_keys:
-        raise PermissionError("The Disposition Desk requires buyer-network access.")
-
     effective_scope, allowed_user_ids, scope_label, member_count, can_view_team, scope_notice = (
         _team_scope(db, principal, requested_scope)
     )

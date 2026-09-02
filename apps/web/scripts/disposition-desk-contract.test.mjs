@@ -22,6 +22,7 @@ const alexRoadmap = readFileSync(resolve(process.cwd(), "../../docs/ALEX_DISPOSI
 
 test("the canonical disposition desk is URL-backed and server-loaded", () => {
   assert.match(api, /export type DispositionDeskScope = "mine" \| "team"/);
+  assert.match(api, /deal_id: string/);
   assert.match(api, /export async function getDispositionDesk/);
   assert.match(api, /new URLSearchParams\(\{ scope \}\)/);
   assert.match(api, /if \(section\) query\.set\("section", section\)/);
@@ -38,6 +39,7 @@ test("the canonical disposition desk is URL-backed and server-loaded", () => {
     assert.match(page, new RegExp(`${queryKey}\\?: string`));
   }
   assert.match(page, /params\.view === "disposition"/);
+  assert.match(page, /params\.scope === "mine" \? "mine" : "team"/);
   assert.match(iaContract, /\{ name: "deskPage", status: "consumed" \}/);
   assert.match(page, /getDispositionDesk\(\s*dispositionScope,\s*selectedDesk,/);
   assert.match(page, /<DispositionDeskWorkspace/);
@@ -81,6 +83,7 @@ test("the desk centers the two daily jobs and keeps supporting queues secondary"
   assert.match(page, /: "active_deals";/);
   assert.match(desk, /new URLSearchParams\(\{ desk: view, scope, view: "disposition" \}\)/);
   assert.match(desk, /data\.can_view_team/);
+  assert.match(desk, /Company\s*<\/Link>/);
   assert.match(desk, />Owner</);
   assert.match(desk, />Due</);
   assert.match(desk, />Reason</);
@@ -115,7 +118,7 @@ test("a disposition deal opens on one outreach-led three-section workspace", () 
   assert.match(dispositionWorkspace, /<dt>Packet<\/dt>/);
   assert.match(dispositionWorkspace, /<dt>Investors<\/dt>/);
   assert.match(dispositionWorkspace, /Outreach queue/);
-  assert.match(dispositionWorkspace, /Find \/ pull investors/);
+  assert.match(dispositionWorkspace, /Find buyers/);
   assert.match(dispositionWorkspace, /<summary>More tools<\/summary>/);
   assert.match(dispositionWorkspace, /variant === "dedicated" && dedicatedSection === "deal"/);
   assert.match(dispositionWorkspace, /initialTab = "execution"/);
@@ -131,7 +134,7 @@ test("the Alex workflow roadmap preserves every phase and acceptance target", ()
   assert.match(alexRoadmap, /Under Contract -> Ready in Dispositions/);
   assert.match(alexRoadmap, /guidance, not a workflow lock/);
   assert.match(alexRoadmap, /End-To-End Acceptance Checklist/);
-  assert.match(alexRoadmap, /14\. Alex can select a primary\/backup buyer/);
+  assert.match(alexRoadmap, /15\. Alex can select a primary\/backup buyer/);
 });
 
 test("stale, unavailable, and truncated data remain explicit without disabling canonical work", () => {
@@ -205,7 +208,9 @@ test("the Find buyers workbench hosts one governed, explainable buyer pool", () 
 test("the disposition role default and responsive controls use the canonical desk", () => {
   assert.match(navigation, /return "\/os\/deals\?view=disposition"/);
   assert.match(navigation, /label: "Dispositions"/);
-  assert.match(navigation, /allPermissions: \["deals:view", "buyers:view"\]/);
+  assert.match(navigation, /href: "\/os\/deals\?view=disposition&scope=team"/);
+  assert.match(navigation, /roles: internalCompanyRoles/);
+  assert.match(navigation, /allPermissions: \["dispositions:view"\]/);
   assert.match(navigation, /activePaths: \["\/os\/dispositions"\]/);
   assert.equal((iaContract.match(/defaultRoute: "\/os\/deals\?view=disposition"/g) ?? []).length, 2);
   assert.match(iaContract, /targetCanonical: "\/os\/deals\?view=disposition"/);

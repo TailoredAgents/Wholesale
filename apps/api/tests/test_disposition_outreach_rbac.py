@@ -144,7 +144,7 @@ def test_disposition_outreach_permissions_are_bootstrap_discoverable() -> None:
 
 @pytest.mark.parametrize(
     "role_key",
-    ["acquisition_rep", "read_only_partner", "restricted_vendor"],
+    ["read_only_partner", "restricted_vendor"],
 )
 def test_non_disposition_roles_cannot_read_outreach_sensitive_details(
     role_key: str,
@@ -164,7 +164,9 @@ def test_non_disposition_roles_cannot_read_outreach_sensitive_details(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: buyers:view"
+    assert response.json()["detail"].startswith("Missing one of permissions:")
+    assert PermissionKeys.VIEW_DISPOSITIONS in response.json()["detail"]
+    assert PermissionKeys.VIEW_BUYERS in response.json()["detail"]
     for sensitive_key in (
         "captured_email",
         "captured_phone",
@@ -175,15 +177,17 @@ def test_non_disposition_roles_cannot_read_outreach_sensitive_details(
         assert sensitive_key not in response.text
 
 
-def test_buyer_view_alone_does_not_grant_outreach_workspace_access(
+@pytest.mark.parametrize("role_key", ["operations_assistant", "acquisition_rep"])
+def test_internal_roles_can_read_outreach_workspace(
+    role_key: str,
     db_session: Session,
     api_db_override: None,
 ) -> None:
     client = TestClient(app)
     headers = _headers_for_role(
         db_session,
-        role_key="operations_assistant",
-        email="buyer-view-without-outreach@example.com",
+        role_key=role_key,
+        email=f"company-outreach-reader-{role_key}@example.com",
     )
 
     response = client.get(
@@ -191,10 +195,8 @@ def test_buyer_view_alone_does_not_grant_outreach_workspace_access(
         headers=headers,
     )
 
-    assert response.status_code == 403
-    assert response.json()["detail"].startswith("Missing one of permissions:")
-    assert PermissionKeys.MANAGE_DISPOSITION_OUTREACH in response.json()["detail"]
-    assert PermissionKeys.APPROVE_DISPOSITION_OUTREACH in response.json()["detail"]
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Disposition case not found."
 
 
 @pytest.mark.parametrize("role_key", ["owner", "disposition_manager", "disposition_rep"])

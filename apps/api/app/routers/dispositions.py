@@ -126,7 +126,10 @@ from app.services.voice import (
 )
 
 router = APIRouter(prefix="/api/v1/dispositions", tags=["dispositions"])
-view_dependency = require_permission(PermissionKeys.VIEW_DEALS)
+view_dependency = require_any_permission(
+    PermissionKeys.VIEW_DISPOSITIONS,
+    PermissionKeys.VIEW_DEALS,
+)
 edit_dependency = require_permission(PermissionKeys.EDIT_DEALS)
 buyer_view_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
 buyer_edit_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
@@ -138,9 +141,9 @@ outreach_approve_dependency = require_permission(PermissionKeys.APPROVE_DISPOSIT
 buyer_selection_approve_dependency = require_permission(
     PermissionKeys.APPROVE_DISPOSITION_BUYER_SELECTION
 )
-outreach_view_dependency = require_any_permission(
-    PermissionKeys.MANAGE_DISPOSITION_OUTREACH,
-    PermissionKeys.APPROVE_DISPOSITION_OUTREACH,
+disposition_detail_view_dependency = require_any_permission(
+    PermissionKeys.VIEW_DISPOSITIONS,
+    PermissionKeys.VIEW_BUYERS,
 )
 bulk_send_dependency = require_any_permission(
     PermissionKeys.SEND_DISPOSITION_BULK_OUTREACH,
@@ -247,11 +250,11 @@ def read_disposition_intelligence(
         raise invalid(exc) from exc
 
 
-@router.get("/desk")
+@router.get("/desk", dependencies=[Depends(disposition_detail_view_dependency)])
 def read_disposition_desk(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_dependency)],
-    scope: Annotated[DispositionDeskScope, Query()] = "mine",
+    scope: Annotated[DispositionDeskScope, Query()] = "team",
     section: Annotated[DispositionDeskCategory | None, Query()] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> DispositionDeskRead:
@@ -603,13 +606,13 @@ def read_case_package(
 
 @router.get(
     "/cases/{case_id}/outreach",
-    dependencies=[Depends(view_dependency), Depends(buyer_view_dependency)],
+    dependencies=[Depends(disposition_detail_view_dependency)],
 )
 def read_case_outreach(
     case_id: UUID,
     response: Response,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(outreach_view_dependency)],
+    principal: Annotated[Principal, Depends(view_dependency)],
 ) -> DispositionOutreachWorkspaceRead:
     try:
         result = disposition_outreach.read_workspace(db, principal, case_id)
@@ -1196,7 +1199,7 @@ def match_case_buyers(
 
 @router.get(
     "/cases/{case_id}/buyer-pool",
-    dependencies=[Depends(buyer_view_dependency)],
+    dependencies=[Depends(disposition_detail_view_dependency)],
 )
 def read_case_buyer_pool(
     case_id: UUID,
@@ -1291,7 +1294,7 @@ def revoke_case_package_share_link(
 
 @router.get(
     "/cases/{case_id}/execution",
-    dependencies=[Depends(buyer_view_dependency)],
+    dependencies=[Depends(disposition_detail_view_dependency)],
 )
 def read_case_execution_workspace(
     case_id: UUID,
@@ -1555,7 +1558,7 @@ def refresh_case_buyer_pool(
 
 @router.get(
     "/cases/{case_id}/buyer-pool/runs",
-    dependencies=[Depends(buyer_view_dependency)],
+    dependencies=[Depends(disposition_detail_view_dependency)],
 )
 def read_case_buyer_pool_runs(
     case_id: UUID,

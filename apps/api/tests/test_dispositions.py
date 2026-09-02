@@ -3988,12 +3988,13 @@ def test_disposition_intelligence_requires_deal_access_and_redacts_economics(
         assert payload["economics"][key] is None
     assert all(item["collected_revenue_cents"] is None for item in payload["sources"])
 
-    forbidden = client.get(
+    company_view = client.get(
         "/api/v1/dispositions/intelligence",
         headers={"X-Dev-User-Email": marketing_user.email},
     )
-    assert forbidden.status_code == 403, forbidden.text
-    assert "deals:view" in forbidden.json()["detail"]
+    assert company_view.status_code == 200, company_view.text
+    assert company_view.json()["access"]["private_economics_visible"] is False
+    assert company_view.json()["economics"]["completed_assignments"] == 1
 
 
 def test_disposition_intelligence_is_organization_scoped(

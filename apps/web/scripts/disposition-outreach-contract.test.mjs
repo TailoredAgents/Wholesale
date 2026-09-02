@@ -104,9 +104,8 @@ test("live controls require scoped outreach and bulk communication permissions",
   assert.match(outreach, /Disposition bulk-release permission/);
 });
 
-test("buyer and outreach authority both gate the tab, forced URL, and workspace mount", () => {
-  assert.match(page, /profile\?\.permissions\.includes\("buyers:view"\)/);
-  assert.match(page, /canManageOutreach \|\| canApproveOutreach/);
+test("company disposition visibility gates the tab, forced URL, and workspace mount", () => {
+  assert.match(page, /profile\?\.permissions\.includes\("dispositions:view"\)/);
   assert.match(page, /canViewOutreach=\{canViewOutreach\}/);
   assert.match(disposition, /initialTab === "outreach" && !canViewOutreach/);
   assert.match(disposition, /item !== "outreach" \|\| canViewOutreach/);
@@ -117,9 +116,11 @@ test("buyer and outreach authority both gate the tab, forced URL, and workspace 
   assert.match(api, /provider_message_id: string \| null/);
 });
 
-test("acquisition and external deal-view roles cannot satisfy the frontend outreach gate", () => {
+test("internal acquisition roles can view outreach while external deal viewers cannot", () => {
+  const companyVisibilityKeys = rbac.match(/COMPANY_DISPOSITION_VIEW_KEYS = \(([\s\S]*?)\n\)/)?.[1] ?? "";
   const acquisitionKeys = rbac.match(/ACQUISITION_KEYS = \(([\s\S]*?)\n\)/)?.[1] ?? "";
-  assert.doesNotMatch(acquisitionKeys, /VIEW_BUYERS/);
+  assert.match(companyVisibilityKeys, /VIEW_DISPOSITIONS/);
+  assert.match(acquisitionKeys, /\*COMPANY_DISPOSITION_VIEW_KEYS/);
   assert.doesNotMatch(acquisitionKeys, /MANAGE_DISPOSITION_OUTREACH/);
   assert.doesNotMatch(acquisitionKeys, /APPROVE_DISPOSITION_OUTREACH/);
   assert.match(rbac, /"acquisition_rep",[\s\S]*?\*ACQUISITION_KEYS/);

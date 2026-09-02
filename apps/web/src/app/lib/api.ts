@@ -3440,6 +3440,7 @@ export type DispositionOfferRoomWorkspace = {
 
 export type DispositionCase = {
   id: string;
+  deal_id: string;
   transaction_id: string;
   lead_id: string;
   asset_class: "house" | "land";
@@ -7824,7 +7825,7 @@ export async function getDispositionOverview(): Promise<{
 }
 
 export async function getDispositionDesk(
-  scope: DispositionDeskScope = "mine",
+  scope: DispositionDeskScope = "team",
   section?: DispositionDeskCategory,
   offset = 0,
 ): Promise<{

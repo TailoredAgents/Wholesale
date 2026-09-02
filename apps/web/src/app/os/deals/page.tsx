@@ -38,7 +38,7 @@ export default async function DealsPage({
   }>;
 }) {
   const params = await searchParams;
-  const dispositionScope = params.scope === "team" ? "team" : "mine";
+  const dispositionScope = params.scope === "mine" ? "mine" : "team";
 
   if (params.view === "disposition") {
     if (params.desk === "performance") {

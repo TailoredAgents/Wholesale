@@ -53,6 +53,7 @@ class PermissionKeys:
     MANAGE_BUYER_PROOF = "buyers:manage_proof"
     VIEW_DEALS = "deals:view"
     EDIT_DEALS = "deals:edit"
+    VIEW_DISPOSITIONS = "dispositions:view"
     VIEW_DISPOSITION_PRIVATE_ECONOMICS = "dispositions:view_private_economics"
     APPROVE_DISPOSITION_PACKAGES = "dispositions:approve_packages"
     MANAGE_DISPOSITION_OUTREACH = "dispositions:manage_outreach"
@@ -293,6 +294,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition(PermissionKeys.VIEW_DEALS, "View deals", "View deal records."),
     PermissionDefinition(PermissionKeys.EDIT_DEALS, "Edit deals", "Create and update deals."),
     PermissionDefinition(
+        PermissionKeys.VIEW_DISPOSITIONS,
+        "View dispositions",
+        "View company disposition cases, investor workspaces, and outreach history.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS,
         "View disposition private economics",
         "View purchase basis, release floors, and internal disposition economics.",
@@ -341,11 +347,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
 
 ALL_PERMISSION_KEYS = tuple(permission.key for permission in PERMISSIONS)
 
+COMPANY_DISPOSITION_VIEW_KEYS = (
+    PermissionKeys.VIEW_DISPOSITIONS,
+)
+
 ACQUISITION_KEYS = (
     PermissionKeys.VIEW_LEADS,
     PermissionKeys.EDIT_LEADS,
     PermissionKeys.EDIT_UNDERWRITING,
     PermissionKeys.VIEW_DEALS,
+    *COMPANY_DISPOSITION_VIEW_KEYS,
     PermissionKeys.VIEW_CONVERSATIONS,
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_EMAIL,
@@ -354,6 +365,7 @@ ACQUISITION_KEYS = (
 )
 
 DISPOSITION_KEYS = (
+    *COMPANY_DISPOSITION_VIEW_KEYS,
     PermissionKeys.VIEW_DEALS,
     PermissionKeys.EDIT_DEALS,
     PermissionKeys.VIEW_DISPOSITION_PRIVATE_ECONOMICS,
@@ -385,6 +397,7 @@ ROLES: tuple[RoleDefinition, ...] = (
         "administrator",
         "Administrator",
         (
+            *COMPANY_DISPOSITION_VIEW_KEYS,
             PermissionKeys.VIEW_LEADS,
             PermissionKeys.EDIT_LEADS,
             PermissionKeys.MANAGE_USERS,
@@ -432,6 +445,7 @@ ROLES: tuple[RoleDefinition, ...] = (
         "prospecting_caller",
         "Prospecting caller",
         (
+            *COMPANY_DISPOSITION_VIEW_KEYS,
             PermissionKeys.VIEW_ASSIGNED_LEADS,
             PermissionKeys.VIEW_ASSIGNED_CONVERSATIONS,
             PermissionKeys.HANDOFF_ASSIGNED_CONVERSATIONS,
@@ -458,6 +472,7 @@ ROLES: tuple[RoleDefinition, ...] = (
         "transaction_coordinator",
         "Transaction coordinator",
         (
+            *COMPANY_DISPOSITION_VIEW_KEYS,
             PermissionKeys.VIEW_DEALS,
             PermissionKeys.EDIT_DEALS,
             PermissionKeys.SEND_CONTRACTS,
@@ -471,6 +486,7 @@ ROLES: tuple[RoleDefinition, ...] = (
         "marketing_manager",
         "Marketing manager",
         (
+            *COMPANY_DISPOSITION_VIEW_KEYS,
             PermissionKeys.VIEW_LEADS,
             PermissionKeys.SEND_BULK_COMMUNICATIONS,
             PermissionKeys.MANAGE_PUBLIC_PROOF,
@@ -481,6 +497,7 @@ ROLES: tuple[RoleDefinition, ...] = (
         "finance_accounting",
         "Finance/accounting",
         (
+            *COMPANY_DISPOSITION_VIEW_KEYS,
             PermissionKeys.VIEW_FINANCIALS,
             PermissionKeys.VIEW_COMPENSATION,
             PermissionKeys.CHANGE_COMPENSATION_RULES,

@@ -221,6 +221,25 @@ def test_executed_contract_catchup_permission_is_narrowly_assigned() -> None:
         assert PermissionKeys.RECORD_EXECUTED_CONTRACTS not in role_permissions[role_key]
 
 
+def test_internal_company_roles_can_view_the_complete_disposition_workspace() -> None:
+    role_permissions = {role.key: set(role.permission_keys) for role in ROLES}
+    required = {PermissionKeys.VIEW_DISPOSITIONS}
+
+    for role_key in (
+        "administrator",
+        "operations_assistant",
+        "acquisition_manager",
+        "acquisition_rep",
+        "prospecting_caller",
+        "disposition_manager",
+        "disposition_rep",
+        "transaction_coordinator",
+        "marketing_manager",
+        "finance_accounting",
+    ):
+        assert required <= role_permissions[role_key]
+
+
 def test_bootstrap_from_env_logs_before_session_objects_detach(
     db_session: Session,
     monkeypatch: MonkeyPatch,

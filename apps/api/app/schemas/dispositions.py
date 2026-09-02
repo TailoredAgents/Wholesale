@@ -152,6 +152,7 @@ class ReconciliationDecision(BaseModel):
 
 class DispositionCaseRead(BaseModel):
     id: UUID
+    deal_id: UUID
     transaction_id: UUID
     lead_id: UUID
     asset_class: Literal["house", "land"]

@@ -1623,6 +1623,7 @@ def case_read(
     )
     return DispositionCaseRead(
         id=case.id,
+        deal_id=case.deal_id,
         transaction_id=case.transaction_id,
         lead_id=case.lead_id,
         asset_class=normalize_asset_class(lead.asset_class if lead else None),

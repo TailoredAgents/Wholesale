@@ -128,8 +128,9 @@ def test_disposition_desk_empty_read_model(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["requested_scope"] == "mine"
-    assert payload["effective_scope"] == "mine"
+    assert payload["requested_scope"] == "team"
+    assert payload["effective_scope"] == "team"
+    assert payload["scope_label"] == "Company"
     assert payload["metrics"] == {
         "today": 0,
         "active_deals": 0,
@@ -303,7 +304,7 @@ def test_disposition_desk_keeps_active_transaction_with_cancelled_case_visible(
     )
 
 
-def test_disposition_desk_scopes_buyers_and_authorizes_team_view(
+def test_disposition_desk_keeps_my_work_optional_and_company_view_open(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -359,7 +360,7 @@ def test_disposition_desk_scopes_buyers_and_authorizes_team_view(
 
     rep_headers = {"X-Dev-User-Email": rep_one.email}
     mine = client.get("/api/v1/dispositions/desk?scope=mine", headers=rep_headers)
-    forbidden = client.get("/api/v1/dispositions/desk?scope=team", headers=rep_headers)
+    rep_company = client.get("/api/v1/dispositions/desk?scope=team", headers=rep_headers)
     team_view = client.get(
         "/api/v1/dispositions/desk?scope=team",
         headers={"X-Dev-User-Email": manager.email},
@@ -368,16 +369,16 @@ def test_disposition_desk_scopes_buyers_and_authorizes_team_view(
     assert mine.status_code == 200, mine.text
     assert mine.json()["buyer_network"]["total"] == 1
     assert mine.json()["scope_member_count"] == 1
-    assert forbidden.status_code == 403
-    assert "manager access" in forbidden.json()["detail"]
+    assert rep_company.status_code == 200, rep_company.text
+    assert rep_company.json()["effective_scope"] == "team"
+    assert rep_company.json()["scope_label"] == "Company"
+    assert rep_company.json()["buyer_network"]["total"] == 3
     assert team_view.status_code == 200, team_view.text
     assert team_view.json()["effective_scope"] == "team"
-    assert team_view.json()["scope_member_count"] == 3
-    assert team_view.json()["buyer_network"]["total"] == 2
-    assert team_view.json()["buyer_network"]["unassigned"] == 0
-    assert "Unassigned active disposition cases are included" in team_view.json()[
-        "scope_notice"
-    ]
+    assert team_view.json()["scope_member_count"] == 4
+    assert team_view.json()["buyer_network"]["total"] == 3
+    assert team_view.json()["buyer_network"]["unassigned"] == 1
+    assert "every active disposition case" in team_view.json()["scope_notice"]
 
 
 def test_disposition_desk_aggregates_owned_work_with_canonical_links(

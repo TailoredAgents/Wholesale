@@ -68,9 +68,11 @@ def test_deal_viewer_cannot_read_buyer_pool_or_run_history(
     )
 
     assert pool.status_code == 403
-    assert pool.json()["detail"] == "Missing permission: buyers:view"
+    assert pool.json()["detail"].startswith("Missing one of permissions:")
+    assert "buyers:view" in pool.json()["detail"]
+    assert "dispositions:view" in pool.json()["detail"]
     assert history.status_code == 403
-    assert history.json()["detail"] == "Missing permission: buyers:view"
+    assert history.json()["detail"] == pool.json()["detail"]
 
 
 def test_deal_editor_cannot_refresh_or_decide_without_buyer_permissions(

@@ -36,6 +36,16 @@ export type OsNavGroup = {
 export const ownerRoles = ["owner", "founder_operator", "ceo"];
 const acquisitionRoles = ["acquisition_manager", "acquisition_rep"];
 const dispositionRoles = ["disposition_manager", "disposition_rep"];
+const internalCompanyRoles = [
+  "administrator",
+  "operations_assistant",
+  ...acquisitionRoles,
+  ...dispositionRoles,
+  "prospecting_caller",
+  "transaction_coordinator",
+  "marketing_manager",
+  "finance_accounting",
+];
 
 const homeRoles = [
   "administrator",
@@ -143,12 +153,12 @@ export const osNavGroups: OsNavGroup[] = [
         activePaths: ["/os/lead-manager", "/os/pipeline", "/os/underwriting"],
       },
       {
-        href: "/os/deals?view=disposition",
+        href: "/os/deals?view=disposition&scope=team",
         label: "Dispositions",
         icon: Megaphone,
-        roles: ["administrator", "operations_assistant", ...dispositionRoles],
+        roles: internalCompanyRoles,
         anyPermissions: [],
-        allPermissions: ["deals:view", "buyers:view"],
+        allPermissions: ["dispositions:view"],
         activeHrefs: [
           "/os/deals?view=disposition",
           "/os/deals?tab=disposition",

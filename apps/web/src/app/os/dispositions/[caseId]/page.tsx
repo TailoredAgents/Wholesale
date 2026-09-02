@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import {
-  getDealOverview,
   getDispositionOverview,
   getWorkspaceProfile,
 } from "../../../lib/api";
@@ -32,28 +31,23 @@ export default async function DispositionDealPage({
   params: Promise<{ caseId: string }>;
   searchParams: Promise<{ dispositionTab?: string; tab?: string }>;
 }) {
-  const [{ caseId }, query, dispositionResult, dealResult, profile] = await Promise.all([
+  const [{ caseId }, query, dispositionResult, profile] = await Promise.all([
     params,
     searchParams,
     getDispositionOverview(),
-    getDealOverview(),
     getWorkspaceProfile(),
   ]);
   const dispositionCase = dispositionResult.dispositions?.cases.find((item) => item.id === caseId) ?? null;
-  const deal = dealResult.deals?.items.find((item) => item.disposition_case_id === caseId) ?? null;
   const requestedTab = query.tab ?? query.dispositionTab;
   const initialTab = workspaceTabs.has(requestedTab as DispositionWorkspaceTab)
     ? requestedTab as DispositionWorkspaceTab
     : "execution";
   const canManageOutreach = Boolean(profile?.permissions.includes("dispositions:manage_outreach"));
   const canApproveOutreach = Boolean(profile?.permissions.includes("dispositions:approve_outreach"));
-  const canViewOutreach = Boolean(
-    profile?.permissions.includes("buyers:view")
-      && (canManageOutreach || canApproveOutreach),
-  );
-  const connected = dispositionResult.apiConnected && dealResult.apiConnected && Boolean(profile);
+  const canViewOutreach = Boolean(profile?.permissions.includes("dispositions:view"));
+  const connected = dispositionResult.apiConnected && Boolean(profile);
 
-  if (!dispositionCase || !deal || !dispositionResult.dispositions) {
+  if (!dispositionCase || !dispositionResult.dispositions) {
     return (
       <WorkspacePage>
         <PageHeader
@@ -73,7 +67,7 @@ export default async function DispositionDealPage({
   return (
     <WorkspacePage>
       <PageHeader
-        actions={<><Link href="/os/deals?view=disposition&desk=active_deals">Disposition desk</Link><Link href={`/os/deals?view=all&display=queue&deal=${deal.id}&tab=summary`}>Full deal record</Link></>}
+        actions={<><Link href="/os/deals?view=disposition&desk=active_deals&scope=team">Disposition desk</Link>{profile?.permissions.includes("deals:view") ? <Link href={`/os/deals?view=all&display=queue&deal=${dispositionCase.deal_id}&tab=summary`}>Full deal record</Link> : null}</>}
         description={`${dispositionCase.asset_class === "land" ? "Land" : "House"} deal for ${dispositionCase.seller_name}. Work the ranked investor queue; packet and offer tools remain available.`}
         eyebrow="Dispositions / deal marketing"
         meta={<StatusBadge tone={connected ? "success" : "warning"}>{connected ? "Workspace current" : "Access needs review"}</StatusBadge>}
@@ -90,7 +84,7 @@ export default async function DispositionDealPage({
             || profile?.permissions.includes("communications:send_bulk"),
         )}
         canViewOutreach={canViewOutreach}
-        dealId={deal.id}
+        dealId={dispositionCase.deal_id}
         initialCaseId={caseId}
         initialData={dispositionResult.dispositions}
         initialTab={initialTab}

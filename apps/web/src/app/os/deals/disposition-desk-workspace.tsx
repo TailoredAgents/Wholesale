@@ -325,14 +325,14 @@ export function DispositionDeskWorkspace({
 
       <div className={styles.controlRow}>
         <nav aria-label="Disposition ownership scope" className={styles.scopeControl}>
+          {data.can_view_team ? (
+            <Link aria-current={scope === "team" ? "page" : undefined} className={scope === "team" ? styles.activeScope : styles.scopeLink} href={hrefFor(view, "team")}>
+              Company
+            </Link>
+          ) : null}
           <Link aria-current={scope === "mine" ? "page" : undefined} className={scope === "mine" ? styles.activeScope : styles.scopeLink} href={hrefFor(view, "mine")}>
             My work
           </Link>
-          {data.can_view_team ? (
-            <Link aria-current={scope === "team" ? "page" : undefined} className={scope === "team" ? styles.activeScope : styles.scopeLink} href={hrefFor(view, "team")}>
-              Team
-            </Link>
-          ) : null}
         </nav>
         <p>
           Updated <time dateTime={data.source_health.generated_at}>{formatDue(data.source_health.generated_at)}</time>
