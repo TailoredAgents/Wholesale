@@ -1,6 +1,6 @@
 .workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
-.dedicatedWorkspace { gap: 12px; }
+.dedicatedWorkspace { gap: 8px; }
 .body.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .landMarketNotice { margin: 0; padding: 10px 14px; border: 1px solid #d8c58e; border-radius: 8px; background: #fff9e9; color: #684e1c; font-size: 11px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
@@ -251,8 +251,8 @@
 .tabBadge[data-tone="complete"], .tabBadge[data-tone="available"] { background: var(--brand-soft); color: var(--brand-strong); }
 .tabBadge[data-tone="warning"] { background: #fff1c9; color: #795400; }
 .tabBadge[data-tone="hard"] { background: var(--danger-soft); color: var(--danger); }
-.workspaceNavigation { position: sticky; z-index: 12; top: 0; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 8px 20px rgb(20 41 46 / .07); backdrop-filter: blur(12px); }
-.workspaceDealStrip { min-height: 50px; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+.workspaceNavigation { position: sticky; z-index: 12; top: 0; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 3px 10px rgb(20 41 46 / .05); backdrop-filter: blur(12px); }
+.workspaceDealStrip { min-height: 42px; padding: 5px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
 .workspaceDealStrip > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
 .workspaceDealStrip > div span { color: var(--brand-strong); font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .workspaceDealStrip > div strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -262,18 +262,18 @@
 .workspaceDealStrip dt { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .workspaceDealStrip dd { margin: 0; font-size: 9px; font-weight: 850; }
 .workspacePrimaryNav { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.workspacePrimaryNav > button { min-width: 0; min-height: 68px; padding: 10px 13px; display: flex; align-items: center; gap: 10px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
+.workspacePrimaryNav > button { min-width: 0; min-height: 50px; padding: 7px 11px; display: flex; align-items: center; gap: 8px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
 .workspacePrimaryNav > button:last-child { border-right: 0; }
 .workspacePrimaryNav > button > svg { flex: 0 0 auto; }
 .workspacePrimaryNav > button > span { min-width: 0; display: grid; gap: 2px; }
 .workspacePrimaryNav > button strong { color: var(--text); font-size: 11px; }
 .workspacePrimaryNav > button small { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
-.workspaceSecondaryNav { min-height: 44px; padding: 6px 9px; display: flex; align-items: center; gap: 6px; overflow-x: auto; border-top: 1px solid var(--line-soft); }
-.workspaceSecondaryNav button { min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
-.workspaceSecondaryNav button[aria-current="page"] { border-color: var(--brand); background: var(--surface); color: var(--brand-strong); }
+.workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); background: color-mix(in srgb, var(--brand-soft) 48%, var(--surface)); color: var(--brand-strong); }
+.workspaceSecondaryNav { min-height: 38px; padding: 4px 7px; display: flex; align-items: center; gap: 4px; overflow-x: auto; border-top: 1px solid var(--line-soft); }
+.workspaceSecondaryNav button { min-height: 28px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.workspaceSecondaryNav button[aria-current="page"] { border-color: var(--line); border-bottom-color: var(--brand); background: var(--surface); color: var(--brand-strong); }
 .workspaceMoreTools { position: relative; margin-left: auto; }
-.workspaceMoreTools > summary { min-height: 32px; padding: 0 10px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 800; list-style: none; white-space: nowrap; }
+.workspaceMoreTools > summary { min-height: 28px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 800; list-style: none; white-space: nowrap; }
 .workspaceMoreTools > summary::-webkit-details-marker { display: none; }
 .workspaceMoreTools > div { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 210px; padding: 6px; display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 28px rgb(20 41 46 / .14); }
 .workspaceMoreTools > div button { width: 100%; min-height: 40px; justify-content: flex-start; border-radius: 5px; }

@@ -1,4 +1,4 @@
-.builder { overflow: hidden; border: 1px solid #cfd9d1; border-radius: 14px; background: #fff; }
+.builder { overflow: hidden; border: 1px solid #cfd9d1; border-radius: 4px; background: #fff; }
 .emptyStarter { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid #9ab9a5; border-radius: 14px; background: #eef8f1; padding: 16px 18px; }
 .emptyStarter > div:first-child { display: grid; gap: 3px; }
 .emptyStarter span { color: #17633d; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
@@ -8,30 +8,30 @@
 .emptyStarter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #17633d; border-radius: 9px; background: #17633d; padding: 10px 13px; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .emptyStarter button:disabled { cursor: not-allowed; opacity: .48; }
 .emptyStarter .secondary { background: #fff; color: #17633d; }
-.builder > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px 15px; cursor: pointer; list-style: none; }
+.builder > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 10px; cursor: pointer; list-style: none; }
 .builder > summary::-webkit-details-marker { display: none; }
 .builder[open] > summary { border-bottom: 1px solid #dce3dd; background: #f8faf8; }
-.summaryIcon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #e5eee7; color: #17633d; }
+.summaryIcon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 3px; background: #e5eee7; color: #17633d; }
 .summaryCopy, .summaryMetrics { display: grid; min-width: 0; gap: 2px; }
 .summaryCopy strong { color: #203027; }
 .summaryCopy small, .summaryMetrics small { overflow: hidden; color: #68756d; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .summaryMetrics { text-align: right; }
 .summaryMetrics b { color: #17633d; font-size: 12px; }
-.body { display: grid; gap: 12px; padding: 12px; background: #f7f9f7; }
-.overview, .discovery, .pool { overflow: hidden; border: 1px solid #d9ded9; border-radius: 12px; background: #fff; }
-.overview { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 14px; }
+.body { display: grid; gap: 8px; padding: 8px; background: #f7f9f7; }
+.overview, .discovery, .pool { overflow: hidden; border: 1px solid #d9ded9; border-radius: 4px; background: #fff; }
+.overview { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px; }
 .overview > div:first-child { display: grid; gap: 3px; }
 .overview span, .discovery header span, .pool > header span { color: #17633d; font-size: 10px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
 .overview h4, .discovery h4, .pool h4 { margin: 0; color: #203027; }
 .overview p { margin: 0; color: #68756d; font-size: 12px; line-height: 1.45; }
-.overview dl { display: grid; grid-template-columns: repeat(2, minmax(84px, 1fr)); margin: 0; border: 1px solid #dfe4e0; border-radius: 9px; }
+.overview dl { display: grid; grid-template-columns: repeat(2, minmax(84px, 1fr)); margin: 0; border: 1px solid #dfe4e0; border-radius: 3px; }
 .overview dl div { display: grid; gap: 2px; padding: 7px 9px; }
 .overview dl div:nth-child(even) { border-left: 1px solid #e5e8e5; }
 .overview dl div:nth-child(n + 3) { border-top: 1px solid #e5e8e5; }
 .overview dt { color: #68756d; font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .overview dd { margin: 0; color: #17633d; font-size: 14px; font-weight: 850; }
 .primaryActions, .rowActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
-.builder button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #17633d; border-radius: 8px; background: #17633d; padding: 8px 10px; color: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.builder button { display: inline-flex; min-height: 30px; align-items: center; justify-content: center; gap: 5px; border: 1px solid #17633d; border-radius: 3px; background: #17633d; padding: 5px 9px; color: #fff; font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
 .builder button:disabled { cursor: not-allowed; opacity: .48; }
 .builder .secondary { background: #fff; color: #17633d; }
 .error { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e1aa9b; border-radius: 9px; background: #fff1ed; color: #8b3026; font-size: 12px; }

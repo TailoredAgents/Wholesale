@@ -19,6 +19,33 @@ const listBuilderPath = new URL(
   import.meta.url,
 );
 const apiPath = new URL("../src/app/lib/api.ts", import.meta.url);
+const workspaceStylesPath = new URL(
+  "../src/app/os/dispositions/disposition-execution-workspace.module.css",
+  import.meta.url,
+);
+const dispositionStylesPath = new URL(
+  "../src/app/os/dispositions/dispositions.module.css",
+  import.meta.url,
+);
+const queueBuilderStylesPath = new URL(
+  "../src/app/os/dispositions/disposition-queue-builder.module.css",
+  import.meta.url,
+);
+
+test("the outreach desk uses compact, professional workspace controls", async () => {
+  const [workspaceStyles, dispositionStyles, queueBuilderStyles] = await Promise.all([
+    readFile(workspaceStylesPath, "utf8"),
+    readFile(dispositionStylesPath, "utf8"),
+    readFile(queueBuilderStylesPath, "utf8"),
+  ]);
+
+  assert.match(workspaceStyles, /\.hero, \.panel \{[^}]*border-radius: 4px/);
+  assert.match(workspaceStyles, /\.panel button, \.hero button \{[^}]*min-height: 30px/);
+  assert.match(workspaceStyles, /\.queuePanel \{[^}]*border-radius: 4px/);
+  assert.match(dispositionStyles, /\.workspacePrimaryNav > button \{[^}]*min-height: 50px/);
+  assert.match(dispositionStyles, /\.workspaceSecondaryNav button \{[^}]*border-radius: 3px/);
+  assert.match(queueBuilderStyles, /\.builder \{[^}]*border-radius: 4px/);
+});
 
 test("the disposition workspace mounts a permission-aware one-to-one call queue", async () => {
   const [workspace, parent] = await Promise.all([
