@@ -7,6 +7,10 @@
   gap: var(--sg-space-4);
 }
 
+.workspacePageWide {
+  max-width: 1800px;
+}
+
 .pageHeader {
   min-height: 104px;
   padding: 4px 0 var(--sg-space-5);

@@ -31,12 +31,19 @@ const queueBuilderStylesPath = new URL(
   "../src/app/os/dispositions/disposition-queue-builder.module.css",
   import.meta.url,
 );
+const pagePath = new URL("../src/app/os/dispositions/[caseId]/page.tsx", import.meta.url);
+const pageContractsStylesPath = new URL(
+  "../src/app/os/_components/page-contracts.module.css",
+  import.meta.url,
+);
 
 test("the outreach desk uses compact, professional workspace controls", async () => {
-  const [workspaceStyles, dispositionStyles, queueBuilderStyles] = await Promise.all([
+  const [workspaceStyles, dispositionStyles, queueBuilderStyles, page, pageContractsStyles] = await Promise.all([
     readFile(workspaceStylesPath, "utf8"),
     readFile(dispositionStylesPath, "utf8"),
     readFile(queueBuilderStylesPath, "utf8"),
+    readFile(pagePath, "utf8"),
+    readFile(pageContractsStylesPath, "utf8"),
   ]);
 
   assert.match(workspaceStyles, /\.hero, \.panel \{[^}]*border-radius: 4px/);
@@ -55,6 +62,10 @@ test("the outreach desk uses compact, professional workspace controls", async ()
   assert.match(dispositionStyles, /\.workspacePrimaryTools \{[^}]*flex: 0 0 auto/);
   assert.match(dispositionStyles, /\.workspaceSecondaryNav button \{[^}]*border-radius: 3px/);
   assert.match(queueBuilderStyles, /\.builder \{[^}]*border-radius: 4px/);
+  assert.match(workspaceStyles, /\.commandDeck > \.hero \{[^}]*border: 0/);
+  assert.match(dispositionStyles, /\.dedicatedWorkspace \.embeddedBody \{[^}]*background: transparent/);
+  assert.match(page, /<WorkspacePage wide>/);
+  assert.match(pageContractsStyles, /\.workspacePageWide \{[^}]*max-width: 1800px/);
 });
 
 test("the disposition workspace mounts a permission-aware one-to-one call queue", async () => {
@@ -88,14 +99,14 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /Use my cellphone/);
   assert.match(workspace, /execution\/forwarded-calls/);
   assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
-  assert.match(workspace, /Open \{packageLabel\} packet/);
+  assert.match(workspace, /Open packet/);
   assert.match(workspace, /className=\{styles\.packetQuickBar\}/);
   assert.match(workspace, /<strong>Packet<\/strong>/);
   assert.match(workspace, /async function copyPacketLink\(\)/);
   assert.match(workspace, /navigator\.clipboard\.writeText\(issued\.share_url\)/);
   assert.match(workspace, /Copy link/);
-  assert.match(workspace, /Send by text/);
-  assert.match(workspace, /Send by email/);
+  assert.match(workspace, /Text packet/);
+  assert.match(workspace, /Email packet/);
   assert.match(workspace, /async function emailInvestorPacket\(\)/);
   assert.match(workspace, /idempotency\("dispo-packet-email"\)/);
   assert.match(workspace, /packetEmailUnavailable/);
@@ -179,7 +190,7 @@ test("investors can be selected, imported, discovered, and pinned inside Outreac
   assert.match(workspace, /assetClass=\{workspace\.asset_class\}/);
   assert.match(workspace, /quickDialQueueCount=\{candidates\.length\}/);
   assert.match(queueBuilder, /Find and rank investors/);
-  assert.match(queueBuilder, /Pull DealMachine results, add known buyers, and build the outreach list here/);
+  assert.match(queueBuilder, /Add buyers, import a list, or refresh ranking without leaving outreach/);
   assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| result\.entries\.some/);
   assert.match(queueBuilder, /if \(!builderOpen \|\| loadedCaseId === caseId\) return/);
   assert.match(queueBuilder, /Keep them off the[\s\S]*critical path until an operator deliberately expands/);

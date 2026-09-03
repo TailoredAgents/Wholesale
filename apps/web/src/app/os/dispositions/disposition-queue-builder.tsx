@@ -444,7 +444,7 @@ export function DispositionQueueBuilder({
           <span className={styles.summaryIcon}><UsersRound size={18} /></span>
           <span className={styles.summaryCopy}>
             <strong>{quickDialQueueCount ? "Find and rank investors" : "More ways to build this list"}</strong>
-            <small>{quickDialQueueCount ? "Pull DealMachine results, add known buyers, and build the outreach list here" : "Buyer Network ranking, provider discovery, and candidate review"}</small>
+            <small>{quickDialQueueCount ? "Add buyers, import a list, or refresh ranking without leaving outreach" : "Buyer Network ranking, provider discovery, and candidate review"}</small>
           </span>
           <span className={styles.summaryMetrics}>
             <b>{quickDialQueueCount} in QuickDial</b>

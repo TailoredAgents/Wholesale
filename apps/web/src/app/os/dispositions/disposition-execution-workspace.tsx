@@ -1223,36 +1223,38 @@ export function DispositionExecutionWorkspace({
 
   return (
     <section aria-label="Investor outreach desk" className={styles.workspace} data-empty={!candidate} id="call-queue" tabIndex={-1}>
-      <header className={styles.hero} data-empty={!candidate}>
-        <div>
-          <span>Investor QuickDial</span>
-          <h3>Contact an investor, then move to the next</h3>
-          <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
-        </div>
-        <div className={styles.heroActions}>
-          {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
-          {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving…" : workspace.session.persisted ? "Saved" : "Ready to save"}</span> : null}
-        </div>
-      </header>
+      <div className={styles.commandDeck}>
+        <header className={styles.hero} data-empty={!candidate}>
+          <div>
+            <span>Investor QuickDial</span>
+            <h3>Contact an investor, then move to the next</h3>
+            <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
+          </div>
+          <div className={styles.heroActions}>
+            {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
+            {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving…" : workspace.session.persisted ? "Saved" : "Ready to save"}</span> : null}
+          </div>
+        </header>
 
-      {workspace.blockers.length ? (
-        <details className={styles.advisoryDetails}>
-          <summary><ShieldAlert size={16} />Advisory deal checklist <strong>{workspace.blockers.length}</strong></summary>
-          <div>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<small>These items do not prevent work. Contact controls still follow each investor&apos;s live channel permissions.</small></div>
-        </details>
-      ) : null}
+        {workspace.blockers.length ? (
+          <details className={styles.advisoryDetails}>
+            <summary><ShieldAlert size={16} />Advisory deal checklist <strong>{workspace.blockers.length}</strong></summary>
+            <div>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<small>These items do not prevent work. Contact controls still follow each investor&apos;s live channel permissions.</small></div>
+          </details>
+        ) : null}
 
-      <DispositionQueueBuilder
-        assetClass={workspace.asset_class}
-        canEditBuyers={canEditBuyers}
-        canEditDeals={canEditDeals}
-        caseId={caseId}
-        currentQueueBuyerIds={candidates.map((item) => item.buyer_id)}
-        onMessage={onMessage}
-        onQueueChanged={refreshQueueBuilderWorkspace}
-        quickDialQueueCount={candidates.length}
-        request={request}
-      />
+        <DispositionQueueBuilder
+          assetClass={workspace.asset_class}
+          canEditBuyers={canEditBuyers}
+          canEditDeals={canEditDeals}
+          caseId={caseId}
+          currentQueueBuyerIds={candidates.map((item) => item.buyer_id)}
+          onMessage={onMessage}
+          onQueueChanged={refreshQueueBuilderWorkspace}
+          quickDialQueueCount={candidates.length}
+          request={request}
+        />
+      </div>
 
       {candidate ? (
         <div className={styles.outreachLayout}>
@@ -1286,10 +1288,10 @@ export function DispositionExecutionWorkspace({
                 <section aria-label="Investor packet delivery" className={styles.packetQuickBar}>
                   <div><Download size={15} /><span><strong>Packet</strong><small>Open, copy, or send the current {packageLabel} PDF.</small></span></div>
                   <div>
-                    {workspace.package_pdf_path ? <button aria-label={`Open ${packageLabel} packet`} className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open {packageLabel} packet</button> : null}
+                    {workspace.package_pdf_path ? <button aria-label={`Open ${packageLabel} packet`} className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open packet</button> : null}
                     <button aria-label="Copy investor packet link" className={styles.secondary} disabled={!canEditDeals || !workspace.package_pdf_path || busy !== null} onClick={() => void copyPacketLink()} title="Copy packet link" type="button"><Link2 size={14} /><span>{busy === "packet-link" ? "Copying…" : "Copy link"}</span></button>
-                    <button aria-label="Send investor packet by text" className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} title="Send packet by text" type="button"><MessageSquareText size={14} /><span>{busy === "packet-sms" ? "Sending…" : "Send by text"}</span></button>
-                    <button aria-label="Send investor packet by email" className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} title="Send packet by email" type="button"><Mail size={14} /><span>{busy === "packet-email" ? "Sending…" : "Send by email"}</span></button>
+                    <button aria-label="Send investor packet by text" className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} title="Send packet by text" type="button"><MessageSquareText size={14} /><span>{busy === "packet-sms" ? "Sending…" : "Text packet"}</span></button>
+                    <button aria-label="Send investor packet by email" className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} title="Send packet by email" type="button"><Mail size={14} /><span>{busy === "packet-email" ? "Sending…" : "Email packet"}</span></button>
                   </div>
                 </section>
                 {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}

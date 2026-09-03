@@ -9,11 +9,13 @@ function classes(...values: Array<string | false | null | undefined>) {
 export function WorkspacePage({
   children,
   className,
+  wide = false,
 }: {
   children: ReactNode;
   className?: string;
+  wide?: boolean;
 }) {
-  return <div className={classes(styles.workspacePage, className)}>{children}</div>;
+  return <div className={classes(styles.workspacePage, wide && styles.workspacePageWide, className)}>{children}</div>;
 }
 
 export function PageHeader({

@@ -108,7 +108,7 @@ export default async function DispositionDealPage({
   }
 
   return (
-    <WorkspacePage>
+    <WorkspacePage wide>
       <PageHeader
         actions={<><Link href="/os/deals?view=disposition&desk=active_deals&scope=team">Disposition desk</Link>{profile?.permissions.includes("deals:view") ? <Link href={`/os/deals?view=all&display=queue&deal=${dispositionCase.deal_id}&tab=summary`}>Full deal record</Link> : null}</>}
         description={`${dispositionCase.asset_class === "land" ? "Land" : "House"} deal for ${dispositionCase.seller_name}. Work the ranked investor queue; packet and offer tools remain available.`}

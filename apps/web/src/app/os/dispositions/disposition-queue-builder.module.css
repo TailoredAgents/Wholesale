@@ -13,10 +13,10 @@
 .builder[open] > summary { border-bottom: 1px solid #dce3dd; background: #f8faf8; }
 .summaryIcon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 3px; background: #e5eee7; color: #17633d; }
 .summaryCopy, .summaryMetrics { display: grid; min-width: 0; gap: 2px; }
-.summaryCopy strong { color: #203027; font-size: 11px; }
-.summaryCopy small, .summaryMetrics small { overflow: hidden; color: #68756d; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.summaryCopy strong { color: #203027; font-size: 12px; }
+.summaryCopy small, .summaryMetrics small { overflow: hidden; color: #68756d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .summaryMetrics { text-align: right; }
-.summaryMetrics b { color: #17633d; font-size: 10px; }
+.summaryMetrics b { color: #17633d; font-size: 11px; }
 .body { display: grid; gap: 8px; padding: 8px; background: #f7f9f7; }
 .overview, .discovery, .pool { overflow: hidden; border: 1px solid #d9ded9; border-radius: 4px; background: #fff; }
 .overview { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px; }

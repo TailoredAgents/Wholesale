@@ -1,6 +1,7 @@
 .workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
 .dedicatedWorkspace { gap: 10px; }
+.dedicatedWorkspace .embeddedBody { background: transparent; }
 .body.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .landMarketNotice { margin: 0; padding: 10px 14px; border: 1px solid #d8c58e; border-radius: 8px; background: #fff9e9; color: #684e1c; font-size: 11px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
@@ -251,23 +252,23 @@
 .tabBadge[data-tone="complete"], .tabBadge[data-tone="available"] { background: var(--brand-soft); color: var(--brand-strong); }
 .tabBadge[data-tone="warning"] { background: #fff1c9; color: #795400; }
 .tabBadge[data-tone="hard"] { background: var(--danger-soft); color: var(--danger); }
-.workspaceNavigation { position: sticky; z-index: 12; top: 0; overflow: visible; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 5px 18px rgb(20 41 46 / .06); backdrop-filter: blur(12px); }
+.workspaceNavigation { position: sticky; z-index: 12; top: 0; overflow: visible; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 3px 12px rgb(20 41 46 / .045); backdrop-filter: blur(12px); }
 .workspaceDealStrip { min-height: 38px; padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
 .workspaceDealStrip > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
-.workspaceDealStrip > div span { color: var(--brand-strong); font-size: 8px; font-weight: 850; text-transform: uppercase; }
-.workspaceDealStrip > div strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.workspaceDealStrip > div span { color: var(--brand-strong); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.workspaceDealStrip > div strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .workspaceDealStrip > div small { grid-column: 2; color: var(--muted); font-size: 8px; }
 .workspaceDealStrip dl { margin: 0; display: flex; align-items: center; }
 .workspaceDealStrip dl > div { min-width: 88px; padding: 0 10px; display: grid; gap: 2px; border-left: 1px solid var(--line-soft); }
-.workspaceDealStrip dt { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
-.workspaceDealStrip dd { margin: 0; font-size: 9px; font-weight: 850; }
+.workspaceDealStrip dt { color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.workspaceDealStrip dd { margin: 0; font-size: 10px; font-weight: 850; }
 .workspacePrimaryNav { display: flex; align-items: stretch; }
 .workspacePrimaryNav > button { min-width: 0; min-height: 50px; padding: 7px 11px; display: flex; flex: 1 1 220px; align-items: center; gap: 8px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
 .workspacePrimaryNav > button:last-child { border-right: 0; }
 .workspacePrimaryNav > button > svg { flex: 0 0 auto; }
 .workspacePrimaryNav > button > span { min-width: 0; display: grid; gap: 2px; }
-.workspacePrimaryNav > button strong { color: var(--text); font-size: 11px; }
-.workspacePrimaryNav > button small { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.workspacePrimaryNav > button strong { color: var(--text); font-size: 12px; }
+.workspacePrimaryNav > button small { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); background: color-mix(in srgb, var(--brand-soft) 48%, var(--surface)); color: var(--brand-strong); }
 .workspaceSecondaryNav { min-height: 38px; padding: 4px 7px; display: flex; align-items: center; gap: 4px; overflow-x: auto; border-top: 1px solid var(--line-soft); }
 .workspaceSecondaryNav button { min-height: 28px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--muted); font: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; cursor: pointer; }
