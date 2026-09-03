@@ -450,3 +450,12 @@ def test_profile_relationship_follow_up_timeline_and_verification(
     assert any(
         item["event_type"] == "follow_up" for item in payload["timeline"]["items"]
     )
+    compact_profile = client.get(
+        f"/api/v1/buyers/{buyer_id}/profile?timeline_limit=1",
+        headers=HEADERS,
+    )
+    assert compact_profile.status_code == 200, compact_profile.text
+    compact_timeline = compact_profile.json()["timeline"]
+    assert len(compact_timeline["items"]) == 1
+    assert compact_timeline["total"] == payload["timeline"]["total"]
+    assert compact_timeline["has_more"] is True

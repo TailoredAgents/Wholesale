@@ -485,10 +485,11 @@ export function DispositionExecutionWorkspace({
   }, [request]);
 
   useEffect(() => {
+    if (loading) return;
     // Email configuration is remote authorization state and must be synchronized client-side.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadEmailConfiguration();
-  }, [loadEmailConfiguration]);
+  }, [loadEmailConfiguration, loading]);
 
   useEffect(() => {
     if (!emailSenderAliases.length) return;

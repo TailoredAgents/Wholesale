@@ -1,5 +1,6 @@
 import json
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -53,6 +54,16 @@ MAX_EXTERNAL_PACKAGE_PDF_SIZE = 15 * 1024 * 1024
 EXTERNAL_ARTIFACT_METADATA_KEY = "_external_artifact"
 ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES = frozenset({"clean", "not_configured"})
 ELIGIBLE_TRANSACTION_STATUSES = {"executed", "closing", "funded"}
+
+
+@dataclass(frozen=True)
+class DispositionPackageArtifactReference:
+    """Lightweight pointer for pages that do not need to read or verify PDF bytes."""
+
+    id: UUID
+    status: str
+
+
 PUBLIC_PACKAGE_KEYS = {
     "headline",
     "description",
@@ -1374,6 +1385,76 @@ def package_version_currentness(
             current_fingerprint=current_fingerprint,
         )
     )
+
+
+def latest_package_artifact_reference(
+    db: Session,
+    principal: Principal,
+    case: DispositionCase,
+) -> DispositionPackageArtifactReference | None:
+    """Return a usable stored artifact pointer without loading its PDF blob.
+
+    Upload/generation paths establish the stored size, hash, and scan metadata. Exact bytes and
+    source freshness are intentionally revalidated by ``require_package_artifact`` when an
+    operator opens or shares the packet.
+    """
+
+    if case.organization_id != principal.organization_id:
+        return None
+    row = db.execute(
+        select(
+            DispositionPackageVersion.id,
+            DispositionPackageVersion.status,
+            DispositionPackageVersion.pdf_file_name,
+            DispositionPackageVersion.pdf_content_type,
+            DispositionPackageVersion.pdf_size,
+            DispositionPackageVersion.pdf_sha256,
+            DispositionPackageVersion.readiness_snapshot,
+        )
+        .where(
+            DispositionPackageVersion.organization_id == principal.organization_id,
+            DispositionPackageVersion.disposition_case_id == case.id,
+            DispositionPackageVersion.pdf_file_name.is_not(None),
+            DispositionPackageVersion.pdf_size.is_not(None),
+            DispositionPackageVersion.pdf_sha256.is_not(None),
+        )
+        .order_by(
+            DispositionPackageVersion.version_number.desc(),
+            DispositionPackageVersion.created_at.desc(),
+        )
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    (
+        version_id,
+        status,
+        file_name,
+        content_type,
+        file_size,
+        file_sha256,
+        readiness_snapshot,
+    ) = row
+    external_metadata = (
+        readiness_snapshot.get(EXTERNAL_ARTIFACT_METADATA_KEY)
+        if isinstance(readiness_snapshot, dict)
+        else None
+    )
+    if (
+        not file_name
+        or content_type != "application/pdf"
+        or file_size is None
+        or file_size <= 0
+        or not file_sha256
+        or (
+            isinstance(external_metadata, dict)
+            and external_metadata.get("source") == "external_upload"
+            and external_metadata.get("malware_scan_status")
+            not in ACCEPTABLE_EXTERNAL_ARTIFACT_SCAN_STATUSES
+        )
+    ):
+        return None
+    return DispositionPackageArtifactReference(id=version_id, status=status)
 
 
 def _external_artifact_metadata(

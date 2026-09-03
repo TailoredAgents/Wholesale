@@ -101,6 +101,7 @@ export function DispositionQueueBuilder({
   const [manualBuyerOpen, setManualBuyerOpen] = useState(false);
   const [listBuilderOpen, setListBuilderOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [loadedCaseId, setLoadedCaseId] = useState<string | null>(null);
   const [buyerNetworkCount, setBuyerNetworkCount] = useState<number | null>(null);
   const [buyerNetwork, setBuyerNetwork] = useState<BuyerListItem[]>([]);
   const [relationshipOwners, setRelationshipOwners] = useState<BuyerRelationshipOwner[]>([]);
@@ -156,8 +157,10 @@ export function DispositionQueueBuilder({
   }, [canEditBuyers, request]);
 
   useEffect(() => {
+    if (!builderOpen || loadedCaseId === caseId) return;
     let active = true;
-    // Initial provider and queue synchronization is intentionally client-side.
+    // Ranking, discovery, and the full Buyer Network are secondary tools. Keep them off the
+    // outreach desk's critical path until an operator deliberately expands this section.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void Promise.allSettled([loadPool(), loadDiscovery(), loadBuyerOptions()])
       .then((results) => {
@@ -170,12 +173,15 @@ export function DispositionQueueBuilder({
         }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoadedCaseId(caseId);
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
     };
-  }, [loadBuyerOptions, loadDiscovery, loadPool]);
+  }, [builderOpen, caseId, loadBuyerOptions, loadDiscovery, loadPool, loadedCaseId]);
 
   async function rebuildQueue(pinBuyerId?: string) {
     const rankedPool = await request<DispositionBuyerPoolPage>(`/api/v1/dispositions/cases/${caseId}/buyer-pool/runs`, {
@@ -429,7 +435,11 @@ export function DispositionQueueBuilder({
         </section>
       ) : null}
 
-      <details className={styles.builder} onToggle={(event) => setBuilderOpen(event.currentTarget.open)} open={builderOpen}>
+      <details className={styles.builder} onToggle={(event) => {
+        const open = event.currentTarget.open;
+        if (open && loadedCaseId !== caseId) setLoading(true);
+        setBuilderOpen(open);
+      }} open={builderOpen}>
         <summary>
           <span className={styles.summaryIcon}><UsersRound size={18} /></span>
           <span className={styles.summaryCopy}>

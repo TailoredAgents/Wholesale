@@ -439,8 +439,12 @@ def get_buyer_profile(
         return None
     versions = list_buy_box_versions(db, principal, buyer_id)
     legacy = current_criteria(db, principal, buyer_id)
-    timeline_items = buyer_timeline_items(db, principal, buyer_id)
-    total = len(timeline_items)
+    timeline_items, total = buyer_timeline_items(
+        db,
+        principal,
+        buyer_id,
+        per_source_limit=timeline_offset + timeline_limit,
+    )
     page_items = timeline_items[timeline_offset : timeline_offset + timeline_limit]
     return BuyerProfileRead(
         buyer=buyer_read,
@@ -2099,19 +2103,27 @@ def buyer_timeline_items(
     db: Session,
     principal: Principal,
     buyer_id: UUID,
-) -> list[BuyerTimelineItemRead]:
+    *,
+    per_source_limit: int | None = None,
+) -> tuple[list[BuyerTimelineItemRead], int]:
     items: list[BuyerTimelineItemRead] = []
+    total = 0
     engagement_filters: list[Any] = [
         BuyerEngagement.organization_id == principal.organization_id,
         BuyerEngagement.buyer_id == buyer_id,
     ]
     if PermissionKeys.VIEW_DEALS not in principal.permission_keys:
         engagement_filters.append(BuyerEngagement.disposition_case_id.is_(None))
-    engagements = db.scalars(
-        select(BuyerEngagement)
+    engagement_statement = (
+        select(BuyerEngagement, func.count().over())
         .where(*engagement_filters)
         .order_by(BuyerEngagement.occurred_at.desc())
-    ).all()
+    )
+    if per_source_limit is not None:
+        engagement_statement = engagement_statement.limit(per_source_limit)
+    engagement_rows = db.execute(engagement_statement).all()
+    engagements = [engagement for engagement, _ in engagement_rows]
+    total += int(engagement_rows[0][1]) if engagement_rows else 0
     items.extend(
         BuyerTimelineItemRead(
             id=engagement.id,
@@ -2128,15 +2140,20 @@ def buyer_timeline_items(
         for engagement in engagements
     )
 
-    activities = db.scalars(
-        select(ActivityEvent)
+    activity_statement = (
+        select(ActivityEvent, func.count().over())
         .where(
             ActivityEvent.organization_id == principal.organization_id,
             ActivityEvent.entity_type == "buyer",
             ActivityEvent.entity_id == buyer_id,
         )
         .order_by(ActivityEvent.created_at.desc())
-    ).all()
+    )
+    if per_source_limit is not None:
+        activity_statement = activity_statement.limit(per_source_limit)
+    activity_rows = db.execute(activity_statement).all()
+    activities = [activity for activity, _ in activity_rows]
+    total += int(activity_rows[0][1]) if activity_rows else 0
     items.extend(
         BuyerTimelineItemRead(
             id=activity.id,
@@ -2157,14 +2174,19 @@ def buyer_timeline_items(
             )
         )
         if conversation_id is not None:
-            communications = db.scalars(
-                select(CommunicationRecord)
+            communication_statement = (
+                select(CommunicationRecord, func.count().over())
                 .where(
                     CommunicationRecord.organization_id == principal.organization_id,
                     CommunicationRecord.conversation_id == conversation_id,
                 )
                 .order_by(CommunicationRecord.occurred_at.desc())
-            ).all()
+            )
+            if per_source_limit is not None:
+                communication_statement = communication_statement.limit(per_source_limit)
+            communication_rows = db.execute(communication_statement).all()
+            communications = [record for record, _ in communication_rows]
+            total += int(communication_rows[0][1]) if communication_rows else 0
             items.extend(
                 BuyerTimelineItemRead(
                     id=record.id,
@@ -2181,14 +2203,19 @@ def buyer_timeline_items(
             )
 
     if PermissionKeys.VIEW_DEALS in principal.permission_keys:
-        offers = db.scalars(
-            select(BuyerOffer)
+        offer_statement = (
+            select(BuyerOffer, func.count().over())
             .where(
                 BuyerOffer.organization_id == principal.organization_id,
                 BuyerOffer.buyer_id == buyer_id,
             )
             .order_by(BuyerOffer.received_at.desc())
-        ).all()
+        )
+        if per_source_limit is not None:
+            offer_statement = offer_statement.limit(per_source_limit)
+        offer_rows = db.execute(offer_statement).all()
+        offers = [offer for offer, _ in offer_rows]
+        total += int(offer_rows[0][1]) if offer_rows else 0
         items.extend(
             BuyerTimelineItemRead(
                 id=offer.id,
@@ -2207,7 +2234,7 @@ def buyer_timeline_items(
         value = item.occurred_at
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
-    return sorted(items, key=sort_key, reverse=True)
+    return sorted(items, key=sort_key, reverse=True), total
 
 
 def _activity(

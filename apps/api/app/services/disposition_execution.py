@@ -107,21 +107,7 @@ def read_workspace(
     if case.status not in EXECUTION_CASE_STATUSES:
         blockers.append("Move the deal into buyer placement before beginning buyer calls.")
 
-    package = None
-    try:
-        package = disposition_packages.require_package_artifact(
-            db,
-            principal,
-            case,
-            action="opening the one-to-one buyer workbench",
-        )
-    except ValueError:
-        # Package readiness is advisory. Calls may still proceed without an attachment.
-        package = None
-    package_is_current = bool(
-        package is not None
-        and disposition_packages.package_version_currentness(db, principal, case, package)
-    )
+    package = disposition_packages.latest_package_artifact_reference(db, principal, case)
 
     try:
         pool = disposition_buyer_pool.read_buyer_pool(
@@ -279,7 +265,7 @@ def read_workspace(
         package_status=package.status if package is not None else case.package_status,
         package_is_preliminary=bool(
             package is not None
-            and (package.status != "approved" or not package_is_current)
+            and package.status != "approved"
         ),
         package_pdf_path=(
             f"/api/v1/dispositions/cases/{case.id}/package/versions/{package.id}/package.pdf"

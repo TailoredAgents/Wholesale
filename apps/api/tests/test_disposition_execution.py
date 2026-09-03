@@ -1227,6 +1227,34 @@ def test_land_case_uses_the_same_one_to_one_execution_queue(
     assert not any("house deals only" in item for item in response.json()["blockers"])
 
 
+def test_execution_load_defers_exact_packet_bytes_until_open_or_share(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    case_id, _ = _ready_execution_case(db_session, client)
+
+    def fail_on_exact_artifact_read(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("execution loading must not read or hash the packet PDF")
+
+    monkeypatch.setattr(
+        "app.services.disposition_packages.require_package_artifact",
+        fail_on_exact_artifact_read,
+    )
+    monkeypatch.setattr(
+        "app.services.disposition_packages.package_version_currentness",
+        fail_on_exact_artifact_read,
+    )
+    response = client.get(
+        f"/api/v1/dispositions/cases/{case_id}/execution",
+        headers=HEADERS,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["package_pdf_path"] is not None
+    assert response.json()["package_is_preliminary"] is False
+
+
 def test_explicit_pass_is_visible_but_not_actionable_until_cleared(
     db_session: Session,
     api_db_override: None,

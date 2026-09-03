@@ -178,6 +178,8 @@ test("investors can be selected, imported, discovered, and pinned inside Outreac
   assert.match(queueBuilder, /Find and rank investors/);
   assert.match(queueBuilder, /Pull DealMachine results, add known buyers, and build the outreach list here/);
   assert.match(queueBuilder, /setBuilderOpen\(\(current\) => current \|\| result\.entries\.some/);
+  assert.match(queueBuilder, /if \(!builderOpen \|\| loadedCaseId === caseId\) return/);
+  assert.match(queueBuilder, /Keep them off the[\s\S]*critical path until an operator deliberately expands/);
   assert.match(queueBuilder, /entry\.source_type === "external" && !entry\.buyer_id/);
   assert.match(queueBuilder, /Quick add investor/);
   assert.match(queueBuilder, /<BuyerForm compact/);

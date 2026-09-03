@@ -239,6 +239,11 @@ export function DispositionWorkspace({
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
   const activeTab =
     selected?.asset_class === "land" && landUnavailableTabs.has(tab) ? "package" : tab;
+  const dedicatedSection = ["overview", "package"].includes(activeTab)
+    ? "deal"
+    : ["buyers", "execution", "outreach", "provider"].includes(activeTab)
+      ? "outreach"
+      : "closing";
   const buyerChoicesNeeded = activeTab === "buyers" || activeTab === "offers";
   const buyerChoices = useMemo(
     () => mergeBuyerChoices(
@@ -252,7 +257,11 @@ export function DispositionWorkspace({
   const dispositionHref = `/os/deals?view=all&display=queue&deal=${encodeURIComponent(dealId)}&tab=disposition`;
 
   useEffect(() => {
-    if (!selectedId || selected?.asset_class === "land") {
+    if (
+      !selectedId
+      || selected?.asset_class === "land"
+      || (variant === "dedicated" && dedicatedSection !== "deal")
+    ) {
       return;
     }
     let active = true;
@@ -276,17 +285,17 @@ export function DispositionWorkspace({
     };
   // The request helper intentionally follows the selected case and current Clerk session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, selected?.asset_class]);
+  }, [dedicatedSection, selectedId, selected?.asset_class, variant]);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || (variant === "dedicated" && dedicatedSection !== "deal")) return;
     void loadReadiness(selectedId);
     return () => {
       readinessSequenceRef.current += 1;
     };
   // The request helper intentionally follows the selected case and current Clerk session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [dedicatedSection, selectedId, variant]);
 
   useEffect(() => {
     if (!selectedId || !buyerChoicesNeeded) return;
@@ -630,12 +639,6 @@ export function DispositionWorkspace({
   }
 
   const activeReadiness = readinessCaseId === selected?.id ? readiness : null;
-  const dedicatedSection = ["overview", "package"].includes(activeTab)
-    ? "deal"
-    : ["buyers", "execution", "outreach", "provider"].includes(activeTab)
-      ? "outreach"
-      : "closing";
-
   function tabAttention(tabKey: Tab) {
     const actions = (activeReadiness?.actions ?? []).filter(
       (item) => item.target_tab === tabKey && item.state !== "not_applicable",
