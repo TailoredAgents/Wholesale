@@ -4057,14 +4057,16 @@ export type DispositionDeskOverview = {
   can_view_team: boolean;
   scope_notice: string | null;
   can_edit_buyers: boolean;
+  details_loaded: boolean;
+  deferred_sections: DispositionDeskCategory[];
   metrics: {
-    today: number;
-    active_deals: number;
-    buyer_follow_ups: number;
-    replies: number;
-    offers: number;
-    deadlines: number;
-    weak_coverage: number;
+    today: number | null;
+    active_deals: number | null;
+    buyer_follow_ups: number | null;
+    replies: number | null;
+    offers: number | null;
+    deadlines: number | null;
+    weak_coverage: number | null;
   };
   buyer_network: {
     total: number;

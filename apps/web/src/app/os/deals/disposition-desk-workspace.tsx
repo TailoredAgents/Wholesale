@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,10 +16,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
+  DispositionCaseReadiness,
   DispositionDeskCategory,
+  DispositionDeskChecklist,
   DispositionDeskItem,
   DispositionDeskOverview,
   DispositionDeskScope,
@@ -92,6 +95,42 @@ const metricKeys: Record<DeskView, keyof DispositionDeskOverview["metrics"]> = {
   deadlines: "deadlines",
 };
 
+function metricValue(data: DispositionDeskOverview, view: DeskView) {
+  const value = data.metrics[metricKeys[view]];
+  return value === null ? "—" : value;
+}
+
+function checklistFromReadiness(
+  readiness: DispositionCaseReadiness,
+): DispositionDeskChecklist {
+  const actionsByKey = new Map(readiness.actions.map((action) => [action.key, action]));
+  const best = readiness.best_action_key
+    ? actionsByKey.get(readiness.best_action_key)
+    : null;
+  return {
+    warning_count: readiness.warning_count,
+    completed_count: readiness.completed_count,
+    total_count: readiness.total_count,
+    best_action_key: readiness.best_action_key,
+    best_action_label: best?.label ?? null,
+    best_action_href: best?.href ?? null,
+    parallel_action_keys: readiness.parallel_action_keys,
+    parallel_actions: readiness.parallel_action_keys.flatMap((key) => {
+      const action = actionsByKey.get(key);
+      return action?.href ? [{ label: action.label, href: action.href }] : [];
+    }),
+    issues: readiness.actions.flatMap((action) => action.checks
+      .filter((check) => check.blocker_class !== null)
+      .map((check) => ({
+        key: check.key,
+        label: check.label,
+        blocker_class: check.blocker_class,
+        detail: check.detail,
+        href: check.remediation?.href ?? action.href,
+      }))),
+  };
+}
+
 function hrefFor(view: DeskView, scope: DispositionDeskScope, page = 1) {
   const query = new URLSearchParams({ desk: view, scope, view: "disposition" });
   if (page > 1) query.set("deskPage", String(page));
@@ -144,7 +183,17 @@ function dispositionActionHref(item: DispositionDeskItem, href: string) {
   return `${dealWorkbenchHref(item.disposition_case_id, dispositionTab)}${anchor}`;
 }
 
-function WorkItem({ item }: { item: DispositionDeskItem }) {
+function WorkItem({
+  item,
+  onRequestReadiness,
+  readinessError,
+  readinessLoading,
+}: {
+  item: DispositionDeskItem;
+  onRequestReadiness: (caseId: string) => void;
+  readinessError: string | null;
+  readinessLoading: boolean;
+}) {
   const isActiveDeal = item.category === "active_deals" && Boolean(item.disposition_case_id);
   const caseWorkbench = item.category === "active_deals" && item.checklist
     ? item.checklist
@@ -186,22 +235,37 @@ function WorkItem({ item }: { item: DispositionDeskItem }) {
         </div>
         <div>
           <dt>Readiness</dt>
-          <dd>{caseWorkbench ? `${caseWorkbench.completed_count} of ${caseWorkbench.total_count} actions complete - ${caseWorkbench.warning_count} need attention` : item.blocker ?? "No issue recorded"}</dd>
+          <dd>{caseWorkbench
+            ? `${caseWorkbench.completed_count} of ${caseWorkbench.total_count} actions complete - ${caseWorkbench.warning_count} need attention`
+            : isActiveDeal
+              ? "Open details to load current readiness"
+              : item.blocker ?? "No issue recorded"}</dd>
         </div>
       </dl>
 
-      {caseWorkbench ? (
-        <details className={styles.cardChecklist}>
-          <summary><span>Deal details &amp; readiness</span><strong>{caseWorkbench.warning_count}</strong></summary>
+      {isActiveDeal && item.disposition_case_id ? (
+        <details className={styles.cardChecklist}
+          onToggle={(event) => {
+            if (event.currentTarget.open && !caseWorkbench) {
+              onRequestReadiness(item.disposition_case_id as string);
+            }
+          }}
+        >
+          <summary>
+            <span>Deal details &amp; readiness</span>
+            <strong>{caseWorkbench?.warning_count ?? (readinessLoading ? "…" : "View")}</strong>
+          </summary>
           <div>
-            {checklistIssues.map((issue) => (
+            {readinessLoading && !caseWorkbench ? <p>Loading current deal readiness…</p> : null}
+            {readinessError && !caseWorkbench ? <p role="alert">{readinessError}</p> : null}
+            {caseWorkbench ? checklistIssues.map((issue) => (
               <article data-tone={issue.blocker_class ?? "warning"} key={issue.key}>
                 <AlertTriangle aria-hidden="true" size={14} />
                 <div><strong>{issue.label}</strong><span>{issue.detail}</span></div>
                 {issue.href ? <Link href={issue.href}>Open<ArrowRight aria-hidden="true" size={13} /></Link> : null}
               </article>
-            ))}
-            {!checklistIssues.length ? <p>{caseWorkbench.warning_count ? <AlertTriangle aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}{caseWorkbench.warning_count ? "Open the deal workspace for the current issue details; outreach remains usable." : "No open checklist issues. Outreach and the other deal tools remain available."}</p> : null}
+            )) : null}
+            {caseWorkbench && !checklistIssues.length ? <p>{caseWorkbench.warning_count ? <AlertTriangle aria-hidden="true" size={14} /> : <CheckCircle2 aria-hidden="true" size={14} />}{caseWorkbench.warning_count ? "Open the deal workspace for the current issue details; outreach remains usable." : "No open checklist issues. Outreach and the other deal tools remain available."}</p> : null}
           </div>
         </details>
       ) : null}
@@ -252,10 +316,127 @@ export function DispositionDeskWorkspace({
   initialPage?: number;
   isStale: boolean;
 }) {
+  const { getToken } = useAuth();
   const router = useRouter();
   const view = validView(initialDesk);
   const page = Math.max(1, Math.floor(initialPage));
   const [stalenessNow, setStalenessNow] = useState<number | null>(null);
+  const [deskDetails, setDeskDetails] = useState<DispositionDeskOverview | null>(
+    data?.details_loaded ? data : null,
+  );
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [checklists, setChecklists] = useState<Record<string, DispositionDeskChecklist>>(
+    () => Object.fromEntries(
+      (data?.active_deals ?? []).flatMap((item) => (
+        item.disposition_case_id && item.checklist
+          ? [[item.disposition_case_id, item.checklist] as const]
+          : []
+      )),
+    ),
+  );
+  const [readinessLoading, setReadinessLoading] = useState<Set<string>>(() => new Set());
+  const [readinessErrors, setReadinessErrors] = useState<Record<string, string>>({});
+  const detailsRequestRef = useRef<Promise<void> | null>(null);
+  const readinessRequestsRef = useRef(new Set<string>());
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
+  const devUserEmail = useMemo(
+    () => process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com",
+    [],
+  );
+
+  const request = useCallback(async function request<T>(path: string): Promise<T> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12_000);
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        cache: "no-store",
+        headers,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { detail?: string } | null;
+        throw new Error(payload?.detail ?? "The requested disposition details could not be loaded.");
+      }
+      return await response.json() as T;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, [apiBaseUrl, devUserEmail, getToken]);
+
+  const loadReadiness = useCallback(async (caseId: string) => {
+    if (checklists[caseId] || readinessRequestsRef.current.has(caseId)) return;
+    readinessRequestsRef.current.add(caseId);
+    setReadinessLoading((current) => new Set(current).add(caseId));
+    setReadinessErrors((current) => {
+      const next = { ...current };
+      delete next[caseId];
+      return next;
+    });
+    try {
+      const readiness = await request<DispositionCaseReadiness>(
+        `/api/v1/dispositions/cases/${encodeURIComponent(caseId)}/readiness`,
+      );
+      setChecklists((current) => ({
+        ...current,
+        [caseId]: checklistFromReadiness(readiness),
+      }));
+    } catch (requestError) {
+      setReadinessErrors((current) => ({
+        ...current,
+        [caseId]: requestError instanceof Error
+          ? requestError.message
+          : "Current deal readiness could not be loaded.",
+      }));
+    } finally {
+      readinessRequestsRef.current.delete(caseId);
+      setReadinessLoading((current) => {
+        const next = new Set(current);
+        next.delete(caseId);
+        return next;
+      });
+    }
+  }, [checklists, request]);
+
+  const loadDeskDetails = useCallback(async () => {
+    if (!data || data.details_loaded || deskDetails || detailsRequestRef.current) return;
+    setDetailsLoading(true);
+    setDetailsError(null);
+    const pending = (async () => {
+      try {
+        const fullDesk = await request<DispositionDeskOverview>(
+          `/api/v1/dispositions/desk?${new URLSearchParams({ scope: data.effective_scope })}`,
+        );
+        setDeskDetails(fullDesk);
+        setChecklists((current) => ({
+          ...current,
+          ...Object.fromEntries(fullDesk.active_deals.flatMap((item) => (
+            item.disposition_case_id && item.checklist
+              ? [[item.disposition_case_id, item.checklist] as const]
+              : []
+          ))),
+        }));
+      } catch (requestError) {
+        setDetailsError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Desk status and readiness could not be loaded.",
+        );
+      } finally {
+        setDetailsLoading(false);
+        detailsRequestRef.current = null;
+      }
+    })();
+    detailsRequestRef.current = pending;
+    await pending;
+  }, [data, deskDetails, request]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -285,7 +466,13 @@ export function DispositionDeskWorkspace({
     && (Number.isNaN(generatedAt) || stalenessNow - generatedAt > 5 * 60 * 1000)
   );
   const selectedView = deskViews.find((item) => item.key === view) ?? deskViews[0];
-  const items = data[view];
+  const detailedData = data.details_loaded ? data : deskDetails;
+  const metricData = detailedData ?? data;
+  const items = data[view].map((item) => (
+    item.disposition_case_id && checklists[item.disposition_case_id]
+      ? { ...item, checklist: checklists[item.disposition_case_id] }
+      : item
+  ));
   const sectionState = data.sections?.[view] ?? {
     total: data.metrics[metricKeys[view]],
     returned: items.length,
@@ -293,9 +480,9 @@ export function DispositionDeskWorkspace({
     offset: 0,
   };
   const returnTo = hrefFor(view, scope, page);
-  const providerTone = data.source_health.external_provider_status === "available"
+  const providerTone = detailedData?.source_health.external_provider_status === "available"
     ? "success"
-    : data.source_health.external_provider_status === "unavailable"
+    : detailedData?.source_health.external_provider_status === "unavailable"
       ? "danger"
       : "warning";
   return (
@@ -358,7 +545,7 @@ export function DispositionDeskWorkspace({
         {primaryDeskViews.map((item) => (
           <Link aria-current={view === item.key ? "page" : undefined} className={view === item.key ? styles.activeView : styles.viewTab} href={hrefFor(item.key, scope)} key={item.key}>
             <span>{item.label}</span>
-            <strong>{data.metrics[metricKeys[item.key]]}</strong>
+            <strong>{metricValue(metricData, item.key)}</strong>
           </Link>
         ))}
       </nav>
@@ -367,7 +554,7 @@ export function DispositionDeskWorkspace({
         <span>Also available</span>
         {secondaryDeskViews.map((item) => (
           <Link aria-current={view === item.key ? "page" : undefined} href={hrefFor(item.key, scope)} key={item.key}>
-            {item.label}<strong>{data.metrics[metricKeys[item.key]]}</strong>
+            {item.label}<strong>{metricValue(metricData, item.key)}</strong>
           </Link>
         ))}
         <Link href="/os/deals?view=disposition&desk=performance">Performance</Link>
@@ -403,7 +590,22 @@ export function DispositionDeskWorkspace({
             </div>
           ) : null}
           {items.length ? (
-            <div className={styles.workList}>{items.map((item) => <WorkItem item={item} key={item.key} />)}</div>
+            <div className={styles.workList}>{items.map((item) => (
+              <WorkItem
+                item={item}
+                key={item.key}
+                onRequestReadiness={(caseId) => void loadReadiness(caseId)}
+                readinessError={
+                  item.disposition_case_id
+                    ? readinessErrors[item.disposition_case_id] ?? null
+                    : null
+                }
+                readinessLoading={Boolean(
+                  item.disposition_case_id
+                  && readinessLoading.has(item.disposition_case_id)
+                )}
+              />
+            ))}</div>
           ) : (
             <EmptyState
               action={<Link className={styles.emptyAction} href={view === "active_deals" ? "/os/deals?view=all" : hrefFor("active_deals", scope)}>Review active deals</Link>}
@@ -416,24 +618,28 @@ export function DispositionDeskWorkspace({
 
       </div>
 
-      <details className={styles.deskDetails}>
+      <details className={styles.deskDetails}
+        onToggle={(event) => {
+          if (event.currentTarget.open && !detailedData) void loadDeskDetails();
+        }}
+      >
         <summary>
           <span><ChevronDown aria-hidden="true" size={16} />Desk status &amp; readiness</span>
           <small>Data health, buyer network health, and deal coverage</small>
         </summary>
-        <div className={styles.deskDetailsBody}>
+        {detailedData ? <div className={styles.deskDetailsBody}>
           <section aria-label="Disposition data health" className={styles.healthBanner}>
             <div>
               <CheckCircle2 aria-hidden="true" size={18} />
               <span>Stonegate records</span>
-              <strong>{apiConnected && data.source_health.canonical_data_status === "current" && !snapshotIsStale ? "Current" : "Needs review"}</strong>
+              <strong>{apiConnected && detailedData.source_health.canonical_data_status === "current" && !snapshotIsStale ? "Current" : "Needs review"}</strong>
             </div>
             <div>
               <ShieldCheck aria-hidden="true" size={18} />
               <span>External discovery</span>
-              <StatusBadge tone={providerTone}>{data.source_health.external_provider_status.replaceAll("_", " ")}</StatusBadge>
+              <StatusBadge tone={providerTone}>{detailedData.source_health.external_provider_status.replaceAll("_", " ")}</StatusBadge>
             </div>
-            <p>{data.source_health.message}</p>
+            <p>{detailedData.source_health.message}</p>
           </section>
 
           <aside className={styles.sideRail}>
@@ -446,13 +652,13 @@ export function DispositionDeskWorkspace({
                 <WalletCards aria-hidden="true" size={20} />
               </header>
               <dl>
-                <div><dt>Total buyers</dt><dd>{data.buyer_network.total}</dd></div>
-                <div><dt>Active</dt><dd>{data.buyer_network.active}</dd></div>
-                <div><dt>Needs review</dt><dd>{data.buyer_network.needs_review}</dd></div>
-                <div><dt>Missing proof</dt><dd>{data.buyer_network.missing_proof}</dd></div>
-                <div><dt>Proof expiring</dt><dd>{data.buyer_network.expiring_proof}</dd></div>
-                <div><dt>Missing criteria</dt><dd>{data.buyer_network.missing_criteria}</dd></div>
-                <div><dt>Unassigned</dt><dd>{data.buyer_network.unassigned}</dd></div>
+                <div><dt>Total buyers</dt><dd>{detailedData.buyer_network.total}</dd></div>
+                <div><dt>Active</dt><dd>{detailedData.buyer_network.active}</dd></div>
+                <div><dt>Needs review</dt><dd>{detailedData.buyer_network.needs_review}</dd></div>
+                <div><dt>Missing proof</dt><dd>{detailedData.buyer_network.missing_proof}</dd></div>
+                <div><dt>Proof expiring</dt><dd>{detailedData.buyer_network.expiring_proof}</dd></div>
+                <div><dt>Missing criteria</dt><dd>{detailedData.buyer_network.missing_criteria}</dd></div>
+                <div><dt>Unassigned</dt><dd>{detailedData.buyer_network.unassigned}</dd></div>
               </dl>
               <Link href="/os/buyers">Review buyer network <ArrowRight aria-hidden="true" size={14} /></Link>
             </section>
@@ -465,9 +671,9 @@ export function DispositionDeskWorkspace({
                 </div>
                 <AlertTriangle aria-hidden="true" size={20} />
               </header>
-              {data.coverage_warnings.length ? (
+              {detailedData.coverage_warnings.length ? (
                 <div className={styles.coverageList}>
-                  {data.coverage_warnings.slice(0, 5).map((warning) => (
+                  {detailedData.coverage_warnings.slice(0, 5).map((warning) => (
                     <article key={warning.key}>
                       <div>
                         <strong>{warning.title}</strong>
@@ -480,15 +686,27 @@ export function DispositionDeskWorkspace({
               ) : (
                 <p className={styles.clearCoverage}><CheckCircle2 aria-hidden="true" size={16} /> No weak buyer-coverage warnings.</p>
               )}
-              {data.coverage_warnings.length > 5 ? (
+              {detailedData.coverage_warnings.length > 5 ? (
                 <Link href={hrefFor("active_deals", scope)}>
-                  Showing 5 of {data.sections.coverage_warnings.total}; open active deals
+                  Showing 5 of {detailedData.sections.coverage_warnings.total}; open active deals
                 </Link>
               ) : null}
             </section>
 
           </aside>
-        </div>
+        </div> : (
+          <div className={styles.deskDetailsBody} role={detailsError ? "alert" : "status"}>
+            <p>{detailsError ?? (detailsLoading
+              ? "Loading current desk status and readiness…"
+              : "Open this section to load current desk status and readiness.")}</p>
+            {detailsError ? (
+              <button onClick={() => void loadDeskDetails()} type="button">
+                <RefreshCw aria-hidden="true" size={15} />
+                Retry
+              </button>
+            ) : null}
+          </div>
+        )}
       </details>
     </section>
   );

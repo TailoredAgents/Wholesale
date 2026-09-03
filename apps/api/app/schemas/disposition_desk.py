@@ -84,13 +84,13 @@ class DispositionDeskBuyerHealthRead(BaseModel):
 
 
 class DispositionDeskMetricsRead(BaseModel):
-    today: int
-    active_deals: int
-    buyer_follow_ups: int
-    replies: int
-    offers: int
-    deadlines: int
-    weak_coverage: int
+    today: int | None
+    active_deals: int | None
+    buyer_follow_ups: int | None
+    replies: int | None
+    offers: int | None
+    deadlines: int | None
+    weak_coverage: int | None
 
 
 class DispositionDeskSectionStatusRead(BaseModel):
@@ -131,6 +131,8 @@ class DispositionDeskRead(BaseModel):
     can_view_team: bool
     scope_notice: str | None = None
     can_edit_buyers: bool
+    details_loaded: bool = True
+    deferred_sections: list[DispositionDeskCategory] = Field(default_factory=list)
     metrics: DispositionDeskMetricsRead
     sections: DispositionDeskSectionsRead
     buyer_network: DispositionDeskBuyerHealthRead

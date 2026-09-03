@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -357,6 +357,115 @@ def _coverage_warning(
     )
 
 
+def _lightweight_relationship_counts(
+    db: Session,
+    principal: Principal,
+    *,
+    case_ids: set[UUID],
+    allowed_user_ids: set[UUID] | None,
+) -> tuple[int, int, int]:
+    """Count the visible relationship queues without materializing their records."""
+
+    followup_scope = []
+    reply_scope = []
+    relationship_only_followup = BuyerEngagement.disposition_case_id.is_(None)
+    if allowed_user_ids is not None:
+        relationship_only_followup = and_(
+            BuyerEngagement.disposition_case_id.is_(None),
+            Buyer.relationship_owner_user_id.in_(allowed_user_ids),
+        )
+        followup_scope.append(
+            or_(
+                BuyerEngagement.actor_user_id.in_(allowed_user_ids),
+                DispositionCase.owner_user_id.in_(allowed_user_ids),
+                Buyer.relationship_owner_user_id.in_(allowed_user_ids),
+            )
+        )
+        reply_scope.append(
+            or_(
+                Conversation.assigned_user_id.in_(allowed_user_ids),
+                Buyer.relationship_owner_user_id.in_(allowed_user_ids),
+            )
+        )
+    followups = int(
+        db.scalar(
+            select(func.count(func.distinct(BuyerEngagement.id)))
+            .outerjoin(
+                DispositionCase,
+                and_(
+                    DispositionCase.id == BuyerEngagement.disposition_case_id,
+                    DispositionCase.organization_id == BuyerEngagement.organization_id,
+                ),
+            )
+            .join(
+                Buyer,
+                and_(
+                    Buyer.id == BuyerEngagement.buyer_id,
+                    Buyer.organization_id == BuyerEngagement.organization_id,
+                ),
+            )
+            .where(
+                BuyerEngagement.organization_id == principal.organization_id,
+                BuyerEngagement.engagement_type == "follow_up",
+                BuyerEngagement.status.notin_(COMPLETE_WORK_STATUSES),
+                or_(
+                    BuyerEngagement.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else BuyerEngagement.id.is_(None),
+                    relationship_only_followup,
+                ),
+                *followup_scope,
+            )
+        )
+        or 0
+    )
+    replies = 0
+    if PermissionKeys.VIEW_CONVERSATIONS in principal.permission_keys:
+        replies = int(
+            db.scalar(
+                select(func.count(func.distinct(Conversation.id)))
+                .join(
+                    ConversationContextLink,
+                    ConversationContextLink.conversation_id == Conversation.id,
+                )
+                .join(Buyer, Buyer.id == ConversationContextLink.buyer_id)
+                .where(
+                    Conversation.organization_id == principal.organization_id,
+                    ConversationContextLink.organization_id == principal.organization_id,
+                    Buyer.organization_id == principal.organization_id,
+                    Conversation.conversation_type == "buyer",
+                    Conversation.status != "closed",
+                    ConversationContextLink.context_type == "buyer",
+                    or_(
+                        Conversation.unread_count > 0,
+                        and_(
+                            Conversation.last_inbound_at.is_not(None),
+                            or_(
+                                Conversation.last_outbound_at.is_(None),
+                                Conversation.last_inbound_at > Conversation.last_outbound_at,
+                            ),
+                        ),
+                    ),
+                    *reply_scope,
+                )
+            )
+            or 0
+        )
+    offers = int(
+        db.scalar(
+            select(func.count(BuyerOffer.id)).where(
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.disposition_case_id.in_(case_ids)
+                if case_ids
+                else BuyerOffer.id.is_(None),
+                BuyerOffer.status == "received",
+            )
+        )
+        or 0
+    )
+    return followups, replies, offers
+
+
 def read_desk(
     db: Session,
     principal: Principal,
@@ -375,6 +484,14 @@ def read_desk(
     now = datetime.now(UTC)
     local_now = now.astimezone(EASTERN)
     day_end = local_now.replace(hour=23, minute=59, second=59, microsecond=999999).astimezone(UTC)
+    load_all = selected_section is None or selected_section == "today"
+    load_active = load_all or selected_section == "active_deals"
+    load_followups = load_all or selected_section == "buyer_follow_ups"
+    load_replies = load_all or selected_section == "replies"
+    load_offers = load_all or selected_section == "offers"
+    load_deadlines = load_all or selected_section == "deadlines"
+    load_buyer_health = load_all
+    load_coverage = load_all
 
     case_rows = list(
         db.scalars(
@@ -401,52 +518,56 @@ def read_desk(
     case_by_id = {case.id: case for case in cases}
     case_ids = {case.id for case in cases}
 
-    setup_rows = list(
-        db.execute(
-            select(Transaction, Deal, Lead, Contact, Property, DispositionCase)
-            .join(
-                Deal,
-                (Deal.id == Transaction.deal_id)
-                & (Deal.organization_id == Transaction.organization_id),
+    setup_rows: list[
+        tuple[Transaction, Deal, Lead, Contact, Property, DispositionCase | None]
+    ] = []
+    if load_active:
+        setup_rows = list(
+            db.execute(
+                select(Transaction, Deal, Lead, Contact, Property, DispositionCase)
+                .join(
+                    Deal,
+                    (Deal.id == Transaction.deal_id)
+                    & (Deal.organization_id == Transaction.organization_id),
+                )
+                .join(
+                    Lead,
+                    (Lead.id == Transaction.lead_id)
+                    & (Lead.organization_id == Transaction.organization_id),
+                )
+                .join(
+                    Contact,
+                    (Contact.id == Transaction.contact_id)
+                    & (Contact.organization_id == Transaction.organization_id),
+                )
+                .join(
+                    Property,
+                    (Property.id == Transaction.property_id)
+                    & (Property.organization_id == Transaction.organization_id),
+                )
+                .outerjoin(
+                    DispositionCase,
+                    (DispositionCase.transaction_id == Transaction.id)
+                    & (DispositionCase.organization_id == Transaction.organization_id),
+                )
+                .where(
+                    Transaction.organization_id == principal.organization_id,
+                    or_(
+                        DispositionCase.id.is_(None),
+                        ~DispositionCase.status.in_(ACTIVE_CASE_STATUSES),
+                    ),
+                    Transaction.status.in_(("executed", "closing")),
+                    Transaction.contract_executed_at.is_not(None),
+                    Lead.asset_class.in_(tuple(sorted(ASSET_CLASSES))),
+                    Lead.archived_at.is_(None),
+                    ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
+                    ~Deal.stage_key.in_(tuple(INACTIVE_DEAL_STAGES)),
+                )
+                .order_by(Transaction.contract_executed_at, Transaction.id)
             )
-            .join(
-                Lead,
-                (Lead.id == Transaction.lead_id)
-                & (Lead.organization_id == Transaction.organization_id),
-            )
-            .join(
-                Contact,
-                (Contact.id == Transaction.contact_id)
-                & (Contact.organization_id == Transaction.organization_id),
-            )
-            .join(
-                Property,
-                (Property.id == Transaction.property_id)
-                & (Property.organization_id == Transaction.organization_id),
-            )
-            .outerjoin(
-                DispositionCase,
-                (DispositionCase.transaction_id == Transaction.id)
-                & (DispositionCase.organization_id == Transaction.organization_id),
-            )
-            .where(
-                Transaction.organization_id == principal.organization_id,
-                or_(
-                    DispositionCase.id.is_(None),
-                    ~DispositionCase.status.in_(ACTIVE_CASE_STATUSES),
-                ),
-                Transaction.status.in_(("executed", "closing")),
-                Transaction.contract_executed_at.is_not(None),
-                Lead.asset_class.in_(tuple(sorted(ASSET_CLASSES))),
-                Lead.archived_at.is_(None),
-                ~Lead.stage_key.in_(tuple(INACTIVE_LEAD_STAGES)),
-                ~Deal.stage_key.in_(tuple(INACTIVE_DEAL_STAGES)),
-            )
-            .order_by(Transaction.contract_executed_at, Transaction.id)
+            .tuples()
+            .all()
         )
-        .tuples()
-        .all()
-    )
     setup_transaction_ids = {
         setup_transaction.id for setup_transaction, _, _, _, _, _ in setup_rows
     }
@@ -509,10 +630,11 @@ def read_desk(
         )
     setup_deal_ids = {setup_deal.id for _, setup_deal, _, _, _, _, _, _ in setup_intakes}
 
+    needs_deal_context = load_active or load_followups or load_offers or load_deadlines
     deal_overview = deals.overview(
         db,
         principal,
-        deal_ids=set(case_by_deal) | setup_deal_ids,
+        deal_ids=(set(case_by_deal) | setup_deal_ids) if needs_deal_context else set(),
     )
     active_records_by_id: dict[UUID, DealQueueItemRead] = {}
     for item in deal_overview.items:
@@ -522,29 +644,37 @@ def read_desk(
     active_deal_ids = {item.id for item in active_records}
     operational_deal_ids = active_deal_ids | setup_deal_ids
 
-    transactions = list(
-        db.scalars(
-            select(Transaction).where(
-                Transaction.organization_id == principal.organization_id,
-                Transaction.deal_id.in_(active_deal_ids)
-                if active_deal_ids
-                else Transaction.id.is_(None),
-            )
-        ).all()
+    transactions = (
+        list(
+            db.scalars(
+                select(Transaction).where(
+                    Transaction.organization_id == principal.organization_id,
+                    Transaction.deal_id.in_(active_deal_ids)
+                    if active_deal_ids
+                    else Transaction.id.is_(None),
+                )
+            ).all()
+        )
+        if load_deadlines
+        else []
     )
     transaction_by_deal = {transaction.deal_id: transaction for transaction in transactions}
     transaction_ids = {transaction.id for transaction in transactions}
-    checklist_rows = list(
-        db.scalars(
-            select(TransactionChecklistItem).where(
-                TransactionChecklistItem.organization_id == principal.organization_id,
-                TransactionChecklistItem.transaction_id.in_(transaction_ids)
-                if transaction_ids
-                else TransactionChecklistItem.id.is_(None),
-                TransactionChecklistItem.due_at.is_not(None),
-                TransactionChecklistItem.status.notin_(COMPLETE_WORK_STATUSES),
-            )
-        ).all()
+    checklist_rows = (
+        list(
+            db.scalars(
+                select(TransactionChecklistItem).where(
+                    TransactionChecklistItem.organization_id == principal.organization_id,
+                    TransactionChecklistItem.transaction_id.in_(transaction_ids)
+                    if transaction_ids
+                    else TransactionChecklistItem.id.is_(None),
+                    TransactionChecklistItem.due_at.is_not(None),
+                    TransactionChecklistItem.status.notin_(COMPLETE_WORK_STATUSES),
+                )
+            ).all()
+        )
+        if load_deadlines
+        else []
     )
     checklist_by_transaction: dict[UUID, list[TransactionChecklistItem]] = {}
     for checklist_item in checklist_rows:
@@ -552,64 +682,84 @@ def read_desk(
             checklist_item
         )
 
-    offer_room_checkpoints = list(
-        db.scalars(
-            select(DispositionClosingCheckpoint).where(
-                DispositionClosingCheckpoint.organization_id == principal.organization_id,
-                DispositionClosingCheckpoint.disposition_case_id.in_(case_ids)
-                if case_ids
-                else DispositionClosingCheckpoint.id.is_(None),
-                DispositionClosingCheckpoint.status.in_(("pending", "in_progress", "missed")),
-            )
-        ).all()
+    offer_room_checkpoints = (
+        list(
+            db.scalars(
+                select(DispositionClosingCheckpoint).where(
+                    DispositionClosingCheckpoint.organization_id == principal.organization_id,
+                    DispositionClosingCheckpoint.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else DispositionClosingCheckpoint.id.is_(None),
+                    DispositionClosingCheckpoint.status.in_(
+                        ("pending", "in_progress", "missed")
+                    ),
+                )
+            ).all()
+        )
+        if load_deadlines or load_coverage
+        else []
     )
     checkpoint_ids = {checkpoint.id for checkpoint in offer_room_checkpoints}
-    deadline_alerts = list(
-        db.scalars(
-            select(DispositionDeadlineAlert)
-            .where(
-                DispositionDeadlineAlert.organization_id == principal.organization_id,
-                DispositionDeadlineAlert.checkpoint_id.in_(checkpoint_ids)
-                if checkpoint_ids
-                else DispositionDeadlineAlert.id.is_(None),
-                DispositionDeadlineAlert.status.in_(("open", "acknowledged")),
-            )
-            .order_by(DispositionDeadlineAlert.created_at.desc())
-        ).all()
+    deadline_alerts = (
+        list(
+            db.scalars(
+                select(DispositionDeadlineAlert)
+                .where(
+                    DispositionDeadlineAlert.organization_id == principal.organization_id,
+                    DispositionDeadlineAlert.checkpoint_id.in_(checkpoint_ids)
+                    if checkpoint_ids
+                    else DispositionDeadlineAlert.id.is_(None),
+                    DispositionDeadlineAlert.status.in_(("open", "acknowledged")),
+                )
+                .order_by(DispositionDeadlineAlert.created_at.desc())
+            ).all()
+        )
+        if load_deadlines
+        else []
     )
     active_alert_by_checkpoint: dict[UUID, DispositionDeadlineAlert] = {}
     for alert in deadline_alerts:
         active_alert_by_checkpoint.setdefault(alert.checkpoint_id, alert)
 
-    match_rows = list(
-        db.scalars(
-            select(DispositionMatch).where(
-                DispositionMatch.organization_id == principal.organization_id,
-                DispositionMatch.disposition_case_id.in_(case_ids)
-                if case_ids
-                else DispositionMatch.id.is_(None),
-            )
-        ).all()
+    match_rows = (
+        list(
+            db.scalars(
+                select(DispositionMatch).where(
+                    DispositionMatch.organization_id == principal.organization_id,
+                    DispositionMatch.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else DispositionMatch.id.is_(None),
+                )
+            ).all()
+        )
+        if load_deadlines or load_buyer_health
+        else []
     )
     matched_buyer_ids = {match.buyer_id for match in match_rows}
     user_ids: set[UUID | None] = {case.owner_user_id for case in cases}
     user_ids.update(owner_id for _, _, _, _, _, _, owner_id, _ in setup_intakes)
-    task_rows = list(
-        db.scalars(
-            select(Task).where(
-                Task.organization_id == principal.organization_id,
-                Task.deal_id.in_(operational_deal_ids)
-                if operational_deal_ids
-                else Task.id.is_(None),
-                Task.status.in_(("open", "in_progress")),
-            )
-        ).all()
+    task_statement = select(Task).where(
+        Task.organization_id == principal.organization_id,
+        Task.deal_id.in_(operational_deal_ids)
+        if operational_deal_ids
+        else Task.id.is_(None),
+        Task.status.in_(("open", "in_progress")),
     )
+    if not load_all:
+        task_statement = task_statement.where(Task.task_type == HANDOFF_SETUP_TASK_TYPE)
+    task_rows = list(db.scalars(task_statement).all()) if load_all or load_active else []
     tasks = [task for task in task_rows if _scoped(task.responsible_user_id, allowed_user_ids)]
     user_ids.update(task.responsible_user_id for task in tasks)
 
+    needs_buyers = (
+        load_followups
+        or load_replies
+        or load_offers
+        or load_deadlines
+        or load_buyer_health
+    )
     buyer_statement = select(Buyer).where(Buyer.organization_id == principal.organization_id)
-    buyers_all = list(db.scalars(buyer_statement).all())
+    buyers_all = list(db.scalars(buyer_statement).all()) if needs_buyers else []
     buyers = [
         buyer for buyer in buyers_all if _scoped(buyer.relationship_owner_user_id, allowed_user_ids)
     ]
@@ -621,7 +771,7 @@ def read_desk(
     ]
     reviewed_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
     verified_proof_by_buyer: dict[UUID, BuyerProofDocument] = {}
-    if proof_buyer_ids:
+    if proof_buyer_ids and (load_deadlines or load_buyer_health):
         for document in db.scalars(
             select(BuyerProofDocument)
             .where(
@@ -645,25 +795,29 @@ def read_desk(
     user_ids.update(checklist.responsible_user_id for checklist in checklist_rows)
     user_ids.update(checkpoint.responsible_user_id for checkpoint in offer_room_checkpoints)
 
-    followup_rows = list(
-        db.scalars(
-            select(BuyerEngagement).where(
-                BuyerEngagement.organization_id == principal.organization_id,
-                BuyerEngagement.engagement_type == "follow_up",
-                BuyerEngagement.status.notin_(COMPLETE_WORK_STATUSES),
-                or_(
-                    BuyerEngagement.disposition_case_id.in_(case_ids)
-                    if case_ids
-                    else BuyerEngagement.id.is_(None),
-                    and_(
-                        BuyerEngagement.disposition_case_id.is_(None),
-                        BuyerEngagement.buyer_id.in_(buyer_ids)
-                        if buyer_ids
+    followup_rows = (
+        list(
+            db.scalars(
+                select(BuyerEngagement).where(
+                    BuyerEngagement.organization_id == principal.organization_id,
+                    BuyerEngagement.engagement_type == "follow_up",
+                    BuyerEngagement.status.notin_(COMPLETE_WORK_STATUSES),
+                    or_(
+                        BuyerEngagement.disposition_case_id.in_(case_ids)
+                        if case_ids
                         else BuyerEngagement.id.is_(None),
+                        and_(
+                            BuyerEngagement.disposition_case_id.is_(None),
+                            BuyerEngagement.buyer_id.in_(buyer_ids)
+                            if buyer_ids
+                            else BuyerEngagement.id.is_(None),
+                        ),
                     ),
-                ),
-            )
-        ).all()
+                )
+            ).all()
+        )
+        if load_followups
+        else []
     )
     followups: list[BuyerEngagement] = []
     for followup in followup_rows:
@@ -683,7 +837,7 @@ def read_desk(
             user_ids.add(followup.actor_user_id)
 
     reply_rows: list[tuple[Conversation, ConversationContextLink, Buyer]] = []
-    if PermissionKeys.VIEW_CONVERSATIONS in principal.permission_keys:
+    if load_replies and PermissionKeys.VIEW_CONVERSATIONS in principal.permission_keys:
         reply_rows = list(
             db.execute(
                 select(Conversation, ConversationContextLink, Buyer)
@@ -723,15 +877,19 @@ def read_desk(
         replies.append((conversation, buyer))
         user_ids.add(conversation.assigned_user_id or buyer.relationship_owner_user_id)
 
-    offer_rows = list(
-        db.scalars(
-            select(BuyerOffer).where(
-                BuyerOffer.organization_id == principal.organization_id,
-                BuyerOffer.disposition_case_id.in_(case_ids)
-                if case_ids
-                else BuyerOffer.id.is_(None),
-            )
-        ).all()
+    offer_rows = (
+        list(
+            db.scalars(
+                select(BuyerOffer).where(
+                    BuyerOffer.organization_id == principal.organization_id,
+                    BuyerOffer.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else BuyerOffer.id.is_(None),
+                )
+            ).all()
+        )
+        if load_offers or load_deadlines or load_coverage
+        else []
     )
     offers = [offer for offer in offer_rows if offer.status == "received"]
     deposit_offers = [
@@ -742,16 +900,20 @@ def read_desk(
         and offer.deposit_received_at is None
     ]
     offer_by_id = {offer.id: offer for offer in offer_rows}
-    active_selections = list(
-        db.scalars(
-            select(DispositionBuyerSelection).where(
-                DispositionBuyerSelection.organization_id == principal.organization_id,
-                DispositionBuyerSelection.disposition_case_id.in_(case_ids)
-                if case_ids
-                else DispositionBuyerSelection.id.is_(None),
-                DispositionBuyerSelection.status == "active",
-            )
-        ).all()
+    active_selections = (
+        list(
+            db.scalars(
+                select(DispositionBuyerSelection).where(
+                    DispositionBuyerSelection.organization_id == principal.organization_id,
+                    DispositionBuyerSelection.disposition_case_id.in_(case_ids)
+                    if case_ids
+                    else DispositionBuyerSelection.id.is_(None),
+                    DispositionBuyerSelection.status == "active",
+                )
+            ).all()
+        )
+        if load_deadlines or load_coverage
+        else []
     )
     active_selection_case = {
         selection.id: selection.disposition_case_id for selection in active_selections
@@ -781,137 +943,144 @@ def read_desk(
 
     active_items: list[DispositionDeskItemRead] = []
     coverage_warnings: list[DispositionDeskItemRead] = []
-    for (
-        setup_transaction,
-        setup_deal,
-        setup_lead,
-        setup_contact,
-        setup_property,
-        setup_existing_case,
-        setup_owner_id,
-        setup_blockers,
-    ) in setup_intakes:
-        setup_task = setup_task_by_deal.get(setup_deal.id)
-        active_items.append(
-            DispositionDeskItemRead(
-                key=f"setup:{setup_transaction.id}",
-                category="active_deals",
-                title=_property_address(setup_property),
-                context=f"{setup_contact.legal_name} | Executed contract",
-                owner_user_id=setup_owner_id,
-                owner_name=_owner_name(setup_owner_id, users),
-                due_at=(
-                    setup_task.due_at
-                    if setup_task is not None
-                    else setup_transaction.contract_executed_at
-                ),
-                reason=(
-                    f"Executed {setup_lead.asset_class.title()} contract is waiting for "
-                    "Dispositions setup."
-                ),
-                blocker=" ".join(setup_blockers),
-                severity="danger",
-                deal_id=setup_deal.id,
-                transaction_id=setup_transaction.id,
-                task_id=setup_task.id if setup_task is not None else None,
-                disposition_case_id=(
-                    setup_existing_case.id if setup_existing_case is not None else None
-                ),
-                needs_setup=True,
-                asset_class=_asset_class(setup_lead.asset_class),
-                primary_action=DispositionDeskActionRead(
-                    label="Resolve setup",
-                    href=f"/os/dispositions?transaction={setup_transaction.id}",
-                ),
-                secondary_action=DispositionDeskActionRead(
-                    label="Open deal",
-                    href=_deal_href(setup_deal.id),
-                ),
-            )
-        )
-    for item in active_records:
-        case = case_by_deal.get(item.id)
-        case_lead = db.get(Lead, case.lead_id) if case is not None else None
-        case_property = db.get(Property, case.property_id) if case is not None else None
-        blocker = next(
-            (value.label for value in item.blockers if value.domain == "disposition"),
-            None,
-        )
-        active_items.append(
-            DispositionDeskItemRead(
-                key=f"deal:{item.id}",
-                category="active_deals",
-                title=_property_address(case_property) if case_property else item.property_address,
-                context=(
-                    f"{item.seller_name} | {item.buyer_match_count} matches | "
-                    f"{item.buyer_offer_count} offers"
-                ),
-                owner_user_id=case.owner_user_id if case else None,
-                owner_name=item.disposition_owner_name or "Unassigned",
-                due_at=item.next_deadline,
-                reason=f"Disposition is {item.disposition_status.replace('_', ' ')}.",
-                blocker=blocker,
-                severity=_severity(item.next_deadline, blocker=bool(blocker)),
-                deal_id=item.id,
-                transaction_id=item.transaction_id,
-                disposition_case_id=case.id if case else None,
-                asset_class=_asset_class(case_lead.asset_class) if case_lead else None,
-                primary_action=DispositionDeskActionRead(
-                    label="Open deal" if case else "Open disposition",
-                    href=(
-                        _deal_href(item.id)
-                        if case
-                        else f"/os/dispositions?transaction={item.transaction_id}"
+    if load_active:
+        for (
+            setup_transaction,
+            setup_deal,
+            setup_lead,
+            setup_contact,
+            setup_property,
+            setup_existing_case,
+            setup_owner_id,
+            setup_blockers,
+        ) in setup_intakes:
+            setup_task = setup_task_by_deal.get(setup_deal.id)
+            active_items.append(
+                DispositionDeskItemRead(
+                    key=f"setup:{setup_transaction.id}",
+                    category="active_deals",
+                    title=_property_address(setup_property),
+                    context=f"{setup_contact.legal_name} | Executed contract",
+                    owner_user_id=setup_owner_id,
+                    owner_name=_owner_name(setup_owner_id, users),
+                    due_at=(
+                        setup_task.due_at
+                        if setup_task is not None
+                        else setup_transaction.contract_executed_at
                     ),
-                ),
-                secondary_action=DispositionDeskActionRead(
-                    label="Buyer network",
-                    href="/os/buyers",
-                ),
-                checklist=_desk_checklist(db, principal, case) if case else None,
+                    reason=(
+                        f"Executed {setup_lead.asset_class.title()} contract is waiting for "
+                        "Dispositions setup."
+                    ),
+                    blocker=" ".join(setup_blockers),
+                    severity="danger",
+                    deal_id=setup_deal.id,
+                    transaction_id=setup_transaction.id,
+                    task_id=setup_task.id if setup_task is not None else None,
+                    disposition_case_id=(
+                        setup_existing_case.id if setup_existing_case is not None else None
+                    ),
+                    needs_setup=True,
+                    asset_class=_asset_class(setup_lead.asset_class),
+                    primary_action=DispositionDeskActionRead(
+                        label="Resolve setup",
+                        href=f"/os/dispositions?transaction={setup_transaction.id}",
+                    ),
+                    secondary_action=DispositionDeskActionRead(
+                        label="Open deal",
+                        href=_deal_href(setup_deal.id),
+                    ),
+                )
             )
-        )
-        warning = _coverage_warning(
-            item,
-            case,
-            has_viable_approved_backup=(case is not None and case.id in viable_backup_case_ids),
-        )
-        if warning:
-            coverage_warnings.append(warning)
+        for item in active_records:
+            case = case_by_deal.get(item.id)
+            blocker = next(
+                (value.label for value in item.blockers if value.domain == "disposition"),
+                None,
+            )
+            active_items.append(
+                DispositionDeskItemRead(
+                    key=f"deal:{item.id}",
+                    category="active_deals",
+                    title=item.property_address,
+                    context=(
+                        f"{item.seller_name} | {item.buyer_match_count} matches | "
+                        f"{item.buyer_offer_count} offers"
+                    ),
+                    owner_user_id=case.owner_user_id if case else None,
+                    owner_name=item.disposition_owner_name or "Unassigned",
+                    due_at=item.next_deadline,
+                    reason=f"Disposition is {item.disposition_status.replace('_', ' ')}.",
+                    blocker=blocker,
+                    severity=_severity(item.next_deadline, blocker=bool(blocker)),
+                    deal_id=item.id,
+                    transaction_id=item.transaction_id,
+                    disposition_case_id=case.id if case else None,
+                    asset_class=item.asset_class,
+                    primary_action=DispositionDeskActionRead(
+                        label="Open deal" if case else "Open disposition",
+                        href=(
+                            _deal_href(item.id)
+                            if case
+                            else f"/os/dispositions?transaction={item.transaction_id}"
+                        ),
+                    ),
+                    secondary_action=DispositionDeskActionRead(
+                        label="Buyer network",
+                        href="/os/buyers",
+                    ),
+                    checklist=(
+                        _desk_checklist(db, principal, case)
+                        if load_all and case
+                        else None
+                    ),
+                )
+            )
+            if load_coverage:
+                warning = _coverage_warning(
+                    item,
+                    case,
+                    has_viable_approved_backup=(
+                        case is not None and case.id in viable_backup_case_ids
+                    ),
+                )
+                if warning:
+                    coverage_warnings.append(warning)
 
     task_items: list[DispositionDeskItemRead] = []
-    for task in tasks:
-        deal = deal_by_id.get(task.deal_id) if task.deal_id else None
-        if deal is None:
-            continue
-        task_items.append(
-            DispositionDeskItemRead(
-                key=f"task:{task.id}",
-                category="today",
-                title=task.title,
-                context=deal.property_address,
-                owner_user_id=task.responsible_user_id,
-                owner_name=_owner_name(task.responsible_user_id, users),
-                due_at=task.due_at,
-                reason="Open deal task requires disposition attention.",
-                blocker=None,
-                severity=_severity(task.due_at),
-                deal_id=deal.id,
-                task_id=task.id,
-                disposition_case_id=deal.disposition_case_id,
-                primary_action=DispositionDeskActionRead(
-                    label="Open task",
-                    href=(
-                        f"/os/tasks?view={'team' if effective_scope == 'team' else 'mine'}"
-                        f"&item=task:{task.id}"
+    if load_all:
+        for task in tasks:
+            deal = deal_by_id.get(task.deal_id) if task.deal_id else None
+            if deal is None:
+                continue
+            task_items.append(
+                DispositionDeskItemRead(
+                    key=f"task:{task.id}",
+                    category="today",
+                    title=task.title,
+                    context=deal.property_address,
+                    owner_user_id=task.responsible_user_id,
+                    owner_name=_owner_name(task.responsible_user_id, users),
+                    due_at=task.due_at,
+                    reason="Open deal task requires disposition attention.",
+                    blocker=None,
+                    severity=_severity(task.due_at),
+                    deal_id=deal.id,
+                    task_id=task.id,
+                    disposition_case_id=deal.disposition_case_id,
+                    primary_action=DispositionDeskActionRead(
+                        label="Open task",
+                        href=(
+                            f"/os/tasks?view={'team' if effective_scope == 'team' else 'mine'}"
+                            f"&item=task:{task.id}"
+                        ),
                     ),
-                ),
-                secondary_action=DispositionDeskActionRead(
-                    label="Open deal",
-                    href=_deal_href(deal.id),
-                ),
+                    secondary_action=DispositionDeskActionRead(
+                        label="Open deal",
+                        href=_deal_href(deal.id),
+                    ),
+                )
             )
-        )
 
     followup_items: list[DispositionDeskItemRead] = []
     for followup in followups:
@@ -1264,21 +1433,27 @@ def read_desk(
             )
         )
 
-    criteria_buyer_ids = set(
-        db.scalars(
-            select(BuyerBuyBox.buyer_id)
-            .join(
-                BuyerBuyBoxVersion,
-                BuyerBuyBoxVersion.buy_box_id == BuyerBuyBox.id,
-            )
-            .where(
-                BuyerBuyBox.organization_id == principal.organization_id,
-                BuyerBuyBox.buyer_id.in_(buyer_ids) if buyer_ids else BuyerBuyBox.id.is_(None),
-                BuyerBuyBoxVersion.organization_id == principal.organization_id,
-                BuyerBuyBoxVersion.is_current.is_(True),
-                BuyerBuyBoxVersion.verification_status == "verified",
-            )
-        ).all()
+    criteria_buyer_ids = (
+        set(
+            db.scalars(
+                select(BuyerBuyBox.buyer_id)
+                .join(
+                    BuyerBuyBoxVersion,
+                    BuyerBuyBoxVersion.buy_box_id == BuyerBuyBox.id,
+                )
+                .where(
+                    BuyerBuyBox.organization_id == principal.organization_id,
+                    BuyerBuyBox.buyer_id.in_(buyer_ids)
+                    if buyer_ids
+                    else BuyerBuyBox.id.is_(None),
+                    BuyerBuyBoxVersion.organization_id == principal.organization_id,
+                    BuyerBuyBoxVersion.is_current.is_(True),
+                    BuyerBuyBoxVersion.verification_status == "verified",
+                )
+            ).all()
+        )
+        if load_buyer_health
+        else set()
     )
     active_buyers = [
         buyer for buyer in buyers if buyer.archived_at is None and buyer.status == "active"
@@ -1291,19 +1466,29 @@ def read_desk(
         if buyer_id in active_buyer_ids
     )
     buyer_health = DispositionDeskBuyerHealthRead(
-        total=len(buyers),
-        active=len(active_buyers),
-        needs_review=sum(
-            buyer.archived_at is None and buyer.status == "needs_review" for buyer in buyers
+        total=len(buyers) if load_buyer_health else 0,
+        active=len(active_buyers) if load_buyer_health else 0,
+        needs_review=(
+            sum(buyer.archived_at is None and buyer.status == "needs_review" for buyer in buyers)
+            if load_buyer_health
+            else 0
         ),
-        unassigned=sum(
-            buyer.relationship_owner_user_id is None
-            for buyer in buyers
-            if buyer.archived_at is None
+        unassigned=(
+            sum(
+                buyer.relationship_owner_user_id is None
+                for buyer in buyers
+                if buyer.archived_at is None
+            )
+            if load_buyer_health
+            else 0
         ),
-        missing_proof=missing_proof,
-        expiring_proof=expiring_proof,
-        missing_criteria=sum(buyer.id not in criteria_buyer_ids for buyer in active_buyers),
+        missing_proof=missing_proof if load_buyer_health else 0,
+        expiring_proof=expiring_proof if load_buyer_health else 0,
+        missing_criteria=(
+            sum(buyer.id not in criteria_buyer_ids for buyer in active_buyers)
+            if load_buyer_health
+            else 0
+        ),
     )
 
     active_items_all = _sort(active_items)
@@ -1323,14 +1508,30 @@ def read_desk(
         ],
         day_end,
     )
+    lightweight_followups: int | None = None
+    lightweight_replies: int | None = None
+    lightweight_offers: int | None = None
+    if not load_all:
+        (
+            lightweight_followups,
+            lightweight_replies,
+            lightweight_offers,
+        ) = _lightweight_relationship_counts(
+            db,
+            principal,
+            case_ids=case_ids,
+            allowed_user_ids=allowed_user_ids,
+        )
     metrics = DispositionDeskMetricsRead(
-        today=len(today_items_all),
-        active_deals=len(active_items_all),
-        buyer_follow_ups=len(followup_items_all),
-        replies=len(reply_items_all),
-        offers=len(offer_items_all),
-        deadlines=len(deadline_items_all),
-        weak_coverage=len(coverage_warnings_all),
+        today=len(today_items_all) if load_all else None,
+        active_deals=len(active_items_all) if load_active else None,
+        buyer_follow_ups=(
+            len(followup_items_all) if load_followups else lightweight_followups
+        ),
+        replies=len(reply_items_all) if load_replies else lightweight_replies,
+        offers=len(offer_items_all) if load_offers else lightweight_offers,
+        deadlines=len(deadline_items_all) if load_deadlines else None,
+        weak_coverage=len(coverage_warnings_all) if load_coverage else None,
     )
 
     def section_offset(section: DispositionDeskCategory) -> int:
@@ -1358,7 +1559,7 @@ def read_desk(
         offset=section_offset("deadlines"),
     )
     coverage_warnings, coverage_warnings_section = _page(coverage_warnings_all)
-    deal_records, deal_records_section = _page(active_records)
+    deal_records, deal_records_section = _page(active_records if load_all else [])
     sections = DispositionDeskSectionsRead(
         today=today_section,
         active_deals=active_deals_section,
@@ -1380,6 +1581,9 @@ def read_desk(
     if not provider.configured:
         provider_state = "not_configured"
         provider_message = provider.message
+    elif not load_all:
+        provider_state = "configured_unverified"
+        provider_message = "External provider health loads when Desk status is opened."
     else:
         latest_provider_run = db.scalar(
             select(BuyerDiscoveryRun)
@@ -1414,6 +1618,23 @@ def read_desk(
         can_view_team=can_view_team,
         scope_notice=scope_notice,
         can_edit_buyers=PermissionKeys.EDIT_BUYERS in principal.permission_keys,
+        details_loaded=load_all,
+        deferred_sections=(
+            []
+            if load_all
+            else [
+                section
+                for section in (
+                    "today",
+                    "active_deals",
+                    "buyer_follow_ups",
+                    "replies",
+                    "offers",
+                    "deadlines",
+                )
+                if section != selected_section
+            ]
+        ),
         metrics=metrics,
         sections=sections,
         buyer_network=buyer_health,

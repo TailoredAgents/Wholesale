@@ -152,7 +152,7 @@ test("buyer decisions permit primary-only coverage and warning-bearing replaceme
 
 test("desk guidance and readiness UI are responsive and preserve explicit role restrictions", () => {
   assert.match(desk, /Start \/ continue outreach/);
-  assert.match(desk, /<details className=\{styles\.cardChecklist\}>/);
+  assert.match(desk, /<details className=\{styles\.cardChecklist\}[\s\S]*?>/);
   assert.match(desk, /Deal details &amp; readiness/);
   assert.doesNotMatch(desk, /Suggested action \(optional\)|Also available now/);
   assert.match(panelStyles, /@media \(max-width: 760px\)/);

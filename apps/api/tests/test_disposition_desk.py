@@ -131,6 +131,8 @@ def test_disposition_desk_empty_read_model(
     assert payload["requested_scope"] == "team"
     assert payload["effective_scope"] == "team"
     assert payload["scope_label"] == "Company"
+    assert payload["details_loaded"] is True
+    assert payload["deferred_sections"] == []
     assert payload["metrics"] == {
         "today": 0,
         "active_deals": 0,
@@ -159,6 +161,57 @@ def test_disposition_desk_empty_read_model(
         }
     assert payload["source_health"]["canonical_data_status"] == "current"
     assert payload["source_health"]["external_provider_status"] == "not_configured"
+
+
+def test_selected_active_deals_defers_company_health_and_case_readiness(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id, _ = setup_case_foundation(db_session, client)
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    transaction.contract_executed_at = datetime.now(UTC)
+    db_session.commit()
+    disposition_case = ensure_house_disposition_case_for_executed_transaction(
+        db_session,
+        transaction,
+    )
+    db_session.commit()
+    assert disposition_case is not None
+
+    def fail_on_eager_readiness(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("selected desk routes must not build collapsed readiness")
+
+    monkeypatch.setattr(
+        disposition_desk_service.disposition_readiness,
+        "read_case_readiness",
+        fail_on_eager_readiness,
+    )
+    response = client.get(
+        "/api/v1/dispositions/desk?scope=mine&section=active_deals",
+        headers=HEADERS,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["details_loaded"] is False
+    assert payload["deferred_sections"] == [
+        "today",
+        "buyer_follow_ups",
+        "replies",
+        "offers",
+        "deadlines",
+    ]
+    assert payload["metrics"]["active_deals"] == 1
+    assert payload["metrics"]["buyer_follow_ups"] == 0
+    assert payload["metrics"]["replies"] == 0
+    assert payload["metrics"]["offers"] == 0
+    assert payload["metrics"]["deadlines"] is None
+    assert payload["buyer_network"]["total"] == 0
+    assert len(payload["active_deals"]) == 1
+    assert payload["active_deals"][0]["checklist"] is None
 
 
 def test_disposition_desk_keeps_advisory_parcel_only_land_shell_visible(
@@ -576,6 +629,26 @@ def test_disposition_desk_aggregates_owned_work_with_canonical_links(
     assert checklist["primary_action"]["href"].endswith(f"deal={deal_id}&tab=closing")
     assert any(item["key"].startswith("task:") for item in payload["today"])
     assert any(item["key"] == f"reply:{conversation.id}" for item in payload["today"])
+
+    for section in (
+        "active_deals",
+        "buyer_follow_ups",
+        "replies",
+        "offers",
+        "deadlines",
+    ):
+        section_response = client.get(
+            f"/api/v1/dispositions/desk?scope=mine&section={section}",
+            headers=HEADERS,
+        )
+        assert section_response.status_code == 200, section_response.text
+        section_payload = section_response.json()
+        assert section_payload["details_loaded"] is False
+        assert section_payload["metrics"][section] == payload["metrics"][section]
+        assert [item["key"] for item in section_payload[section]] == [
+            item["key"] for item in payload[section]
+        ]
+        assert section not in section_payload["deferred_sections"]
 
     selected_offer = db_session.get(BuyerOffer, UUID(offer_id))
     assert selected_offer is not None
