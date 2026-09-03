@@ -44,13 +44,15 @@ test("the outreach desk uses compact, professional workspace controls", async ()
   assert.match(workspaceStyles, /\.queuePanel \{[^}]*border-radius: 4px/);
   assert.match(workspaceStyles, /\.queueSearch \{[^}]*display: flex/);
   assert.match(workspaceStyles, /\.queueRowMenu > div \{[^}]*position: absolute/);
-  assert.match(workspaceStyles, /\.queueRowActions \.queueContactAction \{[^}]*background: #17633d/);
+  assert.doesNotMatch(workspaceStyles, /\.queueContactAction/);
   assert.match(workspaceStyles, /\.outreachConsole \{[^}]*padding: 0/);
   assert.match(workspaceStyles, /\.channelTabs \{[^}]*grid-template-columns: repeat\(3/);
-  assert.match(workspaceStyles, /\.conversationTimeline \{[^}]*min-height: 230px/);
+  assert.match(workspaceStyles, /\.conversationTimeline \{[^}]*min-height: 250px/);
   assert.match(workspaceStyles, /\.resultDock \{[^}]*border-top/);
+  assert.match(workspaceStyles, /\.permissionNotice \{[^}]*background: #fff8e8/);
   assert.doesNotMatch(workspaceStyles, /\.outcomePanel \{/);
   assert.match(dispositionStyles, /\.workspacePrimaryNav > button \{[^}]*min-height: 50px/);
+  assert.match(dispositionStyles, /\.workspacePrimaryTools \{[^}]*flex: 0 0 auto/);
   assert.match(dispositionStyles, /\.workspaceSecondaryNav button \{[^}]*border-radius: 3px/);
   assert.match(queueBuilderStyles, /\.builder \{[^}]*border-radius: 4px/);
 });
@@ -77,6 +79,7 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /callIntentId: intent\.id/);
   assert.match(workspace, /fromNumber: intent\.from_number/);
   assert.match(workspace, /A call begins only when you choose one of these options/);
+  assert.match(workspace, /Formal permission is \{labelize\(status\)\.toLowerCase\(\)\}; manual outreach remains available/);
   assert.doesNotMatch(workspace, /callCountdown|beginCallCountdown|cancelPreparedCall/);
   assert.doesNotMatch(workspace, /initializeHeadset/);
   const sendSmsFunction = workspace.match(/async function sendSms\(\)[\s\S]*?(?=\n  async function startBrowserCall)/)?.[0] ?? "";
@@ -86,9 +89,8 @@ test("the disposition workspace mounts a permission-aware one-to-one call queue"
   assert.match(workspace, /execution\/forwarded-calls/);
   assert.doesNotMatch(workspace, /voice\/conversations\/\$\{conversationId\}\/forwarded-calls/);
   assert.match(workspace, /Open \{packageLabel\} packet/);
-  assert.match(workspace, /Text \$\{packageLabel\} packet/);
   assert.match(workspace, /className=\{styles\.packetQuickBar\}/);
-  assert.match(workspace, /Investor asks for the packet\?/);
+  assert.match(workspace, /<strong>Packet<\/strong>/);
   assert.match(workspace, /async function copyPacketLink\(\)/);
   assert.match(workspace, /navigator\.clipboard\.writeText\(issued\.share_url\)/);
   assert.match(workspace, /Copy link/);
@@ -130,7 +132,7 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /Choose who to contact/);
   assert.match(workspace, /candidates\.map\(\(item\) =>/);
   assert.match(workspace, /key=\{item\.buyer_id\}/);
-  assert.match(workspace, /chooseCandidate\(item\.buyer_id\)/);
+  assert.match(workspace, /aria-label=\{`Contact \$\{item\.name\}`\}/);
   assert.match(workspace, /moveCandidate\(item\.buyer_id, -1\)/);
   assert.match(workspace, /moveCandidate\(item\.buyer_id, 1\)/);
   assert.match(workspace, /removeCandidate\(item\.buyer_id\)/);
@@ -140,6 +142,7 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(workspace, /aria-label="Search investor queue"/);
   assert.match(workspace, /draggable=\{busy === null\}/);
   assert.match(workspace, /chooseCandidate\(item\.buyer_id, true\)/);
+  assert.doesNotMatch(workspace, /styles\.queueContactAction/);
   assert.match(workspace, /execution\/session\/cursor/);
   assert.match(workspace, /selectCandidateLocally\(previousWorkspace, nextCandidate\)/);
   const chooseCandidateFunction = workspace.match(/async function chooseCandidate\([\s\S]*?(?=\n  async function saveQueueOrder)/)?.[0] ?? "";

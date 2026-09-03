@@ -707,8 +707,7 @@ export function DispositionWorkspace({
                   <header className={styles.workspaceDealStrip}>
                     <div>
                       <span>{selected.asset_class === "land" ? "Land" : "House"} deal</span>
-                      <strong>{selected.property_address}</strong>
-                      <small>Seller: {selected.seller_name}</small>
+                      <strong>Seller: {selected.seller_name}</strong>
                     </div>
                     <dl>
                       <div><dt>Asking</dt><dd>{money(selected.asking_price_cents)}</dd></div>
@@ -717,21 +716,18 @@ export function DispositionWorkspace({
                     </dl>
                   </header>
                   <div className={styles.workspacePrimaryNav}>
-                    <button aria-current={dedicatedSection === "outreach" ? "page" : undefined} className={dedicatedSection === "outreach" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["buyers", "execution", "outreach", "provider"].includes(activeTab) ? activeTab : "execution")} type="button"><PhoneCall aria-hidden="true" size={17} /><span><strong>Outreach Desk</strong><small>Work the ranked investor queue</small></span></button>
+                    <button aria-current={dedicatedSection === "outreach" ? "page" : undefined} aria-label="Outreach queue" className={dedicatedSection === "outreach" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["buyers", "execution", "outreach", "provider"].includes(activeTab) ? activeTab : "execution")} type="button"><PhoneCall aria-hidden="true" size={17} /><span><strong>Outreach Desk</strong><small>Work the ranked investor queue</small></span></button>
                     <button aria-current={dedicatedSection === "deal" ? "page" : undefined} className={dedicatedSection === "deal" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["overview", "package"].includes(activeTab) ? activeTab : "package")} type="button"><FileText aria-hidden="true" size={17} /><span><strong>Deal &amp; Packet</strong><small>Facts, uploads, and checklist</small></span></button>
                     {selected.asset_class === "house" && data.can_view_private_economics ? <button aria-current={dedicatedSection === "closing" ? "page" : undefined} className={dedicatedSection === "closing" ? styles.activeWorkspaceSection : ""} onClick={() => selectWorkspaceTab(["offers", "reconciliation"].includes(activeTab) ? activeTab : "offers")} type="button"><Gavel aria-hidden="true" size={17} /><span><strong>Offers & Closing</strong><small>Compare, select, and close</small></span></button> : null}
-                  </div>
-                  {dedicatedSection === "outreach" ? <div className={styles.workspaceSecondaryNav}>
-                    <button aria-current={activeTab === "execution" ? "page" : undefined} onClick={() => selectWorkspaceTab("execution")} type="button"><PhoneCall aria-hidden="true" size={15} />Outreach queue</button>
-                    <details className={styles.workspaceMoreTools}>
+                    {dedicatedSection === "outreach" ? <details className={`${styles.workspaceMoreTools} ${styles.workspacePrimaryTools}`}>
                       <summary>More tools</summary>
                       <div>
                         <button aria-current={activeTab === "buyers" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("buyers"); }} type="button"><UsersRound aria-hidden="true" size={15} />Full buyer pool &amp; evidence</button>
                         {canViewOutreach ? <button aria-current={activeTab === "outreach" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("outreach"); }} type="button"><Send aria-hidden="true" size={15} />Bulk campaigns</button> : null}
                         {selected.asset_class === "house" ? <button aria-current={activeTab === "provider" ? "page" : undefined} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); selectWorkspaceTab("provider"); }} type="button">External distribution</button> : null}
                       </div>
-                    </details>
-                  </div> : null}
+                    </details> : null}
+                  </div>
                   {dedicatedSection === "deal" ? <div className={styles.workspaceSecondaryNav}>
                     <button aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectWorkspaceTab("overview")} type="button">Deal summary</button>
                     <button aria-current={activeTab === "package" ? "page" : undefined} onClick={() => selectWorkspaceTab("package")} type="button"><FileText aria-hidden="true" size={15} />Packet &amp; uploads</button>

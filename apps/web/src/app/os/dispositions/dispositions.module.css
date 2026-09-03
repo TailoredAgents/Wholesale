@@ -1,6 +1,6 @@
 .workspace { width: 100%; min-width: 0; max-width: 100%; display: grid; gap: 14px; }
 .embeddedWorkspace { gap: 0; }
-.dedicatedWorkspace { gap: 8px; }
+.dedicatedWorkspace { gap: 10px; }
 .body.embeddedBody { width: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .landMarketNotice { margin: 0; padding: 10px 14px; border: 1px solid #d8c58e; border-radius: 8px; background: #fff9e9; color: #684e1c; font-size: 11px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
@@ -251,8 +251,8 @@
 .tabBadge[data-tone="complete"], .tabBadge[data-tone="available"] { background: var(--brand-soft); color: var(--brand-strong); }
 .tabBadge[data-tone="warning"] { background: #fff1c9; color: #795400; }
 .tabBadge[data-tone="hard"] { background: var(--danger-soft); color: var(--danger); }
-.workspaceNavigation { position: sticky; z-index: 12; top: 0; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 3px 10px rgb(20 41 46 / .05); backdrop-filter: blur(12px); }
-.workspaceDealStrip { min-height: 42px; padding: 5px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+.workspaceNavigation { position: sticky; z-index: 12; top: 0; overflow: visible; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--surface) 98%, transparent); box-shadow: 0 5px 18px rgb(20 41 46 / .06); backdrop-filter: blur(12px); }
+.workspaceDealStrip { min-height: 38px; padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface); }
 .workspaceDealStrip > div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 8px; }
 .workspaceDealStrip > div span { color: var(--brand-strong); font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .workspaceDealStrip > div strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -261,8 +261,8 @@
 .workspaceDealStrip dl > div { min-width: 88px; padding: 0 10px; display: grid; gap: 2px; border-left: 1px solid var(--line-soft); }
 .workspaceDealStrip dt { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .workspaceDealStrip dd { margin: 0; font-size: 9px; font-weight: 850; }
-.workspacePrimaryNav { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.workspacePrimaryNav > button { min-width: 0; min-height: 50px; padding: 7px 11px; display: flex; align-items: center; gap: 8px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
+.workspacePrimaryNav { display: flex; align-items: stretch; }
+.workspacePrimaryNav > button { min-width: 0; min-height: 50px; padding: 7px 11px; display: flex; flex: 1 1 220px; align-items: center; gap: 8px; border: 0; border-right: 1px solid var(--line-soft); border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; cursor: pointer; text-align: left; }
 .workspacePrimaryNav > button:last-child { border-right: 0; }
 .workspacePrimaryNav > button > svg { flex: 0 0 auto; }
 .workspacePrimaryNav > button > span { min-width: 0; display: grid; gap: 2px; }
@@ -277,6 +277,8 @@
 .workspaceMoreTools > summary::-webkit-details-marker { display: none; }
 .workspaceMoreTools > div { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 210px; padding: 6px; display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 28px rgb(20 41 46 / .14); }
 .workspaceMoreTools > div button { width: 100%; min-height: 40px; justify-content: flex-start; border-radius: 5px; }
+.workspacePrimaryTools { flex: 0 0 auto; margin: 0; display: grid; place-items: center; padding: 0 8px; border-left: 1px solid var(--line-soft); }
+.workspacePrimaryTools > summary { min-height: 30px; background: var(--surface); }
 .dispositionOverview { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .dispositionOverview > header { min-height: 108px; padding: 18px 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; background: linear-gradient(135deg, var(--brand-soft), var(--surface)); }
 .dispositionOverview > header > div { min-width: 0; display: grid; gap: 5px; }
@@ -576,12 +578,14 @@
   .workspaceDealStrip dl { width: 100%; }
   .workspaceDealStrip dl > div { min-width: 0; flex: 1; }
   .workspaceDealStrip dl > div:first-child { padding-left: 0; border-left: 0; }
-  .workspacePrimaryNav { grid-template-columns: 1fr; }
+  .workspacePrimaryNav { flex-direction: column; }
   .workspacePrimaryNav > button { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .workspacePrimaryNav > button.activeWorkspaceSection { border-bottom-color: var(--brand); }
   .workspacePrimaryNav > button:last-child { border-bottom: 3px solid transparent; }
   .workspacePrimaryNav > button.activeWorkspaceSection:last-child { border-bottom-color: var(--brand); }
   .workspaceMoreTools { margin-left: 0; }
+  .workspacePrimaryTools { width: auto; min-height: 42px; padding: 5px 8px; border-top: 1px solid var(--line-soft); border-left: 0; place-items: stretch; }
+  .workspacePrimaryTools > summary { justify-content: center; }
   .workspaceMoreTools > div { position: fixed; right: 12px; left: 12px; top: auto; width: auto; }
   .dispositionOverview > header { align-items: flex-start; flex-direction: column; }
   .overviewFacts { grid-template-columns: repeat(2, minmax(0, 1fr)); }

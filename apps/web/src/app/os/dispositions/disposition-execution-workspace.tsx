@@ -1230,7 +1230,6 @@ export function DispositionExecutionWorkspace({
           <p>Choose anyone in the queue. Calls, drafts, outcomes, and your exact position save as you work.</p>
         </div>
         <div className={styles.heroActions}>
-          {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button"><Download size={15} />Open {packageLabel} packet</button> : null}
           {candidate ? <button aria-label="Refresh disposition call queue" className={styles.secondary} disabled={busy !== null || loading} onClick={() => void refreshOutreachWorkspace()} type="button"><RefreshCw size={15} />Refresh</button> : null}
           {candidate ? <span className={styles.sessionSave} data-saving={sessionSaveState === "saving"}>{sessionSaveState === "saving" ? "Saving…" : workspace.session.persisted ? "Saved" : "Ready to save"}</span> : null}
         </div>
@@ -1284,17 +1283,17 @@ export function DispositionExecutionWorkspace({
                     ? candidate.score_explanation.slice(0, 5).map((item) => <p key={item}><CheckCircle2 size={14} />{item}</p>)
                     : <p><UserRound size={14} />This canonical Buyer Network record has not been scored by a ranking run. No rank or fit score is implied.</p>}</div>
                 </details>
+                <section aria-label="Investor packet delivery" className={styles.packetQuickBar}>
+                  <div><Download size={15} /><span><strong>Packet</strong><small>Open, copy, or send the current {packageLabel} PDF.</small></span></div>
+                  <div>
+                    {workspace.package_pdf_path ? <button aria-label={`Open ${packageLabel} packet`} className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open {packageLabel} packet</button> : null}
+                    <button aria-label="Copy investor packet link" className={styles.secondary} disabled={!canEditDeals || !workspace.package_pdf_path || busy !== null} onClick={() => void copyPacketLink()} title="Copy packet link" type="button"><Link2 size={14} /><span>{busy === "packet-link" ? "Copying…" : "Copy link"}</span></button>
+                    <button aria-label="Send investor packet by text" className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} title="Send packet by text" type="button"><MessageSquareText size={14} /><span>{busy === "packet-sms" ? "Sending…" : "Send by text"}</span></button>
+                    <button aria-label="Send investor packet by email" className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} title="Send packet by email" type="button"><Mail size={14} /><span>{busy === "packet-email" ? "Sending…" : "Send by email"}</span></button>
+                  </div>
+                </section>
                 {isPassedCandidate(candidate) && !isDoNotContact(candidate) && candidate.candidate_id && candidate.lock_version !== null ? <button className={styles.secondary} disabled={busy !== null || !canEditDeals} onClick={() => void clearPass()} type="button">{busy === "clear-pass" ? "Clearing pass…" : "Clear pass"}</button> : null}
               </div>
-              <section aria-label="Investor packet delivery" className={styles.packetQuickBar}>
-                <div><Download size={16} /><span><strong>Investor asks for the packet?</strong><small>Send the current {packageLabel} PDF without leaving the call or conversation.</small></span></div>
-                <div>
-                  {workspace.package_pdf_path ? <button className={styles.secondary} disabled={busy !== null} onClick={() => void downloadPackage(workspace.package_pdf_path!)} type="button">Open packet</button> : null}
-                  <button className={styles.secondary} disabled={!canEditDeals || !workspace.package_pdf_path || busy !== null} onClick={() => void copyPacketLink()} type="button"><Link2 size={14} />{busy === "packet-link" ? "Copying…" : "Copy link"}</button>
-                  <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><MessageSquareText size={14} />{busy === "packet-sms" ? "Sending…" : "Send by text"}</button>
-                  <button className={styles.secondary} disabled={packetEmailUnavailable} onClick={() => void emailInvestorPacket()} type="button"><Mail size={14} />{busy === "packet-email" ? "Sending…" : "Send by email"}</button>
-                </div>
-              </section>
               <InvestorConversation
                 candidate={candidate}
                 loading={buyerTimelineLoading}
@@ -1315,7 +1314,6 @@ export function DispositionExecutionWorkspace({
                   <label><span>To {candidate.phone ?? "No phone recorded"}</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
                   <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
                   <div className={styles.composerActions}>
-                    <button className={styles.secondary} disabled={packetUnavailable} onClick={() => void sendApprovedPacket()} type="button"><Download size={15} />{busy === "packet-sms" ? "Sending packet…" : `Text ${packageLabel} packet`}</button>
                     <button className={styles.secondary} disabled={busy === "sms"} onClick={() => void discardCurrentSmsDraft()} onMouseDown={(event) => event.preventDefault()} type="button">Reset draft</button>
                     <button disabled={smsUnavailable || !smsDraft.trim()} onClick={() => void sendSms()} onMouseDown={(event) => event.preventDefault()} type="button"><MessageSquareText size={16} />{busy === "sms" ? "Sending…" : "Send text"}</button>
                   </div>
@@ -1396,7 +1394,7 @@ export function DispositionExecutionWorkspace({
               <div><dt>Skipped</dt><dd>{sessionSkippedBuyerIds.length}</dd></div>
             </dl>
             <label className={styles.queueSearch}><Search aria-hidden="true" size={14} /><input aria-label="Search investor queue" onChange={(event) => setQueueSearch(event.target.value)} placeholder="Search investors" type="search" value={queueSearch} /></label>
-            <p className={styles.queueGuidance}>Select anyone to review them, use Contact to begin, or drag rows into your preferred order.</p>
+            <p className={styles.queueGuidance}>Choose any investor to open their conversation, or drag rows into your preferred order.</p>
             <ol className={styles.rankedPool}>
               {visibleCandidates.map((item) => {
                 const index = candidates.findIndex((candidateItem) => candidateItem.buyer_id === item.buyer_id);
@@ -1406,24 +1404,21 @@ export function DispositionExecutionWorkspace({
                 return (
                   <li data-dragging={draggingBuyerId === item.buyer_id} draggable={busy === null} key={item.buyer_id} onDragEnd={() => setDraggingBuyerId(null)} onDragOver={(event) => { if (draggingBuyerId) event.preventDefault(); }} onDragStart={(event) => { setDraggingBuyerId(item.buyer_id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.buyer_id); }} onDrop={(event) => { event.preventDefault(); const draggedBuyerId = draggingBuyerId ?? event.dataTransfer.getData("text/plain"); setDraggingBuyerId(null); if (draggedBuyerId) void moveCandidateBefore(draggedBuyerId, item.buyer_id); }} ref={selected ? selectedQueueItemRef : undefined}>
                     <span aria-hidden="true" className={styles.queueDragHandle}><GripVertical size={13} /></span>
-                    <button aria-current={selected ? "true" : undefined} className={styles.rankedBuyer} data-actionable={item.actionable} data-ranked={hasRankedFit(item)} data-selected={selected} data-skipped={skipped} disabled={busy !== null} onClick={() => void chooseCandidate(item.buyer_id)} type="button">
+                    <button aria-current={selected ? "true" : undefined} aria-label={`Contact ${item.name}`} className={styles.rankedBuyer} data-actionable={item.actionable} data-ranked={hasRankedFit(item)} data-selected={selected} data-skipped={skipped} disabled={busy !== null} onClick={() => void chooseCandidate(item.buyer_id, true)} type="button">
                       {hasRankedFit(item) ? <span className={styles.rankedBuyerRank}>{candidateRankLabel(item)}</span> : null}
                       <span className={styles.rankedBuyerIdentity}><span className={styles.queueIdentityHeader}><strong>{item.name}</strong><span className={styles.queueBadges}>{selected ? <b data-tone="current">Current</b> : null}{isNext ? <b data-tone="next">Next</b> : null}</span></span><small>{skipped ? "Skipped this session" : item.company_name ?? candidateAvailabilityLabel(item)}</small></span>
                       {hasRankedFit(item) ? <strong className={styles.rankedBuyerScore}>{candidateFitLabel(item)}</strong> : null}
                     </button>
-                    <div className={styles.queueRowActions}>
-                      <button className={styles.queueContactAction} disabled={busy !== null || !item.actionable} onClick={() => void chooseCandidate(item.buyer_id, true)} type="button"><PhoneCall size={12} />Contact</button>
-                      <details className={styles.queueRowMenu}>
-                        <summary aria-label={`More queue actions for ${item.name}`}><EllipsisVertical size={14} /></summary>
-                        <div>
-                          <button disabled={busy !== null || selected || !item.actionable} onClick={() => void makeCandidateNext(item.buyer_id)} type="button">Make next</button>
-                          <button disabled={busy !== null || index === 0} onClick={() => void moveCandidateToTop(item.buyer_id)} type="button">Move to top</button>
-                          <button disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={12} />Move earlier</button>
-                          <button disabled={busy !== null || index === candidates.length - 1} onClick={() => void moveCandidate(item.buyer_id, 1)} type="button"><ArrowDown size={12} />Move later</button>
-                          <button data-danger="true" disabled={busy !== null} onClick={() => void removeCandidate(item.buyer_id)} type="button"><Trash2 size={12} />Remove</button>
-                        </div>
-                      </details>
-                    </div>
+                    <details className={styles.queueRowMenu}>
+                      <summary aria-label={`More queue actions for ${item.name}`}><EllipsisVertical size={14} /></summary>
+                      <div>
+                        <button disabled={busy !== null || selected || !item.actionable} onClick={() => void makeCandidateNext(item.buyer_id)} type="button">Make next</button>
+                        <button disabled={busy !== null || index === 0} onClick={() => void moveCandidateToTop(item.buyer_id)} type="button">Move to top</button>
+                        <button disabled={busy !== null || index === 0} onClick={() => void moveCandidate(item.buyer_id, -1)} type="button"><ArrowUp size={12} />Move earlier</button>
+                        <button disabled={busy !== null || index === candidates.length - 1} onClick={() => void moveCandidate(item.buyer_id, 1)} type="button"><ArrowDown size={12} />Move later</button>
+                        <button data-danger="true" disabled={busy !== null} onClick={() => void removeCandidate(item.buyer_id)} type="button"><Trash2 size={12} />Remove</button>
+                      </div>
+                    </details>
                   </li>
                 );
               })}
@@ -1532,7 +1527,13 @@ function RelationshipContext({
 }
 
 function PermissionLine({ allowed, blockers, channel, status }: { allowed: boolean; blockers: string[]; channel: string; status: string }) {
-  return <div className={allowed ? styles.permissionAllowed : styles.permissionBlocked}><span>{channel} permission: {labelize(status)}</span>{!allowed ? <small>{blockers.join(" ")}</small> : <small>Manual outreach is available; this permission label remains informational.</small>}</div>;
+  const formalPermissionMissing = ["missing", "unknown", "not_recorded"].includes(status);
+  const tone = !allowed
+    ? styles.permissionBlocked
+    : formalPermissionMissing
+      ? styles.permissionNotice
+      : styles.permissionAllowed;
+  return <div className={tone}><span>{channel}: {allowed ? "Available" : "Unavailable"}</span>{!allowed ? <small>{blockers.join(" ")}</small> : formalPermissionMissing ? <small>Formal permission is {labelize(status).toLowerCase()}; manual outreach remains available.</small> : <small>{labelize(status)} permission is recorded.</small>}</div>;
 }
 
 function ShowingRow({

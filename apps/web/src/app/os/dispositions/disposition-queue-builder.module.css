@@ -1,4 +1,4 @@
-.builder { overflow: hidden; border: 1px solid #cfd9d1; border-radius: 4px; background: #fff; }
+.builder { overflow: hidden; border: 1px solid #d2d9d3; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgb(20 41 46 / .025); }
 .emptyStarter { display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid #9ab9a5; border-radius: 14px; background: #eef8f1; padding: 16px 18px; }
 .emptyStarter > div:first-child { display: grid; gap: 3px; }
 .emptyStarter span { color: #17633d; font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
@@ -8,15 +8,15 @@
 .emptyStarter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #17633d; border-radius: 9px; background: #17633d; padding: 10px 13px; color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .emptyStarter button:disabled { cursor: not-allowed; opacity: .48; }
 .emptyStarter .secondary { background: #fff; color: #17633d; }
-.builder > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 10px; cursor: pointer; list-style: none; }
+.builder > summary { min-height: 36px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 9px; cursor: pointer; list-style: none; }
 .builder > summary::-webkit-details-marker { display: none; }
 .builder[open] > summary { border-bottom: 1px solid #dce3dd; background: #f8faf8; }
-.summaryIcon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 3px; background: #e5eee7; color: #17633d; }
+.summaryIcon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 3px; background: #e5eee7; color: #17633d; }
 .summaryCopy, .summaryMetrics { display: grid; min-width: 0; gap: 2px; }
-.summaryCopy strong { color: #203027; }
-.summaryCopy small, .summaryMetrics small { overflow: hidden; color: #68756d; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.summaryCopy strong { color: #203027; font-size: 11px; }
+.summaryCopy small, .summaryMetrics small { overflow: hidden; color: #68756d; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .summaryMetrics { text-align: right; }
-.summaryMetrics b { color: #17633d; font-size: 12px; }
+.summaryMetrics b { color: #17633d; font-size: 10px; }
 .body { display: grid; gap: 8px; padding: 8px; background: #f7f9f7; }
 .overview, .discovery, .pool { overflow: hidden; border: 1px solid #d9ded9; border-radius: 4px; background: #fff; }
 .overview { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px; }
