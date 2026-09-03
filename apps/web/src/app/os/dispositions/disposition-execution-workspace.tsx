@@ -1236,13 +1236,6 @@ export function DispositionExecutionWorkspace({
           </div>
         </header>
 
-        {workspace.blockers.length ? (
-          <details className={styles.advisoryDetails}>
-            <summary><ShieldAlert size={16} />Advisory deal checklist <strong>{workspace.blockers.length}</strong></summary>
-            <div>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<small>These items do not prevent work. Contact controls still follow each investor&apos;s live channel permissions.</small></div>
-          </details>
-        ) : null}
-
         <DispositionQueueBuilder
           assetClass={workspace.asset_class}
           canEditBuyers={canEditBuyers}
@@ -1255,6 +1248,13 @@ export function DispositionExecutionWorkspace({
           request={request}
         />
       </div>
+
+      {workspace.blockers.length ? (
+        <details className={styles.advisoryDetails}>
+          <summary><ShieldAlert size={16} />Advisory deal checklist <strong>{workspace.blockers.length}</strong></summary>
+          <div>{workspace.blockers.map((item) => <span key={item}>{item}</span>)}<small>These items do not prevent work. Contact controls still follow each investor&apos;s live channel permissions.</small></div>
+        </details>
+      ) : null}
 
       {candidate ? (
         <div className={styles.outreachLayout}>
@@ -1312,7 +1312,7 @@ export function DispositionExecutionWorkspace({
                 <div className={styles.sectionTitle}><MessageSquareText size={17} /><div><span>Text</span><h4>Message {candidate.name}</h4></div></div>
                 <p className={styles.help}>Write freely from the deal-aware draft. Nothing sends until you choose Send text.</p>
                 <PermissionLine allowed={candidate.actionable && candidate.sms.allowed} blockers={[...candidate.action_blockers, ...candidate.sms.blockers]} channel="SMS" status={candidate.sms.status} />
-                <div className={styles.smsComposer}>
+                <div className={`${styles.smsComposer} ${styles.messageComposer}`}>
                   <label><span>To {candidate.phone ?? "No phone recorded"}</span><textarea aria-label="Introduction SMS draft" onBlur={() => void saveCurrentBuyerState({ current_step: "sms" })} onChange={(event) => { setSmsDraft(event.target.value); setSessionSaveState("idle"); }} rows={5} value={smsDraft} /></label>
                   <small className={styles.characterCount}>{smsDraft.trim().length} characters</small>
                   <div className={styles.composerActions}>

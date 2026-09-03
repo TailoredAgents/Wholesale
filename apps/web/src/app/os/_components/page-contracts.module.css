@@ -11,6 +11,11 @@
   max-width: 1800px;
 }
 
+.workspacePageWide .pageHeader {
+  min-height: 86px;
+  padding-bottom: var(--sg-space-4);
+}
+
 .pageHeader {
   min-height: 104px;
   padding: 4px 0 var(--sg-space-5);

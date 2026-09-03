@@ -63,9 +63,12 @@ test("the outreach desk uses compact, professional workspace controls", async ()
   assert.match(dispositionStyles, /\.workspaceSecondaryNav button \{[^}]*border-radius: 3px/);
   assert.match(queueBuilderStyles, /\.builder \{[^}]*border-radius: 4px/);
   assert.match(workspaceStyles, /\.commandDeck > \.hero \{[^}]*border: 0/);
+  assert.match(workspaceStyles, /\.commandDeck \{[^}]*grid-template-columns:/);
+  assert.match(workspaceStyles, /\.messageComposer label textarea \{[^}]*border: 0/);
   assert.match(dispositionStyles, /\.dedicatedWorkspace \.embeddedBody \{[^}]*background: transparent/);
   assert.match(page, /<WorkspacePage wide>/);
   assert.match(pageContractsStyles, /\.workspacePageWide \{[^}]*max-width: 1800px/);
+  assert.match(pageContractsStyles, /\.workspacePageWide \.pageHeader \{[^}]*min-height: 86px/);
 });
 
 test("the disposition workspace mounts a permission-aware one-to-one call queue", async () => {
@@ -244,6 +247,7 @@ test("the outreach session keeps result recording operator-led", async () => {
   assert.match(workspace, /styles\.conversationTimeline/);
   assert.match(workspace, /styles\.conversationHeader/);
   assert.match(workspace, /styles\.conversationMeta/);
+  assert.match(workspace, /styles\.messageComposer/);
   assert.match(workspace, /slice\(0, 12\)\.reverse\(\)/);
   assert.match(workspace, /data-direction=\{item\.direction \?\? "activity"\}/);
   assert.match(workspace, /Shared with the canonical buyer relationship and Inbox history/);

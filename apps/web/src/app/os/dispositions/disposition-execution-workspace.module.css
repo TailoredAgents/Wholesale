@@ -1,12 +1,16 @@
 .workspace { display: grid; gap: 10px; min-width: 0; }
-.commandDeck { overflow: hidden; border: 1px solid #c8d2ca; border-radius: 4px; background: #fff; box-shadow: 0 4px 14px rgb(20 41 46 / .045); }
+.commandDeck { overflow: hidden; border: 1px solid #c8d2ca; border-radius: 4px; background: #fff; box-shadow: 0 4px 14px rgb(20 41 46 / .045); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(440px, .75fr); align-items: stretch; }
 .commandDeck > .hero { border: 0; border-radius: 0; box-shadow: none; }
-.commandDeck > details { border: 0; border-top: 1px solid #dce3dd; border-radius: 0; box-shadow: none; }
+.commandDeck > details { border: 0; border-left: 1px solid #dce3dd; border-radius: 0; box-shadow: none; }
+.commandDeck > details > summary { min-height: 54px; }
+.commandDeck > details[open] { grid-column: 1 / -1; border-top: 1px solid #dce3dd; border-left: 0; }
+.commandDeck:has(> details[open]) > .hero { grid-column: 1 / -1; }
+.commandDeck > section { grid-column: 1 / -1; margin: 8px; }
 .hero, .panel { border: 1px solid var(--border, #d3dad4); border-radius: 4px; background: #fff; }
 .hero { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 12px; background: linear-gradient(90deg, #fff 0%, #fbfdfb 72%, #f2f7f3 100%); box-shadow: 0 3px 12px rgb(20 41 46 / .04); }
 .hero span, .sectionTitle span, .conversationIdentity > span, .score span { color: #607067; font-size: 9px; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; }
 .hero h3, .conversationIdentity h4, .sectionTitle h4 { margin: 2px 0; color: #15241b; }
-.hero h3 { font-size: 15px; }
+.hero h3 { font-size: 16px; }
 .hero p, .conversationIdentity p, .help { margin: 0; color: #607067; font-size: 11px; line-height: 1.4; }
 .heroActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; text-align: right; }
 .heroActions > div { display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 0 5px; min-width: 86px; margin-right: 4px; }
@@ -27,7 +31,7 @@
 .outreachConsole { min-width: 0; }
 .conversationUtilities { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 7px 12px; border-bottom: 1px solid #dce3dd; background: #fbfcfb; }
 .fitEvidence { flex: 1; min-width: 0; }
-.fitEvidence summary { padding: 5px 0; color: #17633d; font-size: 10px; font-weight: 800; cursor: pointer; }
+.fitEvidence summary { padding: 5px 0; color: #17633d; font-size: 11px; font-weight: 800; cursor: pointer; }
 .fitEvidence[open] { flex-basis: 100%; }
 .fitEvidence[open] summary { padding-bottom: 6px; }
 .conversationUtilities .evidence { padding: 0 0 5px; border-top: 0; }
@@ -73,6 +77,8 @@
 .queuePanel .rankedBuyer[data-skipped="true"] { opacity: .62; }
 .queueIdentityHeader { min-width: 0; display: flex; align-items: center; gap: 5px; }
 .queueIdentityHeader > strong { min-width: 0; flex: 1; }
+.rankedBuyerIdentity > small { color: #68756d; font-size: 10px; }
+.queueIdentityHeader > strong { color: #26372d; font-size: 12px; }
 .queueBadges { display: inline-flex; flex: none; gap: 3px; }
 .queueBadges b { padding: 2px 4px; border-radius: 2px; background: #e5eee7; color: #17633d; font-size: 7px; font-weight: 850; letter-spacing: .03em; text-transform: uppercase; }
 .queueBadges b[data-tone="next"] { background: #fff1c9; color: #795400; }
@@ -111,8 +117,8 @@
 .conversationTimeline li { display: grid; gap: 3px; width: min(82%, 560px); padding: 8px 10px; border: 1px solid #dfe5e0; border-radius: 5px 5px 5px 2px; background: #fff; box-shadow: 0 2px 5px rgb(20 41 46 / .03); }
 .conversationTimeline li[data-direction="outbound"] { justify-self: end; border-color: #b9d4c1; border-radius: 5px 5px 2px; background: #edf7f0; }
 .conversationTimeline li[data-direction="inbound"] { border-color: #e6c678; background: #fffaf0; }
-.conversationTimeline li span, .conversationTimeline li small { color: #68756d; font-size: 10px; }
-.conversationTimeline li strong { color: #2f4035; font-size: 12px; line-height: 1.45; }
+.conversationTimeline li span, .conversationTimeline li small { color: #68756d; font-size: 11px; }
+.conversationTimeline li strong { color: #2f4035; font-size: 13px; line-height: 1.45; }
 .conversationTimeline > p { align-self: center; margin: 0; color: #68756d; font-size: 11px; text-align: center; }
 .conversationTimeline > footer { align-self: end; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid #e8ece8; color: #68756d; font-size: 10px; }
 .blockers { display: flex; gap: 12px; padding: 14px 16px; border: 1px solid #e8c981; border-radius: 12px; background: #fff8e8; color: #694b09; }
@@ -179,6 +185,12 @@
 .channelWorkspace { padding: 12px 14px 14px; background: #fff; }
 .channelWorkspace .channelSection { margin: 0; padding: 0; border: 0; }
 .smsComposer { display: grid; gap: 8px; margin-top: 9px; padding: 10px; border: 1px solid #cbd5cd; border-radius: 4px; background: #fbfcfb; box-shadow: inset 0 1px 2px rgb(20 41 46 / .025); }
+.messageComposer { grid-template-columns: minmax(0, 1fr) auto; gap: 0; overflow: hidden; padding: 0; background: #fff; box-shadow: 0 2px 8px rgb(20 41 46 / .035); }
+.messageComposer label { grid-column: 1 / -1; padding: 10px 12px 0; }
+.messageComposer label textarea { min-height: 84px; padding: 8px 0 10px; border: 0; background: transparent; outline: 0; resize: vertical; }
+.messageComposer label textarea:focus-visible { box-shadow: inset 0 -2px #4d8464; }
+.messageComposer .characterCount { grid-column: 1; align-self: center; justify-self: start; padding: 0 0 10px 12px; }
+.messageComposer .composerActions { grid-column: 2; padding: 0 10px 9px 10px; }
 .emailComposer { margin-top: 0; }
 .smsComposer label { display: grid; gap: 6px; color: #34453b; font-size: 13px; font-weight: 750; }
 .characterCount { color: #68756d; }
@@ -220,6 +232,7 @@
 .empty strong { color: #24342a; }
 
 @media (max-width: 1280px) {
+  .commandDeck { grid-template-columns: minmax(0, 1fr) minmax(380px, .8fr); }
   .outreachLayout { grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); }
   .currentInvestor { grid-column: 2; grid-row: 1 / span 2; }
   .queuePanel { grid-column: 1; grid-row: 1; }
@@ -227,6 +240,7 @@
 }
 
 @container disposition-detail (max-width: 1280px) {
+  .commandDeck { grid-template-columns: minmax(0, 1fr) minmax(380px, .8fr); }
   .outreachLayout { grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); }
   .currentInvestor { grid-column: 2; grid-row: 1 / span 2; }
   .queuePanel { grid-column: 1; grid-row: 1; }
@@ -234,7 +248,8 @@
 }
 
 @media (max-width: 850px) {
-  .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
+  .commandDeck, .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
+  .commandDeck > details { border-top: 1px solid #dce3dd; border-left: 0; }
   .rankedPool { grid-column: auto; grid-template-columns: 1fr; max-height: 360px; }
   .heroActions { justify-content: flex-start; text-align: left; }
   .currentInvestor { grid-column: 1; grid-row: 2; }
@@ -255,7 +270,8 @@
 }
 
 @container disposition-detail (max-width: 850px) {
-  .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
+  .commandDeck, .hero, .buyerSelector, .executionGrid, .outreachLayout { display: grid; grid-template-columns: 1fr; }
+  .commandDeck > details { border-top: 1px solid #dce3dd; border-left: 0; }
   .rankedPool { grid-column: auto; grid-template-columns: 1fr; max-height: 360px; }
   .heroActions { justify-content: flex-start; text-align: left; }
   .currentInvestor { grid-column: 1; grid-row: 2; }
@@ -289,6 +305,9 @@
   .resultDock > header button { width: 100%; }
   .packetQuickBar > div:last-child { grid-template-columns: 1fr; }
   .packetQuickBar button { width: 100%; }
+  .messageComposer { grid-template-columns: 1fr; }
+  .messageComposer .characterCount, .messageComposer .composerActions { grid-column: 1; }
+  .messageComposer .composerActions { padding-left: 12px; }
   .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
   .relationshipFacts div:nth-child(even) { border-left: 0; }
 }
@@ -307,6 +326,9 @@
   .resultDock > header button { width: 100%; }
   .packetQuickBar > div:last-child { grid-template-columns: 1fr; }
   .packetQuickBar button { width: 100%; }
+  .messageComposer { grid-template-columns: 1fr; }
+  .messageComposer .characterCount, .messageComposer .composerActions { grid-column: 1; }
+  .messageComposer .composerActions { padding-left: 12px; }
   .quickContactBar, .relationshipFacts { grid-template-columns: 1fr; }
   .relationshipFacts div:nth-child(even) { border-left: 0; }
 }
