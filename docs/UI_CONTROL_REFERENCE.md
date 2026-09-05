@@ -916,7 +916,7 @@ separate eligibility controls.
 | **Incoming on** / green ready dot | Confirms this browser is registered; selecting it turns browser ringing off | Reloading, closing the tab, signing out, or selecting the control turns it off without changing cellphone forwarding |
 | **Answer incoming call** | Answers the displayed seller, buyer, or business caller in the browser | Appears only while an inbound browser call is ringing |
 | **Decline incoming call** | Declines only this browser leg; another configured browser or cellphone may still answer | Appears only while an inbound browser call is ringing |
-| **Call in browser** | Places the entered number from the authorized Stonegate line and records or reuses its Inbox thread | Requires a valid number, microphone permission, and available Twilio browser Voice |
+| **Call in browser** | Places a deliberate manual call from the authorized Stonegate line and records or reuses its Inbox thread | Requires a valid outside number, microphone permission, and available Twilio browser Voice; recorded permission is advisory, while an active Do Not Call suppression still blocks the call |
 | Call-quality notice | Warns when the live browser connection is degraded and confirms when it recovers | Check the internet connection or headset if the warning remains visible |
 | Final call result | Shows completed, busy, no answer, canceled, or failed from Stonegate's saved provider result | May update briefly after browser audio closes while the final signed Twilio callback arrives |
 

@@ -736,6 +736,11 @@ def create_quick_dial_intent(
                 "request_fingerprint": request_fingerprint,
             },
             require_browser_voice=True,
+            # Quick Dial is an explicit, human-initiated call. Reusing an existing
+            # seller or buyer conversation must not silently add a permission gate
+            # that a newly created business conversation does not have. Active phone
+            # and all-channel suppressions remain enforced by voice eligibility.
+            require_recorded_permission=False,
             requested_recipient=destination,
             commit=False,
         )

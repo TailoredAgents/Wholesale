@@ -1070,6 +1070,54 @@ def test_quick_dial_treats_recorded_phone_permission_as_advisory(
     assert int(db_session.scalar(select(func.count()).select_from(VoiceCallIntent)) or 0) == 2
 
 
+def test_quick_dial_reuses_existing_outside_contact_without_hidden_permission_block(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    phone_consent = db_session.scalar(
+        select(ConsentRecord).where(
+            ConsentRecord.contact_id == conversation.contact_id,
+            ConsentRecord.channel == "phone",
+        )
+    )
+    assert phone_consent is not None
+    db_session.delete(phone_consent)
+    db_session.commit()
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    response = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={
+            "phone_number": SELLER_NUMBER,
+            "purpose": "other",
+            "idempotency_key": "quick-dial-existing-contact-0001",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["conversation_id"] == str(conversation.id)
+    intent = db_session.get(VoiceCallIntent, UUID(response.json()["intent"]["id"]))
+    assert intent is not None
+    assert intent.intent_metadata["recorded_permission_required"] is False
+
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        {
+            "From": f"client:{session['identity']}",
+            "CallSid": "CA00000000000000000000000000000094",
+            "CallIntentId": response.json()["intent"]["id"],
+        },
+    )
+    assert outbound.status_code == 200, outbound.text
+    assert SELLER_NUMBER in outbound.text
+
+
 def test_quick_dial_reuses_existing_business_contact_without_creating_a_lead(
     db_session: Session,
     api_db_override: None,

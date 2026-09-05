@@ -325,6 +325,11 @@ inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Accepta
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
 
+Quick Dial is a deliberate manual-call workflow. If the outside number already belongs to a saved
+seller, buyer, or business contact, Stonegate reuses that Inbox relationship without requiring a
+separate recorded phone-permission field. An active phone or all-channel Do Not Call suppression
+still blocks the call.
+
 ### Route Reference
 
 | Workspace | Route |
