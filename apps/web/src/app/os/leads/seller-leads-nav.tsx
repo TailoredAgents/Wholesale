@@ -28,9 +28,11 @@ export function SellerLeadsNav({
     <nav aria-label="Seller lead views" className={styles.nav}>
       {views.map((item) => {
         const isActive =
-          item.key === active ||
-          (item.key === "pipeline" && active === "database" && display === "board") ||
-          (item.key === "database" && active === "database" && display === "table");
+          item.key === "pipeline"
+            ? active === "database" && display === "board"
+            : item.key === "database"
+              ? active === "database" && display === "table"
+              : item.key === active;
         const Icon = item.icon;
         return (
           <Link

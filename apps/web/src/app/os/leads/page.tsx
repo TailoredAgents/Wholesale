@@ -140,6 +140,7 @@ export default async function LeadsPage({
           canEditLead={canEditLead}
           canImportExecutedContract={canImportExecutedContract}
           canRecordOutsideOffer={canRecordOutsideOffer}
+          key={`leads-${display}`}
           initialDisplay={display}
           initialAsset={requestedAsset as "all" | "house" | "land"}
           initialLeadId={first(params.lead)}

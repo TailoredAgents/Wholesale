@@ -6,6 +6,7 @@ import test from "node:test";
 const appRoot = resolve(process.cwd(), "src/app");
 const page = readFileSync(resolve(appRoot, "os/leads/page.tsx"), "utf8");
 const workspace = readFileSync(resolve(appRoot, "os/leads/leads-workspace.tsx"), "utf8");
+const navigation = readFileSync(resolve(appRoot, "os/leads/seller-leads-nav.tsx"), "utf8");
 const styles = readFileSync(resolve(appRoot, "os/leads/leads-workspace.module.css"), "utf8");
 const utilities = readFileSync(resolve(appRoot, "os/os-utils.ts"), "utf8");
 const stageForm = readFileSync(resolve(appRoot, "leads/[leadId]/stage-update-form.tsx"), "utf8");
@@ -21,6 +22,13 @@ const offerStageAction = readFileSync(
 const dealsPage = readFileSync(resolve(appRoot, "os/deals/page.tsx"), "utf8");
 const dealsWorkspace = readFileSync(resolve(appRoot, "os/deals/deals-workspace.tsx"), "utf8");
 const pipelineWorkspace = readFileSync(resolve(appRoot, "os/pipeline/pipeline-workspace.tsx"), "utf8");
+
+test("Pipeline navigation changes the mounted workspace without a page refresh", () => {
+  assert.match(page, /key=\{`leads-\$\{display\}`\}/);
+  assert.match(navigation, /item\.key === "pipeline"[\s\S]*display === "board"/);
+  assert.match(navigation, /item\.key === "database"[\s\S]*display === "table"/);
+  assert.doesNotMatch(navigation, /item\.key === active \|\|/);
+});
 
 test("lead board stage movement is permission-gated and accessible", () => {
   assert.match(page, /canEditLead=\{canEditLead\}/);
