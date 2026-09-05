@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import structlog
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from app.integrations.twilio_voice import (
     forwarded_outbound_screen_twiml,
     hangup_twiml,
     inbound_call_twiml,
+    inbound_target_endpoint_counts,
     outbound_call_twiml,
     voice_identity,
     voicemail_twiml,
@@ -59,6 +61,7 @@ from app.models.foundation import (
 from app.schemas.voice import (
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
+    VoiceCallStatusRead,
     VoiceForwardingUpdate,
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
@@ -131,6 +134,7 @@ VOICE_LINE_MISSED_CALL_ACTIONS = {
 ALWAYS_ON_COVERAGE_START_HOUR = 0
 ALWAYS_ON_COVERAGE_END_HOUR = 24
 FINAL_CALL_STATUSES = {"completed", "busy", "failed", "no-answer", "canceled"}
+logger = structlog.get_logger()
 CALL_STATUS_RANK = {
     "queued": 0,
     "initiated": 1,
@@ -590,6 +594,33 @@ def create_voice_session(
         line=voice_line_to_read(db, line),
         recording_enabled=settings.twilio_voice_recording_configured,
         blockers=[],
+    )
+
+
+def get_call_intent_status(
+    db: Session,
+    principal: Principal,
+    intent_id: UUID,
+) -> VoiceCallStatusRead | None:
+    intent = db.scalar(
+        select(VoiceCallIntent).where(
+            VoiceCallIntent.id == intent_id,
+            VoiceCallIntent.organization_id == principal.organization_id,
+            VoiceCallIntent.actor_user_id == principal.user_id,
+        )
+    )
+    if intent is None or intent.prospecting_dial_leg_id is not None:
+        return None
+    call = db.scalar(select(CallRecord).where(CallRecord.call_intent_id == intent.id))
+    provider_status = call.status if call is not None else intent.status
+    return VoiceCallStatusRead(
+        intent_id=intent.id,
+        call_id=call.id if call is not None else None,
+        status=provider_status,
+        answered_at=call.answered_at if call is not None else None,
+        ended_at=call.ended_at if call is not None else None,
+        duration_seconds=call.duration_seconds if call is not None else None,
+        terminal=provider_status in FINAL_CALL_STATUSES,
     )
 
 
@@ -1369,6 +1400,29 @@ def process_outbound_voice_request(
     )
 
 
+def inbound_browser_call_context(
+    db: Session,
+    conversation: Conversation | None,
+    caller: str,
+) -> tuple[str, str, str]:
+    contact = db.get(Contact, conversation.contact_id) if conversation is not None else None
+    caller_number = format_e164(caller) or caller
+    caller_name = (
+        (contact.preferred_name or contact.legal_name).strip()
+        if contact is not None
+        else caller_number
+    )
+    return (
+        caller_name or caller_number,
+        caller_number,
+        (
+            f"/os/inbox?conversation={conversation.id}&channel=call"
+            if conversation is not None
+            else "/os/inbox"
+        ),
+    )
+
+
 def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     settings = get_settings()
     caller = required_voice_value(payload, "From")
@@ -1390,19 +1444,38 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         if existing.conversation_id is None:
             raise VoiceConfigurationError("Inbound call context is unavailable.")
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
-        targets = resolve_inbound_targets(db, target_user_ids)
+        targets = resolve_inbound_targets(
+            db,
+            target_user_ids,
+            include_browser=settings.twilio_browser_voice_configured,
+        )
         if not targets:
             if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
                 return voicemail_twiml(settings, call_id=str(existing.id))
             ensure_missed_call_task(db, existing)
             db.commit()
             return hangup_twiml("Stonegate is unavailable. We will return your call shortly.")
-        update_call_routing_metadata(existing, line, targets)
+        update_call_routing_metadata(
+            existing,
+            line,
+            targets,
+            browser_enabled=settings.twilio_browser_voice_configured,
+        )
         db.commit()
+        caller_name, caller_number, context_href = inbound_browser_call_context(
+            db,
+            db.get(Conversation, existing.conversation_id),
+            caller,
+        )
         return inbound_call_twiml(
             settings,
             targets=targets,
             call_id=str(existing.id),
+            caller_name=caller_name,
+            caller_number=caller_number,
+            context_href=context_href,
+            line_label=line.label,
+            line_number=line.phone_number,
             recording_enabled=settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
         )
@@ -1466,8 +1539,17 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         recording_consent_status=recording_consent_status(settings),
     )
     communication.body = f"Inbound call from {format_e164(caller) or caller}"
-    targets = resolve_inbound_targets(db, target_user_ids)
-    update_call_routing_metadata(call, line, targets)
+    targets = resolve_inbound_targets(
+        db,
+        target_user_ids,
+        include_browser=settings.twilio_browser_voice_configured,
+    )
+    update_call_routing_metadata(
+        call,
+        line,
+        targets,
+        browser_enabled=settings.twilio_browser_voice_configured,
+    )
     update_conversation_activity(
         conversation,
         direction="inbound",
@@ -1506,10 +1588,33 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         ensure_missed_call_task(db, call)
         db.commit()
         return hangup_twiml("Stonegate is unavailable. We will return your call shortly.")
+    browser_count, mobile_count = inbound_target_endpoint_counts(
+        targets,
+        browser_enabled=settings.twilio_browser_voice_configured,
+    )
+    logger.info(
+        "voice_inbound_routing_prepared",
+        call_id=str(call.id),
+        line_id=str(line.id),
+        ring_strategy=line.ring_strategy,
+        browser_targets=browser_count,
+        mobile_targets=mobile_count,
+        total_targets=browser_count + mobile_count,
+    )
+    caller_name, caller_number, context_href = inbound_browser_call_context(
+        db,
+        conversation,
+        caller,
+    )
     return inbound_call_twiml(
         settings,
         targets=targets,
         call_id=str(call.id),
+        caller_name=caller_name,
+        caller_number=caller_number,
+        context_href=context_href,
+        line_label=line.label,
+        line_number=line.phone_number,
         recording_enabled=settings.twilio_voice_recording_configured,
         ring_strategy=line.ring_strategy,
     )
@@ -1557,6 +1662,13 @@ def process_voice_screen_result(
         }
         update_prospecting_callback_status(db, call, "answered")
         db.commit()
+    logger.info(
+        "voice_mobile_screen_completed",
+        call_id=str(call.id),
+        answered_user_id=str(user.id),
+        accepted=accepted,
+        response_received=bool(payload.get("Digits")),
+    )
     return call_screen_result_twiml(accepted=accepted)
 
 
@@ -1624,6 +1736,16 @@ def process_voice_status(
     event.processing_status = "processed"
     event.processed_at = datetime.now(UTC)
     db.commit()
+    logger.info(
+        "voice_status_processed",
+        call_id=str(call.id),
+        intent_id=str(intent_id) if intent_id is not None else None,
+        callback_kind=callback_kind,
+        provider_status=status,
+        direction=call.direction,
+        child_leg=bool(payload.get("ParentCallSid")),
+        answered_user_id=(str(answered_user_id) if answered_user_id is not None else None),
+    )
     return event.processing_status
 
 
@@ -2733,6 +2855,8 @@ def resolve_inbound_users(
 def resolve_inbound_targets(
     db: Session,
     user_ids: list[UUID],
+    *,
+    include_browser: bool,
 ) -> list[InboundVoiceTarget]:
     targets: list[InboundVoiceTarget] = []
     for user_id in user_ids:
@@ -2746,7 +2870,7 @@ def resolve_inbound_targets(
             if user.voice_forwarding_enabled
             else None
         )
-        if forwarding_number is None:
+        if forwarding_number is None and not include_browser:
             continue
         targets.append(
             InboundVoiceTarget(
@@ -2762,18 +2886,27 @@ def update_call_routing_metadata(
     call: CallRecord,
     line: VoiceLine,
     targets: list[InboundVoiceTarget],
+    *,
+    browser_enabled: bool,
 ) -> None:
-    endpoint_count = sum(int(target.forwarding_number is not None) for target in targets)
+    browser_count, mobile_count = inbound_target_endpoint_counts(
+        targets,
+        browser_enabled=browser_enabled,
+    )
+    endpoint_count = browser_count + mobile_count
     call.call_metadata = {
         **(call.call_metadata or {}),
         "routing_target_user_ids": [target.user_id for target in targets],
         "routing_mobile_user_ids": [
             target.user_id for target in targets if target.forwarding_number is not None
         ],
+        "routing_browser_user_ids": [target.user_id for target in targets[:browser_count]],
         "routing_owner_user_id": targets[0].user_id if targets else None,
         "ring_strategy": line.ring_strategy,
         "ring_user_count": len(targets),
         "ring_target_count": endpoint_count,
+        "ring_browser_target_count": browser_count,
+        "ring_mobile_target_count": mobile_count,
     }
 
 

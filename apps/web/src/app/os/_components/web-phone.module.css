@@ -50,6 +50,7 @@
 }
 
 .panel[data-audio-state="connecting"] .statusIcon,
+.panel[data-audio-state="incoming_ringing"] .statusIcon,
 .panel[data-audio-state="reconnecting"] .statusIcon,
 .panel[data-audio-state="requesting_microphone"] .statusIcon {
   animation: phonePulse 1.35s ease-in-out infinite;
@@ -136,6 +137,17 @@
 .controls .endButton:hover:not(:disabled) {
   border-color: #963c32;
   background: #963c32;
+}
+
+.controls .answerButton {
+  border-color: #17633d;
+  background: #17633d;
+  color: #fff;
+}
+
+.controls .answerButton:hover:not(:disabled) {
+  border-color: #125231;
+  background: #125231;
 }
 
 .dtmfPad {

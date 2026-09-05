@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Building2, Delete, Headphones, Phone, PhoneCall, X } from "lucide-react";
+import { Building2, Delete, Headphones, Phone, PhoneCall, PhoneIncoming, X } from "lucide-react";
 import { FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { useWebPhone } from "./web-phone-provider";
@@ -79,7 +79,7 @@ export function QuickDialLauncher({
   onOpen: (trigger: HTMLButtonElement) => void;
 }) {
   const webPhone = useWebPhone();
-  const phoneOccupied = Boolean(webPhone.activeCall) || webPhone.status.audioLink !== "idle";
+  const phoneOccupied = Boolean(webPhone.activeCall) || webPhone.status.callActive;
 
   if (phoneOccupied) return null;
 
@@ -90,14 +90,18 @@ export function QuickDialLauncher({
       aria-haspopup="dialog"
       aria-hidden={expanded}
       aria-label="Open Stonegate phone"
-      className={`${styles.launcher} ${expanded ? styles.launcherHidden : ""}`}
+      className={`${styles.launcher} ${webPhone.incomingEnabled ? styles.launcherReady : ""} ${expanded ? styles.launcherHidden : ""}`}
       disabled={expanded}
       onClick={(event) => onOpen(event.currentTarget)}
       ref={buttonRef}
-      title="Open Stonegate phone"
+      title={webPhone.incomingEnabled ? "Stonegate phone · Incoming calls on" : "Open Stonegate phone"}
       type="button"
     >
-      <Phone aria-hidden="true" size={22} />
+      {webPhone.incomingEnabled ? (
+        <PhoneIncoming aria-hidden="true" size={22} />
+      ) : (
+        <Phone aria-hidden="true" size={22} />
+      )}
       <span>Phone</span>
     </button>
   );
@@ -174,9 +178,30 @@ export function QuickDialDialog({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const closeForIncomingCall = () => onClose({ focusActiveCall: true });
+    window.addEventListener("stonegate:incoming-phone-call", closeForIncomingCall);
+    return () => window.removeEventListener("stonegate:incoming-phone-call", closeForIncomingCall);
+  }, [onClose]);
+
   function appendDialPadKey(key: string) {
     setPhoneNumber((current) => `${current}${key}`.slice(0, 80));
     window.requestAnimationFrame(() => phoneInputRef.current?.focus());
+  }
+
+  async function toggleIncomingCalls() {
+    if (webPhone.busy || webPhone.status.callActive) return;
+    setError(null);
+    try {
+      if (webPhone.incomingEnabled) await webPhone.disableIncomingCalls();
+      else await webPhone.enableIncomingCalls();
+    } catch (toggleError) {
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Stonegate could not update incoming browser calls.",
+      );
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -376,9 +401,21 @@ export function QuickDialDialog({
           <div className={styles.callNotice}>
             <Building2 aria-hidden="true" size={18} />
             <p>
-              Calls use your authorized Stonegate browser line. A matching contact is reused;
-              otherwise a business contact is created and the call is saved in Inbox.
+              {webPhone.incomingEnabled
+                ? "This browser will ring with your configured Stonegate cellphone. First answer wins."
+                : "Turn on incoming calls to answer Stonegate callbacks here while this OS tab stays open."}
+              {" "}A matching contact is reused; otherwise a business contact is created and the call is saved in Inbox.
             </p>
+            <button
+              aria-pressed={webPhone.incomingEnabled}
+              className={styles.incomingToggle}
+              disabled={submitting || webPhone.busy || webPhone.status.callActive}
+              onClick={() => void toggleIncomingCalls()}
+              type="button"
+            >
+              <PhoneIncoming aria-hidden="true" size={16} />
+              {webPhone.incomingEnabled ? "Incoming on" : "Enable incoming"}
+            </button>
           </div>
           {error ? <p aria-live="assertive" className={styles.error}>{error}</p> : null}
           {webPhone.activeCall && webPhone.status.callActive ? (

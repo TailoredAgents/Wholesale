@@ -1,7 +1,16 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { ExternalLink, Grid3x3, Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
+import {
+  ExternalLink,
+  Grid3x3,
+  Mic,
+  MicOff,
+  Phone,
+  PhoneIncoming,
+  PhoneOff,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import {
   createContext,
@@ -43,6 +52,7 @@ export type WebPhoneSession = Omit<RawVoiceSession, "token">;
 
 export type WebPhoneCallTarget = {
   callIntentId: string;
+  direction?: "inbound" | "outbound";
   displayName: string;
   phoneNumber?: string | null;
   fromNumber?: string | null;
@@ -57,19 +67,29 @@ export type ActiveWebPhoneCall = WebPhoneCallTarget & {
 };
 
 type WebPhoneContextValue = {
+  acceptIncomingCall: () => void;
   activeCall: ActiveWebPhoneCall | null;
   busy: boolean;
+  disableIncomingCalls: () => Promise<void>;
+  enableIncomingCalls: () => Promise<void>;
   hangUp: () => void;
+  incomingEnabled: boolean;
   initializeHeadset: () => Promise<void>;
   prepareAndStartCall: (
     prepareTarget: () => Promise<WebPhoneCallTarget>,
   ) => Promise<void>;
+  rejectIncomingCall: () => void;
   reset: () => void;
   sendDigits: (digits: string) => void;
   session: WebPhoneSession | null;
   startCall: (target: WebPhoneCallTarget) => Promise<void>;
   status: WebPhoneStatus;
   toggleMute: () => void;
+};
+
+type VoiceCallStatus = {
+  status: string;
+  terminal: boolean;
 };
 
 const WebPhoneContext = createContext<WebPhoneContextValue | null>(null);
@@ -108,6 +128,7 @@ function audioStateLabel(status: WebPhoneStatus) {
     idle: "Headset idle",
     requesting_microphone: "Waiting for microphone",
     ready: "Headset ready",
+    incoming_ringing: "Incoming call",
     connecting: "Connecting browser call",
     audio_established: "Browser audio connected",
     reconnecting: "Reconnecting browser audio",
@@ -115,6 +136,17 @@ function audioStateLabel(status: WebPhoneStatus) {
     error: "Browser call needs attention",
   };
   return labels[status.audioLink];
+}
+
+function completedCallMessage(status: string) {
+  const messages: Record<string, string> = {
+    busy: "The recipient's line was busy.",
+    canceled: "The call was canceled before it connected.",
+    completed: "Call completed.",
+    failed: "The phone network could not complete the call.",
+    "no-answer": "The recipient did not answer.",
+  };
+  return messages[status] ?? "Call ended.";
 }
 
 function elapsedLabel(seconds: number) {
@@ -197,6 +229,23 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
   const ensureRuntime = useCallback(() => {
     if (runtimeRef.current) return runtimeRef.current;
     const runtime = new WebPhoneRuntime({
+      onIncomingCall: (incoming) => {
+        setElapsedSeconds(0);
+        setKeypadOpen(false);
+        publishActiveCall({
+          callIntentId: `incoming:${incoming.callId}`,
+          contextHref: incoming.contextHref,
+          contextLabel: "Incoming Stonegate call",
+          direction: "inbound",
+          displayName: incoming.callerName,
+          fromLabel: incoming.lineLabel,
+          fromNumber: incoming.lineNumber,
+          phoneNumber: incoming.callerNumber,
+          requestedAt: Date.now(),
+          audioEstablishedAt: null,
+        });
+        window.dispatchEvent(new CustomEvent("stonegate:incoming-phone-call"));
+      },
       onStatus: (next) => {
         setStatus(next);
         if (
@@ -270,6 +319,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       const next: ActiveWebPhoneCall = {
         ...target,
         callIntentId: target.callIntentId.trim(),
+        direction: target.direction ?? "outbound",
         displayName: target.displayName.trim(),
         requestedAt: Date.now(),
         audioEstablishedAt: null,
@@ -327,6 +377,50 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     runtimeRef.current?.disconnectLocalAudio();
   }, []);
 
+  const enableIncomingCalls = useCallback(
+    () =>
+      runExclusive(async () => {
+        try {
+          await prepareHeadset();
+          const runtime = runtimeRef.current;
+          if (!runtime) throw new Error("The browser phone is unavailable.");
+          await runtime.registerIncomingCalls();
+        } catch (error) {
+          showFailure(error);
+          throw error;
+        }
+      }),
+    [prepareHeadset, runExclusive, showFailure],
+  );
+
+  const disableIncomingCalls = useCallback(
+    () =>
+      runExclusive(async () => {
+        const runtime = runtimeRef.current;
+        if (!runtime) return;
+        await runtime.unregisterIncomingCalls();
+        runtime.destroy();
+        runtimeRef.current = null;
+        voiceIdentityRef.current = null;
+        setSession(null);
+        setStatus(INITIAL_WEB_PHONE_STATUS);
+      }),
+    [runExclusive],
+  );
+
+  const acceptIncomingCall = useCallback(() => {
+    try {
+      runtimeRef.current?.acceptIncomingCall();
+    } catch (error) {
+      showFailure(error);
+    }
+  }, [showFailure]);
+
+  const rejectIncomingCall = useCallback(() => {
+    setKeypadOpen(false);
+    runtimeRef.current?.rejectIncomingCall();
+  }, []);
+
   const toggleMute = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime?.hasLiveAudio) throw new Error("There is no active browser call to mute.");
@@ -349,13 +443,18 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     const runtime = runtimeRef.current;
     if (runtime?.hasLiveAudio) throw new Error("End the current browser call before closing the phone.");
-    runtime?.destroy();
-    runtimeRef.current = null;
-    voiceIdentityRef.current = null;
+    if (runtime?.currentStatus.incomingRegistration === "ready") runtime.resetAfterCall();
+    else {
+      runtime?.destroy();
+      runtimeRef.current = null;
+      voiceIdentityRef.current = null;
+      setSession(null);
+    }
     setKeypadOpen(false);
     publishActiveCall(null);
-    setSession(null);
-    setStatus(INITIAL_WEB_PHONE_STATUS);
+    if (!runtime || runtime.currentStatus.incomingRegistration !== "ready") {
+      setStatus(INITIAL_WEB_PHONE_STATUS);
+    }
   }, [publishActiveCall]);
 
   useEffect(() => {
@@ -371,6 +470,39 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(interval);
   }, [activeCall?.audioEstablishedAt, status.audioLink]);
 
+  useEffect(() => {
+    const intentId = activeCall?.direction === "outbound" ? activeCall.callIntentId : null;
+    if (!intentId || !["ended", "error"].includes(status.audioLink)) {
+      return;
+    }
+    const controller = new AbortController();
+
+    async function reconcileProviderResult(callIntentId: string) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 450 * attempt));
+        }
+        if (controller.signal.aborted) return;
+        const token = await getToken().catch(() => null);
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        else headers["X-Dev-User-Email"] = devUserEmail;
+        const response = await fetch(
+          `${apiBaseUrl}/api/v1/voice/call-intents/${encodeURIComponent(callIntentId)}/status`,
+          { headers, cache: "no-store", signal: controller.signal },
+        ).catch(() => null);
+        if (!response?.ok) continue;
+        const result = (await response.json().catch(() => null)) as VoiceCallStatus | null;
+        if (!result?.terminal) continue;
+        setStatus((current) => ({ ...current, message: completedCallMessage(result.status) }));
+        return;
+      }
+    }
+
+    void reconcileProviderResult(intentId);
+    return () => controller.abort();
+  }, [activeCall, apiBaseUrl, devUserEmail, getToken, status.audioLink]);
+
   useEffect(
     () => () => {
       runtimeRef.current?.destroy();
@@ -381,11 +513,16 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WebPhoneContextValue>(
     () => ({
+      acceptIncomingCall,
       activeCall,
       busy,
+      disableIncomingCalls,
+      enableIncomingCalls,
       hangUp,
+      incomingEnabled: status.incomingRegistration === "ready",
       initializeHeadset,
       prepareAndStartCall,
+      rejectIncomingCall,
       reset,
       sendDigits,
       session,
@@ -394,11 +531,15 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       toggleMute,
     }),
     [
+      acceptIncomingCall,
       activeCall,
       busy,
+      disableIncomingCalls,
+      enableIncomingCalls,
       hangUp,
       initializeHeadset,
       prepareAndStartCall,
+      rejectIncomingCall,
       reset,
       sendDigits,
       session,
@@ -407,11 +548,14 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       toggleMute,
     ],
   );
-  const panelVisible = Boolean(activeCall) || status.audioLink !== "idle";
+  const panelVisible = Boolean(activeCall) || !["idle", "ready"].includes(status.audioLink);
+  const incomingRinging = Boolean(
+    activeCall?.direction === "inbound" && status.audioLink === "incoming_ringing",
+  );
   const canMute = Boolean(
     activeCall && status.callActive && ["audio_established", "reconnecting"].includes(status.audioLink),
   );
-  const canEnd = Boolean(activeCall && status.callActive);
+  const canEnd = Boolean(activeCall && status.callActive && !incomingRinging);
   const canUseKeypad = Boolean(
     activeCall && status.callActive && status.audioLink === "audio_established",
   );
@@ -468,12 +612,23 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
             >
               {status.muted ? <MicOff aria-hidden="true" size={17} /> : <Mic aria-hidden="true" size={17} />}
             </button>
+            {incomingRinging ? (
+              <button
+                aria-label="Answer incoming call"
+                className={styles.answerButton}
+                disabled={busy}
+                onClick={acceptIncomingCall}
+                type="button"
+              >
+                <PhoneIncoming aria-hidden="true" size={17} />
+              </button>
+            ) : null}
             <button
-              aria-label="End browser call"
+              aria-label={incomingRinging ? "Decline incoming call" : "End browser call"}
               className={styles.endButton}
-              disabled={!canEnd}
+              disabled={incomingRinging ? busy : !canEnd}
               id="stonegate-active-phone-end-call"
-              onClick={hangUp}
+              onClick={incomingRinging ? rejectIncomingCall : hangUp}
               type="button"
             >
               <PhoneOff aria-hidden="true" size={17} />
@@ -510,12 +665,18 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
           ) : null}
           {activeCall?.fromNumber || session?.line ? (
             <span className={styles.lineLabel}>
-              From {activeCall?.fromLabel ?? (
-                activeCall?.fromNumber && activeCall.fromNumber !== session?.line?.phone_number
-                  ? "Stonegate"
-                  : session?.line?.label ?? "Stonegate"
-              )} ·{" "}
-              {activeCall?.fromNumber ?? session?.line?.phone_number}
+              {activeCall?.direction === "inbound" ? "On" : "From"}{" "}
+              {activeCall?.direction === "inbound"
+                ? activeCall.fromLabel ?? session?.line?.label ?? "Stonegate"
+                : activeCall?.fromLabel ?? (
+                    activeCall?.fromNumber && activeCall.fromNumber !== session?.line?.phone_number
+                      ? "Stonegate"
+                      : session?.line?.label ?? "Stonegate"
+                  )}{" "}
+              ·{" "}
+              {activeCall?.direction === "inbound"
+                ? activeCall.fromNumber ?? session?.line?.phone_number
+                : activeCall?.fromNumber ?? session?.line?.phone_number}
             </span>
           ) : null}
         </aside>

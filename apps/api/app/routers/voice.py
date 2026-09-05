@@ -22,6 +22,7 @@ from app.schemas.voice import (
     CallTranscriptReview,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
+    VoiceCallStatusRead,
     VoiceForwardingUpdate,
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
@@ -56,6 +57,7 @@ from app.services.voice import (
     create_voice_line,
     create_voice_session,
     delete_recording,
+    get_call_intent_status,
     get_scoped_recording,
     get_scoped_transcript,
     get_voice_provider_readiness,
@@ -111,6 +113,18 @@ def read_voice_session(
     principal: Annotated[Principal, Depends(call_dependency)],
 ) -> VoiceSessionRead:
     return create_voice_session(db, principal)
+
+
+@router.get("/call-intents/{intent_id}/status")
+def read_call_intent_status(
+    intent_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(call_dependency)],
+) -> VoiceCallStatusRead:
+    result = get_call_intent_status(db, principal, intent_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Call not found.")
+    return result
 
 
 @router.post("/conversations/{conversation_id}/call-intents", status_code=201)

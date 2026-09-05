@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: September 1, 2026
+Last verified against the application: September 4, 2026
 
 ## Purpose
 
@@ -906,6 +906,22 @@ separate eligibility controls.
 | **Call seller** | Calls the employee first; pressing 1 connects the seller with Stonegate caller ID | Requires configured Twilio Voice and an active department line |
 | **Log call** | Opens the manual inbound/outbound call record form | Logging does not itself place a call |
 | Call outcome | Records answered, voicemail, missed, no answer, or other disposition | Required by the active workflow when shown |
+
+### Shared Browser Phone And Quick Dial
+
+| Control | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Green **Phone** bubble | Opens Quick Dial from any OS workspace | Requires `communications:place_calls`; hidden during an active browser call |
+| **Enable incoming** | Registers this browser to ring for callbacks while the signed-in OS tab remains open | Requires microphone permission, browser Voice configuration, and an authorized active company line |
+| **Incoming on** / green ready dot | Confirms this browser is registered; selecting it turns browser ringing off | Reloading, closing the tab, signing out, or selecting the control turns it off without changing cellphone forwarding |
+| **Answer incoming call** | Answers the displayed seller, buyer, or business caller in the browser | Appears only while an inbound browser call is ringing |
+| **Decline incoming call** | Declines only this browser leg; another configured browser or cellphone may still answer | Appears only while an inbound browser call is ringing |
+| **Call in browser** | Places the entered number from the authorized Stonegate line and records or reuses its Inbox thread | Requires a valid number, microphone permission, and available Twilio browser Voice |
+| Final call result | Shows completed, busy, no answer, canceled, or failed from Stonegate's saved provider result | May update briefly after browser audio closes while the final signed Twilio callback arrives |
+
+Cellphone screening still requires pressing 1. That prevents a personal voicemail greeting from
+winning the shared business call. Browser answering does not use the press-1 prompt because the
+employee explicitly selects **Answer** in the OS.
 
 ### Assignment And Handoff
 

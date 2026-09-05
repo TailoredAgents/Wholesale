@@ -6,6 +6,7 @@ export type WebPhoneAudioLinkState =
   | "idle"
   | "requesting_microphone"
   | "ready"
+  | "incoming_ringing"
   | "connecting"
   | "audio_established"
   | "reconnecting"
@@ -23,14 +24,25 @@ export type WebPhoneMicrophoneState =
 export type WebPhoneStatus = {
   audioLink: WebPhoneAudioLinkState;
   callActive: boolean;
+  incomingRegistration: "disabled" | "registering" | "ready" | "error";
   microphone: WebPhoneMicrophoneState;
   muted: boolean;
   message: string | null;
 };
 
 export type WebPhoneCallbacks = {
+  onIncomingCall?: (call: IncomingWebPhoneCall) => void;
   onStatus: (status: WebPhoneStatus) => void;
   onTokenWillExpire: () => void | Promise<void>;
+};
+
+export type IncomingWebPhoneCall = {
+  callId: string;
+  callerName: string;
+  callerNumber: string | null;
+  contextHref: string | null;
+  lineLabel: string | null;
+  lineNumber: string | null;
 };
 
 export type WebPhoneDependencies = {
@@ -45,6 +57,7 @@ type ConnectResult = {
 export const INITIAL_WEB_PHONE_STATUS: WebPhoneStatus = {
   audioLink: "idle",
   callActive: false,
+  incomingRegistration: "disabled",
   microphone: "unchecked",
   muted: false,
   message: null,
@@ -79,7 +92,9 @@ export class WebPhoneRuntime {
   private device: Device | null = null;
   private generation = 0;
   private initializePromise: Promise<void> | null = null;
+  private incomingCall: Call | null = null;
   private latestToken = "";
+  private localDisconnectRequested = false;
   private loadVoiceSdk: () => Promise<typeof import("@twilio/voice-sdk")>;
   private microphoneSupported: boolean;
   private owner = Symbol("stonegate-web-phone");
@@ -261,6 +276,21 @@ export class WebPhoneRuntime {
         message: errorMessage(error),
       });
     });
+    device.on("registered", () => {
+      if (generation !== this.generation || this.device !== device) return;
+      this.publish({ incomingRegistration: "ready", message: null });
+    });
+    device.on("unregistered", () => {
+      if (generation !== this.generation || this.device !== device) return;
+      this.publish({ incomingRegistration: "disabled" });
+    });
+    device.on("incoming", (call: Call) => {
+      if (generation !== this.generation || this.device !== device) {
+        call.ignore();
+        return;
+      }
+      void this.captureIncomingCall(call, generation);
+    });
     device.on("tokenWillExpire", () => {
       if (generation !== this.generation || this.device !== device) return;
       void this.callbacks.onTokenWillExpire();
@@ -277,6 +307,30 @@ export class WebPhoneRuntime {
   updateToken(token: string) {
     if (!this.device) throw new Error("The browser headset is not initialized.");
     this.device.updateToken(token);
+  }
+
+  async registerIncomingCalls(): Promise<void> {
+    const device = this.device;
+    if (!device) throw new Error("Initialize the browser headset before receiving calls.");
+    if (this.status.incomingRegistration === "ready") return;
+    this.publish({ incomingRegistration: "registering", message: null });
+    try {
+      await device.register();
+      this.publish({ incomingRegistration: "ready", message: null });
+    } catch (error) {
+      this.publish({ incomingRegistration: "error", message: errorMessage(error) });
+      throw error;
+    }
+  }
+
+  async unregisterIncomingCalls(): Promise<void> {
+    if (this.hasLiveAudio) {
+      throw new Error("Finish the current call before turning off incoming browser calls.");
+    }
+    const device = this.device;
+    if (!device || this.status.incomingRegistration === "disabled") return;
+    await device.unregister();
+    this.publish({ incomingRegistration: "disabled", message: null });
   }
 
   async connect(callIntentId: string): Promise<ConnectResult> {
@@ -299,6 +353,7 @@ export class WebPhoneRuntime {
       throw new WebPhoneCancelledError();
     }
     this.publish({ audioLink: "connecting", callActive: true, muted: false, message: null });
+    this.localDisconnectRequested = false;
     const connectPromise = (async () => {
       const call = await device.connect({ params: { CallIntentId: callIntentId } });
       if (generation !== this.generation) {
@@ -329,6 +384,32 @@ export class WebPhoneRuntime {
     this.publish({ muted });
   }
 
+  acceptIncomingCall() {
+    const call = this.incomingCall;
+    if (!call || this.call !== call || this.status.audioLink !== "incoming_ringing") {
+      throw new Error("There is no incoming browser call to answer.");
+    }
+    this.incomingCall = null;
+    this.localDisconnectRequested = false;
+    this.publish({ audioLink: "connecting", callActive: true, message: "Connecting the caller." });
+    call.accept();
+  }
+
+  rejectIncomingCall() {
+    const call = this.incomingCall;
+    if (!call || this.call !== call) return;
+    this.incomingCall = null;
+    this.call = null;
+    this.releaseCallOwnership();
+    call.reject();
+    this.publish({
+      audioLink: "ended",
+      callActive: false,
+      muted: false,
+      message: "Incoming call declined. The caller can continue to another Stonegate phone.",
+    });
+  }
+
   sendDigits(digits: string) {
     if (!this.call || this.status.audioLink !== "audio_established") {
       throw new Error("Wait for browser audio to connect before using the keypad.");
@@ -341,6 +422,11 @@ export class WebPhoneRuntime {
 
   disconnectLocalAudio() {
     if (this.call) {
+      if (this.incomingCall === this.call) {
+        this.rejectIncomingCall();
+        return;
+      }
+      this.localDisconnectRequested = true;
       this.call.disconnect();
       return;
     }
@@ -355,15 +441,30 @@ export class WebPhoneRuntime {
     this.publish({
       audioLink: "ended",
       callActive: false,
+      incomingRegistration: "disabled",
       muted: false,
-      message: "Browser audio ended.",
+      message: "Call ended by you.",
+    });
+  }
+
+  resetAfterCall() {
+    if (this.hasLiveAudio) throw new Error("Finish the current call before clearing it.");
+    this.incomingCall = null;
+    this.localDisconnectRequested = false;
+    this.publish({
+      audioLink: this.device ? "ready" : "idle",
+      callActive: false,
+      muted: false,
+      message: null,
     });
   }
 
   destroy() {
     this.generation += 1;
-    this.call?.disconnect();
+    if (this.incomingCall) this.incomingCall.ignore();
+    else this.call?.disconnect();
     this.call = null;
+    this.incomingCall = null;
     this.device?.destroy();
     this.device = null;
     this.latestToken = "";
@@ -401,6 +502,8 @@ export class WebPhoneRuntime {
     call.on("error", (error: unknown) => {
       if (this.call !== call) return;
       this.call = null;
+      this.incomingCall = null;
+      this.localDisconnectRequested = false;
       this.releaseCallOwnership();
       this.publish({
         audioLink: "error",
@@ -411,15 +514,64 @@ export class WebPhoneRuntime {
     for (const event of ["cancel", "disconnect", "reject"] as const) {
       call.on(event, () => {
         if (this.call !== call) return;
+        const wasIncomingRinging = this.incomingCall === call;
+        const endedLocally = this.localDisconnectRequested;
         this.call = null;
+        this.incomingCall = null;
+        this.localDisconnectRequested = false;
         this.releaseCallOwnership();
         this.publish({
           audioLink: "ended",
           callActive: false,
           muted: false,
-          message: "Browser audio ended.",
+          message:
+            event === "cancel" && wasIncomingRinging
+              ? "Incoming call ended or was answered on another Stonegate phone."
+              : event === "reject"
+                ? "Incoming call declined."
+                : endedLocally
+                  ? "Call ended by you."
+                  : "Call ended.",
         });
       });
+    }
+  }
+
+  private async captureIncomingCall(call: Call, generation: number) {
+    if (this.call || this.connectPromise || this.incomingCall) {
+      call.ignore();
+      return;
+    }
+    try {
+      const reservation = this.reserveCallOwnership();
+      if (reservation) await reservation;
+      if (generation !== this.generation || this.device === null) {
+        this.releaseCallOwnership();
+        call.ignore();
+        return;
+      }
+      this.call = call;
+      this.incomingCall = call;
+      this.bindCallEvents(call);
+      const callerNumber = call.customParameters.get("CallerNumber") ?? call.parameters.From ?? null;
+      const callerName = call.customParameters.get("CallerName") ?? callerNumber ?? "Incoming caller";
+      this.callbacks.onIncomingCall?.({
+        callId: call.customParameters.get("StonegateCallId") ?? call.parameters.CallSid ?? "incoming",
+        callerName,
+        callerNumber,
+        contextHref: call.customParameters.get("ContextHref") ?? null,
+        lineLabel: call.customParameters.get("LineLabel") ?? null,
+        lineNumber: call.customParameters.get("LineNumber") ?? null,
+      });
+      this.publish({
+        audioLink: "incoming_ringing",
+        callActive: true,
+        muted: false,
+        message: "Incoming Stonegate call.",
+      });
+    } catch {
+      this.releaseCallOwnership();
+      call.ignore();
     }
   }
 }

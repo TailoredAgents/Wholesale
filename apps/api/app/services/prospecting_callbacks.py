@@ -226,8 +226,14 @@ def process_prospecting_inbound_callback(
             active_settings,
             targets=targets,
             call_id=str(call.id),
+            caller_name="Prospecting callback",
+            caller_number=normalized_caller,
+            context_href="/os/prospecting",
+            line_label=line.label,
+            line_number=line.phone_number,
             recording_enabled=active_settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
+            include_browser=False,
         )
     if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
         callback.status = "voicemail"
@@ -907,8 +913,14 @@ def _existing_callback_twiml(
             settings,
             targets=targets,
             call_id=str(call.id),
+            caller_name="Prospecting callback",
+            caller_number=callback.caller_number,
+            context_href="/os/prospecting",
+            line_label=line.label,
+            line_number=line.phone_number,
             recording_enabled=settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
+            include_browser=False,
         )
     if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
         callback.status = "voicemail"

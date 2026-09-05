@@ -29,10 +29,23 @@
   transform: scale(0.92);
 }
 
+.launcherReady::after {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #78c79b;
+  content: "";
+}
+
 .launcher:focus-visible,
 .closeButton:focus-visible,
 .dialPad button:focus-visible,
 .backspaceButton:focus-visible,
+.incomingToggle:focus-visible,
 .dialog footer button:focus-visible,
 .callDetails summary:focus-visible {
   outline: 3px solid rgba(47, 111, 78, 0.3);
@@ -268,6 +281,33 @@
   border-radius: 10px;
   background: #f1f6f3;
   color: #286448;
+}
+
+.incomingToggle {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  border: 1px solid #8fb5a0;
+  border-radius: 9px;
+  background: #fff;
+  color: #1d6444;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.incomingToggle[aria-pressed="true"] {
+  border-color: #276f4d;
+  background: #e6f3eb;
+}
+
+.incomingToggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .error {

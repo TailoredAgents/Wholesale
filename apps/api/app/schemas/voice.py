@@ -153,6 +153,16 @@ class VoiceCallIntentRead(BaseModel):
     recording_enabled: bool
 
 
+class VoiceCallStatusRead(BaseModel):
+    intent_id: UUID
+    call_id: UUID | None
+    status: str
+    answered_at: datetime | None
+    ended_at: datetime | None
+    duration_seconds: int | None
+    terminal: bool
+
+
 class VoiceQuickDialCreate(BaseModel):
     phone_number: str = Field(min_length=7, max_length=80)
     contact_name: str | None = Field(default=None, max_length=255)

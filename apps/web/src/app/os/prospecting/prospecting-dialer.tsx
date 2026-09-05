@@ -80,6 +80,7 @@ type PendingDialerLeaseRecovery = {
 const INITIAL_SOFTPHONE_STATUS: ProspectingSoftphoneStatus = {
   audioLink: "idle",
   callActive: false,
+  incomingRegistration: "disabled",
   microphone: "unchecked",
   muted: false,
   message: null,
@@ -226,6 +227,7 @@ function audioStateLabel(status: ProspectingSoftphoneStatus) {
     idle: "Headset not started",
     requesting_microphone: "Checking microphone",
     ready: "Headset ready",
+    incoming_ringing: "Incoming call",
     connecting: "Connecting browser audio",
     audio_established: "Browser audio established",
     reconnecting: "Browser audio reconnecting",

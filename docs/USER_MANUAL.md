@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: September 1, 2026
+Last verified against the application: September 4, 2026
 
 ## Purpose
 
@@ -310,7 +310,12 @@ The exact list is reduced by role and permission.
 
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
-Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
+Use **New** to enter a seller lead or compose a company email when authorized. Use the green
+**Phone** bubble to call any business number. Select **Enable incoming** there when you want the
+current browser to ring for Stonegate callbacks; the ready dot lasts only while that signed-in OS
+tab remains open. Incoming calls show the known contact or number with **Answer** and **Decline**.
+Configured cellphones continue ringing under the line's first-answer-wins policy and still require
+pressing 1. Use each workspace's
 local views for focused work: Campaigns, Analytics, and My Calls in Prospecting;
 Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
 inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.
@@ -3217,6 +3222,11 @@ Read the provider status in Settings first.
   domain, sender alias, webhook, or recipient route.
 - Voice forwarding remains unavailable until its Twilio provider settings, active company line,
   and staff cellphone destinations pass acceptance.
+- Browser calling requires microphone permission plus the Twilio API-key and TwiML App settings.
+  Open the green phone and select **Enable incoming** during each OS session if callbacks should
+  ring in that browser. A reload or closed tab turns browser ringing off; cellphone routing remains.
+- A final **Call completed**, **Line busy**, **No answer**, **Canceled**, or **Failed** label comes
+  from the saved Twilio callback. It can appear shortly after browser audio closes.
 
 Log approved communication manually in Inbox when a provider is unavailable. Recording must remain
 off until market authorization, access, retention, and deletion settings are approved.

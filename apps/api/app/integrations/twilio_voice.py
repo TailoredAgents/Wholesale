@@ -147,8 +147,14 @@ def inbound_call_twiml(
     *,
     targets: list[InboundVoiceTarget],
     call_id: str,
+    caller_name: str,
+    caller_number: str,
+    context_href: str,
+    line_label: str,
+    line_number: str,
     recording_enabled: bool,
     ring_strategy: str,
+    include_browser: bool = True,
 ) -> str:
     if not targets:
         raise TwilioVoiceConfigurationError("Inbound call has no active routing targets.")
@@ -180,9 +186,32 @@ def inbound_call_twiml(
             }
         )
     dial = response.dial(**dial_options)
-    endpoint_count = 0
+    browser_count, mobile_count = inbound_target_endpoint_counts(
+        targets,
+        browser_enabled=include_browser and settings.twilio_browser_voice_configured,
+    )
+    for target in targets[:browser_count]:
+        client = dial.client(
+            target.identity,
+            status_callback=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/status",
+                call_id=call_id,
+                answered_user_id=target.user_id,
+            ),
+            status_callback_event="initiated ringing answered completed",
+            status_callback_method="POST",
+        )
+        client.parameter(name="StonegateCallId", value=call_id)
+        client.parameter(name="CallerName", value=caller_name)
+        client.parameter(name="CallerNumber", value=caller_number)
+        client.parameter(name="ContextHref", value=context_href)
+        client.parameter(name="LineLabel", value=line_label)
+        client.parameter(name="LineNumber", value=line_number)
+
+    emitted_mobile_count = 0
     for target in targets:
-        if endpoint_count >= 10:
+        if emitted_mobile_count >= mobile_count:
             break
         if target.forwarding_number is None:
             continue
@@ -200,12 +229,25 @@ def inbound_call_twiml(
                 settings,
                 "/api/v1/webhooks/twilio/voice/status",
                 call_id=call_id,
+                answered_user_id=target.user_id,
             ),
             status_callback_event="initiated ringing answered completed",
             status_callback_method="POST",
         )
-        endpoint_count += 1
+        emitted_mobile_count += 1
     return str(response)
+
+
+def inbound_target_endpoint_counts(
+    targets: list[InboundVoiceTarget],
+    *,
+    browser_enabled: bool,
+) -> tuple[int, int]:
+    """Reserve every cellphone route, then use remaining Twilio slots for browsers."""
+
+    mobile_count = min(10, sum(target.forwarding_number is not None for target in targets))
+    browser_count = min(len(targets), max(0, 10 - mobile_count)) if browser_enabled else 0
+    return browser_count, mobile_count
 
 
 def call_screen_twiml(

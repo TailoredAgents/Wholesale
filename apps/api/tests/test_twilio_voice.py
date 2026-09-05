@@ -539,7 +539,9 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     inbound_response = post_signed(client, inbound_path, inbound_payload)
     assert inbound_response.status_code == 200, inbound_response.text
     assert "+14045550101" in inbound_response.text
-    assert "<Client " not in inbound_response.text
+    assert "<Client " in inbound_response.text
+    assert f"stonegate_{devon['id'].replace('-', '')}" in inbound_response.text
+    assert "CallerNumber" in inbound_response.text
 
 
 def test_shared_line_rings_multiple_users_and_attributes_the_answer(
@@ -625,15 +627,18 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     )
 
     assert inbound.status_code == 200, inbound.text
-    assert "<Client " not in inbound.text
+    assert inbound.text.count("<Client ") == 2
     assert inbound.text.count("<Number ") == 2
     assert "/voice/screen" in inbound.text
+    assert inbound.text.count("answered_user_id=") == 6
     assert 'sequential="false"' in inbound.text
     call = db_session.scalar(select(CallRecord))
     assert call is not None
     assert call.call_metadata is not None
     assert call.call_metadata["ring_user_count"] == 2
-    assert call.call_metadata["ring_target_count"] == 2
+    assert call.call_metadata["ring_target_count"] == 4
+    assert call.call_metadata["ring_browser_target_count"] == 2
+    assert call.call_metadata["ring_mobile_target_count"] == 2
 
     mobile_screen_path = (
         f"/api/v1/webhooks/twilio/voice/screen?call_id={call.id}"
@@ -701,6 +706,34 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     db_session.refresh(call)
     assert call.status == "in-progress"
     assert str(call.actor_user_id) == devon["id"]
+
+
+def test_inbound_call_still_rings_cellphone_without_browser_credentials(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    seed_voice_lead(db_session, client)
+    for key in ("TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "TWILIO_TWIML_APP_SID"):
+        monkeypatch.delenv(key)
+    get_settings.cache_clear()
+
+    inbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        {
+            "From": SELLER_NUMBER,
+            "To": STONEGATE_NUMBER,
+            "CallSid": "CA00000000000000000000000000000087",
+        },
+    )
+
+    assert inbound.status_code == 200, inbound.text
+    assert "<Client " not in inbound.text
+    assert "<Number " in inbound.text
+    assert "+14045550100" in inbound.text
 
 
 def test_inbound_call_rings_after_hours_then_uses_voicemail_on_no_answer(
@@ -808,6 +841,33 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     assert "<Number " in outbound.text
     assert SELLER_NUMBER in outbound.text
     assert int(db_session.scalar(select(func.count()).select_from(CallRecord)) or 0) == 1
+
+    initial_status = client.get(
+        f"/api/v1/voice/call-intents/{intent['id']}/status",
+        headers=headers,
+    )
+    assert initial_status.status_code == 200, initial_status.text
+    assert initial_status.json()["status"] == "initiated"
+    assert initial_status.json()["terminal"] is False
+
+    completed_status = post_signed(
+        client,
+        f"/api/v1/webhooks/twilio/voice/status?intent_id={intent['id']}",
+        {
+            "CallSid": payload["CallSid"],
+            "CallStatus": "completed",
+            "CallDuration": "14",
+        },
+    )
+    assert completed_status.status_code == 204, completed_status.text
+    final_status = client.get(
+        f"/api/v1/voice/call-intents/{intent['id']}/status",
+        headers=headers,
+    )
+    assert final_status.status_code == 200, final_status.text
+    assert final_status.json()["status"] == "completed"
+    assert final_status.json()["duration_seconds"] == 14
+    assert final_status.json()["terminal"] is True
 
     reused_payload = {**payload, "CallSid": "CA00000000000000000000000000000002"}
     reused = post_signed(client, path, reused_payload)
@@ -1793,7 +1853,7 @@ def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
     inbound_path = "/api/v1/webhooks/twilio/voice/incoming"
     inbound = post_signed(client, inbound_path, inbound_payload)
     assert inbound.status_code == 200
-    assert "<Client " not in inbound.text
+    assert "<Client " in inbound.text
     assert "<Number " in inbound.text
 
     call = db_session.scalar(select(CallRecord))
@@ -1810,6 +1870,20 @@ def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
 
     assert first.status_code == 204
     assert duplicate.status_code == 204
+    db_session.expire_all()
+    updated_call = db_session.get(CallRecord, call.id)
+    assert updated_call is not None
+    assert updated_call.status == "ringing"
+    dial_result = post_signed(
+        client,
+        f"/api/v1/webhooks/twilio/voice/dial-result?call_id={call.id}",
+        {
+            "CallSid": inbound_payload["CallSid"],
+            "DialCallStatus": "no-answer",
+            "DialCallDuration": "0",
+        },
+    )
+    assert dial_result.status_code == 200
     db_session.expire_all()
     updated_call = db_session.get(CallRecord, call.id)
     assert updated_call is not None

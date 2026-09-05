@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: September 1, 2026
+Last verified against the repository: September 4, 2026
 
 ## 1. Document Authority
 
@@ -1325,6 +1325,8 @@ The Twilio Voice implementation supports:
 - company voice lines separated by department and purpose
 - primary, fallback, and optional department-team membership
 - conversation-owner-first routing with sequential or simultaneous ringing
+- an explicitly enabled shared browser phone for incoming seller, buyer, and business callbacks
+- browser and private-cellphone first-answer-wins ringing with browser Answer and Decline controls
 - private-cellphone forwarding groups with first-answer-wins behavior
 - department call announcements and press-1 cellphone screening
 - active-user filtering, duplicate removal, and answer attribution
@@ -1332,14 +1334,17 @@ The Twilio Voice implementation supports:
 - outbound cellphone bridging with Stonegate caller ID and automatic conversation history
 - company-number-aware inbound routing
 - call status and dial result callbacks
+- provider-backed outbound completion labels for completed, busy, no-answer, canceled, and failed calls
+- redacted routing, mobile-screen, and status diagnostics without phone numbers, tokens, or audio
 - missed-call tasks
 - private recordings
 - recording-authorization state
 - transcript review
 
-Voice forwarding requires the Account SID, Auth Token, company number, inbound callback, active
-Stonegate line, and enabled staff cellphone destinations. Browser access tokens and a TwiML App
-are not required for this operating mode.
+Voice forwarding requires the Account SID, Auth Token, company number, inbound callback, and an
+active Stonegate line. Cellphone destinations require each employee's enabled forwarding number.
+The optional shared browser-answering path additionally requires the API key and TwiML App settings;
+an employee must select **Enable incoming** in the green OS phone during each browser session.
 
 ### 10.6 Call Intelligence
 

@@ -42,6 +42,27 @@ test("the shared phone lazily initializes Twilio from an ephemeral session", () 
   assert.doesNotMatch(provider, /console\./);
 });
 
+test("incoming browser calls are explicitly enabled and remain a first-answer-wins option", () => {
+  assert.match(runtime, /device\.on\("incoming"/);
+  assert.match(runtime, /await device\.register\(\)/);
+  assert.match(runtime, /await device\.unregister\(\)/);
+  assert.match(runtime, /acceptIncomingCall\(\)/);
+  assert.match(runtime, /rejectIncomingCall\(\)/);
+  assert.match(provider, /Answer incoming call/);
+  assert.match(provider, /Decline incoming call/);
+  assert.match(quickDial, /Enable incoming/);
+  assert.match(quickDial, /First answer wins/);
+  assert.match(quickDial, /stonegate:incoming-phone-call/);
+});
+
+test("outbound call endings reconcile to the provider result", () => {
+  assert.match(provider, /\/api\/v1\/voice\/call-intents\/\$\{encodeURIComponent\(callIntentId\)\}\/status/);
+  assert.match(provider, /The recipient did not answer/);
+  assert.match(provider, /The recipient's line was busy/);
+  assert.match(provider, /Call completed/);
+  assert.doesNotMatch(runtime, /Browser audio ended\./);
+});
+
 test("the provider offers one reusable intent-driven call surface", () => {
   assert.match(provider, /export function WebPhoneProvider/);
   assert.match(provider, /export function useWebPhone/);

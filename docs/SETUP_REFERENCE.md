@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: August 28, 2026
+Last verified against the repository: September 4, 2026
 
 ## Purpose
 
@@ -710,9 +710,9 @@ failures. An SMS in `delivery_unknown` must be investigated rather than retried 
 - `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
-keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode. They supported
-the historical D4 browser softphone, which is dormant and must not be reactivated through Voice
-configuration.
+keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode, but they are
+required for the shared warm-call browser phone used by Inbox, Dispositions, and Quick Dial. This
+does not reactivate the dormant native D4 prospecting dialer.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
 The disclosure is optional. Stonegate's Owner-selected Georgia-only one-party mode leaves it unset
@@ -733,9 +733,11 @@ All paths use `https://api.stonegatehb.com` as the base.
 
 ### Acceptance
 
-1. Browser device registers.
-2. Outbound call uses the Stonegate number.
-3. Inbound call routes to the intended staff identity.
+1. Select **Enable incoming** in the green OS phone and confirm its ready indicator appears.
+2. Outbound call uses the Stonegate number and shows the final completed, busy, no-answer,
+   canceled, or failed result rather than a generic browser-audio ending.
+3. Inbound call rings the enabled browser and configured staff cellphone under the line's
+   first-answer-wins strategy. Confirm Answer and Decline in the OS and press-1 screening on mobile.
 4. No-answer and missed-call task behavior work.
 5. Status callbacks attach to the correct conversation.
 6. Confirm and document acceptance of the Owner-selected recording-authorization and retention
@@ -837,6 +839,11 @@ queue, and **New > Quick Dial**. It does not activate the dormant native VA pros
    company line.
 5. Keep the existing Twilio callback base URL on HTTPS and callback-signature validation enabled.
    After deployment, allow microphone access when the OS first asks to prepare the browser headset.
+6. Open the green phone, select **Enable incoming**, and leave that signed-in OS tab open. The green
+   ready dot means that browser can ring; closing or reloading the tab deliberately turns it off.
+7. Call the applicable Stonegate number from a controlled outside phone. Confirm the browser and
+   configured cellphone ring, answering either stops the other, Decline leaves other destinations
+   available, and no answer reaches the configured voicemail/task plan.
 
 ### Historical D4 Twilio Browser Setup
 
