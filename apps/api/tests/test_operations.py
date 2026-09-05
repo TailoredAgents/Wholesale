@@ -237,6 +237,11 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
 
     assert shared_runtime_keys <= api_keys
     assert shared_runtime_keys <= worker_keys
+    assert {
+        "TWILIO_API_KEY_SID",
+        "TWILIO_API_KEY_SECRET",
+        "TWILIO_TWIML_APP_SID",
+    } <= api_keys
     api_values = render_service_environment_values(blueprint, "oakwell-api")
     worker_values = render_service_environment_values(blueprint, "oakwell-worker")
     for service_values in (api_values, worker_values):

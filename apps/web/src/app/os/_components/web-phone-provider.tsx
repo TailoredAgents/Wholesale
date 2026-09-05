@@ -78,7 +78,7 @@ type WebPhoneContextValue = {
   prepareAndStartCall: (
     prepareTarget: () => Promise<WebPhoneCallTarget>,
   ) => Promise<void>;
-  rejectIncomingCall: () => void;
+  declineIncomingCall: () => void;
   reset: () => void;
   sendDigits: (digits: string) => void;
   session: WebPhoneSession | null;
@@ -416,9 +416,9 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
     }
   }, [showFailure]);
 
-  const rejectIncomingCall = useCallback(() => {
+  const declineIncomingCall = useCallback(() => {
     setKeypadOpen(false);
-    runtimeRef.current?.rejectIncomingCall();
+    runtimeRef.current?.declineIncomingCall();
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -522,7 +522,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       incomingEnabled: status.incomingRegistration === "ready",
       initializeHeadset,
       prepareAndStartCall,
-      rejectIncomingCall,
+      declineIncomingCall,
       reset,
       sendDigits,
       session,
@@ -539,7 +539,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
       hangUp,
       initializeHeadset,
       prepareAndStartCall,
-      rejectIncomingCall,
+      declineIncomingCall,
       reset,
       sendDigits,
       session,
@@ -628,7 +628,7 @@ export function WebPhoneProvider({ children }: { children: ReactNode }) {
               className={styles.endButton}
               disabled={incomingRinging ? busy : !canEnd}
               id="stonegate-active-phone-end-call"
-              onClick={incomingRinging ? rejectIncomingCall : hangUp}
+              onClick={incomingRinging ? declineIncomingCall : hangUp}
               type="button"
             >
               <PhoneOff aria-hidden="true" size={17} />

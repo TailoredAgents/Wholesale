@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: September 4, 2026
+Last verified against the application: September 5, 2026
 
 ## Purpose
 
@@ -314,8 +314,10 @@ Use **New** to enter a seller lead or compose a company email when authorized. U
 **Phone** bubble to call any business number. Select **Enable incoming** there when you want the
 current browser to ring for Stonegate callbacks; the ready dot lasts only while that signed-in OS
 tab remains open. Incoming calls show the known contact or number with **Answer** and **Decline**.
-Configured cellphones continue ringing under the line's first-answer-wins policy and still require
-pressing 1. Use each workspace's
+Declining closes only the current browser's ringing leg, so another enabled Stonegate browser or
+configured cellphone can still answer. Configured cellphones continue ringing under the line's
+first-answer-wins policy and still require pressing 1. During a connected browser call, Stonegate
+warns if the live connection degrades and confirms when call quality recovers. Use each workspace's
 local views for focused work: Campaigns, Analytics, and My Calls in Prospecting;
 Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
 inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.

@@ -47,7 +47,9 @@ test("incoming browser calls are explicitly enabled and remain a first-answer-wi
   assert.match(runtime, /await device\.register\(\)/);
   assert.match(runtime, /await device\.unregister\(\)/);
   assert.match(runtime, /acceptIncomingCall\(\)/);
-  assert.match(runtime, /rejectIncomingCall\(\)/);
+  assert.match(runtime, /declineIncomingCall\(\)/);
+  assert.match(runtime, /call\.ignore\(\)/);
+  assert.doesNotMatch(runtime, /call\.reject\(\)/);
   assert.match(provider, /Answer incoming call/);
   assert.match(provider, /Decline incoming call/);
   assert.match(quickDial, /Enable incoming/);
@@ -61,6 +63,13 @@ test("outbound call endings reconcile to the provider result", () => {
   assert.match(provider, /The recipient's line was busy/);
   assert.match(provider, /Call completed/);
   assert.doesNotMatch(runtime, /Browser audio ended\./);
+});
+
+test("active calls surface and clear Twilio call-quality warnings", () => {
+  assert.match(runtime, /call\.on\("warning"/);
+  assert.match(runtime, /call\.on\("warning-cleared"/);
+  assert.match(runtime, /Call quality is degraded/);
+  assert.match(runtime, /Call quality restored/);
 });
 
 test("the provider offers one reusable intent-driven call surface", () => {

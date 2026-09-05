@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: September 4, 2026
+Last verified against the repository: September 5, 2026
 
 ## 1. Document Authority
 
@@ -1327,6 +1327,7 @@ The Twilio Voice implementation supports:
 - conversation-owner-first routing with sequential or simultaneous ringing
 - an explicitly enabled shared browser phone for incoming seller, buyer, and business callbacks
 - browser and private-cellphone first-answer-wins ringing with browser Answer and Decline controls
+- browser Decline isolation that leaves the other shared ringing destinations available
 - private-cellphone forwarding groups with first-answer-wins behavior
 - department call announcements and press-1 cellphone screening
 - active-user filtering, duplicate removal, and answer attribution
@@ -1335,6 +1336,7 @@ The Twilio Voice implementation supports:
 - company-number-aware inbound routing
 - call status and dial result callbacks
 - provider-backed outbound completion labels for completed, busy, no-answer, canceled, and failed calls
+- live browser call-quality degradation and recovery feedback
 - redacted routing, mobile-screen, and status diagnostics without phone numbers, tokens, or audio
 - missed-call tasks
 - private recordings

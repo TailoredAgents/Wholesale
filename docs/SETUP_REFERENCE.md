@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: September 4, 2026
+Last verified against the repository: September 5, 2026
 
 ## Purpose
 
@@ -831,8 +831,9 @@ queue, and **New > Quick Dial**. It does not activate the dormant native VA pros
    Request URL to POST to
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`.
 3. Put `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, and `TWILIO_TWIML_APP_SID` in the Render API
-   service alongside the existing Twilio Voice settings. Do not put them in the web service, source
-   code, or any `NEXT_PUBLIC_*` variable.
+   service alongside the existing Twilio Voice settings. The production Blueprint declares all
+   three as secret API environment slots, but their values must still be entered in Render. Do not
+   put them in the web service, source code, or any `NEXT_PUBLIC_*` variable.
 4. In **Settings > Communications**, keep each staff member assigned to the active company line(s)
    they are authorized to use. Disposition staff need an active Buyer Relations line; acquisitions
    staff need an active Seller Conversations line. Quick Dial uses an authorized non-prospecting
@@ -843,7 +844,9 @@ queue, and **New > Quick Dial**. It does not activate the dormant native VA pros
    ready dot means that browser can ring; closing or reloading the tab deliberately turns it off.
 7. Call the applicable Stonegate number from a controlled outside phone. Confirm the browser and
    configured cellphone ring, answering either stops the other, Decline leaves other destinations
-   available, and no answer reaches the configured voicemail/task plan.
+   available, and no answer reaches the configured voicemail/task plan. On a connected test call,
+   also confirm the OS surfaces a degraded-connection warning if Twilio reports one and clears the
+   warning after recovery.
 
 ### Historical D4 Twilio Browser Setup
 

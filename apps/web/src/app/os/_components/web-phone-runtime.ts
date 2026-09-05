@@ -395,13 +395,15 @@ export class WebPhoneRuntime {
     call.accept();
   }
 
-  rejectIncomingCall() {
+  declineIncomingCall() {
     const call = this.incomingCall;
     if (!call || this.call !== call) return;
     this.incomingCall = null;
     this.call = null;
     this.releaseCallOwnership();
-    call.reject();
+    // Ignore closes only this browser leg. Twilio can continue ringing the
+    // other registered browsers and screened cellphones in the shared Dial.
+    call.ignore();
     this.publish({
       audioLink: "ended",
       callActive: false,
@@ -423,7 +425,7 @@ export class WebPhoneRuntime {
   disconnectLocalAudio() {
     if (this.call) {
       if (this.incomingCall === this.call) {
-        this.rejectIncomingCall();
+        this.declineIncomingCall();
         return;
       }
       this.localDisconnectRequested = true;
@@ -479,6 +481,7 @@ export class WebPhoneRuntime {
     const publishForCurrentCall = (update: Partial<WebPhoneStatus>) => {
       if (this.call === call) this.publish(update);
     };
+    const activeQualityWarnings = new Set<string>();
     call.on("ringing", () => publishForCurrentCall({ audioLink: "connecting", message: null }));
     call.on("accept", () =>
       publishForCurrentCall({
@@ -499,6 +502,21 @@ export class WebPhoneRuntime {
       }),
     );
     call.on("mute", (muted: boolean) => publishForCurrentCall({ muted }));
+    call.on("warning", (name: string) => {
+      activeQualityWarnings.add(name);
+      publishForCurrentCall({
+        message: "Call quality is degraded. Check your internet connection or headset.",
+      });
+    });
+    call.on("warning-cleared", (name: string) => {
+      activeQualityWarnings.delete(name);
+      publishForCurrentCall({
+        message:
+          activeQualityWarnings.size === 0
+            ? "Call quality restored."
+            : "Call quality is degraded. Check your internet connection or headset.",
+      });
+    });
     call.on("error", (error: unknown) => {
       if (this.call !== call) return;
       this.call = null;
