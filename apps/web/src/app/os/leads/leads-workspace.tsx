@@ -18,12 +18,10 @@ import {
 import {
   ArrowRight,
   CalendarDays,
-  Columns3,
   ExternalLink,
   GripVertical,
   Inbox,
   Search,
-  Table2,
   UserRound,
   X,
 } from "lucide-react";
@@ -150,7 +148,9 @@ function LeadBoardCard({
 }) {
   const operatingStatus = getLeadOperatingStatus(lead, tasks);
   const needsReview = needsQualifiedSellerReview(lead.id, tasks);
-  const action = nextAction(lead, tasks);
+  const temperature = lead.lead_temperature
+    ? labelize(lead.lead_temperature)
+    : null;
   const canMoveLead =
     (canEditLead || canImportExecutedContract || canRecordOutsideOffer) &&
     getPipelineStage(lead.stage_key)?.key !== "under_contract";
@@ -172,13 +172,14 @@ function LeadBoardCard({
         onClick={onSelect}
         type="button"
       >
-        <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)} · {labelize(lead.lead_temperature)}</em></span>
+        <span className={styles.cardTop}>
+          <strong>{lead.seller_name}</strong>
+          <em>{labelize(lead.asset_class)}{temperature ? ` · ${temperature}` : ""}</em>
+        </span>
         <span className={styles.cardAddress}>{lead.property_address}</span>
-        <time className={styles.cardReceived} dateTime={lead.created_at}>Received {formatDateTime(lead.created_at)}</time>
         <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
         {needsReview ? <QualifiedSellerReviewBadge /> : null}
         <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
-        <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
       </button>
       {canMoveLead ? (
         <button
@@ -392,13 +393,13 @@ export function LeadsWorkspace({
   );
   const [view, setView] = useState<SavedLeadViewKey>(initialView);
   const [asset, setAsset] = useState<"all" | "house" | "land">(initialAsset);
-  const [display, setDisplay] = useState<"table" | "board">(initialDisplay);
+  const display = initialDisplay;
   const [query, setQuery] = useState(initialQuery);
   const [owner, setOwner] = useState(initialOwner);
   const [sort, setSort] = useState<LeadSortKey>(initialSort);
   const [stage, setStage] = useState(initialDisplay === "board" ? "all" : initialStage);
   const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(Boolean(initialLeadId));
   const [workingLeads, setWorkingLeads] = useState(leads);
   const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
   const [pendingLeadIds, setPendingLeadIds] = useState<Set<string>>(() => new Set());
@@ -433,6 +434,15 @@ export function LeadsWorkspace({
     );
   }, [initialDisplay, initialStage]);
 
+  useEffect(() => {
+    if (!previewOpen) return;
+    function closePreviewOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setPreviewOpen(false);
+    }
+    window.addEventListener("keydown", closePreviewOnEscape);
+    return () => window.removeEventListener("keydown", closePreviewOnEscape);
+  }, [previewOpen]);
+
   const viewCounts = useMemo(
     () => getSavedLeadViewCounts(workingLeads, tasks),
     [tasks, workingLeads],
@@ -466,7 +476,9 @@ export function LeadsWorkspace({
     });
   }, [asset, baseLeads, owner, query, stage]);
   const selectedLead =
-    visibleLeads.find((lead) => lead.id === selectedLeadId) ?? visibleLeads[0] ?? null;
+    visibleLeads.find((lead) => lead.id === selectedLeadId) ??
+    (display === "table" ? visibleLeads[0] : null) ??
+    null;
   const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
   const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
   const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
@@ -497,7 +509,6 @@ export function LeadsWorkspace({
 
   function replaceLocation(overrides: {
     asset?: "all" | "house" | "land";
-    display?: "table" | "board";
     leadId?: string;
     owner?: string;
     query?: string;
@@ -507,7 +518,7 @@ export function LeadsWorkspace({
   } = {}) {
     const next = {
       asset: overrides.asset ?? asset,
-      display: overrides.display ?? display,
+      display,
       leadId: overrides.leadId ?? selectedLeadId,
       owner: overrides.owner ?? owner,
       query: overrides.query ?? query,
@@ -535,19 +546,9 @@ export function LeadsWorkspace({
     replaceLocation({ sort: nextSort, view: nextView });
   }
 
-  function chooseDisplay(nextDisplay: "table" | "board") {
-    setDisplay(nextDisplay);
-    if (nextDisplay === "board") {
-      setStage("all");
-      replaceLocation({ display: nextDisplay, stage: "all" });
-      return;
-    }
-    replaceLocation({ display: nextDisplay });
-  }
-
   function selectLead(leadId: string) {
     setSelectedLeadId(leadId);
-    setMobileDetailOpen(true);
+    setPreviewOpen(true);
     replaceLocation({ leadId });
   }
 
@@ -695,7 +696,7 @@ export function LeadsWorkspace({
     setPendingLeadIds(new Set(pendingLeadIdsRef.current));
     setWorkingLeads((current) => current.filter((lead) => lead.id !== closedLeadId));
     setSelectedLeadId(nextLead?.id ?? "");
-    setMobileDetailOpen(false);
+    setPreviewOpen(false);
     replaceLocation({ leadId: nextLead?.id ?? "" });
     setStageNotice({
       message: `${result.lead.seller_name} was closed and removed from the active Leads board.`,
@@ -757,7 +758,7 @@ export function LeadsWorkspace({
   };
 
   return (
-    <div className={styles.workspace}>
+    <div className={`${styles.workspace} ${display === "board" ? styles.pipelineWorkspace : ""}`}>
       <section className={styles.metrics} aria-label="Lead database summary" tabIndex={0}>
         <div><span>New</span><strong>{newLeadCount}</strong><small>First-contact records</small></div>
         <div><span>Qualified+</span><strong>{qualifiedCount}</strong><small>Appointment or offer work</small></div>
@@ -781,7 +782,7 @@ export function LeadsWorkspace({
       </section>
 
       <section className={styles.leadDesk}>
-        <div className={styles.toolbar}>
+        <div className={`${styles.toolbar} ${display === "board" ? styles.pipelineToolbar : ""}`}>
           <label className={styles.search}>
             <Search aria-hidden="true" size={16} />
             <input
@@ -818,22 +819,22 @@ export function LeadsWorkspace({
               {owners.map((email) => <option key={email} value={email}>{ownerLabel(email)}</option>)}
             </select>
           </label>
-          <label>
-            <span>Stage</span>
-            <select
-              aria-label={display === "board" ? "All stages shown in Board view" : "Filter leads by stage"}
-              disabled={display === "board"}
-              onChange={(event) => {
-                setStage(event.target.value);
-                replaceLocation({ stage: event.target.value });
-              }}
-              title={display === "board" ? "Board view shows every pipeline stage so leads can be moved between columns." : undefined}
-              value={stage}
-            >
-              <option value="all">All stages</option>
-              {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-            </select>
-          </label>
+          {display === "table" ? (
+            <label>
+              <span>Stage</span>
+              <select
+                aria-label="Filter leads by stage"
+                onChange={(event) => {
+                  setStage(event.target.value);
+                  replaceLocation({ stage: event.target.value });
+                }}
+                value={stage}
+              >
+                <option value="all">All stages</option>
+                {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+            </label>
+          ) : null}
           <label>
             <span>Sort</span>
             <select onChange={(event) => {
@@ -846,10 +847,6 @@ export function LeadsWorkspace({
               ))}
             </select>
           </label>
-          <div aria-label="Lead display" className={styles.displayControl}>
-            <button aria-pressed={display === "table"} onClick={() => chooseDisplay("table")} title="Table view" type="button"><Table2 aria-hidden="true" size={15} /><span>Table</span></button>
-            <button aria-pressed={display === "board"} onClick={() => chooseDisplay("board")} title="Board view" type="button"><Columns3 aria-hidden="true" size={15} /><span>Board</span></button>
-          </div>
           <strong>{visibleLeads.length} shown</strong>
         </div>
         {stageNotice ? (
@@ -912,7 +909,7 @@ export function LeadsWorkspace({
               onDragStart={handleDragStart}
               sensors={sensors}
             >
-              <div className={styles.board}>
+              <div aria-label="Lead pipeline stages" className={styles.board} role="region">
                 {pipelineStages.map((pipelineStage) => {
                   const stageLeads = visibleLeads.filter(
                     (lead) => getPipelineStage(lead.stage_key)?.key === pipelineStage.key,
@@ -952,12 +949,16 @@ export function LeadsWorkspace({
             </DndContext>
           )}
 
-          <aside className={`${styles.preview} ${mobileDetailOpen ? styles.previewOpen : ""}`}>
+          {display === "table" || previewOpen ? (
+            <aside
+              aria-label="Seller preview"
+              className={`${styles.preview} ${previewOpen ? styles.previewOpen : ""}`}
+            >
             {selectedLead && selectedStatus && selectedAction ? (
               <>
                 <header>
                   <div><span>Seller preview</span><h2>{selectedLead.seller_name}</h2><p>{selectedLead.property_address}</p></div>
-                  <button aria-label="Close seller preview" onClick={() => setMobileDetailOpen(false)} type="button"><X size={17} /></button>
+                  <button aria-label="Close seller preview" onClick={() => setPreviewOpen(false)} type="button"><X size={17} /></button>
                 </header>
                 <div className={styles.previewStatus}>
                   <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
@@ -1044,8 +1045,9 @@ export function LeadsWorkspace({
             ) : (
               <div className={styles.empty}><strong>No seller selected</strong><span>Select a lead to inspect its current context.</span></div>
             )}
-          </aside>
-          {mobileDetailOpen ? <button aria-label="Close seller preview" className={styles.backdrop} onClick={() => setMobileDetailOpen(false)} type="button" /> : null}
+            </aside>
+          ) : null}
+          {previewOpen ? <button aria-label="Close seller preview" className={styles.backdrop} onClick={() => setPreviewOpen(false)} type="button" /> : null}
         </div>
       </section>
       {contractImportLead ? (

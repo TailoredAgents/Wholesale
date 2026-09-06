@@ -83,7 +83,7 @@ export default async function LeadsPage({
         : "Search, filter, assign, and move every active seller opportunity from one database.";
 
   return (
-    <WorkspacePage>
+    <WorkspacePage wide={display === "board"}>
       <PageHeader
         actions={
           <>

@@ -24,6 +24,7 @@ const dealsWorkspace = readFileSync(resolve(appRoot, "os/deals/deals-workspace.t
 const pipelineWorkspace = readFileSync(resolve(appRoot, "os/pipeline/pipeline-workspace.tsx"), "utf8");
 
 test("Pipeline navigation changes the mounted workspace without a page refresh", () => {
+  assert.match(page, /<WorkspacePage wide=\{display === "board"\}>/);
   assert.match(page, /key=\{`leads-\$\{display\}`\}/);
   assert.match(navigation, /item\.key === "pipeline"[\s\S]*display === "board"/);
   assert.match(navigation, /item\.key === "database"[\s\S]*display === "table"/);
@@ -46,6 +47,10 @@ test("lead board stage movement is permission-gated and accessible", () => {
   assert.match(workspace, /Available on keyboard and mobile/);
   assert.match(workspace, /announcements: dragAnnouncements/);
   assert.match(workspace, /aria-live=\{stageNotice\.tone === "error" \? "assertive" : "polite"\}/);
+  assert.match(workspace, /const temperature = lead\.lead_temperature[\s\S]*\? labelize\(lead\.lead_temperature\)[\s\S]*: null;/);
+  assert.match(workspace, /display === "table" \|\| previewOpen/);
+  assert.match(workspace, /if \(event\.key === "Escape"\) setPreviewOpen\(false\)/);
+  assert.doesNotMatch(workspace, /styles\.cardAction/);
 });
 
 test("mouse and delayed touch dragging expose every board destination", () => {
@@ -55,10 +60,12 @@ test("mouse and delayed touch dragging expose every board destination", () => {
   assert.match(workspace, /<DragOverlay>/);
   assert.match(workspace, /collisionDetection=\{pointerWithin\}/);
   assert.match(workspace, /pipelineStages\.map\(\(pipelineStage\) => \{/);
-  assert.match(workspace, /if \(nextDisplay === "board"\) \{[\s\S]*setStage\("all"\)/);
+  assert.doesNotMatch(workspace, /function chooseDisplay/);
+  assert.doesNotMatch(workspace, /aria-label="Lead display"/);
   assert.match(workspace, /initialDisplay !== "board" \|\| initialStage === "all"/);
   assert.match(workspace, /currentUrl\.searchParams\.delete\("stage"\)/);
-  assert.match(workspace, /disabled=\{display === "board"\}/);
+  assert.match(workspace, /display === "table" \? \([\s\S]*aria-label="Filter leads by stage"/);
+  assert.doesNotMatch(workspace, /disabled=\{display === "board"\}/);
   assert.doesNotMatch(workspace, /visibleStages\.map/);
 });
 
@@ -275,4 +282,10 @@ test("board styling distinguishes handles, pending cards, overlays, and drop tar
     assert.match(styles, new RegExp(`\\.${className}\\b`));
   }
   assert.match(styles, /\.dragHandle[\s\S]*touch-action: none/);
+  assert.match(styles, /\.boardContent \{[^}]*height: clamp\([^}]*display: block;[^}]*overflow: hidden;/s);
+  assert.match(styles, /\.board \{[^}]*grid-auto-columns: 272px;[^}]*overflow-x: auto;[^}]*overflow-y: hidden;/s);
+  assert.match(styles, /\.boardColumn \{[^}]*grid-template-rows: auto minmax\(0, 1fr\);/s);
+  assert.match(styles, /\.boardColumn > div \{[^}]*overflow-y: auto;/s);
+  assert.match(styles, /\.boardContent > \.preview \{[^}]*position: absolute;[^}]*transform: translateX\(105%\);/s);
+  assert.match(styles, /\.boardContent > \.previewOpen \{ transform: translateX\(0\); \}/);
 });
