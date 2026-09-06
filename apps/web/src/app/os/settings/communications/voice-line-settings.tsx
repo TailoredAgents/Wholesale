@@ -445,7 +445,7 @@ export function VoiceLineSettings() {
                   name="inbound_message_alert_sms_enabled"
                   type="checkbox"
                 />
-                <span>Text inbound messages</span>
+                <span>Text all inbound messages</span>
               </label>
               <button disabled={busyId === `user:${user.id}`} type="submit">
                 <Save aria-hidden="true" size={15} />

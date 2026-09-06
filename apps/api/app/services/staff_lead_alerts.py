@@ -18,11 +18,7 @@ from app.models.foundation import (
     LeadFormSubmission,
     Notification,
     Property,
-    Role,
-    RoleAssignment,
     StaffLeadAlert,
-    Team,
-    TeamMembership,
     User,
     VoiceLine,
 )
@@ -31,7 +27,6 @@ from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES
 
 logger = structlog.get_logger()
 STAFF_ALERT_RECOVERY_WINDOW = timedelta(hours=24)
-OWNER_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
 WEBSITE_STAGE_1_ALERT_SOURCE_TYPE = "website_form_stage_1"
 WEBSITE_STAGE_2_ALERT_SOURCE_TYPE = "website_form"
 WEBSITE_STAGE_ALERT_FLOW_VERSION = "website-staged-alerts-v1"
@@ -318,21 +313,9 @@ def queue_staff_inbound_sms_alert(
     sender_line: VoiceLine | None,
     sender_phone: str,
 ) -> int:
-    existing = db.scalar(
-        select(StaffLeadAlert.id).where(
-            StaffLeadAlert.organization_id == conversation.organization_id,
-            StaffLeadAlert.source_type == "inbound_sms",
-            StaffLeadAlert.source_event_id == communication.id,
-        )
-    )
-    if existing is not None:
-        return 0
-
-    recipient, routing_snapshot = select_inbound_sms_alert_recipient(
+    recipients, diagnostics = eligible_staff_inbound_message_alert_recipients(
         db,
-        conversation=conversation,
-        sender_line=sender_line,
-        sender_phone=sender_phone,
+        organization_id=conversation.organization_id,
     )
     contact = db.get(Contact, conversation.contact_id)
     party_label = "buyer" if conversation.conversation_type == "buyer" else "seller"
@@ -341,10 +324,27 @@ def queue_staff_inbound_sms_alert(
         if contact is not None and contact.legal_name.strip()
         else "Unknown contact"
     )
+    sender_normalized = format_e164(sender_phone)
     created = 0
-    if recipient is not None:
+    existing_count = 0
+    sender_phone_matches = 0
+    for recipient in recipients:
         recipient_phone = format_e164(recipient.voice_forwarding_number or "")
         assert recipient_phone is not None
+        if recipient_phone == sender_normalized:
+            sender_phone_matches += 1
+            continue
+        existing = db.scalar(
+            select(StaffLeadAlert.id).where(
+                StaffLeadAlert.organization_id == conversation.organization_id,
+                StaffLeadAlert.source_type == "inbound_sms",
+                StaffLeadAlert.source_event_id == communication.id,
+                StaffLeadAlert.recipient_user_id == recipient.id,
+            )
+        )
+        if existing is not None:
+            existing_count += 1
+            continue
         db.add(
             StaffLeadAlert(
                 organization_id=conversation.organization_id,
@@ -372,130 +372,57 @@ def queue_staff_inbound_sms_alert(
                 last_error=None,
             )
         )
-        created = 1
+        created += 1
 
     queue_snapshot = {
         "communication_id": str(communication.id),
         "conversation_id": str(conversation.id),
         "lead_id": str(conversation.lead_id) if conversation.lead_id is not None else None,
-        "recipient_user_id": str(recipient.id) if recipient is not None else None,
-        **routing_snapshot,
+        "voice_line_id": str(sender_line.id) if sender_line is not None else None,
+        "active_opted_in_recipients": diagnostics.active_opted_in,
+        "ready_recipients": diagnostics.ready,
+        "recipients_missing_phone": diagnostics.missing_phone,
+        "recipients_with_invalid_phone": diagnostics.invalid_phone,
+        "recipients_matching_sender": sender_phone_matches,
+        "alerts_created": created,
+        "alerts_already_present": existing_count,
+        "routing_result": (
+            "company_wide_opt_in"
+            if created
+            else "already_queued"
+            if existing_count
+            else "no_eligible_recipient"
+        ),
     }
+    if created:
+        audit_action = "communication.staff_inbound_sms_alert_queued"
+        audit_reason = "Queued private cellphone alerts for all eligible opted-in staff."
+    elif existing_count:
+        audit_action = "communication.staff_inbound_sms_alert_already_queued"
+        audit_reason = "Inbound-message alerts already existed for every eligible recipient."
+    else:
+        audit_action = "communication.staff_inbound_sms_alert_not_queued"
+        audit_reason = "No active opted-in staff cellphone was eligible for this inbound SMS."
     db.add(
         AuditEvent(
             organization_id=conversation.organization_id,
             actor_user_id=None,
             actor_type="system",
-            action=(
-                "communication.staff_inbound_sms_alert_queued"
-                if created
-                else "communication.staff_inbound_sms_alert_not_queued"
-            ),
+            action=audit_action,
             entity_type="communication_record",
             entity_id=communication.id,
             previous_value=None,
             new_value=queue_snapshot,
-            reason=(
-                "Queued a private cellphone alert for the responsible staff member."
-                if created
-                else "No active opted-in staff cellphone was eligible for this inbound SMS."
-            ),
+            reason=audit_reason,
         )
     )
-    log = logger.info if created else logger.warning
+    log = logger.info if created or existing_count else logger.warning
     log(
         "staff_inbound_sms_alert_queue_evaluated",
-        alerts_created=created,
         **queue_snapshot,
     )
     db.flush()
     return created
-
-
-def select_inbound_sms_alert_recipient(
-    db: Session,
-    *,
-    conversation: Conversation,
-    sender_line: VoiceLine | None,
-    sender_phone: str,
-) -> tuple[User | None, dict[str, object]]:
-    candidates: list[tuple[UUID | None, str]] = [
-        (conversation.assigned_user_id, "conversation_owner"),
-    ]
-    if sender_line is not None:
-        candidates.append((sender_line.assigned_user_id, "line_primary_owner"))
-        if sender_line.assigned_team_id is not None:
-            team = db.get(Team, sender_line.assigned_team_id)
-            if team is not None and team.is_active:
-                candidates.append((team.manager_user_id, "line_team_manager"))
-            candidates.extend(
-                (user_id, "line_team_member")
-                for user_id in db.scalars(
-                    select(TeamMembership.user_id)
-                    .join(User, User.id == TeamMembership.user_id)
-                    .where(
-                        TeamMembership.organization_id == conversation.organization_id,
-                        TeamMembership.team_id == sender_line.assigned_team_id,
-                        User.is_active.is_(True),
-                    )
-                    .order_by(
-                        (TeamMembership.membership_role == "manager").desc(),
-                        TeamMembership.created_at.asc(),
-                    )
-                ).all()
-            )
-        candidates.append((sender_line.fallback_user_id, "line_fallback_owner"))
-    candidates.extend(
-        (user_id, "organization_owner")
-        for user_id in db.scalars(
-            select(User.id)
-            .join(RoleAssignment, RoleAssignment.user_id == User.id)
-            .join(Role, Role.id == RoleAssignment.role_id)
-            .where(
-                User.organization_id == conversation.organization_id,
-                User.is_active.is_(True),
-                Role.key.in_(OWNER_ROLE_KEYS),
-            )
-            .order_by(User.created_at.asc())
-        ).all()
-    )
-
-    sender_normalized = format_e164(sender_phone)
-    seen: set[UUID] = set()
-    checked = 0
-    opted_out = 0
-    missing_or_invalid_phone = 0
-    for candidate_id, route in candidates:
-        if candidate_id is None or candidate_id in seen:
-            continue
-        seen.add(candidate_id)
-        user = db.get(User, candidate_id)
-        if (
-            user is None
-            or not user.is_active
-            or user.organization_id != conversation.organization_id
-        ):
-            continue
-        checked += 1
-        if not user.inbound_message_alert_sms_enabled:
-            opted_out += 1
-            continue
-        candidate_phone = format_e164(user.voice_forwarding_number)
-        if candidate_phone is None or candidate_phone == sender_normalized:
-            missing_or_invalid_phone += 1
-            continue
-        return user, {
-            "candidate_recipients_checked": checked,
-            "candidate_recipients_opted_out": opted_out,
-            "candidate_recipients_without_usable_phone": missing_or_invalid_phone,
-            "routing_result": route,
-        }
-    return None, {
-        "candidate_recipients_checked": checked,
-        "candidate_recipients_opted_out": opted_out,
-        "candidate_recipients_without_usable_phone": missing_or_invalid_phone,
-        "routing_result": "no_eligible_recipient",
-    }
 
 
 def is_staff_cellphone(

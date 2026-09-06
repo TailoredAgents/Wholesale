@@ -1274,9 +1274,9 @@ Replying or otherwise resolving the wait state clears the associated response al
 ### Handle An Incoming Text
 
 An incoming seller or buyer text is saved in Inbox immediately and marks the thread unread and
-needing a reply. When the responsible employee has **Settings > Communications > Text inbound
-messages** enabled, Stonegate also texts that employee a minimal alert with an Inbox link. Open the
-link and reply from Stonegate; do not reply to the personal-phone alert.
+needing a reply. Stonegate also sends a minimal alert with an Inbox link to every active employee
+who has **Settings > Communications > Text all inbound messages** enabled and a valid cellphone.
+Open the link and reply from Stonegate; do not reply to the personal-phone alert.
 
 If Stonegate does not recognize the sender, an Acquisitions text creates a reviewable seller lead
 with **Address pending**, while a Dispositions text creates a reviewable buyer thread. Rename the

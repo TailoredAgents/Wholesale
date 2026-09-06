@@ -702,10 +702,10 @@ normal CRM intake. No Meta developer app or Graph API token is required.
 7. Activate staff texts only after the Twilio campaign/use case is approved. Confirm delivery and
    Twilio callbacks using controlled information.
 
-Enable **Text inbound messages** separately for employees who should receive a personal-cellphone
-alert when a seller or buyer texts a Stonegate number. Stonegate alerts the assigned conversation
-owner first, then uses the company line's primary and fallback owners when needed. Staff should
-open the linked Inbox thread to read and answer the customer message.
+Enable **Text all inbound messages** separately for every employee who should receive a
+personal-cellphone alert when a seller or buyer texts any Stonegate number. Stonegate sends one
+minimal alert to every active, opted-in employee with a valid cellphone. Staff should open the
+linked Inbox thread to read and answer the customer message.
 
 Stonegate never treats a Facebook lead-form phone field as seller SMS consent. The form may permit
 a requested phone call, but automated or marketing texts to that seller need separate consent.

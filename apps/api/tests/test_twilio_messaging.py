@@ -1653,7 +1653,76 @@ def test_unknown_dispositions_sms_creates_reviewable_buyer_conversation(
     assert conversation.id != buyer_conversation.id
 
 
-def test_inbound_sms_alert_falls_back_when_conversation_owner_is_not_opted_in(
+def test_inbound_sms_alert_fans_out_to_every_opted_in_staff_member(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.inbound_message_alert_sms_enabled = True
+    teammate = User(
+        organization_id=conversation.organization_id,
+        email="teammate@example.com",
+        display_name="Teammate",
+        is_active=True,
+        voice_forwarding_number="+14045550124",
+        voice_forwarding_enabled=True,
+        lead_alert_sms_enabled=True,
+        inbound_message_alert_sms_enabled=True,
+    )
+    opted_out_teammate = User(
+        organization_id=conversation.organization_id,
+        email="opted-out@example.com",
+        display_name="Opted Out",
+        is_active=True,
+        voice_forwarding_number="+14045550125",
+        voice_forwarding_enabled=True,
+        lead_alert_sms_enabled=True,
+        inbound_message_alert_sms_enabled=False,
+    )
+    db_session.add_all([teammate, opted_out_teammate])
+    db_session.flush()
+    conversation.assigned_user_id = owner.id
+    db_session.commit()
+
+    payload = {
+        "From": "+14045551212",
+        "To": "+14045550000",
+        "MessagingServiceSid": MESSAGING_SERVICE_SID,
+        "Body": "Can someone send me the details?",
+        "MessageSid": "SM00000000000000000000000000000115",
+    }
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+    duplicate_response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+
+    assert response.status_code == 200, response.text
+    assert duplicate_response.status_code == 200, duplicate_response.text
+    alerts = db_session.scalars(
+        select(StaffLeadAlert).order_by(StaffLeadAlert.recipient_phone)
+    ).all()
+    assert len(alerts) == 2
+    assert {alert.recipient_user_id for alert in alerts} == {owner.id, teammate.id}
+    assert {alert.recipient_phone for alert in alerts} == {
+        "+14045550123",
+        "+14045550124",
+    }
+    assert all(f"conversation={conversation.id}" in alert.message_body for alert in alerts)
+    assert all("Can someone send me the details" not in alert.message_body for alert in alerts)
+
+
+def test_inbound_sms_alert_excludes_conversation_owner_who_is_not_opted_in(
     db_session: Session,
     api_db_override: None,
     twilio_settings: None,

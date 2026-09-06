@@ -2021,7 +2021,7 @@ telemarketing, recording, or real-estate advice.
 | BatchDialer direct API | VA completed-call evidence and qualified seller handoff | Fixed-host authenticated client, durable polling/checkpoint, pre-lead transcript evidence gate, bounded readiness retries, visible Tasks approval review, idempotent accepted-handoff processing, and manual-appointment task implemented and repository-verified | Controlled qualified/appointment/review results and 24-hour reconciliation pending |
 | Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented intentionally secretless endpoint with Page/form restrictions, burst and daily circuits, payload limits, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; residual caller-provenance risk is monitored |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Prior controlled delivery exists; repeat acceptance is pending after the worker credential correction |
-| Twilio inbound-message staff alerts | Assigned-owner/fallback cellphone notification with Inbox link; unknown seller/buyer sender capture and loop protection | Implemented with independent per-employee opt-in, durable deduplication, retries, and delivery callbacks | Controlled production acceptance pending |
+| Twilio inbound-message staff alerts | Company-wide opted-in cellphone notifications with Inbox link; unknown seller/buyer sender capture and loop protection | Implemented with independent per-employee opt-in, per-recipient durable deduplication, retries, and delivery callbacks | Controlled production acceptance pending |
 
 ## 21. Data Domain Map
 
