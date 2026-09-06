@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 from collections.abc import Iterator
 from typing import Any
@@ -22,6 +23,7 @@ from app.models.foundation import (
     Contact,
     ContactMethod,
     Conversation,
+    EmailAttachment,
     EmailSenderAlias,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -196,6 +198,7 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
 
     client = TestClient(app)
     alias_id, conversation = create_alias_and_conversation(db_session, client)
+    attachment_content = b"%PDF-1.7\nStonegate offer summary\n%%EOF"
     first_payload = {
         "email_sender_alias_id": alias_id,
         "subject": "Your Stonegate appointment",
@@ -208,7 +211,7 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
             {
                 "filename": "offer-summary.pdf",
                 "content_type": "application/pdf",
-                "content_base64": base64.b64encode(b"offer summary").decode(),
+                "content_base64": base64.b64encode(attachment_content).decode(),
             }
         ],
     }
@@ -255,7 +258,7 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
     assert first_request["payload"]["attachments"] == [
         {
             "filename": "offer-summary.pdf",
-            "content": base64.b64encode(b"offer summary").decode(),
+            "content": base64.b64encode(attachment_content).decode(),
         }
     ]
     assert requests[1]["payload"]["headers"] == {
@@ -270,6 +273,60 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
     assert communications[0].provider == "resend"
     assert communications[0].communication_metadata is not None
     assert communications[0].communication_metadata["email_sender_alias_id"] == alias_id
+    assert communications[0].communication_metadata["attachment_manifest"] == [
+        {
+            "filename": "offer-summary.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": len(attachment_content),
+            "sha256": hashlib.sha256(attachment_content).hexdigest(),
+        }
+    ]
+    attachment = db_session.scalar(
+        select(EmailAttachment).where(
+            EmailAttachment.communication_record_id == communications[0].id
+        )
+    )
+    assert attachment is not None
+    assert attachment.email_sender_alias_id == UUID(alias_id)
+    assert attachment.provider_message_id == "resend-email-1"
+    assert attachment.filename == "offer-summary.pdf"
+    assert attachment.content_type == "application/pdf"
+    assert attachment.size_bytes == len(attachment_content)
+    assert attachment.sha256 == hashlib.sha256(attachment_content).hexdigest()
+    assert attachment.storage_provider == "database"
+    assert attachment.content_data == attachment_content
+    assert attachment.attachment_metadata == {
+        "storage_status": "retained",
+        "source": "shared_inbox_outbound",
+        "provider_submission": "included",
+    }
+
+    inbox_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=OWNER_HEADERS,
+    )
+    assert inbox_response.status_code == 200, inbox_response.text
+    outbound_email = next(
+        item
+        for item in inbox_response.json()["timeline"]
+        if item["id"] == str(communications[0].id)
+    )
+    assert outbound_email["attachments"] == [
+        {
+            "id": str(attachment.id),
+            "filename": "offer-summary.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": len(attachment_content),
+            "malware_scan_status": "not_configured",
+            "content_url": f"/api/v1/inbox/attachments/{attachment.id}/content",
+        }
+    ]
+    download_response = client.get(
+        outbound_email["attachments"][0]["content_url"],
+        headers=OWNER_HEADERS,
+    )
+    assert download_response.status_code == 200
+    assert download_response.content == attachment_content
     participants = db_session.scalars(
         select(CommunicationParticipant)
         .where(CommunicationParticipant.communication_record_id == communications[0].id)
@@ -317,6 +374,53 @@ def test_resend_refuses_to_send_without_a_professional_signature(
     assert response.status_code == 503, response.text
     assert "professional signature" in response.json()["detail"]
     assert db_session.scalar(select(CommunicationDispatch)) is None
+
+
+def test_resend_rejects_invalid_pdf_before_provider_delivery(
+    db_session: Session,
+    api_db_override: None,
+    resend_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider_called = False
+
+    class ProviderThatMustNotSend:
+        def send(self, _request: EmailDeliveryRequest) -> None:
+            nonlocal provider_called
+            provider_called = True
+
+    monkeypatch.setattr(
+        "app.services.email.ResendEmailDeliveryProvider",
+        lambda **_kwargs: ProviderThatMustNotSend(),
+    )
+    client = TestClient(app)
+    alias_id, conversation = create_alias_and_conversation(db_session, client)
+
+    response = client.post(
+        f"/api/v1/email/conversations/{conversation.id}/messages",
+        headers=OWNER_HEADERS,
+        json={
+            "email_sender_alias_id": alias_id,
+            "subject": "Purchase agreement",
+            "body": "Please review the attached agreement.",
+            "idempotency_key": "invalid-pdf-request-1",
+            "attachments": [
+                {
+                    "filename": "purchase-agreement.pdf",
+                    "content_type": "application/pdf",
+                    "content_base64": base64.b64encode(b"not actually a pdf").decode(),
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "valid PDF header" in response.json()["detail"]
+    assert provider_called is False
+    dispatch = db_session.scalar(select(CommunicationDispatch))
+    assert dispatch is not None
+    assert dispatch.status == "failed"
+    assert db_session.scalar(select(EmailAttachment)) is None
 
 
 def test_global_compose_creates_general_conversation_and_reuses_idempotency(

@@ -1,11 +1,12 @@
 import base64
 import binascii
 import hashlib
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from html import escape
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
@@ -62,7 +63,12 @@ from app.schemas.email import (
     GeneralEmailComposeRequest,
 )
 from app.services.communication_participants import record_email_participants
-from app.services.document_storage import read_content
+from app.services.document_storage import (
+    StoredContent,
+    delete_content,
+    read_content,
+    store_content,
+)
 from app.services.email_aliases import get_authorized_email_sender_alias
 from app.services.email_content import readable_email_body
 from app.services.inbox import (
@@ -88,6 +94,16 @@ class EmailDispatchConflictError(RuntimeError):
 
 class EmailAttachmentError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class PreparedOutboundAttachment:
+    id: UUID
+    filename: str
+    content_type: str
+    content: bytes
+    sha256: str
+    stored: StoredContent
 
 
 def _fernet(settings: Settings) -> Fernet:
@@ -732,6 +748,17 @@ def send_conversation_email(
     prior_metadata = (prior_email.communication_metadata if prior_email else None) or {}
     message_body = append_signature(body, sender_signature)
     message_html_body = append_html_signature(payload.html_body, sender_signature)
+    prepared_attachments: list[PreparedOutboundAttachment] = []
+    if alias is not None and decoded_attachments:
+        try:
+            prepared_attachments = prepare_outbound_attachments(
+                organization_id=principal.organization_id,
+                attachments=decoded_attachments,
+                settings=settings,
+            )
+        except EmailAttachmentError as exc:
+            mark_email_dispatch_failed(db, dispatch_id, str(exc))
+            raise
     try:
         delivery_provider = get_email_delivery_provider(
             db,
@@ -778,6 +805,7 @@ def send_conversation_email(
             )
         )
     except (EmailConfigurationError, EmailProviderError, GoogleGmailError) as exc:
+        discard_prepared_outbound_attachments(prepared_attachments, settings=settings)
         mark_email_dispatch_failed(db, dispatch_id, str(exc))
         raise
     provider_message_id = delivery_result.provider_message_id
@@ -820,10 +848,47 @@ def send_conversation_email(
             "cc": payload.cc,
             "bcc": payload.bcc,
             "attachment_count": len(decoded_attachments),
+            "attachment_manifest": [
+                {
+                    "filename": filename,
+                    "content_type": content_type,
+                    "size_bytes": len(content),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                }
+                for filename, content_type, content in decoded_attachments
+            ],
         },
     )
     db.add(communication)
     db.flush()
+    for index, prepared in enumerate(prepared_attachments):
+        db.add(
+            EmailAttachment(
+                id=prepared.id,
+                organization_id=principal.organization_id,
+                communication_record_id=communication.id,
+                email_account_id=None,
+                email_sender_alias_id=alias.id if alias is not None else None,
+                provider_message_id=provider_message_id,
+                provider_attachment_id=f"outbound-{index}-{prepared.sha256}",
+                filename=prepared.filename,
+                content_type=prepared.content_type,
+                size_bytes=len(prepared.content),
+                content_id=None,
+                disposition="attachment",
+                sha256=prepared.sha256,
+                content_data=prepared.stored.database_bytes,
+                storage_provider=prepared.stored.provider,
+                storage_key=prepared.stored.key,
+                malware_scan_status=prepared.stored.malware_scan_status,
+                retention_until=prepared.stored.retention_until,
+                attachment_metadata={
+                    "storage_status": "retained",
+                    "source": "shared_inbox_outbound",
+                    "provider_submission": "included",
+                },
+            )
+        )
     record_email_participants(
         db,
         communication,
@@ -877,6 +942,15 @@ def send_conversation_email(
                 "recipient": recipient,
                 "recipients": recipients,
                 "attachment_count": len(decoded_attachments),
+                "attachments": [
+                    {
+                        "filename": filename,
+                        "content_type": content_type,
+                        "size_bytes": len(content),
+                        "sha256": hashlib.sha256(content).hexdigest(),
+                    }
+                    for filename, content_type, content in decoded_attachments
+                ],
             },
             reason="One-to-one email sent from shared inbox",
         )
@@ -1510,6 +1584,59 @@ def decode_outbound_attachments(
             )
         result.append((attachment.filename, attachment.content_type, content))
     return result
+
+
+def prepare_outbound_attachments(
+    *,
+    organization_id: UUID,
+    attachments: list[tuple[str, str, bytes]],
+    settings: Settings,
+) -> list[PreparedOutboundAttachment]:
+    prepared: list[PreparedOutboundAttachment] = []
+    failed_filename = "Attachment"
+    try:
+        for filename, content_type, content in attachments:
+            failed_filename = filename
+            record_id = uuid4()
+            stored = store_content(
+                organization_id=organization_id,
+                namespace="email-attachments",
+                record_id=record_id,
+                file_name=filename,
+                content_type=content_type,
+                content=content,
+                settings=settings,
+            )
+            prepared.append(
+                PreparedOutboundAttachment(
+                    id=record_id,
+                    filename=filename,
+                    content_type=content_type,
+                    content=content,
+                    sha256=hashlib.sha256(content).hexdigest(),
+                    stored=stored,
+                )
+            )
+    except ValueError as exc:
+        discard_prepared_outbound_attachments(prepared, settings=settings)
+        raise EmailAttachmentError(f"{failed_filename} could not be attached: {exc}") from exc
+    return prepared
+
+
+def discard_prepared_outbound_attachments(
+    attachments: list[PreparedOutboundAttachment],
+    *,
+    settings: Settings,
+) -> None:
+    for attachment in attachments:
+        try:
+            delete_content(
+                provider=attachment.stored.provider,
+                key=attachment.stored.key,
+                settings=settings,
+            )
+        except Exception:  # pragma: no cover - cleanup must not hide the delivery error
+            continue
 
 
 def append_signature(body: str, signature: str | None) -> str:
