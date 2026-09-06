@@ -44,13 +44,25 @@ test("lead board stage movement is permission-gated and accessible", () => {
   assert.match(workspace, /aria-label=\{`Move \$\{lead\.seller_name\} to another pipeline stage`\}/);
   assert.match(workspace, /onClick=\{\(event\) => \{[\s\S]*onSelect\(\)/);
   assert.match(workspace, /<label className=\{styles\.moveControl\}>/);
-  assert.match(workspace, /Available on keyboard and mobile/);
+  assert.match(workspace, /Offer and Under Contract open their required workflows\./);
   assert.match(workspace, /announcements: dragAnnouncements/);
   assert.match(workspace, /aria-live=\{stageNotice\.tone === "error" \? "assertive" : "polite"\}/);
   assert.match(workspace, /const temperature = lead\.lead_temperature[\s\S]*\? labelize\(lead\.lead_temperature\)[\s\S]*: null;/);
   assert.match(workspace, /display === "table" \|\| previewOpen/);
-  assert.match(workspace, /if \(event\.key === "Escape"\) setPreviewOpen\(false\)/);
+  assert.match(workspace, /if \(event\.key === "Escape"\) closePreview\(\)/);
   assert.doesNotMatch(workspace, /styles\.cardAction/);
+});
+
+test("the Pipeline preview stays lightweight and the board remains directly usable", () => {
+  assert.match(workspace, /const closePreview = useCallback\(\(\) => \{[\s\S]*setSelectedLeadId\(""\)[\s\S]*searchParams\.delete\("lead"\)/);
+  assert.match(workspace, /isSelected=\{previewOpen && selectedLead\?\.id === lead\.id\}/);
+  assert.match(workspace, /aria-label="Jump to pipeline stage"/);
+  assert.match(workspace, /scrollIntoView\(\{[\s\S]*inline: "start"/);
+  assert.match(workspace, /id=\{`lead-pipeline-stage-\$\{stage\.key\}`\}/);
+  assert.match(workspace, /<details className=\{styles\.previewMoreActions\}>[\s\S]*<summary>More actions<\/summary>/);
+  assert.match(workspace, /<LeadLifecycleActions[\s\S]*compact/);
+  assert.doesNotMatch(workspace, /className=\{styles\.backdrop\}/);
+  assert.doesNotMatch(styles, /\.boardContent > \.backdrop/);
 });
 
 test("mouse and delayed touch dragging expose every board destination", () => {
@@ -186,7 +198,7 @@ test("board and Move to stage open the governed signed-contract form for Under C
   assert.match(workspace, /<dialog[\s\S]*aria-labelledby="executed-contract-import-title"/);
   assert.match(workspace, /onClose=\{onClose\}/);
   assert.match(workspace, /Cancel recording the signed contract/);
-  assert.match(workspace, /Under Contract opens the signed-contract form/);
+  assert.match(workspace, /Offer and Under Contract open their required workflows\./);
   assert.match(workspace, /lead\.id === result\.lead_id \? \{ \.\.\.lead, stage_key: result\.lead_stage \}/);
 
   const governedBranch = workspace.indexOf('if (targetStage.key === "under_contract")');
@@ -270,6 +282,7 @@ test("board styling distinguishes handles, pending cards, overlays, and drop tar
     "disabledDropTarget",
     "savingBadge",
     "moveControl",
+    "previewMoreActions",
     "stageSuccess",
     "stageError",
     "contractImportDialog",

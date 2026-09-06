@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   ExecutedContractImportForm,
@@ -227,6 +227,7 @@ function LeadBoardColumn({
       aria-label={`${stage.label} pipeline stage${blockedReason ? `, move unavailable: ${blockedReason}` : ""}`}
       className={`${styles.boardColumn} ${isOver ? (blockedReason ? styles.blockedDropTarget : styles.dropTarget) : ""} ${disabled || blockedReason ? styles.disabledDropTarget : ""}`}
       data-drop-disabled={disabled || Boolean(blockedReason) || undefined}
+      id={`lead-pipeline-stage-${stage.key}`}
       ref={setNodeRef}
       title={blockedReason}
     >
@@ -411,6 +412,18 @@ export function LeadsWorkspace({
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
   );
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    if (display !== "board") return;
+    setSelectedLeadId("");
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("lead");
+    window.history.replaceState(
+      null,
+      "",
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+  }, [display]);
 
   useEffect(() => {
     setWorkingLeads((current) =>
@@ -437,11 +450,11 @@ export function LeadsWorkspace({
   useEffect(() => {
     if (!previewOpen) return;
     function closePreviewOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setPreviewOpen(false);
+      if (event.key === "Escape") closePreview();
     }
     window.addEventListener("keydown", closePreviewOnEscape);
     return () => window.removeEventListener("keydown", closePreviewOnEscape);
-  }, [previewOpen]);
+  }, [closePreview, previewOpen]);
 
   const viewCounts = useMemo(
     () => getSavedLeadViewCounts(workingLeads, tasks),
@@ -550,6 +563,14 @@ export function LeadsWorkspace({
     setSelectedLeadId(leadId);
     setPreviewOpen(true);
     replaceLocation({ leadId });
+  }
+
+  function jumpToStage(stageKey: string) {
+    document.getElementById(`lead-pipeline-stage-${stageKey}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "start",
+    });
   }
 
   function fullRecordHref(leadId: string) {
@@ -847,6 +868,23 @@ export function LeadsWorkspace({
               ))}
             </select>
           </label>
+          {display === "board" ? (
+            <label className={styles.stageJump}>
+              <span>Jump</span>
+              <select
+                aria-label="Jump to pipeline stage"
+                defaultValue=""
+                onChange={(event) => {
+                  if (!event.currentTarget.value) return;
+                  jumpToStage(event.currentTarget.value);
+                  event.currentTarget.value = "";
+                }}
+              >
+                <option value="">Choose stage</option>
+                {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+            </label>
+          ) : null}
           <strong>{visibleLeads.length} shown</strong>
         </div>
         {stageNotice ? (
@@ -931,7 +969,7 @@ export function LeadsWorkspace({
                           canImportExecutedContract={canImportExecutedContract}
                           canRecordOutsideOffer={canRecordOutsideOffer}
                           isPending={pendingLeadIds.has(lead.id)}
-                          isSelected={selectedLead?.id === lead.id}
+                          isSelected={previewOpen && selectedLead?.id === lead.id}
                           key={lead.id}
                           lead={lead}
                           onSelect={() => selectLead(lead.id)}
@@ -958,7 +996,7 @@ export function LeadsWorkspace({
               <>
                 <header>
                   <div><span>Seller preview</span><h2>{selectedLead.seller_name}</h2><p>{selectedLead.property_address}</p></div>
-                  <button aria-label="Close seller preview" onClick={() => setPreviewOpen(false)} type="button"><X size={17} /></button>
+                  <button aria-label="Close seller preview" onClick={closePreview} type="button"><X size={17} /></button>
                 </header>
                 <div className={styles.previewStatus}>
                   <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
@@ -1001,7 +1039,7 @@ export function LeadsWorkspace({
                         ? "Saving stage…"
                         : getPipelineStage(selectedLead.stage_key)?.key === "under_contract"
                           ? "Under-contract stages move through Contract & Deal."
-                          : "Available on keyboard and mobile. Offer opens workflow choices; Under Contract opens the signed-contract form."}
+                          : "Offer and Under Contract open their required workflows."}
                     </small>
                   </label>
                 ) : null}
@@ -1030,16 +1068,20 @@ export function LeadsWorkspace({
                   {selectedLead.appointment_status ? <Link href={`/os/calendar`}><CalendarDays size={15} />Calendar</Link> : null}
                 </div>
                 {canEditLead ? (
-                  <div className={styles.previewLifecycle}>
-                    <LeadLifecycleActions
-                      archived={false}
-                      canArchiveRecords={false}
-                      canEditLead={canEditLead}
-                      leadId={selectedLead.id}
-                      onCloseOutComplete={handleLeadClosed}
-                      stageKey={selectedLead.stage_key}
-                    />
-                  </div>
+                  <details className={styles.previewMoreActions}>
+                    <summary>More actions</summary>
+                    <div className={styles.previewLifecycle}>
+                      <LeadLifecycleActions
+                        archived={false}
+                        canArchiveRecords={false}
+                        canEditLead={canEditLead}
+                        compact
+                        leadId={selectedLead.id}
+                        onCloseOutComplete={handleLeadClosed}
+                        stageKey={selectedLead.stage_key}
+                      />
+                    </div>
+                  </details>
                 ) : null}
               </>
             ) : (
@@ -1047,7 +1089,6 @@ export function LeadsWorkspace({
             )}
             </aside>
           ) : null}
-          {previewOpen ? <button aria-label="Close seller preview" className={styles.backdrop} onClick={() => setPreviewOpen(false)} type="button" /> : null}
         </div>
       </section>
       {contractImportLead ? (
