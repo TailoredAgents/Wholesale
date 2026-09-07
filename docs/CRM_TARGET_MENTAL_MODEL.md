@@ -1,10 +1,12 @@
 # Stonegate CRM Target Mental Model
 
-Status: Proposed target architecture
+Status: Accepted target architecture for page blueprinting; not yet implemented
 
 Created: September 7, 2026
 
 Purpose: Define how Stonegate should make sense to an employee before more pages are redesigned. This document describes product ownership and layout, not the current route implementation.
+
+Navigation decision: [CRM_NAVIGATION_MODEL_DECISION.md](CRM_NAVIGATION_MODEL_DECISION.md)
 
 ## The one-sentence model
 
@@ -53,20 +55,20 @@ A conversation is not a separate universe. It is the communication history for a
 
 ### Work
 
-1. **Today** - everything requiring the current employee's attention.
-2. **Inbox** - every seller, investor, and professional conversation.
+1. **Home** - everything requiring the current employee's attention.
+2. **Conversations** - every seller, investor, and professional conversation.
 3. **Calendar** - appointments and scheduled time.
 
-### Seller acquisition
+### CRM
 
-4. **Prospecting** - outbound work to find willing sellers.
-5. **Leads** - seller opportunities from first interest through executed contract.
-
-### Deals and investors
-
+4. **Contacts** - the people and companies Stonegate knows, including sellers, investors, and professionals.
+5. **Leads** - seller-property opportunities from first interest through executed contract.
 6. **Deals** - the canonical post-contract property and transaction record.
-7. **Dispositions** - market an active deal and work investor interest, offers, and selection.
-8. **Investors** - the canonical investor relationship network, currently called Buyers.
+
+### Outreach
+
+7. **Prospecting** - outbound work to find willing sellers.
+8. **Dispositions** - market an active deal and work investor interest, offers, and selection.
 
 ### Restricted company areas
 
@@ -76,9 +78,11 @@ A conversation is not a separate universe. It is the communication history for a
 
 ### Structural changes from the current sidebar
 
-- Rename Home to **Today** because the page should answer "what needs my attention?"
-- Absorb the current Tasks destination into Today. Tasks remain records and a Today view, but are not a separate mental destination.
-- Rename Buyers to **Investors** in employee-facing language. A buyer is the investor's role in a particular deal; the long-term relationship is an investor.
+- Keep **Home** as the familiar navigation noun, but make the page answer "what needs my attention?"
+- Rename **Inbox** to **Conversations** because it owns outbound work and calls as well as inbound messages.
+- Absorb the current Tasks destination into Home. Tasks remain records and a complete Home view, but are not a separate mental destination.
+- Introduce **Contacts** as the common directory for sellers, investors, and professionals.
+- Treat Investor as a contact type with a full specialized relationship profile. A buyer is the investor's role in a particular deal.
 - Keep Deals and Dispositions separate because they represent different jobs, but make their boundary explicit.
 - Keep Calendar separate because scheduled time is a familiar and durable mental model.
 
@@ -92,14 +96,14 @@ The navigation should be stable for ordinary employees. A role changes the defau
 
 All ordinary staff should be able to see:
 
-- Today
-- Inbox
+- Home
+- Conversations
 - Calendar
-- Prospecting
+- Contacts
 - Leads
 - Deals
+- Prospecting
 - Dispositions
-- Investors
 
 This supports the stated requirement that employees can help one another, especially with important disposition work.
 
@@ -116,11 +120,11 @@ Visibility does not automatically grant authority. Permissions still govern acti
 
 | Role | Default landing state |
 | --- | --- |
-| Owner / executive | Today, Company view |
-| Operations assistant | Today, Company work needing coordination |
+| Owner / executive | Home, Company view |
+| Operations assistant | Home, Company work needing coordination |
 | Prospecting caller / VA | Prospecting, My Calls |
-| Acquisition representative | Today, My seller follow-ups and appointments |
-| Acquisition manager | Today, Acquisition team |
+| Acquisition representative | Home, My seller follow-ups and appointments |
+| Acquisition manager | Home, Acquisition team |
 | Disposition representative | Dispositions, My active deals and replies |
 | Disposition manager | Dispositions, Company view |
 | Transaction coordinator | Deals, Closing exceptions |
@@ -134,19 +138,20 @@ These are starting positions, not separate products.
 
 | Object or action | Canonical home | Contextual access elsewhere |
 | --- | --- | --- |
-| Personal and team attention queue | Today | Record pages show their own next action |
-| Conversation | Inbox | Seller, deal, disposition, and investor pages open the same shared conversation |
+| Personal and team attention queue | Home | Record pages show their own next action |
+| Person or company identity | Contacts | Conversation, lead, deal, disposition, and calendar pages open the same contact context |
+| Conversation | Conversations | Contact, lead, deal, disposition, and calendar pages open the same shared conversation |
 | Appointment | Calendar | Lead and conversation pages can schedule or open it |
-| Seller prospecting batch | Prospecting | Today links to assigned callbacks |
-| Seller opportunity before contract | Leads | Inbox, Calendar, Today, and Prospecting link to it |
+| Seller prospecting batch | Prospecting | Home links to assigned callbacks |
+| Seller opportunity before contract | Leads | Conversations, Calendar, Home, Contacts, and Prospecting link to it |
 | Underwriting and seller offer | Lead record | Leads views can filter records needing work |
 | Executed seller agreement | Lead Contract section until recorded; then Deal Documents | Pipeline can launch either the in-system or existing-signed-contract path |
 | Post-contract property / transaction | Deals | Dispositions and Finance reference the same deal |
-| Investor relationship | Investors | Inbox and Dispositions display the same relationship history |
+| Investor relationship profile | Contacts, Investors view | Conversations and Dispositions display the same relationship history |
 | Deal-specific investor outreach | Dispositions | Investor profile shows resulting activity |
-| Investor packet | Deal Documents as the canonical file; Dispositions Deal & Packet as the working view | Inbox and Outreach can attach or link the approved version |
+| Investor packet | Deal Documents as the canonical file; Dispositions Deal & Packet as the working view | Conversations and Outreach can attach or link the approved version |
 | Buyer offer and selection | Dispositions | Deal summary displays the selected buyer and status |
-| Closing | Deals | Today and Calendar surface deadlines; Dispositions shows relevant status |
+| Closing | Deals | Home and Calendar surface deadlines; Dispositions shows relevant status |
 | Accounting and reconciliation | Finance | Deal shows permitted operational status without exposing restricted details |
 | Company configuration | Settings | Contextual links may open the applicable settings section |
 
@@ -154,11 +159,11 @@ The rule is simple: data can be visible in many contexts, but it should have one
 
 ## Workspace contracts
 
-### Today
+### Home
 
 **Owns:** prioritization, not underlying records.
 
-Today should answer three questions immediately:
+Home should answer three questions immediately:
 
 1. What needs my attention now?
 2. What is due later today?
@@ -171,13 +176,13 @@ Target views:
 - Approvals, for roles with approval authority
 - Completed, as a secondary history view
 
-Tasks, overdue follow-ups, replies, appointments, and exceptions appear in one ranked list with a clear source label. Selecting an item opens the canonical record or a compact completion panel. Today must not become a second editor for every record type.
+Tasks, overdue follow-ups, replies, appointments, and exceptions appear in one ranked list with a clear source label. Selecting an item opens the canonical record or a compact completion panel. Home must not become a second editor for every record type.
 
-### Inbox
+### Conversations
 
 **Owns:** communication.
 
-Inbox should contain seller, investor, attorney, vendor, and general company conversations. The conversation layout and send behavior should remain the same regardless of where it was opened.
+Conversations should contain seller, investor, attorney, vendor, and general company conversations. The conversation layout and send behavior should remain the same regardless of where it was opened.
 
 Target views:
 
@@ -212,7 +217,47 @@ Calendar should focus on:
 - Availability and assignment capacity for authorized coordinators
 - Appointment preparation and outcome through the selected event
 
-Unscheduled tasks belong to Today. Calendar should not become the destination for general notifications.
+Unscheduled tasks belong to Home. Calendar should not become the destination for general notifications.
+
+### Contacts
+
+**Owns:** person and company identity, communication methods, relationship type, ownership, and follow-up.
+
+Contacts is one directory with prominent saved views:
+
+- All contacts
+- Sellers
+- Investors
+- Professionals
+- Needs follow-up
+- Recently contacted
+- Unassigned
+
+These are lenses over the same relationship directory rather than separate databases.
+
+The Contacts page should support:
+
+- Search and segmentation
+- Relationship owner and priority
+- Communication methods and conversation history
+- Associated leads, properties, deals, and disposition activity
+- Import, merge, archive, and duplicate review
+
+An Investor contact opens a full specialized relationship profile that additionally supports:
+
+- Markets, asset types, buy boxes, and strategies
+- Proof of funds and capacity
+- Deal interest, offers, purchases, failures, and performance
+
+Target investor sections:
+
+1. Overview
+2. Buy boxes
+3. Conversations & follow-ups
+4. Proof & capacity
+5. Deals & performance
+
+Starting a conversation without a deal uses the general contact relationship. Starting from Dispositions automatically carries the selected deal context into the same conversation history. Contact identity remains visible while investor-specific criteria and performance stay in the specialized profile.
 
 ### Prospecting
 
@@ -321,33 +366,9 @@ Find and rank investors is a list-building action inside the current deal. It ca
 - CSV import
 - Manual addition
 
-All imported or newly contacted people become canonical Investor records instead of disposable deal-only contacts.
+All imported or newly contacted people become canonical Contacts with Investor profiles instead of disposable deal-only contacts.
 
 House and land use the same Outreach, Deal & Packet, Offers & Closing, and Activity capabilities. Asset-specific fields may differ inside a section; entire operational sections should not disappear merely because the property is land.
-
-### Investors
-
-**Owns:** the long-term investor relationship.
-
-Rename the employee-facing Buyers destination to Investors. The page should support:
-
-- Search and segmentation
-- Relationship owner and priority
-- Markets, asset types, buy boxes, and strategies
-- Proof of funds and capacity
-- Conversation and follow-up history
-- Deal interest, offers, purchases, failures, and performance
-- Import, merge, archive, and duplicate review
-
-Target investor sections:
-
-1. Overview
-2. Buy boxes
-3. Conversations & follow-ups
-4. Proof & capacity
-5. Deals & performance
-
-Starting a conversation without a deal uses the general relationship. Starting from Dispositions automatically carries the selected deal context into the same conversation history.
 
 ### Finance, Marketing, and Settings
 
@@ -359,6 +380,7 @@ These areas remain separate because they have different audiences and sensitive 
 
 The header search should search the CRM, not only workspace names. Results should be grouped by:
 
+- Contacts
 - Sellers and leads
 - Properties and deals
 - Investors
@@ -376,14 +398,14 @@ The bell should open a real activity center, not Calendar. Notifications should 
 - Approvals
 - System or delivery failures
 
-Every notification links directly to its source. Inbox should independently show conversation unread counts. Notification delivery preferences determine who is alerted; they do not hide the underlying company conversation from authorized staff.
+Every notification links directly to its source. Conversations should independently show unread counts. Notification delivery preferences determine who is alerted; they do not hide the underlying company conversation from authorized staff.
 
 ### Create
 
 The global New menu should remain concise:
 
 - Seller lead
-- Investor
+- Contact
 - Email
 - Quick Dial
 
@@ -450,10 +472,12 @@ For queue-based pages:
 
 | From | Action | Destination and preserved context |
 | --- | --- | --- |
-| Today | Open work item | Canonical lead, deal, conversation, appointment, disposition, or investor record |
+| Home | Open work item | Canonical contact, lead, deal, conversation, appointment, or disposition record |
 | Prospecting | Warm handoff | Lead record with source, conversation, caller notes, owner, and next action preserved |
-| Inbox | Open seller | Lead or Deal depending on lifecycle, with conversation preserved |
-| Inbox | Open investor | Investor profile, with any linked deal context preserved |
+| Conversations | Open contact | Contact context with seller, investor, or professional relationships visible |
+| Conversations | Open related work | Lead, Deal, or Disposition depending on context, with conversation preserved |
+| Contacts | Open seller work | Associated Lead or Deal with a clear return path |
+| Contacts | Open investor work | Investor profile or deal-specific Disposition activity with context preserved |
 | Lead | Schedule appointment | Calendar composer with seller and property prefilled |
 | Lead | Move to Under Contract | Contract workflow; on completion opens the new Deal summary with Dispositions available |
 | Deal | Market this deal | The deal's Dispositions workspace |
@@ -467,7 +491,7 @@ For queue-based pages:
 - Prospecting and Dispositions should not become one outreach screen. One finds sellers; the other markets a contracted deal to investors.
 - Leads and Deals should not become one giant record. The executed contract is a useful lifecycle boundary.
 - Deals and Dispositions should not become one giant page. Transaction execution and investor marketing are different jobs.
-- Calendar and Today should not become the same page. One owns time; the other owns priority.
+- Calendar and Home should not become the same page. One owns time; the other owns priority.
 - Finance, Marketing, and Settings should not be mixed into ordinary operating screens.
 
 The goal is not to place everything in one workspace. The goal is to make boundaries predictable and handoffs effortless.
@@ -476,14 +500,15 @@ The goal is not to place everything in one workspace. The goal is to make bounda
 
 Codex should now produce page blueprints in this order:
 
-1. Global shell, Today, notification center, and universal search.
-2. Inbox and shared conversation contract.
-3. Prospecting and VA My Calls.
-4. Leads, Pipeline, Offer, and Under Contract.
-5. Deals.
-6. Dispositions and Deal & Packet.
-7. Investors.
-8. Calendar.
-9. Restricted company areas.
+1. Global shell and stable navigation.
+2. Home with integrated tasks, notifications, and approvals.
+3. Conversations and the shared composer/history contract.
+4. Contacts and the context overlay.
+5. Leads, Pipeline, Offer, and Under Contract.
+6. Deals.
+7. Prospecting and VA My Calls.
+8. Dispositions and Deal & Packet.
+9. Calendar.
+10. Restricted company areas.
 
 No employee exercise is required before these blueprints are produced. Existing code, screenshots, business rules, and prior issue reports are sufficient to establish the target architecture. Normal production feedback can refine it later.

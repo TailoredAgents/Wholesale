@@ -8,6 +8,8 @@ Companion plan: [CRM_UX_NAVIGATION_AUDIT_PLAN.md](CRM_UX_NAVIGATION_AUDIT_PLAN.m
 
 Target architecture: [CRM_TARGET_MENTAL_MODEL.md](CRM_TARGET_MENTAL_MODEL.md)
 
+Navigation decision: [CRM_NAVIGATION_MODEL_DECISION.md](CRM_NAVIGATION_MODEL_DECISION.md)
+
 ## Executive finding
 
 Stonegate does not mainly have a "too many sidebar links" problem. The twelve primary destinations are a reasonable top-level set for the breadth of the business. The larger usability risk is that an employee must understand several overlapping mental models inside those destinations:
@@ -69,14 +71,14 @@ This map shows why page-by-page polish alone will not solve the VA's concern. Da
 | Destination | Primary job | Major internal modes | Baseline observation |
 | --- | --- | --- | --- |
 | Home | Decide what needs attention now | Metrics, priority work, interventions, pipeline pulse | Useful orientation page, but it competes with Tasks and Calendar as the answer to "what do I do next?" |
-| Inbox | Continue seller, buyer, and professional conversations | Mine, Unassigned, Team, Needs reply, Appointments, Unread, Archived; SMS, email, call, note | Broad and capable. It is the best existing model for free-form relationship work, but its scope and relationship to notifications require validation. |
+| Inbox | Continue seller, buyer, and professional conversations | Mine, Unassigned, Team, Needs reply, Appointments, Unread, Archived; SMS, email, call, note | Broad and capable. It is the best existing model for free-form relationship work, but its scope and relationship to notifications require architectural resolution. |
 | Tasks | Complete assigned and governed work | My Tasks, Do Today, Overdue, Upcoming, Unscheduled, Team, Approvals, AI Completed, Exceptions, Completed | Ten views are powerful but may require employees to understand system taxonomy before acting. |
 | Calendar | Schedule and conduct time-based work | Schedule, Dispatch, Appointment, Availability; appointment preparation, walkthrough, seller view, outcome | Combines calendar, dispatch, capacity, and field execution. This may be appropriate for managers but heavy for occasional users. |
 | Prospecting | Run seller cold outreach | Campaigns, Dialer control, Analytics, Pilot acceptance, My Calls; campaign and caller subviews | Manager and caller experiences differ substantially. Caller default is appropriately narrow; campaign management is one of the densest areas in the codebase. |
 | Leads | Manage seller opportunities through contract | Lead Queue, All Leads, Pipeline, Underwriting; nine saved views; ten stages | One destination contains four distinct work styles. Recent pipeline improvements are visually strong, but first-click behavior and stage-workflow language require task testing. |
 | Dispositions | Market contracted deals and manage investor outreach | Deals to Market, Investor Relationships, Replies, Offers, Deadlines, Performance; dedicated case workspaces | Business-critical and appropriately first-class, but it is technically routed through Deals and has another eight-concept case workspace. |
 | Deals | Manage active transactions and closing | Seven saved views; queue/table/board; Summary, Contract, Closing, Documents, Parties, Disposition, Finance, Timeline | The record is comprehensive, but Disposition and Finance often act as gateways to other workspaces, creating ambiguous ownership. |
-| Buyers | Manage investor relationships and buying criteria | List filters; Summary, Buy boxes, Activity, Proof & capacity, Active deals | Correct strategic direction for an investor relationship CRM. Needs a real investor follow-up task test and tighter linkage to Inbox and Dispositions. |
+| Buyers | Manage investor relationships and buying criteria | List filters; Summary, Buy boxes, Activity, Proof & capacity, Active deals | Correct strategic direction for an investor relationship CRM. The target model should connect this specialist profile to the shared Contact identity, Conversations, and Dispositions. |
 | Finance | Run accounting, reconciliation, and compensation | Setup, vendors, banking, posting, ledger, reports, tax, reconciliation, revenue, compensation | Sensitive access is appropriate. The page is very broad and loads multiple business systems into a long workspace. |
 | Marketing | Manage attribution, experiments, public proof, and performance | Attribution, funnel, web vitals, proof, experiments, exceptions, exports, campaign and Meta measurement | Appropriate to restrict. It currently behaves more like a management console than one focused job. |
 | Settings | Configure company policy and integrations | Company, Markets, People, Communications, Integrations, Workflows, Data & Quality, Finance Policy, AI | Permission filtering is appropriate, but section access and sidebar visibility need to remain aligned. |
@@ -266,13 +268,13 @@ These scores are triage baselines, not final grades. Repository evidence establi
 | Prospecting - caller | 75 | Low | Focused default workbench, but surrounding navigation for callers is unusual. |
 | Prospecting - manager | 65 | Low | High control density and several nested management modes. |
 | Leads - database and pipeline | 84 | High | Recent screenshots show stronger hierarchy and a usable board; governed stages remain a learning point. |
-| Leads - queue | 72 | Low | Another full operating mode whose distinction from Tasks and Inbox needs observation. |
+| Leads - queue | 72 | Low | Another full operating mode whose distinction from Home work and Conversations needs blueprint resolution. |
 | Lead record | 68 | Medium | Seven tabs and extensive asset-specific valuation, offer, contract, and file tooling. |
 | Disposition desk | 82 | High | Clear company queue after recent refinements; Deals/Dispositions identity still overlaps. |
 | Disposition outreach | 87 | High | Strong free-use investor selection and conversation model after recent iterations. |
 | Deal and packet | 72 | Medium | Critical capabilities exist, but upload reliability and packet identity have caused real confusion. |
 | Deals | 67 | Low | Seven queue views and eight record tabs span transaction, disposition, finance, and documents. |
-| Buyers | 72 | Low | Strong data model, but relationship follow-up navigation has not yet been user-tested. |
+| Buyers | 72 | Low | Strong investor data model, but identity and relationship navigation are split between Buyer, Contact, Conversation, and Dispositions records. |
 | Finance | 61 | Low | Many accounting systems share one long page; access is appropriately restricted. |
 | Marketing | 68 | Low | Dense management console with several distinct measurement and publishing jobs. |
 | Settings | 74 | Low | Logical section list; permission-to-navigation alignment needs validation. |
@@ -303,15 +305,16 @@ The next work is architecture and page design performed by Codex. No employee te
 
 | Order | Area | Design question to resolve |
 | ---: | --- | --- |
-| 1 | Global shell and Today | What is the stable ordinary-employee navigation, where do tasks live, and what should the notification bell and universal search open? |
-| 2 | Inbox | How does one shared communication experience serve sellers, investors, attorneys, and other professionals with unmistakable delivery and attachment evidence? |
-| 3 | Prospecting | How does a VA immediately find assigned work, call, record the result, and hand off an interested seller without learning manager controls? |
-| 4 | Leads | How can one seller database support list and pipeline work while Offer and Under Contract remain clear, clickable workflows for house and land? |
-| 5 | Deals | What information and actions belong to the canonical post-contract record, and which belong in specialized workspaces? |
-| 6 | Dispositions | How should Deal & Packet, free-form investor outreach, offers, and closing work consistently for house and land? |
-| 7 | Investors | How should the canonical relationship network support internal contacts, DealMachine, CSV imports, buy boxes, conversations, and performance? |
-| 8 | Calendar | What belongs to scheduled time versus Today or a record's own next action? |
-| 9 | Restricted areas | How should Finance, Marketing, and Settings be divided without exposing them to inappropriate roles? |
+| 1 | Global shell | How should the stable ordinary-employee navigation migrate while preserving current routes and permissions? |
+| 2 | Home | How should tasks, notifications, approvals, and priority work combine without creating another record editor? |
+| 3 | Conversations | How does one shared communication experience serve sellers, investors, attorneys, and other professionals with unmistakable delivery and attachment evidence? |
+| 4 | Contacts | How should the existing shared Contact identity become a useful directory and context overlay without burying investor-specific relationship data? |
+| 5 | Leads | How can one seller database support list and pipeline work while Offer and Under Contract remain clear, clickable workflows for house and land? |
+| 6 | Deals | What information and actions belong to the canonical post-contract record, and which belong in specialized workspaces? |
+| 7 | Prospecting | How does a VA immediately find assigned work, call, record the result, and hand off an interested seller without learning manager controls? |
+| 8 | Dispositions | How should Deal & Packet, free-form investor outreach, offers, and closing work consistently for house and land? |
+| 9 | Calendar | What belongs to scheduled time versus Home or a record's own next action? |
+| 10 | Restricted areas | How should Finance, Marketing, and Settings be divided without exposing them to inappropriate roles? |
 
 Existing screenshots and ordinary issue reports can be incorporated whenever available, but the team does not need to create them on a schedule.
 
@@ -340,8 +343,8 @@ The useful conclusion is not that larger files are automatically worse. It is th
 
 - Phase 1, codebase inventory: complete for the current baseline.
 - Phase 2, preliminary usability audit: complete for the current baseline.
-- Phase 3, target mental model: complete for the initial architecture.
+- Phase 3, target mental model and navigation decision: complete for the initial architecture.
 - Phase 4, page blueprints: ready to begin.
 - Production changes: none in this audit pass.
 
-The next action is a Codex-owned blueprint for the global shell, Today, notification center, and universal search. It will compare the target model with current components and identify the smallest coherent implementation slice before any code is changed.
+The next action is a Codex-owned blueprint for the global shell and its migration to Home, Conversations, Calendar, Contacts, Leads, Deals, Prospecting, and Dispositions. It will specify route compatibility, permissions, notification ownership, universal search, and the relationship between Home and the current Tasks page before any code is changed.

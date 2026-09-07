@@ -4,6 +4,8 @@ Status: Active
 
 Revised: September 7, 2026
 
+Navigation decision: [CRM_NAVIGATION_MODEL_DECISION.md](CRM_NAVIGATION_MODEL_DECISION.md)
+
 Objective: Give Stonegate one coherent mental model before changing more screens, then bring each important workspace to confident daily-use quality without requiring employees to design or formally test the system.
 
 ## Correction to the original plan
@@ -90,11 +92,14 @@ Codex defines:
 - The business lifecycle employees should understand.
 - The canonical home of every important record and action.
 - The target sidebar and role behavior.
-- How Today, Inbox, Calendar, Prospecting, Leads, Deals, Dispositions, and Investors relate.
+- How Home, Conversations, Calendar, Contacts, Leads, Deals, Prospecting, and Dispositions relate.
 - Where packet, contract, communication, task, and notification functions belong.
 - The target anatomy shared by all operating pages.
 
-Deliverable: `docs/CRM_TARGET_MENTAL_MODEL.md`
+Deliverables:
+
+- `docs/CRM_NAVIGATION_MODEL_DECISION.md`
+- `docs/CRM_TARGET_MENTAL_MODEL.md`
 
 ## Phase 4 - Page blueprints
 
@@ -116,15 +121,16 @@ Before modifying a major page, Codex will define its target blueprint:
 
 Blueprint order:
 
-1. Global shell, Today, notifications, and universal search.
-2. Inbox and shared communication.
-3. Prospecting and the VA daily flow.
-4. Leads, Pipeline, Offer, and Under Contract.
-5. Deals and the post-contract record.
-6. Dispositions, Deal & Packet, and investor outreach.
-7. Investors and long-term relationship management.
-8. Calendar and scheduling.
-9. Finance, Marketing, and Settings.
+1. Global shell and stable navigation.
+2. Home with integrated tasks, notifications, and approvals.
+3. Conversations and shared communication.
+4. Contacts and the context overlay.
+5. Leads, Pipeline, Offer, and Under Contract.
+6. Deals and the post-contract record.
+7. Prospecting and the VA daily flow.
+8. Dispositions, Deal & Packet, and investor outreach.
+9. Calendar and scheduling.
+10. Finance, Marketing, and Settings.
 
 Phase exit condition: The selected page has a coherent target state before implementation begins.
 
@@ -148,10 +154,10 @@ Highest-value structural candidates currently are:
 1. Correct notification ownership and add a real activity destination.
 2. Make ordinary operational navigation consistent across staff roles.
 3. Separate the meaning of Deals from Dispositions while preserving fast handoffs.
-4. Rename Buyers to Investors in employee-facing language and make it the canonical relationship network.
+4. Introduce Contacts as the common identity directory while keeping a full Investor relationship profile.
 5. Unify house and land operating capabilities.
 6. Consolidate Lead modes around one database with predictable views.
-7. Make packet and attachment identity unmistakable across Deals, Dispositions, and Inbox.
+7. Make packet and attachment identity unmistakable across Deals, Dispositions, and Conversations.
 
 These are candidates until Phase 4 determines exact scope.
 
@@ -246,4 +252,4 @@ For each area:
 4. Codex implements, verifies, commits, and pushes when authorized.
 5. Codex updates the audit so work survives context compaction or a device change.
 
-The plan, audit, and target mental model together are the source of truth for this redesign.
+The plan, audit, navigation decision, and target mental model together are the source of truth for this redesign.
