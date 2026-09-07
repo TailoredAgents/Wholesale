@@ -6,6 +6,8 @@ Baseline date: September 6, 2026
 
 Companion plan: [CRM_UX_NAVIGATION_AUDIT_PLAN.md](CRM_UX_NAVIGATION_AUDIT_PLAN.md)
 
+Target architecture: [CRM_TARGET_MENTAL_MODEL.md](CRM_TARGET_MENTAL_MODEL.md)
+
 ## Executive finding
 
 Stonegate does not mainly have a "too many sidebar links" problem. The twelve primary destinations are a reasonable top-level set for the breadth of the business. The larger usability risk is that an employee must understand several overlapping mental models inside those destinations:
@@ -15,9 +17,9 @@ Stonegate does not mainly have a "too many sidebar links" problem. The twelve pr
 - An investor exists as a Buyer, a conversation, a disposition queue member, and sometimes an investor relationship row.
 - The same next action can appear as a task, a calendar item, a status on a lead, or a prompt inside a specialized workspace.
 
-That structure can be correct technically and still be difficult for a new employee to predict. The next stage of this audit must therefore test complete jobs, not ask whether isolated pages look attractive.
+That structure can be correct technically and still be difficult for a new employee to predict. The next stage is therefore to define complete target workflows and page blueprints before making more isolated visual changes.
 
-The code also exposes four high-confidence issues that deserve validation before broader aesthetic work:
+The code also exposes four high-confidence issues that deserve design resolution before broader aesthetic work:
 
 1. The notification bell displays an unread count but routes to Calendar, while unread conversations are handled in Inbox.
 2. Dispositions is represented both as a primary destination and as a specialized view of Deals; this weakens location and ownership cues.
@@ -133,7 +135,7 @@ Legend: H Home, I Inbox, T Tasks, C Calendar, P Prospecting, L Leads, Dp Disposi
 | Read-only partner / restricted vendor | Dp, Dl |
 | AI service identity | No employee sidebar destination |
 
-### Role-access findings to validate
+### Role-access findings to resolve in the target design
 
 - Acquisition managers receive `deals:view` but the Deals sidebar item does not include their role. They can be authorized for a destination that is not presented.
 - Administrators are intentionally broad in company administration but currently do not receive Deals or Buyers permissions. The role name may create a broader expectation than the permission model.
@@ -234,7 +236,7 @@ flowchart LR
 4. **House and land disposition parity.** The dedicated case excludes Offers, External distribution, and Reconciliation for land. This conflicts with the stated business requirement that both asset classes share operational capabilities unless a difference is legally or economically necessary.
 5. **Critical document confidence.** Contract and packet surfaces must show the actual attached file and delivery evidence. A user should not have to infer from an email body that the promised PDF was included.
 
-### P2 - Validate in the first workflow rounds
+### P2 - Resolve in the page-blueprint rounds
 
 1. **Too many internal modes without an employee-level map.** Leads, Tasks, Calendar, Prospecting, Deals, and Dispositions each contain multiple workspaces or saved views.
 2. **Global search expectation.** "Search workspaces" accurately describes the current control, but its global placement creates a reasonable expectation that it searches CRM records.
@@ -253,12 +255,12 @@ flowchart LR
 
 ## Preliminary page scorecard
 
-These scores are triage baselines, not final grades. Repository evidence can establish functional breadth and structural risk, while supplied screenshots help assess hierarchy and density. The most important 30 points - observed task completion - cannot be awarded confidently until the intended role performs a defined task without coaching. Confidence therefore matters as much as the number.
+These scores are triage baselines, not final grades. Repository evidence establishes functional breadth and structural risk, while supplied screenshots show hierarchy and density. Codex will rescore each area by tracing its complete supported jobs against the target mental model and rendered implementation. Organic employee feedback can adjust a score later but is not required to begin the redesign.
 
 | Area | Baseline | Evidence confidence | Primary reason |
 | --- | ---: | --- | --- |
 | Home | 80 | Medium | Clear overview, but overlaps Tasks and Calendar as the daily starting point. |
-| Inbox | 76 | Medium | Strong communication capability; broad scope and notification behavior need real-user proof. |
+| Inbox | 76 | Medium | Strong communication capability; broad scope and notification behavior need complete workflow and rendered-state review. |
 | Tasks | 74 | Low | Comprehensive but divided into as many as ten views. |
 | Calendar | 72 | Low | Combines schedule, dispatch, field execution, and availability. |
 | Prospecting - caller | 75 | Low | Focused default workbench, but surrounding navigation for callers is unusual. |
@@ -295,39 +297,23 @@ Keep workspaces separate when they serve genuinely different roles, time horizon
 
 Rename or relocate when a capability is sound but the employee's natural first guess differs from its current label or destination. Observed first clicks are the evidence for this decision.
 
-## Prioritized real-user evidence queue
+## Codex design queue
 
-The first tests should target daily employee confusion and business-critical handoffs rather than start with another styling pass.
+The next work is architecture and page design performed by Codex. No employee test or evidence form is required.
 
-| Order | Role | Uncoached task | What it tests |
-| ---: | --- | --- | --- |
-| 1 | VA / prospecting caller | Sign in, find the next assigned seller callback, place the call, record the outcome, and identify what happens next. | Default route, visible navigation, My Calls, task language, call reliability, handoff clarity. |
-| 2 | Devon or Alex | Find a newly received SMS, open the correct conversation, reply, and confirm ownership or next follow-up. | Notification delivery, notification destination, Inbox filters, assignment, reply confidence. |
-| 3 | Austin or Devon | Find the contracted Ringgold deal, choose a specific investor, contact them, and send the current packet while remaining in the conversation. | Dispositions entry point, investor selection, relationship context, packet identity, attachment/link evidence. |
-| 4 | Austin | Starting from Pipeline, record a house contract and a land contract that were already signed outside Stonegate. | Clickable Under Contract behavior, asset parity, record creation confirmation. |
-| 5 | Transaction coordinator or Austin | Find the attorney conversation, send a purchase agreement PDF, and verify from Sent history that the PDF was attached. | General professional email, attachment evidence, document retrieval, trust. |
-| 6 | Devon or Alex | Find an existing investor, review the relationship, contact them about a different deal, and set a follow-up. | Buyers versus Dispositions versus Inbox ownership. |
-| 7 | Austin | Find a closing exception and determine the one action and owner required to clear it. | Deals, Tasks, Calendar, and role handoff. |
+| Order | Area | Design question to resolve |
+| ---: | --- | --- |
+| 1 | Global shell and Today | What is the stable ordinary-employee navigation, where do tasks live, and what should the notification bell and universal search open? |
+| 2 | Inbox | How does one shared communication experience serve sellers, investors, attorneys, and other professionals with unmistakable delivery and attachment evidence? |
+| 3 | Prospecting | How does a VA immediately find assigned work, call, record the result, and hand off an interested seller without learning manager controls? |
+| 4 | Leads | How can one seller database support list and pipeline work while Offer and Under Contract remain clear, clickable workflows for house and land? |
+| 5 | Deals | What information and actions belong to the canonical post-contract record, and which belong in specialized workspaces? |
+| 6 | Dispositions | How should Deal & Packet, free-form investor outreach, offers, and closing work consistently for house and land? |
+| 7 | Investors | How should the canonical relationship network support internal contacts, DealMachine, CSV imports, buy boxes, conversations, and performance? |
+| 8 | Calendar | What belongs to scheduled time versus Today or a record's own next action? |
+| 9 | Restricted areas | How should Finance, Marketing, and Settings be divided without exposing them to inappropriate roles? |
 
-## Evidence packet template
-
-Use this block for each test:
-
-```text
-User / role:
-Task result requested:
-Starting page:
-First control they expected:
-First control they used:
-Completed without help: Yes / No
-Approximate time:
-Hesitations or wrong turns:
-Unexpected loading, error, or missing access:
-What the user called the feature in their own words:
-Screenshot or recording:
-```
-
-Screenshots should include the full browser window, selected navigation item, visible URL, and any drawer, modal, error, or loading state involved. A short recording is more valuable than many screenshots when the problem is uncertainty about where to click.
+Existing screenshots and ordinary issue reports can be incorporated whenever available, but the team does not need to create them on a schedule.
 
 ## Repository complexity indicators
 
@@ -348,13 +334,14 @@ Static source size is not a usability score, and controls counted in source are 
 | Marketing | 4 | 1,312 | 51 |
 | Settings | 15 | 1,345 | 32 |
 
-The useful conclusion is not that larger files are automatically worse. It is that Dispositions, Prospecting, lead detail, Inbox, and Finance combine enough behavior that real-user task traces are necessary before reorganizing them.
+The useful conclusion is not that larger files are automatically worse. It is that Dispositions, Prospecting, lead detail, Inbox, and Finance combine enough behavior to require explicit page blueprints and rendered-state inspection before they are reorganized.
 
 ## Phase status and next action
 
 - Phase 1, codebase inventory: complete for the current baseline.
 - Phase 2, preliminary usability audit: complete for the current baseline.
-- Phase 3, real-user evidence: ready to begin.
+- Phase 3, target mental model: complete for the initial architecture.
+- Phase 4, page blueprints: ready to begin.
 - Production changes: none in this audit pass.
 
-The next action is the VA caller test listed first in the evidence queue. Record the attempt without coaching if practical. That result will determine whether the first implementation slice belongs in global navigation, Prospecting / My Calls, task terminology, notification routing, or a combination of those areas.
+The next action is a Codex-owned blueprint for the global shell, Today, notification center, and universal search. It will compare the target model with current components and identify the smallest coherent implementation slice before any code is changed.

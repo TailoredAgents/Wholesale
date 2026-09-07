@@ -1,201 +1,249 @@
-# CRM UX and Navigation Audit Plan
+# CRM UX and Navigation Redesign Plan
 
 Status: Active
 
-Started: September 6, 2026
+Revised: September 7, 2026
 
-Objective: Make Stonegate understandable, predictable, and efficient for the people who use it every day.
+Objective: Give Stonegate one coherent mental model before changing more screens, then bring each important workspace to confident daily-use quality without requiring employees to design or formally test the system.
 
-## Why this audit exists
+## Correction to the original plan
 
-Stonegate has grown quickly across acquisitions, communications, underwriting, contracts, dispositions, buyers, and closing. Individual capabilities can work correctly while the overall product still feels difficult to learn or navigate. This audit will evaluate the complete operating experience instead of polishing isolated screens without understanding how work moves between them.
+The original version moved from a current-state audit directly into structured employee task testing. That was too early and placed design work on Austin and the team.
 
-The audit uses three kinds of evidence:
+The corrected sequence is:
 
-1. Repository evidence: routes, components, permissions, data dependencies, actions, and workflow transitions.
-2. Rendered evidence: screenshots or recordings showing real data, visual hierarchy, density, loading, overflow, and responsive behavior.
-3. User evidence: task completion, hesitation, incorrect first clicks, backtracking, errors, and questions from Austin, Devon, Alex, and the VA.
+1. Codex understands the current system.
+2. Codex defines how the system should work.
+3. Codex defines where each function belongs and how each page should be laid out.
+4. Codex identifies the smallest safe implementation sequence.
+5. Codex implements, verifies, commits, and pushes each slice.
+6. Normal team usage and screenshots provide optional feedback after coherent designs exist.
 
-## Ground rules
+Austin, Devon, Alex, and the VAs are not required to conduct formal usability tests, complete evidence forms, or help design the information architecture. Their ordinary questions and screenshots remain useful evidence when they naturally occur.
 
-- Map the system before reorganizing it.
-- Evaluate complete jobs as well as individual pages.
-- Prefer the language employees naturally use over internal database terminology.
-- Give one familiar action one consistent name and location.
-- Keep sensitive areas such as Finance, Marketing, and Settings appropriately permissioned while making normal operating work visible to the company.
-- Separate usability problems from performance, authorization, and reliability problems, while recording all four.
-- Implement one coherent workflow improvement at a time.
-- Test, commit, push, deploy, and validate each implementation slice before expanding its scope.
-- Preserve unrelated user work and avoid speculative large rewrites.
+## Evidence Codex will use
 
-## Phase 1 — Codebase inventory
+- Current routes, components, controls, data dependencies, and permissions.
+- Existing screenshots and issue reports already provided in conversation.
+- Business intent stated by Austin, including operational visibility, house and land parity, investor relationship management, and the ability to record real-world work after it happens.
+- Established interaction and accessibility principles.
+- Automated tests, local rendering, browser inspection, and production behavior after deployment.
+
+Current code remains authoritative when older documentation differs from the product.
+
+## Non-negotiable product principles
+
+- The system should follow the business lifecycle, not expose its database architecture.
+- Employees should know where to begin without memorizing which module owns a hidden event.
+- A record has one canonical home even when it is visible from several workspaces.
+- The same action uses the same name and interaction pattern everywhere.
+- Contextual shortcuts may appear anywhere, but they must open the canonical record or shared action.
+- Routine operating data is visible across the company so employees can help one another.
+- Finance, Marketing, Settings, private economics, destructive actions, and policy changes remain appropriately restricted.
+- House and land share the same operating capabilities unless a genuine asset-specific requirement justifies a difference.
+- Real-world progress can be recorded after the fact, with accurate evidence and audit history.
+- The CRM supports free relationship work; it does not force a rigid sequence when the business does not require one.
+- Critical communication and document actions show what was sent, to whom, and whether it succeeded.
+- Every page should have one obvious purpose and one obvious primary action.
+
+## Phase 1 - Current-system inventory
 
 Owner: Codex
 
-Codex will inventory:
+Status: Complete
+
+Codex inventoried:
 
 - Primary and secondary navigation.
-- Routes, pages, tabs, drawers, modals, and global controls.
-- Important page states: loading, empty, selected, error, success, and restricted.
-- Functions and actions available from each workspace.
+- Routes, redirects, tabs, drawers, modals, and global controls.
+- Major functions and record types.
 - Role and permission differences.
-- Cross-page links and workflow handoffs.
-- Duplicated, hidden, or inconsistently named capabilities.
+- Cross-page workflow handoffs.
+- High-complexity workspaces.
 
-Deliverables:
+Deliverable: `docs/CRM_UX_NAVIGATION_AUDIT.md`
 
-- `docs/CRM_UX_NAVIGATION_AUDIT.md`
-- A current system/navigation diagram.
-- A page and function inventory.
-- A role-access matrix.
-
-Phase exit condition: Every major workspace and primary action has an identified location and purpose.
-
-## Phase 2 — Preliminary usability audit
+## Phase 2 - Current-state diagnosis
 
 Owner: Codex
 
-Codex will use repository evidence and existing screenshots to:
+Status: Complete
 
-- Establish baseline page and workflow scores.
-- Identify obvious hierarchy, naming, discoverability, and consistency problems.
-- Separate global design-system problems from page-specific problems.
-- Identify pages that require screenshots or real-user observation before a recommendation is safe.
-- Produce a prioritized evidence queue based on business impact and usage frequency.
+Codex identified:
 
-Initial workflow priority:
+- Overlapping workspace ownership.
+- Role-to-navigation mismatches.
+- Terminology and hierarchy problems.
+- Known reliability and confidence problems.
+- Preliminary page scores and priority areas.
 
-1. Inbox and daily communication.
-2. Leads and pipeline.
-3. Offer and Under Contract.
-4. Dispositions and investor outreach.
-5. Deals, packets, documents, and closing.
-6. Buyers and investor relationship management.
-7. Home, Tasks, and Calendar.
-8. Finance, Marketing, and Settings.
+Deliverable: `docs/CRM_UX_NAVIGATION_AUDIT.md`
 
-Phase exit condition: The team has a defensible order for reviewing workflows and knows what evidence is still missing.
-
-## Phase 3 — Real-user evidence
-
-Owners: Austin, the VA, Devon, and Alex
-
-The team will test one workflow at a time without coaching. A useful evidence packet contains:
-
-- The user and their role.
-- The specific result they were trying to achieve.
-- A short screen recording, when practical, or two to five full-window screenshots.
-- The first control they expected to use.
-- Where they hesitated, backtracked, or asked for help.
-- Whether they completed the task and approximately how long it took.
-- Any unexpected loading, failure, missing data, or permission behavior.
-
-Representative tasks:
-
-- Find a seller and continue the correct conversation.
-- Move a lead through qualification and underwriting.
-- Record an existing signed contract and open Dispositions.
-- Find a deal to market and contact a chosen investor.
-- Send or retrieve an investor packet during a conversation.
-- Find an investor reply and set the next action.
-- Find a contract or previously sent attachment.
-
-Phase exit condition: The selected workflow has enough evidence to explain the user’s difficulty rather than merely confirm that difficulty exists.
-
-## Phase 4 — Focused redesign and implementation
+## Phase 3 - Target mental model
 
 Owner: Codex
 
-For the selected workflow, Codex will:
+Status: Complete for the initial architecture
 
-- Compare repository, rendered, and user evidence.
-- Identify the underlying problem rather than only the visible symptom.
-- Recommend simplification, unification, renaming, relocation, or removal as appropriate.
-- Update the audit and proposed score.
-- Implement one limited, coherent improvement.
-- Verify the affected behavior and regression risk.
-- Commit and push the completed slice.
+Codex defines:
 
-Phase exit condition: The improved workflow is deployed and ready for the same real-world task to be repeated.
+- The business lifecycle employees should understand.
+- The canonical home of every important record and action.
+- The target sidebar and role behavior.
+- How Today, Inbox, Calendar, Prospecting, Leads, Deals, Dispositions, and Investors relate.
+- Where packet, contract, communication, task, and notification functions belong.
+- The target anatomy shared by all operating pages.
 
-## Phase 5 — Production validation
+Deliverable: `docs/CRM_TARGET_MENTAL_MODEL.md`
 
-Owners: Austin and the employee who originally tested the workflow
-
-After deployment, the same user repeats the same task without coaching and reports:
-
-- Whether the first action was obvious.
-- Whether they completed the task.
-- Remaining hesitation or wrong turns.
-- Anything that disappeared, broke, or became slower.
-- A screenshot of the deployed result when visual evidence is useful.
-
-Phase exit condition: The workflow is either accepted or has a short, evidence-backed correction list.
-
-## Phase 6 — Workflow correction and closure
+## Phase 4 - Page blueprints
 
 Owner: Codex
 
-Codex will address the production findings, verify relevant screen sizes and roles, update the audit, commit and push the correction, and mark the workflow complete. Phases 3 through 6 then repeat for the next workflow.
+Status: Pending
 
-## Phase 7 — System-wide unification
+Before modifying a major page, Codex will define its target blueprint:
+
+- The job the page owns.
+- What belongs on the first screen.
+- Local navigation and views.
+- Primary, secondary, and destructive actions.
+- Selected-record behavior.
+- Empty, loading, error, success, and restricted states.
+- Desktop and mobile layout.
+- Links to adjacent canonical workspaces.
+- What should be removed, merged, renamed, or moved.
+
+Blueprint order:
+
+1. Global shell, Today, notifications, and universal search.
+2. Inbox and shared communication.
+3. Prospecting and the VA daily flow.
+4. Leads, Pipeline, Offer, and Under Contract.
+5. Deals and the post-contract record.
+6. Dispositions, Deal & Packet, and investor outreach.
+7. Investors and long-term relationship management.
+8. Calendar and scheduling.
+9. Finance, Marketing, and Settings.
+
+Phase exit condition: The selected page has a coherent target state before implementation begins.
+
+## Phase 5 - Implementation roadmap
 
 Owner: Codex
 
-After the major workflows are complete, Codex will perform a cross-system pass for:
+Status: Pending
 
-- Navigation terminology and ordering.
-- Page titles, breadcrumbs, and orientation cues.
-- Button hierarchy and repeated action labels.
-- Search, filters, tables, boards, drawers, and modals.
-- Loading, empty, error, success, and permission states.
-- Responsive behavior and keyboard navigation.
-- Obsolete, duplicated, or misleading controls.
+Codex will turn the target architecture and blueprints into small, dependency-aware slices. Each slice must:
 
-Phase exit condition: Shared patterns are consistent across the operating system.
+- Improve a complete job or remove a clear inconsistency.
+- Avoid speculative backend rewrites when existing records can support the design.
+- State affected roles and records.
+- Include a rollback-safe boundary.
+- Define automated and visual verification.
+- Fit into one commit whenever practical.
 
-## Phase 8 — Final acceptance
+Highest-value structural candidates currently are:
 
-Owners: Stonegate team, then Codex
+1. Correct notification ownership and add a real activity destination.
+2. Make ordinary operational navigation consistent across staff roles.
+3. Separate the meaning of Deals from Dispositions while preserving fast handoffs.
+4. Rename Buyers to Investors in employee-facing language and make it the canonical relationship network.
+5. Unify house and land operating capabilities.
+6. Consolidate Lead modes around one database with predictable views.
+7. Make packet and attachment identity unmistakable across Deals, Dispositions, and Inbox.
 
-The Stonegate team completes a short daily-work acceptance script. Codex resolves remaining findings and publishes:
+These are candidates until Phase 4 determines exact scope.
 
-- The final system and workflow map.
+## Phase 6 - Focused implementation
+
+Owner: Codex
+
+Status: Pending
+
+For each approved slice, Codex will:
+
+1. Record the intended change in the audit documents.
+2. Implement the smallest coherent solution.
+3. Run focused tests and appropriate broader checks.
+4. Inspect the rendered result when visual behavior changes.
+5. Commit and push the completed slice.
+6. Allow Render to finish deployment before treating production as verified.
+
+The team does not need to run a formal test script after each slice.
+
+## Phase 7 - Codex verification
+
+Owner: Codex
+
+Status: Pending
+
+Verification will use, as appropriate:
+
+- Unit and contract tests.
+- TypeScript and lint checks.
+- Production builds.
+- Local browser inspection at relevant widths.
+- Role and permission inspection.
+- API and web logs supplied when a production-only issue occurs.
+- Production checks when access and deployment state permit them.
+
+## Phase 8 - Optional production feedback
+
+Owners: Stonegate team during normal work
+
+Status: Optional and ongoing
+
+No scheduled usability exercise is required. If Austin or an employee encounters confusion during normal work, a screenshot, recording, or plain-language description can be added to the audit. Codex will use it to correct the target design or implementation.
+
+## Phase 9 - System-wide finish
+
+Owner: Codex
+
+Status: Pending
+
+After major workflows are structurally sound, Codex will complete a global pass for:
+
+- Page titles, breadcrumbs, and orientation.
+- Repeated action names and hierarchy.
+- Search, filters, tables, boards, drawers, and dialogs.
+- Loading, empty, error, success, reconnecting, and restricted states.
+- Responsive behavior and keyboard access.
+- Visual density, typography, spacing, borders, and button treatment.
+- Removal of obsolete or misleading controls.
 - Final page and workflow scores.
-- A concise employee navigation guide.
-- A future-improvement backlog separated from launch-critical work.
 
 ## Scoring model
 
-Each major page and workflow receives a 0–100 score.
+Each page and workflow receives a 0-100 score.
 
 | Category | Weight | What it measures |
 | --- | ---: | --- |
-| Task completion | 30 | Whether the intended result can be completed correctly |
-| Findability and navigation | 20 | Whether users know where to begin and where to go next |
-| Language and clarity | 15 | Whether labels and instructions match employee vocabulary |
+| Task completion | 30 | Whether the design supports the complete intended result |
+| Findability and navigation | 20 | Whether the correct starting point and next step are evident |
+| Language and clarity | 15 | Whether labels match ordinary employee vocabulary |
 | Cross-page consistency | 15 | Whether learned patterns remain predictable elsewhere |
-| Speed and efficiency | 10 | Clicks, waiting, re-entry, and unnecessary context switching |
-| Error prevention and recovery | 10 | Protection from mistakes and clarity when something fails |
+| Speed and efficiency | 10 | Clicks, waiting, duplicate entry, and context switching |
+| Error prevention and recovery | 10 | Mistake prevention, status confidence, and recovery behavior |
 
 Score interpretation:
 
-- 90–100: Confident daily-use quality.
-- 80–89: Strong, with identifiable friction.
-- 70–79: Usable but requires training or workarounds.
-- 60–69: Confusing or inefficient in important situations.
-- Below 60: High risk of abandonment, mistakes, or dependence on another employee.
+- 90-100: Confident daily-use quality.
+- 80-89: Strong, with identifiable friction.
+- 70-79: Usable but requires learning or workarounds.
+- 60-69: Confusing or inefficient in important situations.
+- Below 60: High risk of mistakes, abandonment, or dependence on another employee.
 
-Scores are baselines for prioritization, not substitutes for observed task performance.
+Codex can assign a design score before team use by tracing every supported job against the code and target mental model. Organic production feedback may later adjust the score, but is not required to begin improvement.
 
-## Repeatable working cadence
+## Working cadence
 
-For each workflow:
+For each area:
 
-1. Codex maps and audits.
-2. Stonegate supplies real-user evidence.
-3. Codex recommends and implements a focused improvement.
-4. Stonegate validates the deployed behavior.
-5. Codex corrects and closes the workflow.
+1. Codex creates the target blueprint.
+2. Codex compares the blueprint with current code.
+3. Codex recommends a limited implementation slice.
+4. Codex implements, verifies, commits, and pushes when authorized.
+5. Codex updates the audit so work survives context compaction or a device change.
 
-The audit document is the source of truth throughout this process so the work can resume accurately after context compaction, a device change, or a delay between sessions.
+The plan, audit, and target mental model together are the source of truth for this redesign.
