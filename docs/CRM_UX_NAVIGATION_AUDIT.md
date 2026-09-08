@@ -10,6 +10,8 @@ Target architecture: [CRM_TARGET_MENTAL_MODEL.md](CRM_TARGET_MENTAL_MODEL.md)
 
 Navigation decision: [CRM_NAVIGATION_MODEL_DECISION.md](CRM_NAVIGATION_MODEL_DECISION.md)
 
+First page blueprint: [CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md](CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md)
+
 ## Executive finding
 
 Stonegate does not mainly have a "too many sidebar links" problem. The twelve primary destinations are a reasonable top-level set for the breadth of the business. The larger usability risk is that an employee must understand several overlapping mental models inside those destinations:
@@ -344,7 +346,7 @@ The useful conclusion is not that larger files are automatically worse. It is th
 - Phase 1, codebase inventory: complete for the current baseline.
 - Phase 2, preliminary usability audit: complete for the current baseline.
 - Phase 3, target mental model and navigation decision: complete for the initial architecture.
-- Phase 4, page blueprints: ready to begin.
+- Phase 4, page blueprints: in progress; global shell and Home are complete.
 - Production changes: none in this audit pass.
 
-The next action is a Codex-owned blueprint for the global shell and its migration to Home, Conversations, Calendar, Contacts, Leads, Deals, Prospecting, and Dispositions. It will specify route compatibility, permissions, notification ownership, universal search, and the relationship between Home and the current Tasks page before any code is changed.
+The global shell and Home target, including route compatibility, permissions, notification ownership, universal search, and the safe Tasks migration, is documented in `CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md`. The next action is a Codex-owned blueprint for Conversations and the shared communication contract before any communication workspace is reorganized.

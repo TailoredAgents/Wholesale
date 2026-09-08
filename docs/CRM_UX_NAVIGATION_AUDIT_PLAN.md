@@ -105,7 +105,7 @@ Deliverables:
 
 Owner: Codex
 
-Status: Pending
+Status: In progress — global shell and Home complete
 
 Before modifying a major page, Codex will define its target blueprint:
 
@@ -121,8 +121,8 @@ Before modifying a major page, Codex will define its target blueprint:
 
 Blueprint order:
 
-1. Global shell and stable navigation.
-2. Home with integrated tasks, notifications, and approvals.
+1. Global shell and stable navigation. Complete in `CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md`.
+2. Home with integrated tasks, notifications, and approvals. Complete in `CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md`.
 3. Conversations and shared communication.
 4. Contacts and the context overlay.
 5. Leads, Pipeline, Offer, and Under Contract.

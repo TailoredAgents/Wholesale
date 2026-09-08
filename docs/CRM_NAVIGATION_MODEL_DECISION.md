@@ -365,3 +365,5 @@ The next blueprint sequence is:
 10. Restricted areas.
 
 No product code should change until the global-shell and Home blueprint specifies how current routes, permissions, notifications, and Tasks will migrate safely.
+
+That prerequisite is now documented in [CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md](CRM_GLOBAL_SHELL_HOME_BLUEPRINT.md). This remains a design decision only; it does not itself authorize implementation.
