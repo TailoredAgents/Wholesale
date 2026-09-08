@@ -615,7 +615,7 @@
   gap: 10px;
 }
 
-.completionDialog .terminalCheck {
+.completionDialog .scheduleCheck {
   padding: 10px;
   border: 1px solid var(--sg-color-border);
   border-radius: var(--sg-radius-md);
@@ -625,18 +625,18 @@
   gap: 9px;
 }
 
-.terminalCheck input {
+.scheduleCheck input {
   width: 16px;
   min-height: 16px;
   margin-top: 2px;
 }
 
-.terminalCheck span {
+.scheduleCheck span {
   display: grid;
   gap: 2px;
 }
 
-.terminalCheck small {
+.scheduleCheck small {
   color: var(--sg-color-text-muted);
   font-weight: var(--sg-font-weight-regular);
 }

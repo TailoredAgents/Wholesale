@@ -306,7 +306,7 @@ def test_close_out_is_atomic_visible_and_idempotent_then_reopens_with_one_task(
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["changed"] is True
-    assert result["cancelled_tasks"] >= 2
+    assert result["cancelled_tasks"] == 1
     assert result["cancelled_appointments"] == 1
     assert result["cancelled_follow_up_enrollments"] == 1
     assert result["cancelled_follow_up_approvals"] == 1

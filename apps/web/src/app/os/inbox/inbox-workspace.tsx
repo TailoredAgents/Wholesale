@@ -521,7 +521,7 @@ function CallTranscriptPanel({
       .filter((item) => Boolean(transcript.structured_notes?.[item.key]))
       .map((item) => item.key),
   );
-  const [createTask, setCreateTask] = useState(Boolean(transcript.structured_notes?.next_action));
+  const [createTask, setCreateTask] = useState(false);
   const [decisionNotes, setDecisionNotes] = useState("");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "saving">("idle");
   const [retryStatus, setRetryStatus] = useState<"idle" | "saving">("idle");

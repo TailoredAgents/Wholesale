@@ -45,8 +45,6 @@ from app.services.lead_lifecycle import lock_organization_lead, require_lead_ope
 
 SPEED_TO_LEAD_TASK_TYPE = "speed_to_lead"
 OPEN_TASK_STATUSES = ("open", "in_progress")
-TERMINAL_LEAD_STAGES = {"dead", "disqualified", "closed"}
-TERMINAL_DEAL_STAGES = {"funded", "closed", "cancelled", "dead"}
 TEAM_PERMISSION_KEYS = {
     PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
     PermissionKeys.VIEW_AUDIT_LOGS,
@@ -106,12 +104,12 @@ def create_initial_lead_next_action(
     lead: Lead,
     *,
     actor_user_id: UUID | None,
-    title: str = "Review seller lead and set the next action",
-) -> Task:
+    title: str = "Follow up with seller",
+) -> Task | None:
+    if lead.next_follow_up_at is None:
+        return None
     supersede_open_primary_tasks(db, lead_id=lead.id)
-    due_at = lead.next_follow_up_at or (
-        datetime.now(UTC) + timedelta(minutes=get_settings().speed_to_lead_due_minutes)
-    )
+    due_at = lead.next_follow_up_at
     task = Task(
         organization_id=lead.organization_id,
         lead_id=lead.id,
@@ -360,7 +358,6 @@ def list_task_workspace(db: Session, principal: Principal) -> TaskWorkspaceRead:
         list_ai_workspace_items(
             db,
             principal,
-            now=now,
             can_manage_team=can_manage_team,
         )
     )
@@ -546,7 +543,6 @@ def list_ai_workspace_items(
     db: Session,
     principal: Principal,
     *,
-    now: datetime,
     can_manage_team: bool,
 ) -> list[TaskWorkspaceItemRead]:
     events = list(
@@ -607,7 +603,6 @@ def list_ai_workspace_items(
         assigned_user = db.get(User, assigned_user_id) if assigned_user_id else None
         run = runs_by_event.get(event.id)
         output = parse_ai_run_output(run.output_summary if run else None)
-        due_at = parsed_datetime(payload.get("due_at"))
         work_kind = ai_work_kind(event.status)
         event_is_complete = work_kind == "ai_completed"
         summary = output.get("summary") or payload.get("summary")
@@ -647,10 +642,8 @@ def list_ai_workspace_items(
                 summary=str(summary) if summary else event.last_error,
                 status=event.status,
                 priority=str(payload.get("priority") or "normal"),
-                due_at=due_at,
-                due_status=(
-                    "completed" if event_is_complete else workspace_due_status("open", due_at, now)
-                ),
+                due_at=None,
+                due_status="completed" if event_is_complete else "unscheduled",
                 created_at=event.created_at,
                 completed_at=event.processed_at if event_is_complete else None,
                 assigned_user_id=assigned_user_id,
@@ -711,16 +704,6 @@ def parsed_uuid(value: object) -> UUID | None:
         return UUID(value)
     except ValueError:
         return None
-
-
-def parsed_datetime(value: object) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def can_decide_approval(request: ApprovalRequest, principal: Principal) -> bool:
@@ -897,17 +880,11 @@ def complete_task(
     if not can_complete_task(task, principal):
         raise PermissionError("Your role cannot complete this task.")
 
-    deal = db.get(Deal, task.deal_id) if task.deal_id else None
     successor: Task | None = None
     successor_owner: User | None = None
     if task.work_kind == "primary_next_action":
         if not payload.outcome or not payload.outcome.strip():
             raise ValueError("Primary next actions require an outcome.")
-        if source_is_active(lead, deal) and payload.successor is None:
-            raise ValueError(
-                "This record is still active. Set its next action before completing "
-                "the current one."
-            )
         if payload.successor is not None:
             responsible_user_id = (
                 payload.successor.responsible_user_id
@@ -1033,14 +1010,6 @@ def get_primary_next_action(
         responsible_user_email=user.email if user else None,
         due_status=get_due_status(task, datetime.now(UTC)),
     )
-
-
-def source_is_active(lead: Lead | None, deal: Deal | None) -> bool:
-    if deal is not None:
-        return deal.stage_key not in TERMINAL_DEAL_STAGES
-    if lead is not None:
-        return lead.archived_at is None and lead.stage_key not in TERMINAL_LEAD_STAGES
-    return False
 
 
 def get_due_status(task: Task, now: datetime) -> str:

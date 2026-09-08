@@ -302,4 +302,4 @@ class CallTranscriptReview(BaseModel):
     structured_notes: CallNotes
     decision_notes: str | None = Field(default=None, max_length=2000)
     apply_field_updates: list[str] = Field(default_factory=list, max_length=6)
-    create_follow_up_task: bool = True
+    create_follow_up_task: bool = False

@@ -26,7 +26,12 @@ from app.models.foundation import (
     Property,
 )
 from app.schemas.leads import LeadCloseOutRequest
-from app.schemas.voice import AcquisitionSalesCallQuality, CallTranscriptRead, StructuredCallNotes
+from app.schemas.voice import (
+    AcquisitionSalesCallQuality,
+    CallTranscriptRead,
+    CallTranscriptReview,
+    StructuredCallNotes,
+)
 from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
     call_notes_system_prompt,
@@ -47,6 +52,34 @@ def test_call_note_schema_is_valid_for_openai_strict_mode() -> None:
 
     validate_strict_json_schema(schema)
     assert set(schema["properties"]) == set(schema["required"])
+
+
+def test_call_note_review_does_not_create_follow_up_by_default() -> None:
+    review = CallTranscriptReview.model_validate(
+        {
+            "status": "approved",
+            "structured_notes": {
+                "summary": "Seller asked for information but did not request a callback.",
+                "motivation": None,
+                "timeline": None,
+                "property_condition": None,
+                "occupancy_status": None,
+                "asking_price": None,
+                "mortgage_balance": None,
+                "mortgage_or_title": None,
+                "repairs": [],
+                "objections": [],
+                "commitments": [],
+                "next_action": "Send the information discussed",
+                "follow_up_at": None,
+                "appointment_details": None,
+                "confidence": 85,
+                "evidence": [],
+            },
+        }
+    )
+
+    assert review.create_follow_up_task is False
 
 
 def test_acquisition_sales_quality_schema_is_valid_for_openai_strict_mode() -> None:

@@ -114,6 +114,8 @@ def test_new_lead_is_prepared_and_reviewed_from_shared_work_queue(
     assert ai_item["work_kind"] == "ai_review"
     assert ai_item["can_decide"] is True
     assert ai_item["ai_output"]["confidence"] == 90
+    assert ai_item["due_at"] is None
+    assert ai_item["due_status"] == "unscheduled"
 
     review_response = client.patch(
         f"/api/v1/tasks/ai-work/{event.id}/review",

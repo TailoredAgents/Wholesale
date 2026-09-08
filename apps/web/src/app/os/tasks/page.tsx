@@ -15,6 +15,7 @@ const taskViews = new Set<TaskView>([
   "unscheduled",
   "team",
   "approvals",
+  "ai_review",
   "ai_completed",
   "exceptions",
   "completed",
@@ -46,7 +47,7 @@ export default async function TasksPage({
         eyebrow="Daily execution"
         meta={
           profile
-            ? `${primaryRoleLabel(profile)} · ${workspace?.items.filter((item) => item.due_status !== "completed").length ?? 0} open`
+            ? `${primaryRoleLabel(profile)} · ${workspace?.items.filter((item) => item.item_type !== "ai_work" && item.due_status !== "completed").length ?? 0} open`
             : apiConnected
               ? "Workspace current"
               : "API unavailable"

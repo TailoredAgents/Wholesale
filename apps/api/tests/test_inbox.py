@@ -1047,7 +1047,7 @@ def test_general_email_can_be_converted_to_a_lead_without_losing_the_thread(
     assert property_record.parcel_id == "INBOX-123-LAND"
     assert db_session.scalar(
         select(func.count()).select_from(Task).where(Task.lead_id == lead.id)
-    ) == 1
+    ) == 0
     assert db_session.scalar(
         select(func.count())
         .select_from(ConversationContextLink)

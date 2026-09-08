@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from app.models.foundation import ApprovalRequest, Organization, Task, User
 from tests.test_leads import OWNER_EMAIL, lead_payload, seed_owner
 
 
-def test_primary_action_requires_successor_and_updates_shared_truth(
+def test_manual_lead_only_creates_primary_action_when_follow_up_is_scheduled(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -23,9 +24,49 @@ def test_primary_action_requires_successor_and_updates_shared_truth(
     )
     assert create_response.status_code == 201, create_response.text
     lead = create_response.json()
+    assert lead["primary_next_action"] is None
+    assert db_session.scalars(
+        select(Task).where(Task.lead_id == UUID(lead["id"]))
+    ).all() == []
+
+    scheduled_payload = lead_payload()
+    scheduled_contact = cast(dict[str, object], scheduled_payload["contact"])
+    scheduled_property = cast(dict[str, object], scheduled_payload["property"])
+    scheduled_contact["legal_name"] = "Scheduled Seller"
+    scheduled_contact["preferred_name"] = "Scheduled"
+    scheduled_property["street_address"] = "200 Scheduled Way"
+    scheduled_payload["next_follow_up_at"] = (
+        datetime.now(UTC) + timedelta(days=2)
+    ).isoformat()
+    scheduled_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=scheduled_payload,
+    )
+    assert scheduled_response.status_code == 201, scheduled_response.text
+    scheduled_lead = scheduled_response.json()
+    assert scheduled_lead["primary_next_action"] is not None
+    assert scheduled_lead["primary_next_action"]["title"] == "Follow up with seller"
+
+
+def test_primary_action_can_end_without_manufacturing_another_task(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    payload["next_follow_up_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    create_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    assert create_response.status_code == 201, create_response.text
+    lead = create_response.json()
     first_action = lead["primary_next_action"]
     assert first_action is not None
-    assert first_action["title"] == "Review seller lead and set the next action"
+    assert first_action["title"] == "Follow up with seller"
 
     workspace_response = client.get(
         "/api/v1/tasks/workspace",
@@ -40,13 +81,46 @@ def test_primary_action_requires_successor_and_updates_shared_truth(
     assert first_item["source_record_id"] == lead["id"]
     assert first_item["can_complete"] is True
 
-    stranded_response = client.patch(
+    completed_response = client.patch(
         f"/api/v1/tasks/{first_action['task_id']}/complete",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json={"outcome": "reviewed"},
+        json={"outcome": "seller_reached", "completion_notes": "No callback requested."},
     )
-    assert stranded_response.status_code == 422
-    assert "still active" in stranded_response.json()["detail"]
+    assert completed_response.status_code == 200, completed_response.text
+    assert completed_response.json()["successor_task_id"] is None
+
+    detail_response = client.get(
+        f"/api/v1/leads/{lead['id']}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["primary_next_action"] is None
+    assert db_session.scalars(
+        select(Task).where(
+            Task.lead_id == UUID(lead["id"]),
+            Task.work_kind == "primary_next_action",
+            Task.status.in_(("open", "in_progress")),
+        )
+    ).all() == []
+
+
+def test_primary_action_can_create_an_explicit_successor(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    payload["next_follow_up_at"] = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    create_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    assert create_response.status_code == 201, create_response.text
+    lead = create_response.json()
+    first_action = lead["primary_next_action"]
+    assert first_action is not None
 
     successor_due = datetime.now(UTC) + timedelta(days=1)
     completed_response = client.patch(
@@ -214,6 +288,9 @@ def test_individual_contributor_workspace_excludes_other_owners_work(
             "property_type": "single_family",
         }
         payload["assigned_user_id"] = user["id"]
+        payload["next_follow_up_at"] = (
+            datetime.now(UTC) + timedelta(days=index)
+        ).isoformat()
         response = client.post(
             "/api/v1/leads",
             headers={"X-Dev-User-Email": OWNER_EMAIL},

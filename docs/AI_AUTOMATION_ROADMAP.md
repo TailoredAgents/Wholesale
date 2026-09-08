@@ -105,9 +105,9 @@ Delivered:
   visible outside the drawer.
 - The shared AI Operations queue now turns website inquiries, manual leads, accepted prospecting
   handoffs, and unknown inbound callers into governed Lead Manager briefs. The Render worker runs
-  the existing `lead.next_action` capability, routes the result to the responsible employee in
-  Tasks, and requires acceptance or rejection before an approved brief is added to the seller
-  timeline.
+  the existing `lead.next_action` capability and makes the result available under optional
+  **AI Suggestions** in Tasks. Acceptance is required only if an employee chooses to add the brief
+  to the seller timeline; the suggestion is not treated as due or overdue human work.
 - Call Intelligence runs now link to the same orchestrator-event history. Successful processing
   automatically closes the work item and posts the internal note while preserving the recording,
   transcript, structured output, field updates, cost, and evidence as separate records.

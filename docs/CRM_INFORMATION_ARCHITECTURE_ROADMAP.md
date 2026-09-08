@@ -1587,6 +1587,8 @@ operational exceptions without copying their source records. Its permission-awar
 - **Unscheduled**
 - **Team** for authorized managers
 - **Approvals** for authorized decision-makers
+- **AI Suggestions** for optional review
+- **AI Completed** for AI operating history
 - **Exceptions**
 - **Completed**
 
@@ -1599,17 +1601,21 @@ The Task record now distinguishes `primary_next_action`, `supporting`, `approval
 `operational_exception` work. It can retain lead and deal context, completion outcome and notes,
 the completing user, and the successor task.
 
-Every active seller lead or deal has one visible primary action with:
+When a seller lead or deal has a real next commitment, its visible primary action has:
 
 - one responsible owner
 - one specific action
 - one due date
 
-Completing a primary action requires an outcome. If its seller lead or deal is still active, the
-same operation must create the successor primary action. The API rejects completion without a
-successor unless it verifies that the source record is terminal. New seller leads, qualified
-handoffs, appointment-recovery paths, follow-ups, and newly opened deals all create or replace the
-primary action through the shared task service.
+Completing a primary action requires an outcome. Scheduling its successor is explicit and optional;
+an active source record may have no task when there is no genuine follow-up commitment. Manual lead
+creation only creates a primary action when a follow-up date is supplied. Speed-to-lead responses,
+qualified handoffs, appointment-recovery paths, explicit follow-ups, and deal deadlines continue to
+create or replace primary actions through their governed services.
+
+AI processing is not a human task deadline. Processing items stay out of My Tasks and due-date
+views, reviewable results appear under **AI Suggestions**, and failures remain under
+**Exceptions**.
 
 ### 25.3 Shared Truth
 

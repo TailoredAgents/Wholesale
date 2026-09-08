@@ -62,7 +62,8 @@ The first production event loop is active for Lead Manager preparation and Call 
    creates one idempotent `lead.created` orchestrator event.
 2. The background worker runs the existing governed `lead.next_action` capability with read-only
    lead context and no external communication tool.
-3. The assigned Lead Manager or authorized manager sees the result in **Tasks > Needs Approval**.
+3. The assigned Lead Manager or authorized manager can review the result in
+   **Tasks > AI Suggestions**. It is optional guidance, not overdue human work.
 4. The review card shows the seller summary, next step, qualification gaps, suggested questions,
    risk, confidence, and evidence.
 5. **Accept brief** stores a clearly labeled, human-approved internal note on the existing seller
@@ -72,8 +73,8 @@ The first production event loop is active for Lead Manager preparation and Call 
 Recorded seller calls use the same event history, but their decision remains in the Inbox where
 the recording and transcript are visible. Transcript-grounded qualification values automatically
 fill only empty CRM fields and are audit logged; they never replace staff-entered values. Reviewers
-can correct those AI-populated values when approving the narrative note and may create the selected
-follow-up task. Neither workflow sends a message, changes an offer, creates a contract, or contacts
+can correct those AI-populated values when approving the narrative note and may explicitly create
+a follow-up task. Follow-up creation is off by default. Neither workflow sends a message, changes an offer, creates a contract, or contacts
 a seller autonomously.
 
 ## Architecture

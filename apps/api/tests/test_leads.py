@@ -1133,7 +1133,11 @@ def test_archive_restore_and_permanently_delete_lead(
     client.post(
         f"/api/v1/leads/{lead_id}/tasks",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json={"title": "Call test seller", "priority": "normal"},
+        json={
+            "title": "Call test seller",
+            "priority": "normal",
+            "due_at": "2026-07-15T14:30:00Z",
+        },
     )
     repair_response = client.post(
         f"/api/v1/leads/{lead_id}/repair-estimates",
@@ -1321,8 +1325,7 @@ def test_read_lead_detail_and_update_stage(
     detail = detail_response.json()
     assert detail["id"] == lead_id
     assert detail["seller_name"] == "Jane Seller"
-    assert len(detail["open_tasks"]) == 1
-    assert detail["open_tasks"][0]["work_kind"] == "primary_next_action"
+    assert detail["open_tasks"] == []
     assert detail["communications"] == []
     assert detail["appointments"] == []
     assert detail["underwriting_versions"] == []
@@ -1330,7 +1333,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["buyer_offers"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
-    assert detail["intelligence"]["urgency_score"] == 80
+    assert detail["intelligence"]["urgency_score"] == 88
     assert detail["intelligence"]["priority_label"] == "critical"
     assert detail["intelligence"]["next_best_action"]["action_type"] == "ask_missing_question"
     assert detail["intelligence"]["missing_fields"] == [
@@ -1359,7 +1362,7 @@ def test_read_lead_detail_and_update_stage(
     assert update_response.status_code == 200
     updated = update_response.json()
     assert updated["stage_key"] == "contacted"
-    assert updated["intelligence"]["urgency_score"] == 68
+    assert updated["intelligence"]["urgency_score"] == 76
     assert "lead.stage_changed" in [
         activity["event_type"] for activity in updated["recent_activity"]
     ]
@@ -1965,7 +1968,7 @@ def test_add_lead_note_and_follow_up_task(
     assert task_payload["open_tasks"][0]["title"] == "Call seller about appointment window"
     assert task_payload["open_tasks"][0]["priority"] == "high"
     assert task_payload["next_follow_up_at"].startswith("2026-07-16T14:30:00")
-    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
 
     queue_response = client.get(
         "/api/v1/tasks/open",

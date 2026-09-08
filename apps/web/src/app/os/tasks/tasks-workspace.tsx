@@ -32,6 +32,7 @@ export type TaskView =
   | "unscheduled"
   | "team"
   | "approvals"
+  | "ai_review"
   | "ai_completed"
   | "exceptions"
   | "completed";
@@ -94,7 +95,13 @@ function matchesView(
   view: TaskView,
   currentUserId: string,
 ) {
-  if (view === "ai_completed") return item.work_kind === "ai_completed";
+  if (item.item_type === "ai_work") {
+    if (view === "ai_completed") return item.work_kind === "ai_completed";
+    if (view === "ai_review") return item.work_kind === "ai_review";
+    if (view === "exceptions") return item.work_kind === "operational_exception";
+    return false;
+  }
+  if (view === "ai_completed") return false;
   if (view === "completed") {
     return item.due_status === "completed" && item.work_kind !== "ai_completed";
   }
@@ -104,9 +111,7 @@ function matchesView(
   if (view === "overdue") return item.due_status === "overdue";
   if (view === "upcoming") return item.due_status === "upcoming";
   if (view === "unscheduled") return item.due_status === "unscheduled";
-  if (view === "approvals") {
-    return item.work_kind === "approval" || item.work_kind === "ai_review";
-  }
+  if (view === "approvals") return item.work_kind === "approval";
   if (view === "exceptions") return item.attention_flags.length > 0;
   return true;
 }
@@ -191,6 +196,7 @@ export function TasksWorkspace({
   const [query, setQuery] = useState("");
   const [owner, setOwner] = useState("all");
   const [selectedId, setSelectedId] = useState(initialItemId);
+  const [scheduleSuccessor, setScheduleSuccessor] = useState(false);
   const [status, setStatus] = useState<MutationStatus>("idle");
   const [error, setError] = useState("");
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -203,6 +209,7 @@ export function TasksWorkspace({
     if (workspace.can_decide_approvals) {
       result.push({ key: "approvals", label: "Needs Approval" });
     }
+    result.push({ key: "ai_review", label: "AI Suggestions" });
     result.push({ key: "ai_completed", label: "AI Completed" });
     result.push({ key: "exceptions", label: "Exceptions" });
     result.push({ key: "completed", label: "Completed" });
@@ -264,14 +271,14 @@ export function TasksWorkspace({
   const selectedAiConfidence = selected ? aiConfidence(selected) : null;
   const selectedApprovalCanApprove = selected ? approvalCanApprove(selected) : false;
   const selectedApprovalEffect = selected ? approvalEffect(selected) : "";
-  const openItems = workspace.items.filter((item) => item.due_status !== "completed");
+  const openItems = workspace.items.filter(
+    (item) => item.item_type !== "ai_work" && item.due_status !== "completed",
+  );
   const metrics = {
     primary: openItems.filter((item) => item.work_kind === "primary_next_action").length,
     overdue: openItems.filter((item) => item.due_status === "overdue").length,
-    approvals: openItems.filter(
-      (item) => item.work_kind === "approval" || item.work_kind === "ai_review",
-    ).length,
-    aiCompleted: workspace.items.filter((item) => item.work_kind === "ai_completed").length,
+    approvals: openItems.filter((item) => item.work_kind === "approval").length,
+    aiSuggestions: workspace.items.filter((item) => item.work_kind === "ai_review").length,
   };
 
   async function headers() {
@@ -338,7 +345,7 @@ export function TasksWorkspace({
     event.preventDefault();
     if (!selected?.task_id || status === "saving") return;
     const data = new FormData(event.currentTarget);
-    const terminal = data.get("terminal") === "on";
+    const shouldScheduleSuccessor = data.get("schedule_successor") === "on";
     const successorDue = String(data.get("successor_due_at") ?? "");
     setStatus("saving");
     setError("");
@@ -351,21 +358,22 @@ export function TasksWorkspace({
           body: JSON.stringify({
             outcome: String(data.get("outcome") ?? ""),
             completion_notes: String(data.get("completion_notes") ?? "") || null,
-            successor: terminal
-              ? null
-              : {
+            successor: shouldScheduleSuccessor
+              ? {
                   title: String(data.get("successor_title") ?? ""),
                   task_type: String(data.get("successor_type") ?? "follow_up"),
                   due_at: successorDue ? new Date(successorDue).toISOString() : null,
                   responsible_user_id: selected.assigned_user_id,
                   priority: String(data.get("successor_priority") ?? "normal"),
-                },
+                }
+              : null,
           }),
         },
       );
       if (!response.ok) throw new Error(await responseMessage(response));
       await refreshWorkspace();
       dialogRef.current?.close();
+      setScheduleSuccessor(false);
       setStatus("idle");
       setSelectedId("");
     } catch (reason) {
@@ -450,7 +458,7 @@ export function TasksWorkspace({
         <div><CheckCheck size={17} /><span>Primary actions</span><strong>{metrics.primary}</strong></div>
         <div><Clock3 size={17} /><span>Overdue</span><strong>{metrics.overdue}</strong></div>
         <div><BadgeCheck size={17} /><span>Needs approval</span><strong>{metrics.approvals}</strong></div>
-        <div><Sparkles size={17} /><span>AI completed</span><strong>{metrics.aiCompleted}</strong></div>
+        <div><Sparkles size={17} /><span>AI suggestions</span><strong>{metrics.aiSuggestions}</strong></div>
       </section>
 
       <nav className={styles.savedViews} aria-label="Task views">
@@ -659,6 +667,7 @@ export function TasksWorkspace({
                     className={styles.primaryButton}
                     onClick={() => {
                       setError("");
+                      setScheduleSuccessor(false);
                       dialogRef.current?.showModal();
                     }}
                     type="button"
@@ -756,8 +765,8 @@ export function TasksWorkspace({
             </button>
           </header>
           <p>
-            Active seller leads and deals must leave this step with one owner, one next action,
-            and one due date.
+            Record what happened. Schedule another action only when there is a real commitment,
+            deadline, or follow-up you have chosen.
           </p>
           <label>
             <span>Outcome</span>
@@ -775,8 +784,20 @@ export function TasksWorkspace({
               rows={3}
             />
           </label>
-          <fieldset>
-            <legend>Successor action</legend>
+          <label className={styles.scheduleCheck}>
+            <input
+              checked={scheduleSuccessor}
+              name="schedule_successor"
+              onChange={(event) => setScheduleSuccessor(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <strong>Schedule another action</strong>
+              <small>Use this for a callback, deadline, appointment, or other real next step.</small>
+            </span>
+          </label>
+          {scheduleSuccessor ? <fieldset>
+            <legend>Next action</legend>
             <label>
               <span>Next action</span>
               <input
@@ -813,34 +834,19 @@ export function TasksWorkspace({
                 </select>
               </label>
             </div>
-          </fieldset>
-          <label className={styles.terminalCheck}>
-            <input
-              name="terminal"
-              onChange={(event) => {
-                const form = event.currentTarget.form;
-                if (!form) return;
-                for (const fieldName of ["successor_title", "successor_due_at"]) {
-                  const field = form.elements.namedItem(fieldName);
-                  if (field instanceof HTMLInputElement) {
-                    field.disabled = event.target.checked;
-                    field.required = !event.target.checked;
-                  }
-                }
-              }}
-              type="checkbox"
-            />
-            <span>
-              <strong>The source record is already closed</strong>
-              <small>The API verifies this before allowing completion without a successor.</small>
-            </span>
-          </label>
+          </fieldset> : (
+            <p>No replacement task will be created. You can schedule one later from the record.</p>
+          )}
           {error ? <p className={styles.dialogError} role="alert">{error}</p> : null}
           <footer>
             <button onClick={() => dialogRef.current?.close()} type="button">Cancel</button>
             <button className={styles.primaryButton} disabled={status === "saving"} type="submit">
               <Check aria-hidden="true" size={15} />
-              {status === "saving" ? "Saving" : "Complete and set next action"}
+              {status === "saving"
+                ? "Saving"
+                : scheduleSuccessor
+                  ? "Complete and schedule next action"
+                  : "Complete action"}
             </button>
           </footer>
         </form>
