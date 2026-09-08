@@ -107,7 +107,7 @@ test("mapping controls make attribution explicit and persist only on Save", () =
 
 test("manager campaign mappings make House and Land routing explicit", () => {
   assert.match(page, /getBatchDialerCampaignMappings\(\)/);
-  assert.match(page, /initialCampaignMappings=\{batchDialerCampaignMappings\}/);
+  assert.match(page, /initialCampaignMappings=\{campaignMappingsResult\.campaignMappings\}/);
   assert.match(api, /BatchDialerCampaignMapping/);
   assert.match(api, /historical_asset_mismatch_count/);
   assert.match(api, /requeued_event_count/);

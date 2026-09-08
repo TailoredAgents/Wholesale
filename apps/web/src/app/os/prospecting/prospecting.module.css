@@ -5,6 +5,127 @@
   min-width: 0;
 }
 
+.batchDialerBoundary {
+  border: 1px solid #c9d8ce;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f7fbf8 0%, #ffffff 72%);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.batchDialerBoundary > header {
+  padding: 20px 22px;
+  border-bottom: 1px solid #dce7df;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.batchDialerBoundary > header > div {
+  max-width: 820px;
+}
+
+.batchDialerBoundary > header span,
+.batchDialerFlow span {
+  color: var(--brand-strong);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.batchDialerBoundary h2 {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.batchDialerBoundary > header p,
+.batchDialerFlow p,
+.batchDialerStaffInstruction p {
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.batchDialerBoundary > header > strong {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #bcd4c4;
+  border-radius: 6px;
+  background: #eaf5ed;
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.batchDialerFlow {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+}
+
+.batchDialerFlow li {
+  min-width: 0;
+  padding: 17px 20px;
+  border-right: 1px solid #e2e8e3;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.batchDialerFlow li:last-child {
+  border-right: 0;
+}
+
+.batchDialerFlow svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--brand);
+}
+
+.batchDialerFlow strong {
+  margin-top: 4px;
+  color: var(--text);
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.batchDialerBoundaryNote {
+  padding: 12px 20px;
+  border-top: 1px solid #dce7df;
+  background: #f2f7f3;
+  display: flex;
+  align-items: baseline;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.batchDialerBoundaryNote strong {
+  color: var(--brand-strong);
+}
+
+.batchDialerStaffInstruction {
+  padding: 4px 0;
+}
+
+.batchDialerStaffInstruction strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
 .hubNavigation {
   display: flex;
   gap: 4px;
@@ -2132,6 +2253,36 @@
 }
 
 @media (max-width: 760px) {
+  .batchDialerBoundary > header {
+    padding: 17px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .batchDialerBoundary > header > strong {
+    width: fit-content;
+  }
+
+  .batchDialerFlow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .batchDialerFlow li {
+    padding: 15px 17px;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8e3;
+  }
+
+  .batchDialerFlow li:last-child {
+    border-bottom: 0;
+  }
+
+  .batchDialerBoundaryNote {
+    padding: 12px 17px;
+    display: grid;
+    gap: 5px;
+  }
+
   .wrapUpReceipt {
     padding: 12px;
   }

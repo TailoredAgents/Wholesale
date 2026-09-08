@@ -28,10 +28,8 @@ const voiceLineSettings = readFileSync(
   "utf8",
 );
 
-test("dialer control is a manager-only prospecting view backed by the operations endpoint", () => {
-  assert.match(page, /type ProspectingView = "campaigns" \| "dialer-control" \| "my-calls"/);
-  assert.match(page, /canManage && view === "dialer-control"[\s\S]*getProspectingDialerOperations/);
-  assert.match(page, /\{canManage \? \([\s\S]*href="\/os\/prospecting\?view=dialer-control"/);
+test("historical native dialer control remains preserved but is not routed from Prospecting", () => {
+  assert.doesNotMatch(page, /getProspectingDialerOperations|ProspectingDialerControl/);
   assert.match(api, /\/api\/v1\/prospecting\/dialer\/operations/);
   assert.match(control, /export function ProspectingDialerControl/);
 });
@@ -110,7 +108,7 @@ test("callbacks poll independently and only open a prospect after an explicit cl
 });
 
 test("policy creation fails closed when authoritative cohort data is unavailable", () => {
-  assert.match(page, /cohortsAvailable=\{campaignResult\.apiConnected && campaignManagement !== null\}/);
+  assert.doesNotMatch(page, /cohortsAvailable|CampaignManagementWorkspace/);
   assert.match(control, /disabled=\{busy \|\| !cohortsAvailable\}/);
   assert.match(control, /policy creation is paused to prevent duplicates/);
 });

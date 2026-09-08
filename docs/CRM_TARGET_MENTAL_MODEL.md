@@ -122,7 +122,7 @@ Visibility does not automatically grant authority. Permissions still govern acti
 | --- | --- |
 | Owner / executive | Home, Company view |
 | Operations assistant | Home, Company work needing coordination |
-| Prospecting caller / VA | Prospecting, My Calls |
+| Prospecting caller / VA | Prospecting, BatchDialer workflow |
 | Acquisition representative | Home, My seller follow-ups and appointments |
 | Acquisition manager | Home, Acquisition team |
 | Disposition representative | Dispositions, My active deals and replies |
@@ -142,7 +142,7 @@ These are starting positions, not separate products.
 | Person or company identity | Contacts | Conversation, lead, deal, disposition, and calendar pages open the same contact context |
 | Conversation | Conversations | Contact, lead, deal, disposition, and calendar pages open the same shared conversation |
 | Appointment | Calendar | Lead and conversation pages can schedule or open it |
-| Seller prospecting batch | Prospecting | Home links to assigned callbacks |
+| Seller cold-calling campaign | BatchDialer; Stonegate Prospecting monitors the integration | Qualified handoffs continue in Leads and Tasks |
 | Seller opportunity before contract | Leads | Conversations, Calendar, Home, Contacts, and Prospecting link to it |
 | Underwriting and seller offer | Lead record | Leads views can filter records needing work |
 | Executed seller agreement | Lead Contract section until recorded; then Deal Documents | Pipeline can launch either the in-system or existing-signed-contract path |
@@ -263,19 +263,17 @@ Starting a conversation without a deal uses the general contact relationship. St
 
 **Owns:** seller cold outreach before a person becomes an active seller opportunity.
 
-For a VA, the first screen is My Calls with:
+BatchDialer is the only VA cold-calling runtime. Its workspace owns campaigns, calling queues,
+number rotation, cadence, scripts, and call dispositions. Stonegate does not present a second
+softphone, calling queue, or campaign-assignment workflow.
 
-- Current assigned contact
-- Script and relevant property/contact facts
-- Call controls
-- Outcome
-- Callback
-- Warm handoff
-- The next contact
+For a VA, Prospecting explains the boundary and directs all assigned cold-calling work to
+BatchDialer. No call or result needs to be recreated in Stonegate.
 
-Managers additionally receive Campaigns, Lists, Assignments, and Performance. Technical dialer health belongs in a manager tool area, not the VA's primary path.
-
-When a prospect becomes a real opportunity, Prospecting creates or links a Lead and clearly confirms the new owner and next action.
+Managers receive direct-integration health, newly discovered campaign classification, agent
+identity mapping, verified handoff quality, and downstream performance. When a supported result
+passes the evidence gate, Stonegate creates or links the Lead and exposes any required review or
+appointment-entry work.
 
 ### Leads
 
@@ -506,7 +504,7 @@ Codex should now produce page blueprints in this order:
 4. Contacts and the context overlay.
 5. Leads, Pipeline, Offer, and Under Contract.
 6. Deals.
-7. Prospecting and VA My Calls.
+7. Prospecting and the BatchDialer-to-Stonegate handoff.
 8. Dispositions and Deal & Packet.
 9. Calendar.
 10. Restricted company areas.

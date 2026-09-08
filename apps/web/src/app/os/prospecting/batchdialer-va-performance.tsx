@@ -657,8 +657,8 @@ export function BatchDialerVaPerformanceSection({
       <header className={styles.header}>
         <div>
           <span>BatchDialer direct integration</span>
-          <h2>VA performance</h2>
-          <p>See verified calling activity, qualification quality, appointments, and downstream business outcomes.</p>
+          <h2>BatchDialer operations</h2>
+          <p>Classify discovered campaigns, connect agent identities, and review verified calling activity and downstream outcomes.</p>
         </div>
         <div className={styles.headerMeta}>
           <strong>{data ? `${data.date_from} - ${data.date_to}` : "No confirmed period"}</strong>

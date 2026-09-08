@@ -181,7 +181,7 @@ export const targetRoleExperiences = [
   },
   {
     role: "prospecting_caller",
-    defaultRoute: "/os/prospecting?view=my-calls",
+    defaultRoute: "/os/prospecting",
     destinations: ["prospecting", "dispositions"],
   },
   {
@@ -286,7 +286,7 @@ export const currentRouteInventory = [
     routePattern: "/os/campaigns",
     source: "src/app/os/campaigns/page.tsx",
     targetWorkspace: "prospecting",
-    targetCanonical: "/os/prospecting?view=campaigns",
+    targetCanonical: "/os/prospecting",
     migration: "legacy-redirect",
     queryParameters: [],
     helpSections: ["Campaigns"],
@@ -684,7 +684,7 @@ export const legacyNavigation = [
   {
     group: "Acquisitions",
     label: "Campaigns",
-    href: "/os/prospecting?view=campaigns",
+    href: "/os/prospecting",
     targetWorkspace: "prospecting",
   },
   {

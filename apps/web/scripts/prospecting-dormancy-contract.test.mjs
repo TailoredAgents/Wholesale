@@ -36,20 +36,19 @@ test("manual prospecting is granted only by an authoritative disabled context", 
   assert.equal(isManualProspectingMode(null), false);
 });
 
-test("the server page fails closed and hides native management views while dormant", () => {
+test("the live Prospecting page is BatchDialer-only", () => {
   assert.match(api, /export async function getProspectingDialerContext/);
   assert.match(api, /\/api\/v1\/prospecting\/dialer\/context/);
-  assert.match(page, /const nativeDialerEnabled = dialerContext\?\.feature_enabled === true/);
-  assert.match(
-    page,
-    /nativeDialerEnabled &&\s*\(requestedView === "dialer-control" \|\| requestedView === "pilot"\)/,
-  );
-  assert.match(page, /\{nativeDialerEnabled \? \([\s\S]*view=dialer-control/);
-  assert.match(page, /\{nativeDialerEnabled \? \([\s\S]*view=pilot/);
-  assert.match(page, /view === "my-calls" && nativeDialerEnabled[\s\S]*getProspectingInboundCallbacks/);
+  assert.match(page, /Cold calling happens in BatchDialer/);
+  assert.match(page, /getBatchDialerVaPerformance\(\)/);
+  assert.match(page, /getBatchDialerCampaignMappings\(\)/);
+  assert.doesNotMatch(page, /getProspectingDialer|getProspectingWorkbench/);
+  assert.doesNotMatch(page, /ProspectingDialerControl|ProspectingPilotAcceptance|ProspectingWorkspace/);
+  assert.doesNotMatch(page, /view=(?:dialer-control|pilot|my-calls|campaigns)/);
 });
 
-test("dormant My Calls excludes the native softphone chunk and callback polling", () => {
+test("historical My Calls remains preserved but unmounted from the live route", () => {
+  assert.doesNotMatch(page, /from "\.\/prospecting-workspace"/);
   assert.match(workspace, /import type \{[\s\S]*\} from "\.\/prospecting-dialer"/);
   assert.match(
     workspace,

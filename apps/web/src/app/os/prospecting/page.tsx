@@ -1,276 +1,129 @@
-import { BarChart3, ClipboardCheck, ListChecks, Megaphone, SlidersHorizontal } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, Headphones, RefreshCw, ShieldCheck } from "lucide-react";
 
 import {
-  getAcquisitionOperations,
   getBatchDialerAgentMappings,
   getBatchDialerCampaignMappings,
   getBatchDialerVaPerformance,
-  getCampaignManagementOverview,
-  getProspectingDialerAnalytics,
-  getProspectingDialerContext,
-  getProspectingDialerOperations,
-  getProspectingDialerPilot,
-  getProspectingInboundCallbacks,
-  getProspectingWorkbench,
   getWorkspaceProfile,
 } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
-import { CampaignManagementWorkspace } from "../campaigns/campaign-management-workspace";
 import { BatchDialerVaPerformanceSection } from "./batchdialer-va-performance";
-import { ProspectingAnalytics } from "./prospecting-analytics";
-import { ProspectingDialerControl } from "./prospecting-dialer-control";
-import { ProspectingPilotAcceptance } from "./prospecting-pilot-acceptance";
-import { ProspectingWorkspace } from "./prospecting-workspace";
 import styles from "./prospecting.module.css";
 
 export const dynamic = "force-dynamic";
 
-type ProspectingView = "campaigns" | "dialer-control" | "my-calls" | "analytics" | "pilot";
+function BatchDialerBoundary({ canManage }: { canManage: boolean }) {
+  return (
+    <section className={styles.batchDialerBoundary} aria-labelledby="batchdialer-boundary-title">
+      <header>
+        <div>
+          <span>Approved calling path</span>
+          <h2 id="batchdialer-boundary-title">Cold calling happens in BatchDialer</h2>
+          <p>
+            BatchDialer owns campaigns, dialing, number rotation, calling cadence, and cold-call
+            results. Stonegate receives the supported results and becomes the CRM once a seller
+            qualifies.
+          </p>
+        </div>
+        <strong>
+          <ShieldCheck aria-hidden="true" size={17} /> One production dialer
+        </strong>
+      </header>
 
-export default async function ProspectingPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{
-    campaign?: string | string[];
-    campaignView?: string | string[];
-    view?: string | string[];
-  }>;
-}) {
-  const params = await searchParams;
-  const [profile, dialerContextResult] = await Promise.all([
-    getWorkspaceProfile(),
-    getProspectingDialerContext(),
-  ]);
+      <ol className={styles.batchDialerFlow}>
+        <li>
+          <Headphones aria-hidden="true" size={18} />
+          <div>
+            <span>1. Call</span>
+            <strong>Work the assigned campaign in BatchDialer</strong>
+            <p>Use the provider&apos;s queue, phone numbers, scripts, and cadence.</p>
+          </div>
+        </li>
+        <li>
+          <RefreshCw aria-hidden="true" size={18} />
+          <div>
+            <span>2. Sync</span>
+            <strong>Record the truthful result there</strong>
+            <p>Stonegate retrieves supported call records and evidence through the direct API.</p>
+          </div>
+        </li>
+        <li>
+          <ArrowRight aria-hidden="true" size={18} />
+          <div>
+            <span>3. Continue</span>
+            <strong>Work qualified sellers in Stonegate</strong>
+            <p>Accepted handoffs enter Leads; appointment claims create visible review work.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div className={styles.batchDialerBoundaryNote}>
+        <strong>No duplicate dialing or call disposition is required in Stonegate.</strong>
+        <span>
+          Stonegate&apos;s regular phone remains available for individual seller, buyer, attorney, and
+          relationship conversations. It is not a cold-calling power dialer.
+        </span>
+        {!canManage ? (
+          <span>
+            As a caller, complete your assigned cold-calling work in BatchDialer. Return to
+            Stonegate only for CRM work that has been handed off to you.
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+export default async function ProspectingPage() {
+  const profile = await getWorkspaceProfile();
   const canManage = Boolean(profile?.permissions.includes("operations:manage"));
-  const dialerContext = dialerContextResult.dialerContext;
-  const nativeDialerEnabled = dialerContext?.feature_enabled === true;
-  const requestedView = Array.isArray(params?.view) ? params.view[0] : params?.view;
-  const view: ProspectingView = canManage
-    ? requestedView === "my-calls" ||
-      requestedView === "campaigns" ||
-      requestedView === "analytics" ||
-      (nativeDialerEnabled &&
-        (requestedView === "dialer-control" || requestedView === "pilot"))
-      ? requestedView
-      : "campaigns"
-    : "my-calls";
-  const campaignId = Array.isArray(params?.campaign) ? params.campaign[0] : params?.campaign;
-  const campaignView = Array.isArray(params?.campaignView)
-    ? params.campaignView[0]
-    : params?.campaignView;
-  const [
-    { prospecting, apiConnected },
-    campaignResult,
-    operationsResult,
-    dialerOperationsResult,
-    callbackResult,
-    analyticsResult,
-    batchDialerPerformanceResult,
-    batchDialerMappingsResult,
-    batchDialerCampaignMappingsResult,
-    pilotResult,
-  ] =
-    await Promise.all([
-      view === "my-calls" || (canManage && view === "dialer-control")
-        ? getProspectingWorkbench()
-        : Promise.resolve({ prospecting: null, apiConnected: true }),
-      canManage && (view === "campaigns" || view === "dialer-control" || view === "pilot")
-        ? getCampaignManagementOverview()
-        : Promise.resolve({ campaignManagement: null, apiConnected: true }),
-      canManage && view === "campaigns"
-        ? getAcquisitionOperations()
-        : Promise.resolve({ operations: null, apiConnected: true }),
-      canManage && (view === "dialer-control" || view === "pilot")
-        ? getProspectingDialerOperations()
-        : Promise.resolve({ dialerOperations: null, apiConnected: true }),
-      view === "my-calls" && nativeDialerEnabled
-        ? getProspectingInboundCallbacks()
-        : Promise.resolve({ callbacks: null, apiConnected: true }),
-      canManage && view === "analytics"
-        ? getProspectingDialerAnalytics()
-        : Promise.resolve({ dialerAnalytics: null, apiConnected: true }),
-      canManage && view === "analytics"
-        ? getBatchDialerVaPerformance()
-        : Promise.resolve({ vaPerformance: null, apiConnected: true }),
-      canManage && view === "analytics"
-        ? getBatchDialerAgentMappings()
-        : Promise.resolve({ agentMappings: null, apiConnected: true }),
-      canManage && view === "analytics"
-        ? getBatchDialerCampaignMappings()
-        : Promise.resolve({ campaignMappings: null, apiConnected: true }),
-      canManage && view === "pilot"
-        ? getProspectingDialerPilot()
-        : Promise.resolve({ dialerPilot: null, apiConnected: true }),
-    ]);
-  const campaignManagement = campaignResult.campaignManagement;
-  const operations = operationsResult.operations;
-  const dialerOperations = dialerOperationsResult.dialerOperations;
-  const callbacks = callbackResult.callbacks;
-  const dialerAnalytics = analyticsResult.dialerAnalytics;
-  const batchDialerPerformance = batchDialerPerformanceResult.vaPerformance;
-  const batchDialerMappings = batchDialerMappingsResult.agentMappings;
-  const batchDialerCampaignMappings = batchDialerCampaignMappingsResult.campaignMappings;
-  const dialerPilot = pilotResult.dialerPilot;
+  const [performanceResult, agentMappingsResult, campaignMappingsResult] = canManage
+    ? await Promise.all([
+        getBatchDialerVaPerformance(),
+        getBatchDialerAgentMappings(),
+        getBatchDialerCampaignMappings(),
+      ])
+    : [
+        { vaPerformance: null, apiConnected: true },
+        { agentMappings: null, apiConnected: true },
+        { campaignMappings: null, apiConnected: true },
+      ];
   const connected =
-    apiConnected &&
-    dialerContextResult.apiConnected &&
-    campaignResult.apiConnected &&
-    operationsResult.apiConnected &&
-    dialerOperationsResult.apiConnected &&
-    callbackResult.apiConnected &&
-    analyticsResult.apiConnected &&
-    pilotResult.apiConnected;
+    performanceResult.apiConnected &&
+    agentMappingsResult.apiConnected &&
+    campaignMappingsResult.apiConnected;
 
   return (
     <WorkspacePage>
       <PageHeader
-        description={
-          view === "campaigns"
-            ? "Create outreach campaigns, import prospect lists, assign calling work, and measure results."
-            : view === "dialer-control"
-              ? "Activate callers and campaigns, monitor live sessions, and recover stalled calling work safely."
-              : view === "pilot"
-                ? "Run a small controlled pilot, verify every shift, reconcile costs, and record the owner's final decision."
-              : view === "analytics"
-                ? "Compare source economics, caller performance, data quality, and technical readiness for a controlled native-dialer pilot."
-                : "Work assigned prospects, handle callbacks, record call outcomes, and complete warm handoffs."
-        }
-        eyebrow={
-          view === "campaigns"
-            ? "Outreach management"
-            : view === "dialer-control"
-              ? "Dialer operations"
-              : view === "pilot"
-                ? "Controlled pilot acceptance"
-              : view === "analytics"
-                ? "Performance and readiness"
-                : "Caller execution"
-        }
-        meta={connected ? (canManage ? "Campaigns and assigned calls" : "Assigned records only") : "API unavailable"}
+        description="Run seller cold outreach in BatchDialer, then monitor synchronized results and qualified handoffs in Stonegate."
+        eyebrow="Seller prospecting"
+        meta={canManage ? (connected ? "BatchDialer data connected" : "BatchDialer sync needs attention") : "BatchDialer calling workflow"}
         title="Prospecting"
       />
-      <nav aria-label="Prospecting views" className={styles.hubNavigation}>
-        {canManage ? (
-          <>
-            <Link
-              aria-current={view === "campaigns" ? "page" : undefined}
-              className={view === "campaigns" ? styles.activeHubNavigation : undefined}
-              href="/os/prospecting?view=campaigns"
-            >
-              <Megaphone aria-hidden="true" size={16} />
-              <span>Campaigns</span>
-            </Link>
-            {nativeDialerEnabled ? (
-              <Link
-                aria-current={view === "dialer-control" ? "page" : undefined}
-                className={view === "dialer-control" ? styles.activeHubNavigation : undefined}
-                href="/os/prospecting?view=dialer-control"
-              >
-                <SlidersHorizontal aria-hidden="true" size={16} />
-                <span>Dialer control</span>
-              </Link>
-            ) : null}
-            <Link
-              aria-current={view === "analytics" ? "page" : undefined}
-              className={view === "analytics" ? styles.activeHubNavigation : undefined}
-              href="/os/prospecting?view=analytics"
-            >
-              <BarChart3 aria-hidden="true" size={16} />
-              <span>Analytics</span>
-            </Link>
-            {nativeDialerEnabled ? (
-              <Link
-                aria-current={view === "pilot" ? "page" : undefined}
-                className={view === "pilot" ? styles.activeHubNavigation : undefined}
-                href="/os/prospecting?view=pilot"
-              >
-                <ClipboardCheck aria-hidden="true" size={16} />
-                <span>Pilot acceptance</span>
-              </Link>
-            ) : null}
-          </>
-        ) : null}
-        <Link
-          aria-current={view === "my-calls" ? "page" : undefined}
-          className={view === "my-calls" ? styles.activeHubNavigation : undefined}
-          href="/os/prospecting?view=my-calls"
-        >
-          <ListChecks aria-hidden="true" size={16} />
-          <span>My Calls</span>
-          {prospecting?.queue.ready ? <strong>{prospecting.queue.ready}</strong> : null}
-        </Link>
-      </nav>
 
-      {view === "campaigns" && canManage && campaignManagement && operations ? (
-        <CampaignManagementWorkspace
-          data={campaignManagement}
-          initialCampaignId={campaignId}
-          initialTab={campaignView}
-          markets={operations.markets}
-          territories={operations.territories}
-        />
-      ) : view === "campaigns" && canManage ? (
-        <SectionPanel description="Campaign data could not be loaded from the API." title="Campaign management unavailable">
-          <div />
-        </SectionPanel>
-      ) : view === "dialer-control" && canManage && dialerOperations ? (
-        <ProspectingDialerControl
-          cohortsAvailable={campaignResult.apiConnected && campaignManagement !== null}
-          initialCohorts={campaignManagement?.cohorts ?? []}
-          initialData={dialerOperations}
-          scripts={prospecting?.scripts ?? []}
-        />
-      ) : view === "dialer-control" && canManage ? (
-        <SectionPanel description="Dialer operations could not be loaded from the API." title="Dialer control unavailable">
-          <div />
-        </SectionPanel>
-      ) : view === "analytics" && canManage ? (
-        <>
-          {dialerAnalytics ? (
-            <ProspectingAnalytics initialData={dialerAnalytics} />
-          ) : (
-            <SectionPanel
-              description="No native-dialer performance or readiness values are shown because the analytics API could not be reached."
-              title="Native prospecting analytics unavailable"
-            >
-              <div />
-            </SectionPanel>
-          )}
-          <BatchDialerVaPerformanceSection
-            initialApiConnected={
-              batchDialerPerformanceResult.apiConnected && batchDialerMappingsResult.apiConnected
-            }
-            initialData={batchDialerPerformance}
-            initialMappings={batchDialerMappings}
-            initialCampaignMappings={batchDialerCampaignMappings}
-            initialCampaignMappingsAvailable={batchDialerCampaignMappingsResult.apiConnected}
-          />
-        </>
-      ) : view === "pilot" && canManage ? (
-        <ProspectingPilotAcceptance
-          campaignManagement={campaignManagement}
-          dialerOperations={dialerOperations}
-          initialApiConnected={pilotResult.apiConnected}
-          initialData={dialerPilot}
-        />
-      ) : prospecting ? (
-        <ProspectingWorkspace
-          data={prospecting}
-          dialerContext={dialerContext}
-          initialCallbacks={callbacks ?? { items: [], total: 0 }}
-          initialCallbacksAvailable={
-            nativeDialerEnabled && callbackResult.apiConnected && callbacks !== null
-          }
-          key={
-            prospecting.current_entry
-              ? `${prospecting.current_entry.id}:${prospecting.current_entry.status}:${prospecting.current_entry.attempt_count}:${prospecting.current_entry.active_attempt?.id ?? "ready"}`
-              : `empty:${prospecting.queue.ready}:${prospecting.queue.completed}`
-          }
+      <BatchDialerBoundary canManage={canManage} />
+
+      {canManage ? (
+        <BatchDialerVaPerformanceSection
+          initialApiConnected={performanceResult.apiConnected && agentMappingsResult.apiConnected}
+          initialData={performanceResult.vaPerformance}
+          initialMappings={agentMappingsResult.agentMappings}
+          initialCampaignMappings={campaignMappingsResult.campaignMappings}
+          initialCampaignMappingsAvailable={campaignMappingsResult.apiConnected}
         />
       ) : (
-        <SectionPanel description="An assigned caller or acquisition-management role is required." title="Prospecting workbench unavailable">
-          <div />
+        <SectionPanel
+          description="Stonegate does not maintain a second calling queue. Your assigned campaign, next number, and cold-call disposition stay in BatchDialer."
+          title="Your calling workspace is BatchDialer"
+        >
+          <div className={styles.batchDialerStaffInstruction}>
+            <strong>Finish the call and select its result in BatchDialer.</strong>
+            <p>
+              Qualified sellers and supported appointment claims synchronize into Stonegate for
+              the appropriate CRM owner. You do not need to recreate the call here.
+            </p>
+          </div>
         </SectionPanel>
       )}
     </WorkspacePage>

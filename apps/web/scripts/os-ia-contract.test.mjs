@@ -277,11 +277,10 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(transactionWorkspace, /RecordTimeline/);
   assert.doesNotMatch(buyerPage, /DealJourney/);
   assert.doesNotMatch(prospectingPage, /AcquisitionJourney/);
-  assert.match(
-    prospectingPage,
-    /view === "my-calls" \|\| \(canManage && view === "dialer-control"\)\s*\? getProspectingWorkbench\(\)/,
-  );
-  assert.match(prospectingPage, /canManage && view === "campaigns"/);
+  assert.match(prospectingPage, /getBatchDialerVaPerformance\(\)/);
+  assert.match(prospectingPage, /getBatchDialerCampaignMappings\(\)/);
+  assert.doesNotMatch(prospectingPage, /getProspectingWorkbench|getProspectingDialer/);
+  assert.doesNotMatch(prospectingPage, /CampaignManagementWorkspace|ProspectingWorkspace/);
 });
 
 test("seller lead close-out is atomic, auditable, and separate from administrative archive", () => {

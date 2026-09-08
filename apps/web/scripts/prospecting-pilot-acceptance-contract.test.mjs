@@ -22,11 +22,8 @@ const pilotOverviewType = api.slice(
   api.indexOf("export type ProspectingDialerAnalyticsCoverage"),
 );
 
-test("D10 is a manager-only Prospecting view backed by fresh pilot evidence", () => {
-  assert.match(page, /requestedView === "pilot"/);
-  assert.match(page, /canManage && view === "pilot"[\s\S]*getProspectingDialerPilot/);
-  assert.match(page, /href="\/os\/prospecting\?view=pilot"/);
-  assert.match(page, /view === "pilot" && canManage/);
+test("historical D10 evidence remains preserved but is not routed from Prospecting", () => {
+  assert.doesNotMatch(page, /getProspectingDialerPilot|ProspectingPilotAcceptance/);
   assert.match(api, /\/api\/v1\/prospecting\/dialer\/pilot/);
   assert.match(api, /cache: "no-store"/);
   assert.match(pilot, /export function ProspectingPilotAcceptance/);
@@ -45,8 +42,7 @@ test("technical readiness, controlled shifts, and owner acceptance remain separa
 });
 
 test("pilot scope uses authoritative campaign and dialer configuration with fixed caps", () => {
-  assert.match(page, /campaignManagement=\{campaignManagement\}/);
-  assert.match(page, /dialerOperations=\{dialerOperations\}/);
+  assert.doesNotMatch(page, /campaignManagement=|dialerOperations=/);
   assert.match(pilot, /Non-overlapping cohort/);
   assert.match(pilot, /Calling batch/);
   assert.match(pilot, /Dedicated line/);

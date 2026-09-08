@@ -1,6 +1,6 @@
 # Stonegate CRM Information Architecture Roadmap
 
-Last updated: July 30, 2026
+Last updated: September 8, 2026
 
 ## 1. Purpose And Authority
 
@@ -384,45 +384,26 @@ targets, and no squeezed three-column desktop layout.
 
 ### 8.5 Prospecting
 
-Prospecting combines the current Campaigns and Prospecting destinations.
+Prospecting is the Stonegate control and reporting surface for the direct BatchDialer integration.
+BatchDialer remains the only cold-calling runtime.
 
 Manager views:
 
-- Overview
-- Campaigns
-- Imports
-- Calling Batches
-- Handoffs
-- Results
+- Provider synchronization health
+- Newly discovered campaign classification
+- Agent identity mapping
+- Verified handoffs and downstream results
+- VA performance and evidence-backed coaching
 
 Caller views:
 
-- My Calls
-- Callbacks
-- Handoffs
+- A concise explanation that assigned calls and dispositions are completed in BatchDialer
+- Confirmation that qualified sellers synchronize into Stonegate automatically
+- No Stonegate softphone, local call queue, callback queue, or duplicate disposition controls
 
-Campaign creation lives at:
-
-`Prospecting > Campaigns > New Campaign`
-
-A selected campaign contains:
-
-- Summary
-- Prospects
-- Imports
-- Assignments
-- Costs And Results
-- Settings
-
-The import flow begins inside a selected campaign so staff never encounter an unexplained
-campaign picker. The importer may offer **Create campaign** as an authorized escape hatch without
-moving the user to Team & Access.
-
-Market and territory definitions move to Settings. Campaign selection, list import, caller
-assignment, and campaign results remain operational Prospecting work.
-
-VAs keep the focused one-by-one calling interface. They do not receive manager campaign,
-financial, export, buyer, underwriting, contract, or company settings views.
+Campaign creation, contact-list upload, calling assignments, number rotation, and cadence remain
+in BatchDialer. Stonegate reads supported provider evidence and owns the CRM workflow only after
+the handoff gate.
 
 ### 8.6 Leads
 
@@ -745,7 +726,7 @@ Settings sections remain permission-filtered. Consolidating navigation does not 
 | Owner and CEO | Home, company view | All target destinations |
 | Lead Manager | Leads, New or Needs Qualification | Home, Inbox, Tasks, Calendar, Leads |
 | Acquisitions Closer | Calendar, today's appointments | Home, Inbox, Tasks, Calendar, Leads, Deals when assigned |
-| VA Caller | Prospecting, My Calls | Prospecting and account setup only |
+| VA Caller | Prospecting, BatchDialer workflow | Prospecting and account setup only |
 | Transaction Coordinator | Deals, Closing Exceptions | Home, Inbox, Tasks, Calendar, Deals |
 | Dispositions | Dispositions, Today | Home, Inbox, Tasks, Calendar, Dispositions, Deals, Buyers |
 | Finance and bookkeeping | Finance | Home, Inbox when granted, Tasks, Calendar when needed, Deals summary, Finance |
@@ -786,7 +767,7 @@ phase so it answers using the current interface, not the final planned roadmap.
 | `/os/inbox` | `/os/inbox` | Keep |
 | `/os/tasks` | `/os/tasks` Tasks | Keep and rename display label |
 | `/os/calendar` | `/os/calendar` | Keep |
-| `/os/campaigns` | `/os/prospecting?view=campaigns` | Redirect implemented |
+| `/os/campaigns` | `/os/prospecting` | Redirect implemented |
 | `/os/prospecting` | `/os/prospecting` | Keep as workspace root |
 | `/os/lead-manager` | `/os/leads?view=needs-qualification` | Redirect after parity |
 | `/os/leads` | `/os/leads` Leads | Keep |
@@ -846,7 +827,7 @@ Use for Seller Lead, Deal, Buyer, and Campaign:
 Use for:
 
 - CSV import
-- one-by-one calling
+- BatchDialer campaign execution and result entry
 - seller qualification
 - field appointment
 - contract release
@@ -1455,6 +1436,10 @@ IA4 was implemented on July 30, 2026.
 
 ### 22.1 One Prospecting Destination
 
+> Superseded September 8, 2026: the owner confirmed BatchDialer as the permanent production
+> dialer. The local Campaigns and My Calls views described below are preserved as historical
+> implementation evidence but are no longer mounted in the live Prospecting route.
+
 `/os/prospecting` now owns two permission-aware local views:
 
 - **Campaigns** for authorized managers to create campaigns, select campaign context, import
@@ -1498,6 +1483,19 @@ second campaign model.
 
 IA5 is complete. IA6 moves field meeting execution into Calendar while preserving appointment
 deep links and the iPad workflow.
+
+### 22.6 BatchDialer-Only Prospecting
+
+The live `/os/prospecting` route now exposes one unambiguous operating model:
+
+- VAs place every cold call and record every cold-call result in BatchDialer.
+- Managers classify discovered BatchDialer campaigns, map provider agents, inspect direct-sync
+  health, and review verified performance in Stonegate.
+- Stonegate creates CRM work only from supported, evidence-accepted handoffs.
+- The former native softphone, Dialer Control, Pilot Acceptance, My Calls, local campaign
+  creation, and calling-batch entry points are not mounted.
+- Historical native records, code, migrations, evidence, and cleanup behavior remain preserved.
+- `/os/campaigns` redirects to the canonical `/os/prospecting` route.
 
 ## 23. IA5 Leads Consolidation Implementation
 

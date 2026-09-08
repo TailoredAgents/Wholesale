@@ -1,9 +1,9 @@
 # BatchDialer Direct Integration And Native Dialer Dormancy Roadmap
 
-Last updated: August 27, 2026
+Last updated: September 8, 2026
 
-Status: direct-only architecture approved; native dialer dormancy prepared; direct runtime
-implementation and production acceptance in progress
+Status: direct-only architecture implemented; native dialer removed from live Prospecting;
+direct runtime production acceptance remains in progress
 
 ## 1. Purpose And Authority
 

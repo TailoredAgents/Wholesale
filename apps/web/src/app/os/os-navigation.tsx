@@ -257,7 +257,7 @@ export function visibleNavGroups(profile: WorkspaceProfile) {
 export function defaultRouteForProfile(profile: WorkspaceProfile) {
   if (isOwnerProfile(profile) || profile.role_keys.includes("administrator")) return "/os";
   if (profile.role_keys.includes("operations_assistant")) return "/os";
-  if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting?view=my-calls";
+  if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting";
   if (profile.role_keys.includes("acquisition_manager")) return "/os/leads?view=queue";
   if (profile.role_keys.includes("acquisition_rep")) return "/os/calendar?view=day";
   if (profile.role_keys.some((role) => dispositionRoles.includes(role))) {
