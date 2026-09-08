@@ -599,6 +599,28 @@ test("Inbox protects professional email drafts, signatures, and inbound attachme
   assert.match(attachment, /Stonegate has not malware-scanned this attachment/);
 });
 
+test("Inbox keeps the thread primary and collapses secondary email noise", () => {
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const inboxStyles = readFileSync(resolve(osSourceRoot, "inbox/inbox.module.css"), "utf8");
+  const messageText = readFileSync(
+    resolve(osSourceRoot, "inbox/linked-message-text.tsx"),
+    "utf8",
+  );
+  const attachment = readFileSync(resolve(osSourceRoot, "inbox/message-attachment.tsx"), "utf8");
+
+  assert.match(inbox, /data-detail-open=\{detailPaneOpen\}/);
+  assert.match(inbox, /setDetailPaneOpen\(\(current\) => !current\)/);
+  assert.match(inbox, /secondaryFilterSelect/);
+  assert.match(inbox, /collapseEmailHistory=\{item\.channel === "email"\}/);
+  assert.match(inbox, /className=\{styles\.detailDisclosure\}/);
+  assert.match(inboxStyles, /\.inboxFrame\[data-detail-open="false"\]/);
+  assert.match(inboxStyles, /\.message\[data-channel="email"\]/);
+  assert.match(inboxStyles, /\.messageBody details/);
+  assert.match(messageText, /EMAIL_TRAILING_CONTENT_PATTERNS/);
+  assert.match(messageText, /Show signature and quoted history/);
+  assert.match(attachment, /className=\{styles\.attachmentCopy\}/);
+});
+
 test("Lead contact permission control manages calls and SMS without a typed note", () => {
   const control = readFileSync(
     resolve(osSourceRoot, "_components/sms-permission-control.tsx"),

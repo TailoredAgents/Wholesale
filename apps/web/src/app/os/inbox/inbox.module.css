@@ -1,7 +1,7 @@
 .pageHeader {
   max-width: 1680px;
-  margin: 0 auto 16px;
-  padding: 2px 0 16px;
+  margin: 0 auto 14px;
+  padding: 2px 2px 14px;
   border-bottom: 1px solid rgba(104, 112, 115, 0.18);
   display: flex;
   align-items: center;
@@ -149,12 +149,22 @@
   min-height: 650px;
   margin: 0 auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--surface);
   box-shadow: var(--shadow-soft);
   display: grid;
-  grid-template-columns: minmax(270px, 0.78fr) minmax(420px, 1.65fr) minmax(290px, 0.88fr);
+  grid-template-columns: minmax(270px, 310px) minmax(460px, 1fr) minmax(250px, 290px);
   overflow: hidden;
+}
+
+@media (min-width: 1241px) {
+  .inboxFrame[data-detail-open="false"] {
+    grid-template-columns: minmax(270px, 310px) minmax(560px, 1fr);
+  }
+
+  .inboxFrame[data-detail-open="false"] .detailPane {
+    display: none;
+  }
 }
 
 .conversationPane,
@@ -172,7 +182,7 @@
 }
 
 .filterRail {
-  padding: 10px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid var(--line-soft);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -231,8 +241,32 @@
   color: var(--brand-strong);
 }
 
+.secondaryFilterSelect {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.secondaryFilterSelect select {
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  outline: 0;
+}
+
+.secondaryFilterSelect select:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(63, 143, 104, 0.1);
+}
+
 .mailboxRail {
-  max-height: 196px;
+  max-height: 152px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--line-soft);
   display: grid;
@@ -308,7 +342,7 @@
 }
 
 .listHeader {
-  padding: 14px 12px 11px;
+  padding: 13px 12px 11px;
   border-bottom: 1px solid var(--line-soft);
   display: grid;
   gap: 11px;
@@ -374,8 +408,8 @@
 
 .conversationList > button {
   width: 100%;
-  min-height: 91px;
-  padding: 13px 12px;
+  min-height: 86px;
+  padding: 12px;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   background: transparent;
@@ -394,7 +428,7 @@
 }
 
 .conversationList .activeConversation {
-  background: var(--brand-soft);
+  background: color-mix(in srgb, var(--brand-soft) 78%, var(--surface));
   box-shadow: inset 3px 0 0 var(--brand);
 }
 
@@ -509,7 +543,7 @@
 .threadHeader {
   min-width: 0;
   min-height: 76px;
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -583,15 +617,32 @@
 
 .contactActions a,
 .contactActions button {
-  width: 36px;
+  width: auto;
+  min-width: 36px;
   height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-soft);
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
   cursor: pointer;
+}
+
+.contactActions button[aria-pressed="true"] {
+  border-color: #bdd2c4;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.actionLabel {
+  white-space: nowrap;
 }
 
 .contactActions a:hover,
@@ -608,11 +659,11 @@
 .timeline {
   min-width: 0;
   min-height: 0;
-  padding: 20px 18px;
+  padding: 22px 20px;
   background: #f7f6f2;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow-y: auto;
 }
 
@@ -638,13 +689,18 @@
 }
 
 .message {
-  width: min(78%, 540px);
-  padding: 11px 13px;
+  width: min(76%, 590px);
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 8px;
   box-shadow: var(--shadow-tight);
   display: grid;
   gap: 7px;
+}
+
+.message[data-channel="email"],
+.message[data-channel="call"] {
+  width: min(90%, 760px);
 }
 
 .inboundMessage {
@@ -675,19 +731,23 @@
   font-weight: 750;
 }
 
-.message > strong {
-  font-size: 12px;
+.messageSubject {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
-.message p {
+.messageBody {
   color: var(--text);
   font-size: 13px;
-  line-height: 1.5;
+  font-weight: 500;
+  line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.message p a {
+.messageBody a {
   color: var(--brand-strong);
   font-weight: 700;
   text-decoration: underline;
@@ -695,14 +755,43 @@
   text-underline-offset: 2px;
 }
 
-.message p a:hover {
+.messageBody a:hover {
   color: var(--brand);
 }
 
-.message p a:focus-visible {
+.messageBody a:focus-visible {
   border-radius: 3px;
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+.messageBody details {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.messageBody details summary {
+  width: fit-content;
+  color: var(--brand-strong);
+  font-weight: 800;
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.messageBody details > div {
+  max-height: 260px;
+  margin-top: 8px;
+  padding: 10px;
+  border-left: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--text-soft);
+  line-height: 1.5;
+  overflow: auto;
+  white-space: pre-wrap;
 }
 
 .message small {
@@ -732,37 +821,63 @@
 .messageAttachments {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
+  gap: 7px;
 }
 
 .messageFileAttachment {
   grid-column: 1 / -1;
   width: 100%;
-  min-height: 34px;
-  padding: 6px 8px;
+  min-height: 54px;
+  padding: 8px 10px;
   border: 1px solid rgba(104, 112, 115, 0.2);
-  border-radius: 5px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.7);
   color: var(--text-soft);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.messageFileAttachment span {
+.attachmentIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+}
+
+.attachmentCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.attachmentCopy strong {
   overflow: hidden;
-  font-size: 10px;
+  color: var(--text);
+  font-size: 12px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.messageFileAttachment small {
+.attachmentCopy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.messageFileAttachment > svg:last-child {
+  color: var(--brand-strong);
 }
 
 .messageFileAttachment:disabled {
@@ -1525,12 +1640,16 @@
   min-width: 0;
   border-top: 1px solid var(--line);
   background: var(--surface);
+  box-shadow: 0 -5px 16px rgba(22, 26, 29, 0.045);
+  position: relative;
+  z-index: 2;
 }
 
 .composerTabs {
-  height: 42px;
-  padding: 5px 10px 0;
+  height: 44px;
+  padding: 5px 12px 0;
   border-bottom: 1px solid var(--line-soft);
+  background: #fcfcfa;
   display: flex;
   align-items: flex-end;
   gap: 3px;
@@ -1538,7 +1657,7 @@
 
 .composerTabs button {
   height: 36px;
-  padding: 0 9px;
+  padding: 0 11px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -1559,7 +1678,7 @@
 
 .composerControls {
   min-height: 42px;
-  padding: 7px 10px 0;
+  padding: 8px 12px 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1855,7 +1974,7 @@
 
 .emailReady,
 .emailBlocked {
-  margin: 7px 10px 0;
+  margin: 7px 12px 0;
   padding: 7px 9px;
   border-radius: 5px;
   display: flex;
@@ -1886,7 +2005,7 @@
 
 .emailAttachmentRow {
   min-height: 35px;
-  padding: 6px 10px 0;
+  padding: 7px 12px 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1928,7 +2047,7 @@
 
 .smsReady,
 .smsBlocked {
-  margin: 7px 10px 0;
+  margin: 7px 12px 0;
   padding: 7px 9px;
   border-radius: 5px;
   display: flex;
@@ -2021,8 +2140,8 @@
 }
 
 .composerBody {
-  min-height: 94px;
-  padding: 7px 10px 10px;
+  min-height: 104px;
+  padding: 8px 12px 12px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
@@ -2031,16 +2150,16 @@
 
 .composerBody textarea {
   width: 100%;
-  min-height: 74px;
-  max-height: 150px;
-  padding: 9px 10px;
+  min-height: 82px;
+  max-height: 180px;
+  padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface-soft);
   color: var(--text);
   font: inherit;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   outline: 0;
   resize: vertical;
 }
@@ -2083,7 +2202,7 @@
 
 .detailPane {
   border-left: 1px solid var(--line);
-  background: #fbfaf7;
+  background: #fcfbf8;
   overflow-y: auto;
 }
 
@@ -2095,6 +2214,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  background: rgba(252, 251, 248, 0.96);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(10px);
 }
 
 .detailHeader > div {
@@ -2127,7 +2251,7 @@
 }
 
 .detailSection {
-  padding: 14px;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -2299,6 +2423,56 @@
   .generalEmailFormGrid:first-of-type {
     grid-template-columns: 1fr;
   }
+}
+
+.detailDisclosure {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.detailDisclosure > summary {
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.detailDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.detailDisclosure > summary::after {
+  content: "+";
+  color: var(--brand-strong);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.detailDisclosure[open] > summary::after {
+  content: "-";
+}
+
+.detailDisclosure > summary strong {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 9px;
+  text-align: center;
+}
+
+.detailDisclosure > .callNotesList,
+.detailDisclosure > .mutedText {
+  margin: 0 14px 14px;
 }
 
 .callNotesList {
@@ -2526,9 +2700,9 @@
   border: 0;
 }
 
-@media (max-width: 1260px) {
+@media (max-width: 1400px) {
   .inboxFrame {
-    grid-template-columns: minmax(255px, 0.74fr) minmax(390px, 1.6fr) minmax(270px, 0.82fr);
+    grid-template-columns: minmax(245px, 275px) minmax(420px, 1fr) minmax(230px, 260px);
   }
 
   .filterRail button {
@@ -2540,7 +2714,7 @@
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1240px) {
   .mobilePaneNav {
     max-width: 1680px;
     height: 44px;
@@ -2607,7 +2781,7 @@
   }
 
   .filterRail {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2625,7 +2799,7 @@
     margin-bottom: 12px;
   }
 
-  .pageHeader h2 {
+  .pageHeader h1 {
     font-size: 25px;
   }
 
@@ -2667,6 +2841,10 @@
   .internalMessage,
   .systemEvent {
     width: 94%;
+  }
+
+  .actionLabel {
+    display: none;
   }
 
   .threadHeader {

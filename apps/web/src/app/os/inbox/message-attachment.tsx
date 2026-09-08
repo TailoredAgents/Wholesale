@@ -37,11 +37,14 @@ export function MessageAttachment({
 }) {
   const previewable = previewableImageTypes.has(attachment.content_type.toLowerCase());
   const scanVerified = attachment.malware_scan_status === "clean";
-  const scanLabel = scanVerified
-    ? formatSize(attachment.size_bytes)
-    : attachment.malware_scan_status === "scan_error"
-      ? "Scan unavailable"
+  const scanLabel = attachment.malware_scan_status === "scan_error"
+    ? "Scan unavailable"
+    : scanVerified
+      ? "Scanned"
       : "Not malware-scanned";
+  const fileExtension = attachment.filename.split(".").at(-1);
+  const fileTypeLabel =
+    fileExtension && fileExtension.length <= 8 ? fileExtension.toUpperCase() : "FILE";
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">(
     previewable ? "loading" : "idle",
@@ -126,13 +129,22 @@ export function MessageAttachment({
         title={`Download ${attachment.filename}`}
         type="button"
       >
-        {loadState === "loading" ? (
-          <LoaderCircle className={styles.attachmentSpinner} size={13} aria-hidden="true" />
-        ) : (
-          <Paperclip size={13} aria-hidden="true" />
-        )}
-        <span>{attachment.filename}</span>
-        <small>{loadState === "error" ? "Retry" : scanLabel}</small>
+        <span className={styles.attachmentIcon}>
+          {loadState === "loading" ? (
+            <LoaderCircle className={styles.attachmentSpinner} size={17} aria-hidden="true" />
+          ) : (
+            <Paperclip size={17} aria-hidden="true" />
+          )}
+        </span>
+        <span className={styles.attachmentCopy}>
+          <strong>{attachment.filename}</strong>
+          <small>
+            {loadState === "error"
+              ? "Download failed - Select to retry"
+              : `${fileTypeLabel} - ${formatSize(attachment.size_bytes)} - ${scanLabel}`}
+          </small>
+        </span>
+        <Download size={16} aria-hidden="true" />
       </button>
     );
   }

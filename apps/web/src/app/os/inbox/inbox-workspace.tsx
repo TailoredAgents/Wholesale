@@ -23,6 +23,8 @@ import {
   Play,
   Plus,
   Paperclip,
+  PanelRightClose,
+  PanelRightOpen,
   RefreshCw,
   Reply,
   Search,
@@ -312,6 +314,15 @@ const filters: Array<{
   { key: "unread", label: "Unread", icon: MailOpen },
   { key: "archived", label: "Archived", icon: Archive },
 ];
+
+const primaryFilterKeys = new Set<InboxFilterKey>([
+  "mine",
+  "team",
+  "needs_reply",
+  "unread",
+]);
+const primaryFilters = filters.filter((item) => primaryFilterKeys.has(item.key));
+const secondaryFilters = filters.filter((item) => !primaryFilterKeys.has(item.key));
 
 const composerChannels: Array<{
   key: ComposerChannel;
@@ -935,6 +946,7 @@ export function InboxWorkspace({
   const [filter, setFilter] = useState<InboxFilterKey>(initialFilter);
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
+  const [detailPaneOpen, setDetailPaneOpen] = useState(true);
   const [channel, setChannel] = useState<ComposerChannel>(initialChannel);
   const [callComposerMode, setCallComposerMode] = useState<
     "browser" | "cellphone" | "log"
@@ -1884,13 +1896,17 @@ export function InboxWorkspace({
         </button>
       </nav>
 
-      <section className={styles.inboxFrame} aria-label="Shared conversation inbox">
+      <section
+        className={styles.inboxFrame}
+        aria-label="Shared conversation inbox"
+        data-detail-open={detailPaneOpen}
+      >
         <aside
           className={styles.conversationPane}
           data-mobile-active={mobilePane === "conversations"}
         >
           <div className={styles.filterRail}>
-            {filters.map((item) => {
+            {primaryFilters.map((item) => {
               const Icon = item.icon;
               return (
                 <button
@@ -1912,6 +1928,25 @@ export function InboxWorkspace({
                 </button>
               );
             })}
+            <label className={styles.secondaryFilterSelect}>
+              <span className={styles.visuallyHidden}>More inbox views</span>
+              <select
+                aria-label="More inbox views"
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  setMailboxAliasId(null);
+                  setFilter(event.target.value as InboxFilterKey);
+                }}
+                value={secondaryFilters.some((item) => item.key === filter) ? filter : ""}
+              >
+                <option value="">More views</option>
+                {secondaryFilters.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.label} ({counts[item.key]})
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {emailAliases.length > 0 ? (
@@ -2090,7 +2125,7 @@ export function InboxWorkspace({
                       type="button"
                     >
                       <Phone size={17} aria-hidden="true" />
-                      <span className={styles.visuallyHidden}>Call seller</span>
+                      <span className={styles.actionLabel}>Call</span>
                     </button>
                   ) : null}
                   {primaryEmail ? (
@@ -2103,16 +2138,29 @@ export function InboxWorkspace({
                       type="button"
                     >
                       <Mail size={17} aria-hidden="true" />
-                      <span className={styles.visuallyHidden}>Email seller</span>
+                      <span className={styles.actionLabel}>Email</span>
                     </button>
                   ) : null}
                   <button
-                    onClick={() => setMobilePane("details")}
-                    title="Open seller details"
+                    aria-pressed={detailPaneOpen}
+                    onClick={() => {
+                      if (window.matchMedia("(max-width: 1240px)").matches) {
+                        setMobilePane("details");
+                        return;
+                      }
+                      setDetailPaneOpen((current) => !current);
+                    }}
+                    title={detailPaneOpen ? "Hide contact details" : "Show contact details"}
                     type="button"
                   >
-                    <FileText size={17} aria-hidden="true" />
-                    <span className={styles.visuallyHidden}>Open seller details</span>
+                    {detailPaneOpen ? (
+                      <PanelRightClose size={17} aria-hidden="true" />
+                    ) : (
+                      <PanelRightOpen size={17} aria-hidden="true" />
+                    )}
+                    <span className={styles.visuallyHidden}>
+                      {detailPaneOpen ? "Hide contact details" : "Show contact details"}
+                    </span>
                   </button>
                 </div>
               </header>
@@ -2134,22 +2182,32 @@ export function InboxWorkspace({
                             ? styles.internalMessage
                             : styles.inboundMessage
                       } ${item.channel === "call" ? styles.callMessage : ""}`}
+                      data-channel={item.channel}
                       id={item.call_id ? `call-${item.call_id}` : undefined}
                       key={item.id}
                     >
                       <div className={styles.messageMeta}>
                         <span>
+                          {item.direction === "inbound"
+                            ? detail.preferred_name || detail.seller_name
+                            : item.direction === "internal"
+                              ? item.actor_display_name || "Stonegate team"
+                              : item.actor_display_name || "Stonegate"}
+                          {" / "}
                           {item.channel === "sms" && item.attachments.length > 0
                             ? "MMS"
                             : labelize(item.channel)}
                         </span>
                         <time>{formatDateTime(item.occurred_at)}</time>
                       </div>
-                      {item.subject ? <strong>{item.subject}</strong> : null}
+                      {item.subject ? <strong className={styles.messageSubject}>{item.subject}</strong> : null}
                       {item.body.trim() ? (
-                        <p>
-                          <LinkedMessageText text={item.body} />
-                        </p>
+                        <div className={styles.messageBody}>
+                          <LinkedMessageText
+                            collapseEmailHistory={item.channel === "email"}
+                            text={item.body}
+                          />
+                        </div>
                       ) : null}
                       {item.attachments.length > 0 ? (
                         <div className={styles.messageAttachments}>
@@ -2776,7 +2834,11 @@ export function InboxWorkspace({
           ) : null}
         </section>
 
-        <aside className={styles.detailPane} data-mobile-active={mobilePane === "details"}>
+        <aside
+          className={styles.detailPane}
+          data-mobile-active={mobilePane === "details"}
+          data-open={detailPaneOpen}
+        >
           {!detail ? (
             <div className={styles.detailEmpty}>Select a conversation to view seller context.</div>
           ) : (
@@ -2991,8 +3053,11 @@ export function InboxWorkspace({
                     </dl>
                   </section>
 
-                  <section className={styles.detailSection}>
-                    <h4>Call notes</h4>
+                  <details className={styles.detailDisclosure}>
+                    <summary>
+                      <span>Call notes</span>
+                      <strong>{callNotes.length}</strong>
+                    </summary>
                     {callNotes.length > 0 ? (
                       <div className={styles.callNotesList}>
                         {callNotes.map((item) => {
@@ -3026,7 +3091,7 @@ export function InboxWorkspace({
                     ) : (
                       <p className={styles.mutedText}>No processed call notes yet.</p>
                     )}
-                  </section>
+                  </details>
 
                   <section className={styles.detailSection}>
                     <h4>Next action</h4>

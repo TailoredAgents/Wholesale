@@ -8,6 +8,20 @@ const CLOSING_DELIMITERS: Record<string, string> = {
   "}": "{",
 };
 
+const EMAIL_TRAILING_CONTENT_PATTERNS = [
+  { pattern: /\n--\s*\n/, summary: "Show signature" },
+  {
+    pattern: /\nSent from (?:my |Yahoo Mail|Mail for iPhone)/i,
+    summary: "Show signature and quoted history",
+  },
+  { pattern: /\nOn .{1,320}wrote:\s*\n/i, summary: "Show quoted message" },
+  { pattern: /\n-{2,}\s*Original Message\s*-{2,}/i, summary: "Show quoted message" },
+  {
+    pattern: /\nFrom:\s*[^\n]+\nSent:\s*[^\n]+\nTo:\s*[^\n]+/i,
+    summary: "Show quoted message",
+  },
+];
+
 function countCharacter(value: string, character: string): number {
   return [...value].filter((item) => item === character).length;
 }
@@ -59,7 +73,15 @@ function safeHref(value: string): string | null {
   }
 }
 
-export function LinkedMessageText({ text }: { text: string }) {
+function displayLink(value: string, href: string) {
+  if (value.length <= 54) return value;
+  const parsed = new URL(href);
+  const path = parsed.pathname === "/" ? "" : parsed.pathname;
+  const shortenedPath = path.length > 24 ? `${path.slice(0, 24)}...` : path;
+  return `${parsed.hostname}${shortenedPath}`;
+}
+
+function linkedContent(text: string) {
   const content: ReactNode[] = [];
   let cursor = 0;
 
@@ -78,9 +100,9 @@ export function LinkedMessageText({ text }: { text: string }) {
           key={`${index}-${link}`}
           rel="noopener noreferrer"
           target="_blank"
-          title="Open link in a new tab"
+          title={link}
         >
-          {link}
+          {displayLink(link, href)}
         </a>,
       );
       if (trailing) content.push(trailing);
@@ -92,4 +114,48 @@ export function LinkedMessageText({ text }: { text: string }) {
 
   if (cursor < text.length) content.push(text.slice(cursor));
   return content.map((item, index) => <Fragment key={index}>{item}</Fragment>);
+}
+
+function splitEmailTrailingContent(text: string) {
+  let earliestIndex = -1;
+  let summary = "Show quoted message";
+
+  for (const candidate of EMAIL_TRAILING_CONTENT_PATTERNS) {
+    const match = candidate.pattern.exec(text);
+    if (match && (earliestIndex === -1 || match.index < earliestIndex)) {
+      earliestIndex = match.index;
+      summary = candidate.summary;
+    }
+  }
+
+  if (earliestIndex <= 0) return { current: text, trailing: "", summary };
+  return {
+    current: text.slice(0, earliestIndex).trimEnd(),
+    trailing: text.slice(earliestIndex).trim(),
+    summary,
+  };
+}
+
+export function LinkedMessageText({
+  collapseEmailHistory = false,
+  text,
+}: {
+  collapseEmailHistory?: boolean;
+  text: string;
+}) {
+  const { current, trailing, summary } = collapseEmailHistory
+    ? splitEmailTrailingContent(text)
+    : { current: text, trailing: "", summary: "Show quoted message" };
+
+  return (
+    <>
+      {linkedContent(current)}
+      {trailing ? (
+        <details>
+          <summary>{summary}</summary>
+          <div>{linkedContent(trailing)}</div>
+        </details>
+      ) : null}
+    </>
+  );
 }
