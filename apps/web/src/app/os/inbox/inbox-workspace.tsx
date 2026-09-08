@@ -1802,7 +1802,8 @@ export function InboxWorkspace({
 
   return (
     <>
-      <header className={styles.pageHeader}>
+      <div className={styles.inboxPage}>
+        <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>Seller communications</p>
           <h1>Inbox</h1>
@@ -1855,19 +1856,19 @@ export function InboxWorkspace({
             Refresh
           </button>
         </div>
-      </header>
+        </header>
 
-      {error ? (
-        <div className={styles.errorBanner} role="alert">
-          <CircleAlert size={17} aria-hidden="true" />
-          <span>{error}</span>
-          <button onClick={() => setError(null)} type="button" aria-label="Dismiss error">
-            <Check size={16} aria-hidden="true" />
-          </button>
-        </div>
-      ) : null}
+        {error ? (
+          <div className={styles.errorBanner} role="alert">
+            <CircleAlert size={17} aria-hidden="true" />
+            <span>{error}</span>
+            <button onClick={() => setError(null)} type="button" aria-label="Dismiss error">
+              <Check size={16} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
 
-      <nav className={styles.mobilePaneNav} aria-label="Inbox panes">
+        <nav className={styles.mobilePaneNav} aria-label="Inbox panes">
         <button
           className={mobilePane === "conversations" ? styles.activeMobilePane : undefined}
           onClick={() => setMobilePane("conversations")}
@@ -1894,13 +1895,13 @@ export function InboxWorkspace({
           <FileText size={16} aria-hidden="true" />
           Details
         </button>
-      </nav>
+        </nav>
 
-      <section
-        className={styles.inboxFrame}
-        aria-label="Shared conversation inbox"
-        data-detail-open={detailPaneOpen}
-      >
+        <section
+          className={styles.inboxFrame}
+          aria-label="Shared conversation inbox"
+          data-detail-open={detailPaneOpen}
+        >
         <aside
           className={styles.conversationPane}
           data-mobile-active={mobilePane === "conversations"}
@@ -3212,7 +3213,8 @@ export function InboxWorkspace({
             </>
           )}
         </aside>
-      </section>
+        </section>
+      </div>
       {globalComposeOpen && canComposeGlobalEmail ? (
         <GlobalEmailCompose
           aliases={emailAliases}
