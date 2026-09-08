@@ -37,9 +37,14 @@ conversation produced a real next step.
 
 ## Existing Records
 
-The release does not bulk-delete historical tasks. Existing AI work immediately leaves the human
-task and overdue views. Existing human primary actions can be completed with an outcome and no
-successor, which clears the old forced-task loop without erasing task history.
+Migration `0127_retire_legacy_automatic_tasks.py` retires the overdue generic primary actions that
+match the former five-minute automatic-creation fingerprint. It marks them cancelled with the
+`automation_retired` outcome, stores an audit event, and clears the matching artificial lead
+follow-up date. It does not delete task history.
+
+The cleanup does not touch speed-to-lead work, explicitly titled tasks, future work, or generic
+tasks whose due date does not match the former automation fingerprint. Remaining human primary
+actions can be completed with an outcome and no successor.
 
 ## Protections That Remain
 
