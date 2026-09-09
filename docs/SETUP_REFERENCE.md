@@ -758,10 +758,11 @@ All paths use `https://api.stonegatehb.com` as the base.
 
 ## Marin AI Seller Callback Line
 
-Stonegate reserves `+1 (678) 541-7725` for Marin, an OpenAI Realtime phone concierge for possible
-sellers returning BatchDialer cold calls. `+1 (404) 777-2631` remains the human company line and
-the only live-transfer destination. The AI line is excluded from browser and manual outbound line
-selection.
+Stonegate reserves `+1 (470) 888-7952` for Marin, an OpenAI Realtime phone concierge for possible
+sellers returning BatchDialer cold calls. The publicly marketed `+1 (678) 541-7725` remains the
+human company line and the only live-transfer destination. `+1 (404) 777-2631` is not a Stonegate
+number and must not appear in provider or runtime configuration. The AI line is excluded from
+browser and manual outbound line selection.
 
 The implementation is deployed fail-closed. It does not answer with AI until all of these API
 service variables are configured and the enable flag is deliberately set to `true`:
@@ -772,8 +773,8 @@ service variables are configured and the enable flag is deliberately set to `tru
 - `OPENAI_REALTIME_VOICE_ENABLED`
 - `OPENAI_REALTIME_MODEL=gpt-realtime-2.1`
 - `OPENAI_REALTIME_VOICE=marin`
-- `OPENAI_REALTIME_LINE_NUMBER=+16785417725`
-- `OPENAI_REALTIME_TRANSFER_NUMBER=+14047772631`
+- `OPENAI_REALTIME_LINE_NUMBER=+14708887952`
+- `OPENAI_REALTIME_TRANSFER_NUMBER=+16785417725`
 - `OPENAI_REALTIME_MAX_CALL_SECONDS=900`
 
 Provider setup:
@@ -783,12 +784,12 @@ Provider setup:
    `https://api.stonegatehb.com/api/v1/webhooks/openai/realtime`.
 2. Copy its signing secret into the Render API `OPENAI_WEBHOOK_SECRET` value and set the matching
    OpenAI project ID in `OPENAI_PROJECT_ID`.
-3. In Twilio, associate only the 678 number with a SIP trunk and set that trunk's Origination SIP
+3. In Twilio, associate only the 470 number with a SIP trunk and set that trunk's Origination SIP
    URI to `sip:<OPENAI_PROJECT_ID>@sip.api.openai.com;transport=tls`.
-4. Configure Twilio's trunk failure/fallback handling to the 404 human line. Do not point the 404
+4. Configure Twilio's trunk failure/fallback handling to the 678 company line. Do not point the 678
    number at OpenAI.
-5. Open **Settings > Communications** and confirm the Marin readiness card shows the 678 AI line,
-   404 transfer line, signed webhook URL, SIP URI, and four ready checks.
+5. Open **Settings > Communications** and confirm the Marin readiness card shows the 470 AI line,
+   678 transfer line, signed webhook URL, SIP URI, and four ready checks.
 6. Set `OPENAI_REALTIME_VOICE_ENABLED=true`, allow the API to redeploy, and run only controlled
    acceptance calls before public use.
 

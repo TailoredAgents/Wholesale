@@ -253,19 +253,22 @@ def ensure_default_voice_line(
         return None
     realtime_number = format_e164(settings.openai_realtime_line_number)
     transfer_number = format_e164(settings.openai_realtime_transfer_number)
-    configured_line = db.scalar(
-        select(VoiceLine).where(
-            VoiceLine.organization_id == organization.id,
-            VoiceLine.phone_number == phone_number,
+    realtime_line = (
+        db.scalar(
+            select(VoiceLine).where(
+                VoiceLine.organization_id == organization.id,
+                VoiceLine.phone_number == realtime_number,
+            )
         )
+        if realtime_number
+        else None
     )
     if (
-        phone_number == realtime_number
+        transfer_number
         and (
             settings.openai_realtime_voice_enabled
-            or (configured_line is not None and configured_line.purpose_key == "seller_callback_ai")
+            or (realtime_line is not None and realtime_line.purpose_key == "seller_callback_ai")
         )
-        and transfer_number
     ):
         phone_number = transfer_number
     for other_line in db.scalars(

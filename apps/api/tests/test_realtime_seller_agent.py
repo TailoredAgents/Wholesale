@@ -33,8 +33,8 @@ from app.services.realtime_seller_agent import (
 )
 from app.services.voice import get_realtime_seller_agent_readiness, select_voice_line
 
-AI_NUMBER = "+16785417725"
-HUMAN_NUMBER = "+14047772631"
+AI_NUMBER = "+14708887952"
+HUMAN_NUMBER = "+16785417725"
 CALLER_NUMBER = "+17065550199"
 OWNER_EMAIL = "owner@example.com"
 
@@ -138,6 +138,7 @@ def test_bootstrap_reserves_ai_line_and_keeps_human_line_default(
     assert lines[AI_NUMBER].is_default is False
     assert lines[AI_NUMBER].purpose_key == "seller_callback_ai"
     assert lines[AI_NUMBER].inbound_route == "openai_realtime"
+    assert "+14047772631" not in lines
     assert foundation.admin_user is not None
     selected = select_voice_line(
         db_session,
@@ -341,10 +342,10 @@ def test_readiness_rejects_crossed_or_placeholder_line_configuration(
     assert "OPENAI_PROJECT_ID must start with proj_" in (
         settings.openai_realtime_voice_configuration_blockers
     )
-    assert "OPENAI_REALTIME_LINE_NUMBER must be +16785417725" in (
+    assert "OPENAI_REALTIME_LINE_NUMBER must be +14708887952" in (
         settings.openai_realtime_voice_configuration_blockers
     )
-    assert "OPENAI_REALTIME_TRANSFER_NUMBER must be +14047772631" in (
+    assert "OPENAI_REALTIME_TRANSFER_NUMBER must be +16785417725" in (
         settings.openai_realtime_voice_configuration_blockers
     )
     foundation = bootstrap_foundation(

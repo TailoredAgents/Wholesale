@@ -2,20 +2,20 @@
 
 ## Outcome
 
-Stonegate's `+1 (678) 541-7725` line becomes the AI seller-callback line. Calls are answered by Marin using OpenAI Realtime. The existing `+1 (404) 777-2631` line remains the company human line and transfer destination.
+Stonegate's `+1 (470) 888-7952` line becomes the AI seller-callback line. Calls are answered by Marin using OpenAI Realtime. The publicly marketed `+1 (678) 541-7725` line remains the company human line and the only transfer destination. `+1 (404) 777-2631` is not a Stonegate number and must never be configured or dialed by this feature.
 
 The caller is treated as a possible homeowner returning a cold call, but Marin does not assume that the caller knows why Stonegate called and never reveals a stored property address before the caller has identified themself.
 
 ## Call flow
 
-1. Twilio sends calls for the 678 line through a secure SIP trunk to OpenAI.
+1. Twilio sends calls for the 470 line through a secure SIP trunk to OpenAI.
 2. OpenAI sends Stonegate a signed `realtime.call.incoming` webhook.
 3. Stonegate verifies the signature, confirms the called number is the configured AI line, creates one durable callback/call record, and accepts the call with `gpt-realtime-2.1` and the `marin` voice.
 4. A server-side WebSocket observes the call and handles narrowly scoped CRM tools.
 5. Marin opens neutrally: "Thank you for calling Stonegate Home Buyers. This is Marin. How can I help you?"
 6. Marin learns whether the caller is returning a call, verifies identity using information the caller supplies, and gathers seller/property details naturally, one question at a time.
 7. Stonegate saves meaningful information as the conversation progresses. A lead is created or updated only after seller interest and property ownership are established.
-8. If requested or appropriate, the call is transferred to the 404 human line. If live help is unavailable, Marin records an agreed callback time.
+8. If requested or appropriate, the call is transferred to the 678 company line. If live help is unavailable, Marin records an agreed callback time.
 
 ## CRM behavior
 
@@ -33,7 +33,7 @@ The caller is treated as a possible homeowner returning a cold call, but Marin d
 - `lookup_callback_context`: Match caller-supplied identity or property details against Stonegate records.
 - `save_seller_details`: Persist verified seller/property facts and create or update a lead when qualified.
 - `schedule_human_callback`: Store an explicitly agreed callback time and a single follow-up.
-- `transfer_to_acquisitions`: Transfer the live call to the 404 human line.
+- `transfer_to_acquisitions`: Transfer the live call to the 678 company line.
 - `record_call_outcome`: Store interested, not interested, wrong number, unrelated, or do-not-contact outcomes.
 - `wait_for_user`: Keep the call open through brief silence without inventing a response.
 - `finish_call`: Finish the interaction with a concise disposition.
@@ -48,7 +48,7 @@ All mutating tools are idempotent for a call. High-impact actions such as transf
 - The WebSocket worker uses its own short-lived database sessions; it never holds a request database session for the length of a call.
 - The system gives OpenAI only the minimum context needed for the current tool response.
 - A transfer is server-controlled and can target only the configured human line.
-- If the agent is disabled or unavailable, Twilio's SIP trunk fallback must route the call to the 404 human line.
+- If the agent is disabled or unavailable, Twilio's SIP trunk fallback must route the call to the 678 company line.
 - Existing recording consent and retention policy remains authoritative; this feature does not silently enable recording.
 
 ## Runtime configuration
@@ -57,8 +57,8 @@ All mutating tools are idempotent for a call. High-impact actions such as transf
 OPENAI_REALTIME_VOICE_ENABLED=false
 OPENAI_REALTIME_MODEL=gpt-realtime-2.1
 OPENAI_REALTIME_VOICE=marin
-OPENAI_REALTIME_LINE_NUMBER=+16785417725
-OPENAI_REALTIME_TRANSFER_NUMBER=+14047772631
+OPENAI_REALTIME_LINE_NUMBER=+14708887952
+OPENAI_REALTIME_TRANSFER_NUMBER=+16785417725
 OPENAI_WEBHOOK_SECRET=
 OPENAI_PROJECT_ID=
 OPENAI_REALTIME_MAX_CALL_SECONDS=900
@@ -69,15 +69,16 @@ OPENAI_REALTIME_MAX_CALL_SECONDS=900
 1. Deploy the code with the feature disabled.
 2. Create the OpenAI webhook for Stonegate's public incoming-call endpoint and save its signing secret in Render.
 3. Save the OpenAI project ID and enable the feature in Render.
-4. Associate only the 678 number with the Twilio trunk and configure its Origination SIP URI as `sip:<OPENAI_PROJECT_ID>@sip.api.openai.com;transport=tls`.
-5. Configure Twilio trunk fallback/failure routing to the 404 human line.
+4. Associate only the 470 number with the Twilio trunk and configure its Origination SIP URI as `sip:<OPENAI_PROJECT_ID>@sip.api.openai.com;transport=tls`.
+5. Configure Twilio trunk fallback/failure routing to the 678 company line.
 6. Place controlled test calls for returning seller, unknown caller, interested seller, not interested, callback scheduling, transfer, silence, hang-up, duplicate webhook, and agent/API failure.
-7. Confirm the 404 human line's existing routing was not changed.
+7. Confirm the 678 company line's existing routing was not changed.
 
 ## Acceptance checks
 
-- The 678 line is the only number eligible for Marin.
-- The 404 line remains human-operated.
+- The 470 line is the only number eligible for Marin.
+- The 678 line remains human-operated and marketed publicly.
+- The unrelated 404 number is absent from the configuration.
 - The greeting is neutral and natural.
 - No stored address is disclosed before verification.
 - Switching between lookup, note capture, scheduling, and transfer does not produce duplicate records.

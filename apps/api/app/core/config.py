@@ -184,11 +184,11 @@ class Settings(BaseSettings):
         validation_alias="OPENAI_REALTIME_VOICE",
     )
     openai_realtime_line_number: str = Field(
-        default="+16785417725",
+        default="+14708887952",
         validation_alias="OPENAI_REALTIME_LINE_NUMBER",
     )
     openai_realtime_transfer_number: str = Field(
-        default="+14047772631",
+        default="+16785417725",
         validation_alias="OPENAI_REALTIME_TRANSFER_NUMBER",
     )
     openai_realtime_max_call_seconds: int = Field(
@@ -1236,10 +1236,10 @@ class Settings(BaseSettings):
                 blockers.append(variable)
         if self.openai_project_id and not self.openai_project_id.strip().startswith("proj_"):
             blockers.append("OPENAI_PROJECT_ID must start with proj_")
-        if _normalized_phone(self.openai_realtime_line_number) != "+16785417725":
-            blockers.append("OPENAI_REALTIME_LINE_NUMBER must be +16785417725")
-        if _normalized_phone(self.openai_realtime_transfer_number) != "+14047772631":
-            blockers.append("OPENAI_REALTIME_TRANSFER_NUMBER must be +14047772631")
+        if _normalized_phone(self.openai_realtime_line_number) != "+14708887952":
+            blockers.append("OPENAI_REALTIME_LINE_NUMBER must be +14708887952")
+        if _normalized_phone(self.openai_realtime_transfer_number) != "+16785417725":
+            blockers.append("OPENAI_REALTIME_TRANSFER_NUMBER must be +16785417725")
         return tuple(blockers)
 
     @property

@@ -626,7 +626,7 @@ export function VoiceLineSettings() {
                 </strong>
                 <small>
                   {line.purpose_key === "seller_callback_ai"
-                    ? "Marin answers this line and can transfer callers only to the 404 human line."
+                    ? "Marin answers this line and can transfer callers only to the 678 company line."
                     : "Enabled staff phones ring at all hours. If nobody answers, the missed-call plan runs."}
                 </small>
               </span>

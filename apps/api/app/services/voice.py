@@ -467,24 +467,24 @@ def get_realtime_seller_agent_readiness(
         ),
         VoiceReadinessCheckRead(
             key="ai_line",
-            label="Dedicated 678 AI line",
+            label="Dedicated 470 AI line",
             required=True,
             ready=line is not None,
             detail=(
                 f"{line.label} is reserved for Marin."
                 if line is not None
-                else "Configure +1 (678) 541-7725 as Acquisitions / Seller callback AI."
+                else "Configure +1 (470) 888-7952 as Acquisitions / Seller callback AI."
             ),
         ),
         VoiceReadinessCheckRead(
             key="transfer",
-            label="404 human transfer line",
+            label="678 company transfer line",
             required=True,
-            ready=transfer_number == "+14047772631",
+            ready=transfer_number == "+16785417725",
             detail=(
-                "Live transfers go only to +1 (404) 777-2631."
-                if transfer_number == "+14047772631"
-                else "Set OPENAI_REALTIME_TRANSFER_NUMBER to +14047772631."
+                "Live transfers go only to +1 (678) 541-7725."
+                if transfer_number == "+16785417725"
+                else "Set OPENAI_REALTIME_TRANSFER_NUMBER to +16785417725."
             ),
         ),
     ]

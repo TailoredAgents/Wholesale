@@ -123,9 +123,9 @@ services:
       - key: OPENAI_REALTIME_VOICE
         value: marin
       - key: OPENAI_REALTIME_LINE_NUMBER
-        value: +16785417725
+        value: +14708887952
       - key: OPENAI_REALTIME_TRANSFER_NUMBER
-        value: +14047772631
+        value: +16785417725
       - key: OPENAI_REALTIME_MAX_CALL_SECONDS
         value: 900
       - key: OPENAI_PROJECT_ID
