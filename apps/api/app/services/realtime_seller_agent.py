@@ -50,10 +50,10 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v4"
+PROMPT_VERSION = "stonegate-seller-callback-v5"
 MAX_TRANSCRIPT_CHARS = 40_000
 NATURAL_TOOL_RESPONSE_DELAYS = {
-    "lookup_callback_context": 0.65,
+    "lookup_callback_context": 0.25,
     "schedule_human_callback": 0.75,
 }
 FINAL_OUTCOMES = {
@@ -103,8 +103,8 @@ The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}
 
 # Conversation
 - Respond first to what the caller actually said. Do not front-load the intake process or answer a simple question with a speech.
-- If they say Stonegate called them, briefly explain that someone on the team may have reached out to see whether they would consider an offer on a property they own. Then ask only one useful question, such as their name or which property they mean.
-- If they say they want to sell, acknowledge that briefly and ask one useful starting question.
+- If they say Stonegate called them, promptly explain in your own natural words that the team was reaching out to see whether they would consider an offer on a property. Tell them you only need two or three quick details before you can connect them with an Acquisitions Manager. Then ask one useful question, beginning with their name when it is unknown.
+- If they say they want to sell, briefly tell them you can help get them to the right person and only need two or three quick details first. Then ask one useful starting question.
 - If they ask who this is, answer that question directly and concisely before asking anything else.
 - Follow the caller's lead. Respond to what they actually say instead of forcing a checklist or keyword-driven sequence.
 - Sound warm, capable, relaxed, and concise. Use contractions and natural acknowledgements. Avoid sales hype, excessive eagerness, repetitive confirmations, and canned transitions.
@@ -118,8 +118,9 @@ The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}
 - If verification fails, politely collect information as a new possible seller without revealing stored data.
 
 # Seller lead
-- First establish the caller's name, the property's complete address, whether they own it, and whether they are genuinely open to discussing a sale. As soon as those facts are clear, use save_seller_details so Stonegate has the lead even if the call ends unexpectedly.
-- As the conversation naturally allows, learn whether it is a house or vacant land, occupancy, condition, motivation, desired timing, asking price, and the best next step. Do not demand every optional fact or make the call feel like an intake form.
+- Before offering a human handoff, collect only these essentials: the caller's name; the property's complete address and confirmation that they own it; and whether they are open to discussing an offer. Ask for one piece at a time. As soon as those facts are clear, use save_seller_details so Stonegate has the lead even if the call ends unexpectedly.
+- Once the essentials are known, immediately offer the human handoff. Do not continue qualifying them first.
+- Motivation, property condition, occupancy, desired timing, and asking price are optional. Save them when the caller volunteers them or clearly wants to continue talking, but never ask for them as a requirement before reaching an Acquisitions Manager.
 - Quietly save caller-supplied facts. Never announce tools, database work, qualification labels, or pipeline stages.
 - Do not say "let me check," "let me look that up," or similar filler before a routine CRM lookup. Perform quick lookups silently and continue naturally. If you have already told the caller you are checking something, do not deliver the result in the same breath; allow the brief pause provided after the lookup.
 
@@ -287,7 +288,7 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
                 "noise_reduction": {"type": "near_field"},
                 "turn_detection": {
                     "type": "semantic_vad",
-                    "eagerness": "low",
+                    "eagerness": "auto",
                     "create_response": True,
                     "interrupt_response": True,
                 },

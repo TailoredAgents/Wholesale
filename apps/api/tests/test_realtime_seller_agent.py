@@ -169,7 +169,7 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert "voice" not in session
     assert session["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
     assert session["reasoning"] == {"effort": "minimal"}
-    assert session["audio"]["input"]["turn_detection"]["eagerness"] == "low"
+    assert session["audio"]["input"]["turn_detection"]["eagerness"] == "auto"
     assert session["audio"]["input"]["noise_reduction"] == {"type": "near_field"}
     assert session["audio"]["input"]["transcription"]["model"] == "gpt-4o-transcribe"
     assert session["parallel_tool_calls"] is False
@@ -181,14 +181,17 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert "Then stop and listen." in instructions
     assert "offer choices, or ask multiple questions" in instructions
     assert "This short receptionist greeting is the only fixed line." in instructions
-    assert "would consider an offer on a property they own" in instructions
+    assert "only need two or three quick details" in instructions
+    assert "collect only these essentials" in instructions
+    assert "Once the essentials are known, immediately offer the human handoff" in instructions
+    assert "never ask for them as a requirement" in instructions
     assert "A phone-number match alone is not identity verification." in instructions
     assert "first offer to connect them with an Acquisitions Manager now" in instructions
     assert "books the Acquisitions callback on Stonegate's internal calendar" in instructions
     assert "without inventing an appointment or follow-up task" in instructions
     assert 'Do not say "let me check,"' in instructions
     assert NATURAL_TOOL_RESPONSE_DELAYS == {
-        "lookup_callback_context": 0.65,
+        "lookup_callback_context": 0.25,
         "schedule_human_callback": 0.75,
     }
     assert {tool["name"] for tool in session["tools"]} == {
