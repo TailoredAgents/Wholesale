@@ -922,7 +922,7 @@ test("Tall dialogs keep actions visible while their body scrolls", () => {
   );
 });
 
-test("Voice line settings make 24/7 staff ringing the visible default", () => {
+test("Voice line settings separate human ringing from the Marin callback line", () => {
   const voiceSettings = readFileSync(
     resolve(osSourceRoot, "settings/communications/voice-line-settings.tsx"),
     "utf8",
@@ -938,9 +938,13 @@ test("Voice line settings make 24/7 staff ringing the visible default", () => {
   );
   assert.doesNotMatch(voiceSettings, /name="coverage_start_hour"/);
   assert.doesNotMatch(voiceSettings, /name="coverage_end_hour"/);
-  assert.equal([...voiceSettings.matchAll(/<strong>24\/7 staff ringing<\/strong>/g)].length, 2);
+  assert.match(voiceSettings, /24\/7 AI seller answering/);
+  assert.match(voiceSettings, /seller_callback_ai/);
+  assert.match(voiceSettings, /openai_realtime/);
+  assert.match(voiceSettings, /\/api\/v1\/voice\/realtime-seller-readiness/);
+  assert.match(voiceSettings, /Reserved from human outbound calls/);
   assert.equal([...voiceSettings.matchAll(/name="coverage_timezone"/g)].length, 2);
-  assert.match(voiceSettings, /24\/7 staff ringing is always on/);
+  assert.match(voiceSettings, /Choose a dedicated purpose and route/);
 });
 
 test("Marketing exposes safe Meta delivery health without rendering credentials", () => {

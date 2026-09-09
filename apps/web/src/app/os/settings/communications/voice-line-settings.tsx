@@ -16,6 +16,7 @@ type VoiceLine = {
   department_key: "acquisitions" | "dispositions" | "general";
   purpose_key:
     | "seller_conversations"
+    | "seller_callback_ai"
     | "prospecting_outbound"
     | "buyer_relations"
     | "company_general";
@@ -66,6 +67,20 @@ type VoiceReadiness = {
   }>;
 };
 
+type RealtimeVoiceReadiness = {
+  configured: boolean;
+  enabled: boolean;
+  agent_name: string;
+  model: string;
+  voice: string;
+  ai_line_number: string;
+  human_transfer_number: string;
+  webhook_url: string;
+  sip_uri: string | null;
+  line_id: string | null;
+  checks: VoiceReadiness["checks"];
+};
+
 function labelize(value: string) {
   return value
     .split("_")
@@ -82,6 +97,7 @@ const PURPOSES_BY_DEPARTMENT: Record<
 > = {
   acquisitions: [
     { value: "seller_conversations", label: "Seller conversations" },
+    { value: "seller_callback_ai", label: "Seller callback AI (Marin)" },
     { value: "prospecting_outbound", label: "Prospecting outbound and callbacks" },
   ],
   dispositions: [{ value: "buyer_relations", label: "Buyer relations" }],
@@ -139,8 +155,7 @@ function VoiceLineRoutingFields({
           ))}
         </select>
         <small>
-          Prospecting lines stay separate from warm seller calls and route cold callbacks to the
-          assigned caller.
+          Human calls, BatchDialer callbacks, and Marin&apos;s AI callback line stay separate.
         </small>
       </label>
     </>
@@ -153,6 +168,8 @@ export function VoiceLineSettings() {
   const [users, setUsers] = useState<VoiceLineUser[]>([]);
   const [teams, setTeams] = useState<VoiceLineTeam[]>([]);
   const [readiness, setReadiness] = useState<VoiceReadiness | null>(null);
+  const [realtimeReadiness, setRealtimeReadiness] =
+    useState<RealtimeVoiceReadiness | null>(null);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -188,18 +205,22 @@ export function VoiceLineSettings() {
   );
 
   const load = useCallback(async () => {
-    const [payload, readinessPayload] = await Promise.all([
+    const [payload, readinessPayload, realtimePayload] = await Promise.all([
       request<{
         items: VoiceLine[];
         users: VoiceLineUser[];
         teams: VoiceLineTeam[];
       }>("/api/v1/voice/lines"),
       request<VoiceReadiness>("/api/v1/voice/readiness"),
+      request<RealtimeVoiceReadiness>("/api/v1/voice/realtime-seller-readiness").catch(
+        () => null,
+      ),
     ]);
     setLines(payload.items);
     setUsers(payload.users);
     setTeams(payload.teams);
     setReadiness(readinessPayload);
+    setRealtimeReadiness(realtimePayload);
   }, [request]);
 
   useEffect(() => {
@@ -322,11 +343,11 @@ export function VoiceLineSettings() {
     }
   }
 
-  async function copyValue(value: string) {
+  async function copyValue(value: string, label = "Webhook URL") {
     setError("");
     try {
       await navigator.clipboard.writeText(value);
-      setMessage("Webhook URL copied.");
+      setMessage(`${label} copied.`);
     } catch {
       setMessage("");
       setError("The browser could not copy that URL.");
@@ -340,8 +361,8 @@ export function VoiceLineSettings() {
           <span>Twilio Voice</span>
           <h2>Company voice lines</h2>
           <p>
-            Keep phone numbers company-owned and control how inbound calls enter Stonegate. Every
-            active line rings enabled staff 24/7.
+            Keep phone numbers company-owned and control whether calls reach staff, BatchDialer,
+            or Marin.
           </p>
         </div>
         <Phone aria-hidden="true" size={20} />
@@ -393,6 +414,66 @@ export function VoiceLineSettings() {
               </div>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {realtimeReadiness ? (
+        <div className={styles.voiceReadiness} data-ready={realtimeReadiness.configured}>
+          <div className={styles.voiceReadinessHeading}>
+            <div>
+              <strong>
+                {realtimeReadiness.configured
+                  ? `${realtimeReadiness.agent_name} is ready for controlled call testing`
+                  : `${realtimeReadiness.agent_name} setup is safely off`}
+              </strong>
+              <small>
+                {realtimeReadiness.ai_line_number} AI seller callbacks · transfers to{" "}
+                {realtimeReadiness.human_transfer_number}
+              </small>
+            </div>
+            {realtimeReadiness.configured ? (
+              <CheckCircle2 aria-hidden="true" size={20} />
+            ) : (
+              <CircleAlert aria-hidden="true" size={20} />
+            )}
+          </div>
+          <div className={styles.voiceChecks}>
+            {realtimeReadiness.checks.map((check) => (
+              <div data-ready={check.ready} key={check.key}>
+                {check.ready ? (
+                  <CheckCircle2 aria-hidden="true" size={15} />
+                ) : (
+                  <CircleAlert aria-hidden="true" size={15} />
+                )}
+                <span>
+                  <strong>{check.label}</strong>
+                  <small>{check.detail}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.voiceUrls}>
+            {([
+              ["OpenAI webhook", realtimeReadiness.webhook_url],
+              ["Twilio Origination SIP URI", realtimeReadiness.sip_uri],
+            ] satisfies Array<[string, string | null]>).map(([label, value]) => value ? (
+              <div key={label}>
+                <span><strong>{label}</strong><code>{value}</code></span>
+                <button
+                  aria-label={`Copy ${label}`}
+                  onClick={() => void copyValue(value, label)}
+                  title={`Copy ${label}`}
+                  type="button"
+                >
+                  <Copy aria-hidden="true" size={14} />
+                </button>
+              </div>
+            ) : null)}
+          </div>
+          <p>
+            Uses {realtimeReadiness.model} with the {realtimeReadiness.voice} voice. Keep the
+            feature off until OpenAI and Twilio are connected and the 404 fallback is verified.
+          </p>
         </div>
       ) : null}
 
@@ -517,6 +598,7 @@ export function VoiceLineSettings() {
               <select defaultValue={line.inbound_route} name="inbound_route">
                 <option value="conversation_owner">Conversation owner</option>
                 <option value="assigned_user">Primary owner</option>
+                <option value="openai_realtime">OpenAI Realtime (Marin)</option>
               </select>
             </label>
             <label>
@@ -537,10 +619,15 @@ export function VoiceLineSettings() {
             <div className={styles.alwaysOnCoverage}>
               <CheckCircle2 aria-hidden="true" size={17} />
               <span>
-                <strong>24/7 staff ringing</strong>
+                <strong>
+                  {line.purpose_key === "seller_callback_ai"
+                    ? "24/7 AI seller answering"
+                    : "24/7 staff ringing"}
+                </strong>
                 <small>
-                  Enabled staff phones ring at all hours. If nobody answers, the missed-call plan
-                  runs.
+                  {line.purpose_key === "seller_callback_ai"
+                    ? "Marin answers this line and can transfer callers only to the 404 human line."
+                    : "Enabled staff phones ring at all hours. If nobody answers, the missed-call plan runs."}
                 </small>
               </span>
             </div>
@@ -551,8 +638,17 @@ export function VoiceLineSettings() {
               value={line.coverage_timezone}
             />
             <label className={styles.checkLabel}>
-              <input defaultChecked={line.is_default} name="is_default" type="checkbox" />
-              <span>Default company line</span>
+              <input
+                defaultChecked={line.is_default}
+                disabled={line.purpose_key === "seller_callback_ai"}
+                name="is_default"
+                type="checkbox"
+              />
+              <span>
+                {line.purpose_key === "seller_callback_ai"
+                  ? "Reserved from human outbound calls"
+                  : "Default company line"}
+              </span>
             </label>
             <button disabled={busyId === line.id} type="submit">
               <Save aria-hidden="true" size={15} />
@@ -565,7 +661,7 @@ export function VoiceLineSettings() {
           <div className={styles.voiceLineHeading}>
             <div>
               <strong>Add company line</strong>
-              <small>24/7 staff ringing is always on</small>
+              <small>Choose a dedicated purpose and route</small>
             </div>
             <Plus aria-hidden="true" size={17} />
           </div>
@@ -613,6 +709,7 @@ export function VoiceLineSettings() {
             <select defaultValue="conversation_owner" name="inbound_route">
               <option value="conversation_owner">Conversation owner</option>
               <option value="assigned_user">Primary owner</option>
+              <option value="openai_realtime">OpenAI Realtime (Marin)</option>
             </select>
           </label>
           <label>

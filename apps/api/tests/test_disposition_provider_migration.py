@@ -117,7 +117,14 @@ def test_ds8_migration_matches_provider_models() -> None:
     for table_name, model in models.items():
         items = created_tables[table_name]
         table = cast(sa.Table, model.__table__)
-        assert set(_columns(items)) == set(table.columns.keys())
+        expected_columns = set(table.columns.keys())
+        if table_name == "disposition_provider_listing_revisions":
+            # Added later by 0123_disposition_advisory and covered by that migration's test.
+            expected_columns -= {
+                "package_status_at_prepare",
+                "package_was_current_at_prepare",
+            }
+        assert set(_columns(items)) == expected_columns
         assert _migration_indexes(recorder, table_name) == _model_indexes(table)
 
         migration_constraints = _named_constraints(items)

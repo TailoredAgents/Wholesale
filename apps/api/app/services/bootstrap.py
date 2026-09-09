@@ -16,6 +16,7 @@ from app.models.foundation import (
     User,
     VoiceLine,
 )
+from app.services.communication_compliance import format_e164
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ def bootstrap_foundation(
         ensure_role_permissions(db, workspace, permissions_by_key, workspace_roles)
     admin_user = ensure_admin_user(db, organization, admin_email, admin_name)
     ensure_default_voice_line(db, organization, admin_user)
+    ensure_realtime_seller_voice_line(db, organization, admin_user)
     maybe_record_bootstrap_audit(db, organization, admin_user)
     db.commit()
     return BootstrapResult(
@@ -246,9 +248,26 @@ def ensure_default_voice_line(
     admin_user: User | None,
 ) -> VoiceLine | None:
     settings = get_settings()
-    phone_number = settings.twilio_voice_from_number
+    phone_number = format_e164(settings.twilio_voice_from_number)
     if not phone_number:
         return None
+    realtime_number = format_e164(settings.openai_realtime_line_number)
+    transfer_number = format_e164(settings.openai_realtime_transfer_number)
+    configured_line = db.scalar(
+        select(VoiceLine).where(
+            VoiceLine.organization_id == organization.id,
+            VoiceLine.phone_number == phone_number,
+        )
+    )
+    if (
+        phone_number == realtime_number
+        and (
+            settings.openai_realtime_voice_enabled
+            or (configured_line is not None and configured_line.purpose_key == "seller_callback_ai")
+        )
+        and transfer_number
+    ):
+        phone_number = transfer_number
     for other_line in db.scalars(
         select(VoiceLine).where(
             VoiceLine.organization_id == organization.id,
@@ -293,6 +312,68 @@ def ensure_default_voice_line(
     line.coverage_end_hour = 24
     if line.assigned_user_id is None and admin_user is not None:
         line.assigned_user_id = admin_user.id
+    return line
+
+
+def ensure_realtime_seller_voice_line(
+    db: Session,
+    organization: Organization,
+    admin_user: User | None,
+) -> VoiceLine | None:
+    settings = get_settings()
+    phone_number = format_e164(settings.openai_realtime_line_number)
+    human_number = format_e164(settings.openai_realtime_transfer_number)
+    if not phone_number or phone_number == human_number:
+        return None
+    line = db.scalar(
+        select(VoiceLine).where(
+            VoiceLine.organization_id == organization.id,
+            VoiceLine.phone_number == phone_number,
+        )
+    )
+    if not settings.openai_realtime_voice_enabled and (
+        line is None or line.purpose_key != "seller_callback_ai"
+    ):
+        return None
+    if line is None:
+        line = VoiceLine(
+            organization_id=organization.id,
+            assigned_user_id=admin_user.id if admin_user else None,
+            fallback_user_id=None,
+            provider="twilio",
+            provider_phone_number_id=None,
+            phone_number=phone_number,
+            label="Marin seller callback",
+            department_key="acquisitions",
+            purpose_key="seller_callback_ai",
+            status="active",
+            is_default=False,
+            inbound_route="openai_realtime",
+            ring_strategy="simultaneous",
+            coverage_timezone=settings.twilio_voice_timezone,
+            coverage_start_hour=0,
+            coverage_end_hour=24,
+            missed_call_action="fallback_then_voicemail",
+            line_metadata={"source": "openai_realtime_bootstrap", "agent_name": "Marin"},
+        )
+        db.add(line)
+        db.flush()
+        return line
+    line.label = "Marin seller callback"
+    line.department_key = "acquisitions"
+    line.purpose_key = "seller_callback_ai"
+    line.status = "active"
+    line.is_default = False
+    line.inbound_route = "openai_realtime"
+    line.coverage_start_hour = 0
+    line.coverage_end_hour = 24
+    if line.assigned_user_id is None and admin_user is not None:
+        line.assigned_user_id = admin_user.id
+    line.line_metadata = {
+        **(line.line_metadata or {}),
+        "source": "openai_realtime_bootstrap",
+        "agent_name": "Marin",
+    }
     return line
 
 

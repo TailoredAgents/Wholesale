@@ -231,6 +231,7 @@ def test_workspace_profile_is_available_to_non_acquisition_roles(
             "communications:view_conversations",
             "compensation:change_rules",
             "compensation:view",
+            "dispositions:view",
             "financials:view",
         ],
         "unread_notification_count": 0,

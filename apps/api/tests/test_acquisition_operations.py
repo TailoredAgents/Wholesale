@@ -130,6 +130,7 @@ def test_operations_assistant_has_broad_work_access_without_sensitive_authority(
         "calling_lists:work_assigned",
         "deals:edit",
         "deals:view",
+        "dispositions:view",
         "leads:edit",
         "leads:view",
         "operations:view",
@@ -156,6 +157,7 @@ def test_operations_assistant_has_broad_work_access_without_sensitive_authority(
         "/api/v1/operations",
         "/api/v1/prospecting",
         "/api/v1/deals",
+        "/api/v1/dispositions",
         "/api/v1/buyers",
     ):
         response = client.get(path, headers=assistant_headers)

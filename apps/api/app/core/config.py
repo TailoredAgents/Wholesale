@@ -7,6 +7,13 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _normalized_phone(value: str | None) -> str | None:
+    digits = "".join(character for character in str(value or "") if character.isdigit())
+    if len(digits) == 10:
+        digits = f"1{digits}"
+    return f"+{digits}" if len(digits) == 11 else None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -163,6 +170,40 @@ class Settings(BaseSettings):
     openai_transcription_model: str = Field(
         default="gpt-4o-transcribe-diarize",
         validation_alias="OPENAI_TRANSCRIPTION_MODEL",
+    )
+    openai_realtime_voice_enabled: bool = Field(
+        default=False,
+        validation_alias="OPENAI_REALTIME_VOICE_ENABLED",
+    )
+    openai_realtime_model: str = Field(
+        default="gpt-realtime-2.1",
+        validation_alias="OPENAI_REALTIME_MODEL",
+    )
+    openai_realtime_voice: str = Field(
+        default="marin",
+        validation_alias="OPENAI_REALTIME_VOICE",
+    )
+    openai_realtime_line_number: str = Field(
+        default="+16785417725",
+        validation_alias="OPENAI_REALTIME_LINE_NUMBER",
+    )
+    openai_realtime_transfer_number: str = Field(
+        default="+14047772631",
+        validation_alias="OPENAI_REALTIME_TRANSFER_NUMBER",
+    )
+    openai_realtime_max_call_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=3600,
+        validation_alias="OPENAI_REALTIME_MAX_CALL_SECONDS",
+    )
+    openai_project_id: str | None = Field(
+        default=None,
+        validation_alias="OPENAI_PROJECT_ID",
+    )
+    openai_webhook_secret: str | None = Field(
+        default=None,
+        validation_alias="OPENAI_WEBHOOK_SECRET",
     )
     call_transcription_enabled: bool = Field(
         default=True,
@@ -1178,6 +1219,32 @@ class Settings(BaseSettings):
         if not self.openai_api_key:
             blockers.append("OPENAI_API_KEY")
         return tuple(dict.fromkeys(blockers))
+
+    @property
+    def openai_realtime_voice_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.openai_realtime_voice_enabled:
+            blockers.append("OPENAI_REALTIME_VOICE_ENABLED=true")
+        for configured, variable in (
+            (self.openai_api_key, "OPENAI_API_KEY"),
+            (self.openai_webhook_secret, "OPENAI_WEBHOOK_SECRET"),
+            (self.openai_project_id, "OPENAI_PROJECT_ID"),
+            (self.openai_realtime_line_number, "OPENAI_REALTIME_LINE_NUMBER"),
+            (self.openai_realtime_transfer_number, "OPENAI_REALTIME_TRANSFER_NUMBER"),
+        ):
+            if not str(configured or "").strip():
+                blockers.append(variable)
+        if self.openai_project_id and not self.openai_project_id.strip().startswith("proj_"):
+            blockers.append("OPENAI_PROJECT_ID must start with proj_")
+        if _normalized_phone(self.openai_realtime_line_number) != "+16785417725":
+            blockers.append("OPENAI_REALTIME_LINE_NUMBER must be +16785417725")
+        if _normalized_phone(self.openai_realtime_transfer_number) != "+14047772631":
+            blockers.append("OPENAI_REALTIME_TRANSFER_NUMBER must be +14047772631")
+        return tuple(blockers)
+
+    @property
+    def openai_realtime_voice_configured(self) -> bool:
+        return not self.openai_realtime_voice_configuration_blockers
 
     @property
     def google_data_manager_conversion_actions(self) -> dict[str, str]:

@@ -20,6 +20,7 @@ from app.schemas.staff_lead_alerts import (
 from app.schemas.voice import (
     CallTranscriptRead,
     CallTranscriptReview,
+    RealtimeSellerAgentReadinessRead,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
     VoiceCallStatusRead,
@@ -58,6 +59,7 @@ from app.services.voice import (
     create_voice_session,
     delete_recording,
     get_call_intent_status,
+    get_realtime_seller_agent_readiness,
     get_scoped_recording,
     get_scoped_transcript,
     get_voice_provider_readiness,
@@ -284,6 +286,14 @@ def read_voice_provider_readiness(
     principal: Annotated[Principal, Depends(manage_lines_dependency)],
 ) -> VoiceProviderReadinessRead:
     return get_voice_provider_readiness(db, principal)
+
+
+@router.get("/realtime-seller-readiness")
+def read_realtime_seller_agent_readiness(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_lines_dependency)],
+) -> RealtimeSellerAgentReadinessRead:
+    return get_realtime_seller_agent_readiness(db, principal)
 
 
 @router.post("/lines", status_code=201)

@@ -26,6 +26,7 @@ from app.routers import (
     leads,
     marketing,
     me,
+    openai_webhooks,
     operating_model,
     operations,
     prospecting,
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(marketing.router)
     app.include_router(me.router)
     app.include_router(operating_model.router)
+    app.include_router(openai_webhooks.router)
     app.include_router(operations.router)
     app.include_router(prospecting.router)
     app.include_router(public.router)

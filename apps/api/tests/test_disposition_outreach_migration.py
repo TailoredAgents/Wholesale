@@ -115,7 +115,14 @@ def test_disposition_outreach_migration_matches_canonical_models() -> None:
     for table_name, model in models.items():
         items = created_tables[table_name]
         migration_table_columns = migration_columns(items)
-        assert set(migration_table_columns) == set(model.__table__.columns.keys())
+        expected_columns = set(model.__table__.columns.keys())
+        if table_name == "disposition_outreach_revisions":
+            # Added later by 0123_disposition_advisory and covered by that migration's test.
+            expected_columns -= {
+                "package_status_at_prepare",
+                "package_was_current_at_prepare",
+            }
+        assert set(migration_table_columns) == expected_columns
         assert migration_index_signature(recorder, table_name) == model_index_signature(
             model.__table__
         )

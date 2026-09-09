@@ -66,7 +66,9 @@ test("the prospecting softphone is client-only and lazy-loads the runtime SDK", 
   assert.match(softphone, /import type \{ Call, Device \} from "@twilio\/voice-sdk"/);
   assert.match(softphone, /\(\) => import\("@twilio\/voice-sdk"\)/);
   assert.doesNotMatch(softphone, /import \{ Call, Device \} from "@twilio\/voice-sdk"/);
-  assert.doesNotMatch(softphone, /\.register\(/);
+  assert.match(softphone, /async registerIncomingCalls\(\)/);
+  assert.match(softphone, /await device\.register\(\)/);
+  assert.doesNotMatch(prospectingSoftphone, /registerIncomingCalls\(/);
 });
 
 test("voice tokens stay ephemeral and support proactive refresh", () => {

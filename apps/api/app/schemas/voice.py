@@ -63,6 +63,7 @@ class VoiceLineCreate(BaseModel):
     department_key: Literal["acquisitions", "dispositions", "general"] = "acquisitions"
     purpose_key: Literal[
         "seller_conversations",
+        "seller_callback_ai",
         "buyer_relations",
         "company_general",
         "prospecting_outbound",
@@ -87,6 +88,7 @@ class VoiceLineAssignmentUpdate(BaseModel):
     purpose_key: (
         Literal[
             "seller_conversations",
+            "seller_callback_ai",
             "buyer_relations",
             "company_general",
             "prospecting_outbound",
@@ -125,6 +127,20 @@ class VoiceProviderReadinessRead(BaseModel):
     outbound_twiml_app_url: str
     status_callback_url: str
     recording_callback_url: str
+    checks: list[VoiceReadinessCheckRead]
+
+
+class RealtimeSellerAgentReadinessRead(BaseModel):
+    configured: bool
+    enabled: bool
+    agent_name: str
+    model: str
+    voice: str
+    ai_line_number: str
+    human_transfer_number: str
+    webhook_url: str
+    sip_uri: str | None
+    line_id: UUID | None
     checks: list[VoiceReadinessCheckRead]
 
 

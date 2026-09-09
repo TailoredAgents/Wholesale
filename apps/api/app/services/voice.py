@@ -59,6 +59,7 @@ from app.models.foundation import (
     VoiceLine,
 )
 from app.schemas.voice import (
+    RealtimeSellerAgentReadinessRead,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
     VoiceCallStatusRead,
@@ -118,11 +119,15 @@ from app.services.prospecting_voice import (
     validate_prospecting_connect_intent,
 )
 
-VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user"}
+VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user", "openai_realtime"}
 VOICE_LINE_STATUSES = {"active", "inactive"}
 VOICE_LINE_RING_STRATEGIES = {"sequential", "simultaneous"}
 VOICE_LINE_DEPARTMENT_PURPOSES = {
-    "acquisitions": {"seller_conversations", "prospecting_outbound"},
+    "acquisitions": {
+        "seller_conversations",
+        "seller_callback_ai",
+        "prospecting_outbound",
+    },
     "dispositions": {"buyer_relations"},
     "general": {"company_general"},
 }
@@ -408,6 +413,98 @@ def get_voice_provider_readiness(
     )
 
 
+def get_realtime_seller_agent_readiness(
+    db: Session,
+    principal: Principal,
+) -> RealtimeSellerAgentReadinessRead:
+    settings = get_settings()
+    ai_number = format_e164(settings.openai_realtime_line_number)
+    transfer_number = format_e164(settings.openai_realtime_transfer_number)
+    line = (
+        db.scalar(
+            select(VoiceLine).where(
+                VoiceLine.organization_id == principal.organization_id,
+                VoiceLine.phone_number == ai_number,
+                VoiceLine.department_key == "acquisitions",
+                VoiceLine.purpose_key == "seller_callback_ai",
+                VoiceLine.status == "active",
+            )
+        )
+        if ai_number
+        else None
+    )
+    base_url = (settings.twilio_webhook_base_url or "https://api.stonegatehb.com").rstrip("/")
+    openai_ready = all(
+        (
+            bool(settings.openai_api_key),
+            bool(settings.openai_webhook_secret),
+            bool(settings.openai_project_id),
+            bool(settings.openai_project_id and settings.openai_project_id.startswith("proj_")),
+        )
+    )
+    checks = [
+        VoiceReadinessCheckRead(
+            key="feature",
+            label="Marin seller callback agent",
+            required=True,
+            ready=settings.openai_realtime_voice_enabled,
+            detail=(
+                "Realtime seller callbacks are enabled."
+                if settings.openai_realtime_voice_enabled
+                else "Enable only after the OpenAI webhook and Twilio SIP trunk are connected."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="openai",
+            label="OpenAI project and webhook",
+            required=True,
+            ready=openai_ready,
+            detail=(
+                "API key, project ID, and signed webhook secret are present."
+                if openai_ready
+                else "Add the OpenAI project ID and webhook signing secret in Render."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="ai_line",
+            label="Dedicated 678 AI line",
+            required=True,
+            ready=line is not None,
+            detail=(
+                f"{line.label} is reserved for Marin."
+                if line is not None
+                else "Configure +1 (678) 541-7725 as Acquisitions / Seller callback AI."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="transfer",
+            label="404 human transfer line",
+            required=True,
+            ready=transfer_number == "+14047772631",
+            detail=(
+                "Live transfers go only to +1 (404) 777-2631."
+                if transfer_number == "+14047772631"
+                else "Set OPENAI_REALTIME_TRANSFER_NUMBER to +14047772631."
+            ),
+        ),
+    ]
+    project_id = (settings.openai_project_id or "").strip()
+    return RealtimeSellerAgentReadinessRead(
+        configured=settings.openai_realtime_voice_configured
+        and all(check.ready for check in checks if check.required),
+        enabled=settings.openai_realtime_voice_enabled,
+        agent_name="Marin",
+        model=settings.openai_realtime_model,
+        voice=settings.openai_realtime_voice,
+        ai_line_number=ai_number or settings.openai_realtime_line_number,
+        human_transfer_number=transfer_number or settings.openai_realtime_transfer_number,
+        webhook_url=f"{base_url}/api/v1/webhooks/openai/realtime",
+        sip_uri=(f"sip:{project_id}@sip.api.openai.com;transport=tls" if project_id else None),
+        line_id=line.id if line is not None else None,
+        checks=checks,
+    )
+
+
 def create_voice_line(
     db: Session,
     principal: Principal,
@@ -432,6 +529,7 @@ def create_voice_line(
     )
     if payload.inbound_route not in VOICE_LINE_ROUTES:
         raise ValueError("Unsupported inbound voice route.")
+    validate_realtime_line_route(payload.purpose_key, payload.inbound_route, payload.is_default)
     existing = db.scalar(
         select(VoiceLine).where(
             VoiceLine.organization_id == principal.organization_id,
@@ -505,6 +603,9 @@ def update_voice_line(
     )
     department_key = payload.department_key or line.department_key
     purpose_key = payload.purpose_key or line.purpose_key
+    inbound_route = payload.inbound_route or line.inbound_route
+    is_default = payload.is_default if payload.is_default is not None else line.is_default
+    validate_realtime_line_route(purpose_key, inbound_route, is_default)
     coverage_timezone = payload.coverage_timezone or line.coverage_timezone
     next_status = payload.status or line.status
     missed_call_action = payload.missed_call_action or line.missed_call_action
@@ -896,8 +997,7 @@ def create_call_intent(
         contact,
         require_permission=recorded_permission_required,
         requested_phone_number=(
-            requested_recipient
-            or business_voice_requested_phone_number(conversation, contact)
+            requested_recipient or business_voice_requested_phone_number(conversation, contact)
         ),
     )
     if not eligibility.can_call or eligibility.recipient is None:
@@ -2920,6 +3020,8 @@ def voice_line_announcement(line: VoiceLine) -> str:
         return "Stonegate dispositions call."
     if line.purpose_key == "seller_conversations":
         return "Stonegate acquisitions call."
+    if line.purpose_key == "seller_callback_ai":
+        return "Stonegate seller callback."
     if line.purpose_key == "prospecting_outbound":
         return "Stonegate prospecting call."
     return "Stonegate company call."
@@ -2979,7 +3081,7 @@ def select_voice_line(
                 | (VoiceLine.assigned_team_id.in_(team_ids))
             ),
             VoiceLine.status == "active",
-            VoiceLine.purpose_key != "prospecting_outbound",
+            VoiceLine.purpose_key.not_in(("prospecting_outbound", "seller_callback_ai")),
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
@@ -2990,7 +3092,7 @@ def select_voice_line(
         .where(
             VoiceLine.organization_id == organization_id,
             VoiceLine.status == "active",
-            VoiceLine.purpose_key != "prospecting_outbound",
+            VoiceLine.purpose_key.not_in(("prospecting_outbound", "seller_callback_ai")),
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
@@ -3029,7 +3131,7 @@ def select_voice_line_for_conversation(
     query = select(VoiceLine).where(
         VoiceLine.organization_id == organization_id,
         VoiceLine.status == "active",
-        VoiceLine.purpose_key != "prospecting_outbound",
+        VoiceLine.purpose_key.not_in(("prospecting_outbound", "seller_callback_ai")),
         *([VoiceLine.id == requested_line_id] if requested_line_id is not None else []),
         or_(*permitted),
         (
@@ -3047,6 +3149,22 @@ def select_voice_line_for_conversation(
     else:
         query = query.order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     return db.scalar(query)
+
+
+def validate_realtime_line_route(
+    purpose_key: str,
+    inbound_route: str,
+    is_default: bool,
+) -> None:
+    if purpose_key == "seller_callback_ai":
+        if inbound_route != "openai_realtime":
+            raise ValueError("The seller callback AI line must use OpenAI Realtime routing.")
+        if is_default:
+            raise ValueError(
+                "The seller callback AI line cannot be the default human calling line."
+            )
+    elif inbound_route == "openai_realtime":
+        raise ValueError("OpenAI Realtime routing is reserved for the seller callback AI line.")
 
 
 def conversation_activity_entity(

@@ -160,7 +160,11 @@ def test_ds7_migration_matches_all_offer_room_models() -> None:
     assert set(created_tables) == set(models)
     for table_name, model in models.items():
         items = created_tables[table_name]
-        assert set(_columns(items)) == set(model.__table__.columns.keys())
+        expected_columns = set(model.__table__.columns.keys())
+        if table_name == "disposition_buyer_selections":
+            # Added later by 0123_disposition_advisory and covered by that migration's test.
+            expected_columns.remove("advisory_snapshot")
+        assert set(_columns(items)) == expected_columns
         assert _migration_indexes(recorder, table_name) == _model_indexes(model.__table__)
 
         migration_constraints = _named_constraints(items)

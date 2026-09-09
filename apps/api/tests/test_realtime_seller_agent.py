@@ -1,0 +1,420 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.core.auth import principal_for_user
+from app.core.config import Settings, get_settings
+from app.main import app
+from app.models.foundation import (
+    CallRecord,
+    Lead,
+    ProspectingInboundCallback,
+    SuppressionRecord,
+    Task,
+    User,
+    VoiceLine,
+)
+from app.routers import openai_webhooks
+from app.services.bootstrap import bootstrap_foundation
+from app.services.realtime_seller_agent import (
+    _tool_lookup_callback_context,
+    _tool_record_call_outcome,
+    _tool_save_seller_details,
+    _tool_schedule_human_callback,
+    realtime_agent_instructions,
+    realtime_session_configuration,
+    register_realtime_call,
+)
+from app.services.voice import get_realtime_seller_agent_readiness, select_voice_line
+
+AI_NUMBER = "+16785417725"
+HUMAN_NUMBER = "+14047772631"
+CALLER_NUMBER = "+17065550199"
+OWNER_EMAIL = "owner@example.com"
+
+
+def configure_realtime(monkeypatch: MonkeyPatch, *, enabled: bool = True) -> Settings:
+    values = {
+        "TWILIO_VOICE_FROM_NUMBER": AI_NUMBER,
+        "TWILIO_WEBHOOK_BASE_URL": "https://api.stonegate.test",
+        "OPENAI_REALTIME_VOICE_ENABLED": "true" if enabled else "false",
+        "OPENAI_API_KEY": "test-openai-key",
+        "OPENAI_PROJECT_ID": "proj_stonegate",
+        "OPENAI_WEBHOOK_SECRET": "whsec_stonegate-test-secret",
+        "OPENAI_REALTIME_LINE_NUMBER": AI_NUMBER,
+        "OPENAI_REALTIME_TRANSFER_NUMBER": HUMAN_NUMBER,
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    return get_settings()
+
+
+def seed_realtime_call(
+    db: Session,
+    monkeypatch: MonkeyPatch,
+    *,
+    call_id: str = "rtc_seller_1",
+) -> tuple[ProspectingInboundCallback, Settings]:
+    settings = configure_realtime(monkeypatch)
+    bootstrap_foundation(
+        db,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    registered = register_realtime_call(
+        db,
+        event=incoming_event(call_id),
+        webhook_id=f"wh_{call_id}",
+        settings=settings,
+    )
+    callback = db.get(ProspectingInboundCallback, registered.callback_id)
+    assert callback is not None
+    return callback, settings
+
+
+def incoming_event(call_id: str) -> dict[str, Any]:
+    return {
+        "type": "realtime.call.incoming",
+        "data": {
+            "call_id": call_id,
+            "sip_headers": [
+                {"name": "From", "value": f"<sip:{CALLER_NUMBER}@caller.example>"},
+                {"name": "To", "value": f"<sip:{AI_NUMBER}@sip.api.openai.com>"},
+                {"name": "Call-ID", "value": f"sip-{call_id}"},
+            ],
+        },
+    }
+
+
+def seller_details(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "seller_name": "Sam Seller",
+        "street_address": "55 Auburn Avenue",
+        "city": "Atlanta",
+        "state": "GA",
+        "postal_code": "30303",
+        "property_type": "house",
+        "owner_confirmed": True,
+        "seller_interested": True,
+        "occupancy_status": "vacant",
+        "property_condition": "needs cosmetic work",
+        "desired_timeline": "within 30 days",
+        "motivation": "inherited property",
+        "asking_price": "$180,000",
+        "notes": "Caller wants a straightforward sale.",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_bootstrap_reserves_ai_line_and_keeps_human_line_default(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    settings = configure_realtime(monkeypatch)
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    lines = {
+        line.phone_number: line
+        for line in db_session.scalars(
+            select(VoiceLine).where(VoiceLine.organization_id == foundation.organization.id)
+        )
+    }
+
+    assert lines[HUMAN_NUMBER].is_default is True
+    assert lines[HUMAN_NUMBER].purpose_key == "seller_conversations"
+    assert lines[AI_NUMBER].is_default is False
+    assert lines[AI_NUMBER].purpose_key == "seller_callback_ai"
+    assert lines[AI_NUMBER].inbound_route == "openai_realtime"
+    assert foundation.admin_user is not None
+    selected = select_voice_line(
+        db_session,
+        foundation.organization.id,
+        foundation.admin_user.id,
+    )
+    assert selected is not None
+    assert selected.phone_number == settings.openai_realtime_transfer_number
+
+
+def test_realtime_session_is_natural_constrained_and_private() -> None:
+    settings = Settings()
+    session = realtime_session_configuration(settings)
+    instructions = realtime_agent_instructions()
+
+    assert session["model"] == "gpt-realtime-2.1"
+    assert session["audio"]["output"]["voice"] == "marin"
+    assert "voice" not in session
+    assert session["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
+    assert session["reasoning"] == {"effort": "low"}
+    assert session["parallel_tool_calls"] is False
+    assert session["max_output_tokens"] == 300
+    assert "How can I help you?" in instructions
+    assert "A phone-number match alone is not identity verification." in instructions
+    assert "Create a callback only when the caller agrees" in instructions
+    assert {tool["name"] for tool in session["tools"]} == {
+        "lookup_callback_context",
+        "save_seller_details",
+        "schedule_human_callback",
+        "transfer_to_acquisitions",
+        "record_call_outcome",
+        "wait_for_user",
+        "finish_call",
+    }
+
+
+def test_call_registration_is_idempotent(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    callback, settings = seed_realtime_call(db_session, monkeypatch)
+    duplicate = register_realtime_call(
+        db_session,
+        event=incoming_event(callback.provider_call_id),
+        webhook_id="wh_retry",
+        settings=settings,
+    )
+
+    assert duplicate.created is False
+    assert duplicate.callback_id == callback.id
+    assert db_session.scalar(select(func.count()).select_from(ProspectingInboundCallback)) == 1
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+
+
+def test_agent_creates_no_lead_or_task_until_caller_is_qualified_and_agrees(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    callback, _ = seed_realtime_call(db_session, monkeypatch)
+
+    declined = _tool_save_seller_details(
+        db_session,
+        callback,
+        seller_details(seller_interested=False),
+    )
+    db_session.flush()
+    assert declined["lead_created"] is False
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+
+    qualified = _tool_save_seller_details(db_session, callback, seller_details())
+    db_session.flush()
+    assert qualified["lead_created"] is True
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+
+    first_time = datetime.now(UTC) + timedelta(days=2)
+    second_time = first_time + timedelta(hours=1)
+    _tool_schedule_human_callback(
+        db_session,
+        callback,
+        {
+            "callback_at": first_time.isoformat(),
+            "reason": "Seller asked for Austin after work.",
+            "caller_confirmed": True,
+        },
+    )
+    _tool_schedule_human_callback(
+        db_session,
+        callback,
+        {
+            "callback_at": second_time.isoformat(),
+            "reason": "Seller corrected the agreed time.",
+            "caller_confirmed": True,
+        },
+    )
+    tasks = list(db_session.scalars(select(Task)))
+    assert len(tasks) == 1
+    assert tasks[0].due_at is not None
+    assert tasks[0].due_at.replace(tzinfo=UTC) == second_time
+    assert tasks[0].completion_notes == "Seller corrected the agreed time."
+
+
+def test_lookup_never_reveals_stored_property_before_identity_match(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    first_callback, settings = seed_realtime_call(db_session, monkeypatch)
+    _tool_save_seller_details(db_session, first_callback, seller_details())
+    db_session.commit()
+    second_registered = register_realtime_call(
+        db_session,
+        event=incoming_event("rtc_seller_2"),
+        webhook_id="wh_rtc_seller_2",
+        settings=settings,
+    )
+    callback = db_session.get(ProspectingInboundCallback, second_registered.callback_id)
+    assert callback is not None
+
+    unverified = _tool_lookup_callback_context(
+        db_session,
+        callback,
+        {"caller_name": "Someone Else"},
+    )
+    assert unverified["verified"] is False
+    assert "seller_name" not in unverified
+    assert "property_address" not in unverified
+
+    verified = _tool_lookup_callback_context(
+        db_session,
+        callback,
+        {"caller_name": "Sam Seller"},
+    )
+    assert verified["verified"] is True
+    assert verified["property_address"] == "55 Auburn Avenue, Atlanta, GA, 30303"
+
+
+def test_explicit_do_not_contact_suppresses_voice_and_sms(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    callback, _ = seed_realtime_call(db_session, monkeypatch)
+    result = _tool_record_call_outcome(
+        db_session,
+        callback,
+        {
+            "outcome": "do_not_contact",
+            "notes": "Caller explicitly asked not to be contacted again.",
+            "do_not_contact_confirmed": True,
+        },
+    )
+    db_session.flush()
+
+    assert result["saved"] is True
+    suppressions = list(
+        db_session.scalars(
+            select(SuppressionRecord).where(
+                SuppressionRecord.normalized_address == CALLER_NUMBER,
+            )
+        )
+    )
+    assert {item.channel for item in suppressions} == {"phone", "sms"}
+
+
+def test_readiness_exposes_only_admin_setup_values(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    configure_realtime(monkeypatch)
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    assert foundation.admin_user is not None
+    readiness = get_realtime_seller_agent_readiness(
+        db_session,
+        principal_for_user(db_session, foundation.admin_user),
+    )
+
+    assert readiness.configured is True
+    assert readiness.ai_line_number == AI_NUMBER
+    assert readiness.human_transfer_number == HUMAN_NUMBER
+    assert readiness.webhook_url == "https://api.stonegate.test/api/v1/webhooks/openai/realtime"
+    assert readiness.sip_uri == "sip:proj_stonegate@sip.api.openai.com;transport=tls"
+
+
+def test_readiness_rejects_crossed_or_placeholder_line_configuration(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    configure_realtime(monkeypatch)
+    monkeypatch.setenv("OPENAI_PROJECT_ID", "stonegate")
+    monkeypatch.setenv("OPENAI_REALTIME_LINE_NUMBER", HUMAN_NUMBER)
+    monkeypatch.setenv("OPENAI_REALTIME_TRANSFER_NUMBER", AI_NUMBER)
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    assert settings.openai_realtime_voice_configured is False
+    assert "OPENAI_PROJECT_ID must start with proj_" in (
+        settings.openai_realtime_voice_configuration_blockers
+    )
+    assert "OPENAI_REALTIME_LINE_NUMBER must be +16785417725" in (
+        settings.openai_realtime_voice_configuration_blockers
+    )
+    assert "OPENAI_REALTIME_TRANSFER_NUMBER must be +14047772631" in (
+        settings.openai_realtime_voice_configuration_blockers
+    )
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    assert foundation.admin_user is not None
+    readiness = get_realtime_seller_agent_readiness(
+        db_session,
+        principal_for_user(db_session, foundation.admin_user),
+    )
+    assert readiness.configured is False
+
+
+def test_incoming_webhook_accepts_once_and_starts_monitor(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    del api_db_override
+    configure_realtime(monkeypatch)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    accepted: list[tuple[str, dict[str, Any]]] = []
+    monitored: list[str] = []
+
+    class FakeRealtimeClient:
+        def __init__(self, settings: Settings) -> None:
+            del settings
+
+        async def accept(self, call_id: str, session: dict[str, Any]) -> None:
+            accepted.append((call_id, session))
+
+        async def reject(self, call_id: str, *, status_code: int = 480) -> None:
+            raise AssertionError((call_id, status_code))
+
+    monkeypatch.setattr(
+        openai_webhooks,
+        "unwrap_openai_webhook",
+        lambda body, headers, settings: incoming_event("rtc_webhook"),
+    )
+    monkeypatch.setattr(openai_webhooks, "OpenAIRealtimeCallClient", FakeRealtimeClient)
+    monkeypatch.setattr(
+        openai_webhooks,
+        "start_realtime_call_monitor",
+        lambda call: monitored.append(call.call_id),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/webhooks/openai/realtime",
+            content=b"{}",
+            headers={"webhook-id": "wh_webhook"},
+        )
+
+    assert response.status_code == 204
+    assert [item[0] for item in accepted] == ["rtc_webhook"]
+    assert monitored == ["rtc_webhook"]
+    callback = db_session.scalar(
+        select(ProspectingInboundCallback).where(
+            ProspectingInboundCallback.provider_call_id == "rtc_webhook"
+        )
+    )
+    assert callback is not None
+    assert callback.status == "answered"
+    user = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert user is not None

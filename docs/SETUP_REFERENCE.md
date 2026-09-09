@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: September 5, 2026
+Last verified against the repository: September 8, 2026
 
 ## Purpose
 
@@ -37,7 +37,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
 | Operational email | Resend | Configured; controlled acceptance pending |
 | SMS | Twilio | Seller-inquiry A2P approved; website and Facebook staff alerts are implemented; repeat internal new-lead alert acceptance after the worker credential correction |
-| Voice | Twilio | Implemented and processing calls; complete routing, recording, recovery, retention, and deletion acceptance pending |
+| Voice | Twilio + OpenAI Realtime | Human calling is implemented; Marin seller-callback code is deployed fail-closed and awaits OpenAI/Twilio SIP setup and controlled acceptance |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Governed House buyer discovery enabled in the production API manifest; controlled real-deal acceptance remains |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
@@ -755,6 +755,50 @@ All paths use `https://api.stonegatehb.com` as the base.
 10. In a controlled test, exhaust `CALL_TRANSCRIPTION_MAX_ATTEMPTS`, confirm Inbox displays the
     stopped state, then select **Retry call intelligence** and verify the audited retry succeeds on
     the same call record.
+
+## Marin AI Seller Callback Line
+
+Stonegate reserves `+1 (678) 541-7725` for Marin, an OpenAI Realtime phone concierge for possible
+sellers returning BatchDialer cold calls. `+1 (404) 777-2631` remains the human company line and
+the only live-transfer destination. The AI line is excluded from browser and manual outbound line
+selection.
+
+The implementation is deployed fail-closed. It does not answer with AI until all of these API
+service variables are configured and the enable flag is deliberately set to `true`:
+
+- `OPENAI_API_KEY`
+- `OPENAI_PROJECT_ID`
+- `OPENAI_WEBHOOK_SECRET`
+- `OPENAI_REALTIME_VOICE_ENABLED`
+- `OPENAI_REALTIME_MODEL=gpt-realtime-2.1`
+- `OPENAI_REALTIME_VOICE=marin`
+- `OPENAI_REALTIME_LINE_NUMBER=+16785417725`
+- `OPENAI_REALTIME_TRANSFER_NUMBER=+14047772631`
+- `OPENAI_REALTIME_MAX_CALL_SECONDS=900`
+
+Provider setup:
+
+1. In the OpenAI project that owns the API key, create a webhook for
+   `realtime.call.incoming` at
+   `https://api.stonegatehb.com/api/v1/webhooks/openai/realtime`.
+2. Copy its signing secret into the Render API `OPENAI_WEBHOOK_SECRET` value and set the matching
+   OpenAI project ID in `OPENAI_PROJECT_ID`.
+3. In Twilio, associate only the 678 number with a SIP trunk and set that trunk's Origination SIP
+   URI to `sip:<OPENAI_PROJECT_ID>@sip.api.openai.com;transport=tls`.
+4. Configure Twilio's trunk failure/fallback handling to the 404 human line. Do not point the 404
+   number at OpenAI.
+5. Open **Settings > Communications** and confirm the Marin readiness card shows the 678 AI line,
+   404 transfer line, signed webhook URL, SIP URI, and four ready checks.
+6. Set `OPENAI_REALTIME_VOICE_ENABLED=true`, allow the API to redeploy, and run only controlled
+   acceptance calls before public use.
+
+Acceptance must cover a returning seller, unknown caller, interested owner, not interested,
+wrong number, explicit do-not-contact request, agreed callback, human transfer, long silence,
+hang-up, duplicate webhook, and provider failure. Verify that Marin never reveals a stored
+property before caller-supplied identity verification, never creates a lead without confirmed
+ownership and seller interest, and creates exactly one task only when the caller agreed to a
+specific future callback. The complete behavioral contract is in
+`OPENAI_REALTIME_SELLER_CALLBACK_AGENT.md`.
 
 ## Dormant Native VA Dialer Foundation And Historical Browser Softphone
 

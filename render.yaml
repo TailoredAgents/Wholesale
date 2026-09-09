@@ -116,6 +116,22 @@ services:
         value: ""
       - key: OPENAI_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe-diarize
+      - key: OPENAI_REALTIME_VOICE_ENABLED
+        sync: false
+      - key: OPENAI_REALTIME_MODEL
+        value: gpt-realtime-2.1
+      - key: OPENAI_REALTIME_VOICE
+        value: marin
+      - key: OPENAI_REALTIME_LINE_NUMBER
+        value: +16785417725
+      - key: OPENAI_REALTIME_TRANSFER_NUMBER
+        value: +14047772631
+      - key: OPENAI_REALTIME_MAX_CALL_SECONDS
+        value: 900
+      - key: OPENAI_PROJECT_ID
+        sync: false
+      - key: OPENAI_WEBHOOK_SECRET
+        sync: false
       - key: CALL_TRANSCRIPTION_ENABLED
         value: true
       - key: CALL_TRANSCRIPTION_POLL_SECONDS

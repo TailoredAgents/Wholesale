@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: August 29, 2026
+Last verified against the repository: September 8, 2026
 
 ## Purpose
 
@@ -58,6 +58,7 @@ current code or canonical documentation.
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `BATCHDIALER_DIRECT_INTEGRATION_ROADMAP.md` | Current production-dialer decision, sole direct BatchDialer API integration, urgent manual Stonegate appointment task, production acceptance, and native-dialer dormancy | Owner, prospecting managers, and developers |
 | `BATCHDIALER_API_CONTRACT.md` | Official BatchDialer API surface, controlled evidence, unresolved assumptions, and constrained direct-version rules | Owner and developers |
+| `OPENAI_REALTIME_SELLER_CALLBACK_AGENT.md` | Marin's dedicated 678 seller-callback line, privacy rules, CRM actions, 404 transfer boundary, deployment sequence, and acceptance contract | Owner, administrators, and developers |
 | `DISPOSITION_SIDEKICK_ROADMAP.md` | DS0-DS9 disposition architecture and implementation status, including the manual-only InvestorLift boundary and the DS9 pilot that remains unmet | Owner, disposition managers, and developers |
 | `DISPOSITION_COPILOT_REQUIREMENT_MATRIX.md` | DS9 implementation evidence, immutable authority limits, review meanings, test coverage, and measured-pilot gates | Owner, disposition managers, reviewers, and developers |
 | `INVESTORLIFT_PROVIDER_VERIFICATION.md` | Official InvestorLift capability evidence, direct-transport gaps, support questions, and activation gate; not proof of a live connection | Owner and developers |
