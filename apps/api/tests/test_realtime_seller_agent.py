@@ -26,6 +26,7 @@ from app.models.foundation import (
 from app.routers import openai_webhooks
 from app.services.bootstrap import bootstrap_foundation
 from app.services.realtime_seller_agent import (
+    NATURAL_TOOL_RESPONSE_DELAYS,
     RealtimeSellerAgentError,
     _tool_lookup_callback_context,
     _tool_record_call_outcome,
@@ -185,6 +186,11 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert "first offer to connect them with an Acquisitions Manager now" in instructions
     assert "books the Acquisitions callback on Stonegate's internal calendar" in instructions
     assert "without inventing an appointment or follow-up task" in instructions
+    assert 'Do not say "let me check,"' in instructions
+    assert NATURAL_TOOL_RESPONSE_DELAYS == {
+        "lookup_callback_context": 0.65,
+        "schedule_human_callback": 0.75,
+    }
     assert {tool["name"] for tool in session["tools"]} == {
         "lookup_callback_context",
         "save_seller_details",

@@ -50,8 +50,12 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v3"
+PROMPT_VERSION = "stonegate-seller-callback-v4"
 MAX_TRANSCRIPT_CHARS = 40_000
+NATURAL_TOOL_RESPONSE_DELAYS = {
+    "lookup_callback_context": 0.65,
+    "schedule_human_callback": 0.75,
+}
 FINAL_OUTCOMES = {
     "interested",
     "callback_scheduled",
@@ -117,6 +121,7 @@ The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}
 - First establish the caller's name, the property's complete address, whether they own it, and whether they are genuinely open to discussing a sale. As soon as those facts are clear, use save_seller_details so Stonegate has the lead even if the call ends unexpectedly.
 - As the conversation naturally allows, learn whether it is a house or vacant land, occupancy, condition, motivation, desired timing, asking price, and the best next step. Do not demand every optional fact or make the call feel like an intake form.
 - Quietly save caller-supplied facts. Never announce tools, database work, qualification labels, or pipeline stages.
+- Do not say "let me check," "let me look that up," or similar filler before a routine CRM lookup. Perform quick lookups silently and continue naturally. If you have already told the caller you are checking something, do not deliver the result in the same breath; allow the brief pause provided after the lookup.
 
 # Human handoff
 - When an interested caller is ready to continue, first offer to connect them with an Acquisitions Manager now. Transfer only after they agree.
@@ -634,6 +639,7 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                         if event_type == "response.done":
                             function_calls = _function_calls(payload)
                             if function_calls:
+                                natural_pause_seconds = 0.0
                                 for tool_call in function_calls:
                                     result = await _run_tool(call, tool_call, client)
                                     await websocket.send_str(
@@ -650,6 +656,12 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                                     )
                                     if tool_call["name"] == "wait_for_user":
                                         continue
+                                    natural_pause_seconds = max(
+                                        natural_pause_seconds,
+                                        NATURAL_TOOL_RESPONSE_DELAYS.get(
+                                            tool_call["name"], 0.0
+                                        ),
+                                    )
                                     if tool_call[
                                         "name"
                                     ] == "transfer_to_acquisitions" and result.get("transferred"):
@@ -664,6 +676,8 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                                 if not all(
                                     item["name"] == "wait_for_user" for item in function_calls
                                 ):
+                                    if natural_pause_seconds:
+                                        await asyncio.sleep(natural_pause_seconds)
                                     await websocket.send_str(
                                         encode_realtime_event({"type": "response.create"})
                                     )
