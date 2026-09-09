@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from app.models.foundation import (
 from app.routers import openai_webhooks
 from app.services.bootstrap import bootstrap_foundation
 from app.services.realtime_seller_agent import (
+    RealtimeSellerAgentError,
     _tool_lookup_callback_context,
     _tool_record_call_outcome,
     _tool_save_seller_details,
@@ -30,6 +32,7 @@ from app.services.realtime_seller_agent import (
     realtime_agent_instructions,
     realtime_session_configuration,
     register_realtime_call,
+    sip_phone_number,
 )
 from app.services.voice import get_realtime_seller_agent_readiness, select_voice_line
 
@@ -87,7 +90,11 @@ def incoming_event(call_id: str) -> dict[str, Any]:
             "call_id": call_id,
             "sip_headers": [
                 {"name": "From", "value": f"<sip:{CALLER_NUMBER}@caller.example>"},
-                {"name": "To", "value": f"<sip:{AI_NUMBER}@sip.api.openai.com>"},
+                {
+                    "name": "To",
+                    "value": "<sip:proj_stonegate@sip.api.openai.com>",
+                },
+                {"name": "Diversion", "value": f"<sip:{AI_NUMBER}@twilio.com>"},
                 {"name": "Call-ID", "value": f"sip-{call_id}"},
             ],
         },
@@ -191,6 +198,69 @@ def test_call_registration_is_idempotent(
     assert duplicate.callback_id == callback.id
     assert db_session.scalar(select(func.count()).select_from(ProspectingInboundCallback)) == 1
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+
+
+def test_call_registration_accepts_destination_from_to_header(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    settings = configure_realtime(monkeypatch)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    event = incoming_event("rtc_openai_example")
+    event["data"]["sip_headers"] = [
+        {"name": "From", "value": f"<sip:{CALLER_NUMBER}@caller.example>"},
+        {"name": "To", "value": f"<sip:{AI_NUMBER}@sip.api.openai.com>"},
+        {"name": "Call-ID", "value": "sip-rtc_openai_example"},
+    ]
+
+    registered = register_realtime_call(
+        db_session,
+        event=event,
+        webhook_id="wh_openai_example",
+        settings=settings,
+    )
+
+    assert registered.called_number == AI_NUMBER
+
+
+def test_sip_parser_does_not_mistake_project_id_for_phone_number() -> None:
+    assert sip_phone_number("<sip:proj_123456789012@sip.api.openai.com>") is None
+
+
+def test_call_registration_rejects_non_marin_diversion_number(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    settings = configure_realtime(monkeypatch)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    event = incoming_event("rtc_wrong_destination")
+    event["data"]["sip_headers"] = [
+        {"name": "From", "value": f"<sip:{CALLER_NUMBER}@caller.example>"},
+        {"name": "To", "value": f"<sip:{AI_NUMBER}@sip.api.openai.com>"},
+        {"name": "Diversion", "value": f"<sip:{HUMAN_NUMBER}@twilio.com>"},
+        {"name": "Call-ID", "value": "sip-rtc_wrong_destination"},
+    ]
+
+    with pytest.raises(
+        RealtimeSellerAgentError,
+        match="Incoming SIP call was not addressed to the Marin line",
+    ):
+        register_realtime_call(
+            db_session,
+            event=event,
+            webhook_id="wh_wrong_destination",
+            settings=settings,
+        )
 
 
 def test_agent_creates_no_lead_or_task_until_caller_is_qualified_and_agrees(

@@ -284,23 +284,47 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
 def sip_phone_number(value: str | None) -> str | None:
     if not value:
         return None
-    match = re.search(r"(?:sip:|tel:)?(\+?\d{10,15})", value, flags=re.IGNORECASE)
-    return format_e164(match.group(1)) if match else None
+    match = re.search(
+        r"(?:sip:|tel:)\s*(\+?[\d().\s-]{10,30})(?=[@;>])",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return format_e164(match.group(1))
+    if re.fullmatch(r"\s*\+?[\d().\s-]{10,30}\s*", value):
+        return format_e164(value)
+    return None
+
+
+def sip_header_values(payload: dict[str, Any], name: str) -> list[str]:
+    headers = payload.get("data", {}).get("sip_headers", [])
+    if not isinstance(headers, list):
+        return []
+    return [
+        value
+        for item in headers
+        if isinstance(item, dict)
+        and str(item.get("name", "")).lower() == name.lower()
+        and isinstance((value := item.get("value")), str)
+    ]
 
 
 def sip_header(payload: dict[str, Any], name: str) -> str | None:
-    headers = payload.get("data", {}).get("sip_headers", [])
-    if not isinstance(headers, list):
-        return None
-    for item in headers:
-        value = item.get("value") if isinstance(item, dict) else None
-        if (
-            isinstance(item, dict)
-            and str(item.get("name", "")).lower() == name.lower()
-            and isinstance(value, str)
-        ):
-            return value
-    return None
+    values = sip_header_values(payload, name)
+    return values[0] if values else None
+
+
+def sip_phone_numbers_from_headers(
+    payload: dict[str, Any],
+    *names: str,
+) -> list[str]:
+    numbers: list[str] = []
+    for name in names:
+        for value in sip_header_values(payload, name):
+            number = sip_phone_number(value)
+            if number and number not in numbers:
+                numbers.append(number)
+    return numbers
 
 
 def register_realtime_call(
@@ -315,13 +339,30 @@ def register_realtime_call(
     if not isinstance(data, dict) or not isinstance(data.get("call_id"), str):
         raise RealtimeSellerAgentError("OpenAI incoming call did not include a call ID.")
     call_id = data["call_id"].strip()
-    caller_number = sip_phone_number(sip_header(event, "From"))
-    called_number = sip_phone_number(sip_header(event, "To"))
     expected_number = format_e164(active_settings.openai_realtime_line_number)
-    if not call_id or caller_number is None or called_number is None:
+    caller_numbers = sip_phone_numbers_from_headers(
+        event,
+        "From",
+        "P-Asserted-Identity",
+        "Remote-Party-ID",
+    )
+    # Twilio replaces the Request-URI user with the OpenAI project ID and guarantees
+    # that the PSTN number originally dialed is carried in Diversion. Keep To as a
+    # fallback for providers that preserve the destination there.
+    destination_numbers = sip_phone_numbers_from_headers(event, "Diversion")
+    if not destination_numbers:
+        destination_numbers = sip_phone_numbers_from_headers(
+            event,
+            "P-Called-Party-ID",
+            "X-Original-To",
+            "To",
+        )
+    caller_number = caller_numbers[0] if caller_numbers else None
+    if not call_id or caller_number is None or not destination_numbers:
         raise RealtimeSellerAgentError("OpenAI incoming call had invalid SIP addressing.")
-    if called_number != expected_number:
+    if expected_number is None or expected_number not in destination_numbers:
         raise RealtimeSellerAgentError("Incoming SIP call was not addressed to the Marin line.")
+    called_number = expected_number
     line = db.scalar(
         select(VoiceLine).where(
             VoiceLine.phone_number == called_number,
