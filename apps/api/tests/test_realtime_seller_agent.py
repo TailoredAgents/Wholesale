@@ -13,6 +13,8 @@ from app.core.auth import principal_for_user
 from app.core.config import Settings, get_settings
 from app.main import app
 from app.models.foundation import (
+    Appointment,
+    CalendarEvent,
     CallRecord,
     Lead,
     ProspectingInboundCallback,
@@ -165,12 +167,18 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert session["audio"]["output"]["voice"] == "marin"
     assert "voice" not in session
     assert session["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
-    assert session["reasoning"] == {"effort": "low"}
+    assert session["reasoning"] == {"effort": "minimal"}
+    assert session["audio"]["input"]["turn_detection"]["eagerness"] == "low"
+    assert session["audio"]["input"]["noise_reduction"] == {"type": "near_field"}
+    assert session["audio"]["input"]["transcription"]["model"] == "gpt-4o-transcribe"
     assert session["parallel_tool_calls"] is False
-    assert session["max_output_tokens"] == 300
-    assert "How can I help you?" in instructions
+    assert session["max_output_tokens"] == 500
+    assert "Use your own words; never recite a fixed script." in instructions
+    assert "might consider an offer on a property they own" in instructions
     assert "A phone-number match alone is not identity verification." in instructions
-    assert "Create a callback only when the caller agrees" in instructions
+    assert "first offer to connect them with an Acquisitions Manager now" in instructions
+    assert "books the Acquisitions callback on Stonegate's internal calendar" in instructions
+    assert "without inventing an appointment or follow-up task" in instructions
     assert {tool["name"] for tool in session["tools"]} == {
         "lookup_callback_context",
         "save_seller_details",
@@ -284,6 +292,10 @@ def test_agent_creates_no_lead_or_task_until_caller_is_qualified_and_agrees(
     assert qualified["lead_created"] is True
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
     assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    assert lead.source == "batchdialer_callback"
+    assert lead.stage_key == "qualification_in_progress"
 
     first_time = datetime.now(UTC) + timedelta(days=2)
     second_time = first_time + timedelta(hours=1)
@@ -306,10 +318,28 @@ def test_agent_creates_no_lead_or_task_until_caller_is_qualified_and_agrees(
         },
     )
     tasks = list(db_session.scalars(select(Task)))
+    appointments = list(db_session.scalars(select(Appointment)))
+    calendar_events = list(db_session.scalars(select(CalendarEvent)))
     assert len(tasks) == 1
+    assert len(appointments) == 1
+    assert len(calendar_events) == 1
     assert tasks[0].due_at is not None
     assert tasks[0].due_at.replace(tzinfo=UTC) == second_time
     assert tasks[0].completion_notes == "Seller corrected the agreed time."
+    assert appointments[0].appointment_type == "acquisition_callback"
+    assert appointments[0].location_type == "phone"
+    assert appointments[0].location == CALLER_NUMBER
+    assert appointments[0].status == "rescheduled"
+    assert appointments[0].scheduled_start_at.replace(tzinfo=UTC) == second_time
+    assert appointments[0].scheduled_end_at is not None
+    assert appointments[0].scheduled_end_at.replace(tzinfo=UTC) == second_time + timedelta(
+        minutes=30
+    )
+    assert calendar_events[0].appointment_id == appointments[0].id
+    assert calendar_events[0].provider == "internal"
+    assert calendar_events[0].status == "rescheduled"
+    assert lead.stage_key == "appointment_scheduled"
+    assert lead.appointment_status == "rescheduled"
 
 
 def test_lookup_never_reveals_stored_property_before_identity_match(

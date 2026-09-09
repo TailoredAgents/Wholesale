@@ -5,7 +5,7 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -25,6 +25,7 @@ from app.integrations.openai_realtime import (
 )
 from app.models.foundation import (
     ActivityEvent,
+    Appointment,
     CallRecord,
     CommunicationProviderEvent,
     CommunicationRecord,
@@ -40,7 +41,7 @@ from app.models.foundation import (
     Task,
     VoiceLine,
 )
-from app.services.acquisition_operations import create_notification
+from app.services.acquisition_operations import create_notification, upsert_internal_calendar_event
 from app.services.communication_compliance import format_e164, phone_lookup_values
 from app.services.inbox import ensure_primary_conversation, update_conversation_activity
 from app.services.property_identity import refresh_property_identity_keys
@@ -49,7 +50,7 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v1"
+PROMPT_VERSION = "stonegate-seller-callback-v2"
 MAX_TRANSCRIPT_CHARS = 40_000
 FINAL_OUTCOMES = {
     "interested",
@@ -81,42 +82,45 @@ class RegisteredRealtimeCall:
     terminal: bool
 
 
-def realtime_agent_instructions() -> str:
-    return """# Identity
+def realtime_agent_instructions(*, now: datetime | None = None) -> str:
+    local_now = (now or datetime.now(UTC)).astimezone(ZoneInfo("America/New_York"))
+    return f"""# Identity
 You are Marin, the phone concierge for Stonegate Home Buyers, a real-estate investment company.
 
-# Primary situation
-Most callers are possible property owners returning a missed cold call from a Stonegate VA. The caller may not know why Stonegate called. Never imply that they do. Some calls may be unrelated.
+# Situation and objective
+Most callers are property owners returning a cold call from a Stonegate team member. They may not know why Stonegate called. Your goal is to turn a genuine seller callback into a clean handoff: understand why they called, identify the person and property, learn whether they may consider selling, save a useful lead, and connect them with an Acquisitions Manager now or at a time they choose.
 
-# Opening
-Begin every call exactly: "Thank you for calling Stonegate Home Buyers. This is Marin. How can I help you?"
-If they say they are returning a call, say: "Absolutely. Let me pull that up for you. May I ask your name?"
+The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}.
 
-# Style
-- Sound warm, calm, natural, and concise. Use contractions.
-- Speak in one or two short sentences, then listen.
-- Ask one question at a time. Do not interrogate or read a script.
-- Allow interruptions and brief silence. Use wait_for_user when the caller asks for a moment.
-- Do not say you are human. If directly asked whether you are AI, answer honestly that you are Stonegate's virtual phone assistant.
-- Never pressure a caller, invent facts, promise an offer, or give legal, tax, or financial advice.
+# Conversation
+- Greet the caller naturally as Marin with Stonegate Home Buyers and invite them to tell you why they called. Use your own words; never recite a fixed script.
+- If they are returning a call, explain conversationally that someone on Stonegate's team reached out to see whether they might consider an offer on a property they own. Then ask for their name or which property they are calling about.
+- Follow the caller's lead. Respond to what they actually say instead of forcing a checklist or keyword-driven sequence.
+- Sound warm, capable, relaxed, and concise. Use contractions and natural acknowledgements. Avoid sales hype, excessive eagerness, repetitive confirmations, and canned transitions.
+- Usually say one or two short sentences and ask only one useful question before listening. A longer answer is fine when the caller actually needs an explanation.
+- Allow interruptions and comfortable pauses. Use wait_for_user when the caller asks for a moment.
+- Do not say you are human. If directly asked, honestly say you are Stonegate's virtual phone assistant.
 
 # Privacy and identity
 - Do not reveal a stored name, property address, ownership fact, or other CRM detail until the caller supplies identifying information and lookup_callback_context confirms it.
 - A phone-number match alone is not identity verification.
 - If verification fails, politely collect information as a new possible seller without revealing stored data.
 
-# Seller conversation
-When the call concerns a possible property sale, naturally learn: caller name, property address, whether they own it, house or vacant land, whether they are open to selling, occupancy, condition, desired timing, motivation, asking price if they have one, and best next step.
-Do not demand every optional fact. Save useful verified facts during the conversation with save_seller_details. A lead may be created only when the caller confirms ownership and genuine interest in discussing a sale.
+# Seller lead
+- First establish the caller's name, the property's complete address, whether they own it, and whether they are genuinely open to discussing a sale. As soon as those facts are clear, use save_seller_details so Stonegate has the lead even if the call ends unexpectedly.
+- As the conversation naturally allows, learn whether it is a house or vacant land, occupancy, condition, motivation, desired timing, asking price, and the best next step. Do not demand every optional fact or make the call feel like an intake form.
+- Quietly save caller-supplied facts. Never announce tools, database work, qualification labels, or pipeline stages.
 
-# Follow-up and transfers
-- Create a callback only when the caller agrees to a specific future date and time. Confirm the time aloud first.
-- Transfer only when the caller asks for a person or agrees to speak with Acquisitions. Confirm before using transfer_to_acquisitions.
+# Human handoff
+- When an interested caller is ready to continue, first offer to connect them with an Acquisitions Manager now. Transfer only after they agree.
+- If they prefer later, agree on a specific date and time, repeat it naturally for confirmation, and then use schedule_human_callback. This books the Acquisitions callback on Stonegate's internal calendar.
+- If they are interested but do not choose a specific time, save the lead and notes without inventing an appointment or follow-up task.
+
+# Boundaries and closing
+- Never pressure the caller, invent property or offer facts, promise a price, pretend a tool succeeded, or give legal, tax, or financial advice.
 - If a caller says not to call again, confirm the request once and then use record_call_outcome with do_not_contact.
 - A simple "not interested" is not automatically a do-not-contact request.
-
-# Closing
-Before ending, briefly confirm the next step. Record one accurate outcome. Thank the caller. Do not manufacture a follow-up.
+- Before ending, briefly confirm the real next step, record one accurate outcome, thank the caller, and use finish_call. Do not manufacture a follow-up.
 """
 
 
@@ -178,8 +182,9 @@ def realtime_tools() -> list[dict[str, Any]]:
             "type": "function",
             "name": "schedule_human_callback",
             "description": (
-                "Schedule exactly one human callback after the caller agrees to a specific time. "
-                "Use an ISO 8601 timestamp with an offset."
+                "Book an Acquisitions Manager phone appointment on Stonegate's internal calendar "
+                "only after the caller agrees to a specific time. Use an ISO 8601 timestamp with "
+                "an offset."
             ),
             "parameters": {
                 "type": "object",
@@ -259,14 +264,18 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
         "model": settings.openai_realtime_model,
         "output_modalities": ["audio"],
         "instructions": realtime_agent_instructions(),
-        "reasoning": {"effort": "low"},
+        "reasoning": {"effort": "minimal"},
         "audio": {
             "input": {
-                "transcription": {"model": "gpt-4o-mini-transcribe", "language": "en"},
-                "noise_reduction": {"type": "far_field"},
+                "transcription": {
+                    "model": "gpt-4o-transcribe",
+                    "language": "en",
+                    "prompt": "Stonegate Home Buyers; Georgia real estate; seller callback; property address; acreage; parcel; Acquisitions Manager; BatchDialer.",
+                },
+                "noise_reduction": {"type": "near_field"},
                 "turn_detection": {
                     "type": "semantic_vad",
-                    "eagerness": "auto",
+                    "eagerness": "low",
                     "create_response": True,
                     "interrupt_response": True,
                 },
@@ -276,7 +285,7 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
         "tools": realtime_tools(),
         "tool_choice": "auto",
         "parallel_tool_calls": False,
-        "max_output_tokens": 300,
+        "max_output_tokens": 500,
         "truncation": "auto",
     }
 
@@ -991,6 +1000,56 @@ def _tool_schedule_human_callback(
     if due_at <= datetime.now(UTC):
         raise RealtimeSellerAgentError("The callback time must be in the future.")
     reason = _clean(arguments.get("reason"), 500) or "Seller requested a callback."
+    appointment = db.scalar(
+        select(Appointment)
+        .where(
+            Appointment.organization_id == callback.organization_id,
+            Appointment.lead_id == lead.id,
+            Appointment.appointment_type == "acquisition_callback",
+            Appointment.status.in_(("scheduled", "rescheduled")),
+        )
+        .order_by(Appointment.scheduled_start_at)
+    )
+    if appointment is None:
+        appointment = Appointment(
+            organization_id=callback.organization_id,
+            lead_id=lead.id,
+            contact_id=lead.contact_id,
+            property_id=lead.property_id,
+            prospecting_attempt_id=None,
+            owner_user_id=lead.assigned_user_id or callback.assigned_user_id,
+            appointment_type="acquisition_callback",
+            status="scheduled",
+            scheduled_start_at=due_at,
+            scheduled_end_at=due_at + timedelta(minutes=30),
+            location_type="phone",
+            location=callback.normalized_caller,
+            notes=reason,
+            outcome=None,
+            external_calendar_id=None,
+            appointment_metadata={
+                "source": "openai_realtime_seller_callback",
+                "callback_id": str(callback.id),
+                "agent_name": AGENT_NAME,
+            },
+        )
+        db.add(appointment)
+        db.flush()
+    else:
+        appointment.owner_user_id = lead.assigned_user_id or callback.assigned_user_id
+        appointment.status = "rescheduled"
+        appointment.scheduled_start_at = due_at
+        appointment.scheduled_end_at = due_at + timedelta(minutes=30)
+        appointment.location_type = "phone"
+        appointment.location = callback.normalized_caller
+        appointment.notes = reason
+        appointment.appointment_metadata = {
+            **(appointment.appointment_metadata or {}),
+            "source": "openai_realtime_seller_callback",
+            "callback_id": str(callback.id),
+            "agent_name": AGENT_NAME,
+        }
+    upsert_internal_calendar_event(db, appointment)
     existing = db.scalar(
         select(Task).where(
             Task.organization_id == callback.organization_id,
@@ -1023,15 +1082,56 @@ def _tool_schedule_human_callback(
         existing.due_at = due_at
         existing.title = "Call seller at the agreed time"
         existing.completion_notes = reason
+        existing.responsible_user_id = appointment.owner_user_id
     lead.next_follow_up_at = due_at
+    lead.appointment_status = appointment.status
+    if lead.stage_key in {
+        "new",
+        "contact_attempt_due",
+        "attempting_contact",
+        "contacted",
+        "qualification_in_progress",
+        "qualified",
+        "appointment_scheduling",
+    }:
+        lead.stage_key = "appointment_scheduled"
     callback.routing_metadata = {
         **(callback.routing_metadata or {}),
         "callback_at": due_at.isoformat(),
         "callback_reason": reason,
+        "appointment_id": str(appointment.id),
         "outcome": "callback_scheduled",
     }
+    db.add(
+        ActivityEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.appointment_scheduled_by_marin",
+            summary=f"Marin booked an Acquisitions callback for {due_at.isoformat()}.",
+        )
+    )
+    create_notification(
+        db,
+        organization_id=lead.organization_id,
+        recipient_user_id=appointment.owner_user_id,
+        notification_type="appointment_scheduled",
+        title="Seller callback booked by Marin",
+        body=f"An interested seller agreed to a phone appointment at {due_at.isoformat()}.",
+        entity_type="appointment",
+        entity_id=appointment.id,
+        action_url=f"/os/leads/{lead.id}?tab=communications",
+        dedupe_key=f"marin-appointment:{appointment.id}",
+    )
     db.flush()
-    return {"ok": True, "scheduled": True, "callback_at": due_at.isoformat()}
+    return {
+        "ok": True,
+        "scheduled": True,
+        "callback_at": due_at.isoformat(),
+        "appointment_id": str(appointment.id),
+        "calendar": "internal",
+    }
 
 
 def _tool_prepare_transfer(
@@ -1277,7 +1377,7 @@ def _create_realtime_lead(
         contact_id=contact.id,
         property_id=property_record.id,
         assigned_user_id=callback.assigned_user_id,
-        source="ai_seller_callback",
+        source="batchdialer_callback",
         asset_class=("land" if any(word in property_type for word in ("land", "lot")) else "house"),
         qualification_context={
             "source": "openai_realtime_seller_callback",
@@ -1286,7 +1386,7 @@ def _create_realtime_lead(
             "seller_interested": True,
             "notes": details.get("notes"),
         },
-        stage_key="new",
+        stage_key="qualification_in_progress",
         lead_temperature=None,
         motivation=details.get("motivation"),
         desired_timeline=details.get("desired_timeline"),
@@ -1342,6 +1442,8 @@ def _update_realtime_lead(db: Session, lead: Lead, details: dict[str, Any]) -> N
     if not property_record.property_type and details.get("property_type"):
         property_record.property_type = details["property_type"]
     refresh_property_identity_keys(property_record)
+    if lead.stage_key in {"new", "contact_attempt_due", "attempting_contact", "contacted"}:
+        lead.stage_key = "qualification_in_progress"
     lead.qualification_context = {
         **(lead.qualification_context or {}),
         "openai_realtime_seller_callback": {
