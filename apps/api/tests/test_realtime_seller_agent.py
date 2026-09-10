@@ -32,6 +32,7 @@ from app.services.realtime_seller_agent import (
     _tool_record_call_outcome,
     _tool_save_seller_details,
     _tool_schedule_human_callback,
+    mark_realtime_call_failed,
     realtime_agent_instructions,
     realtime_session_configuration,
     register_realtime_call,
@@ -221,6 +222,149 @@ def test_call_registration_is_idempotent(
     assert duplicate.callback_id == callback.id
     assert db_session.scalar(select(func.count()).select_from(ProspectingInboundCallback)) == 1
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+
+
+def test_failed_call_preserves_partial_transcript_for_review(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    callback, settings = seed_realtime_call(db_session, monkeypatch)
+    registered = register_realtime_call(
+        db_session,
+        event=incoming_event(callback.provider_call_id),
+        webhook_id="wh_failure_retry",
+        settings=settings,
+    )
+
+    mark_realtime_call_failed(
+        db_session,
+        registered,
+        error="Realtime connection closed unexpectedly.",
+        transcript=[
+            {"speaker": "caller", "text": "I am calling back about my property."},
+            {"speaker": "marin", "text": "I can help with that."},
+        ],
+    )
+
+    db_session.refresh(callback)
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id == callback.id)
+    )
+    assert call is not None
+    assert callback.status == "failed"
+    assert callback.routing_metadata["outcome"] == "agent_failed"
+    assert callback.routing_metadata["transcript"][0]["speaker"] == "caller"
+    assert callback.routing_metadata["transcript_complete"] is False
+    assert call.call_metadata is not None
+    assert call.call_metadata["transcript"][1]["speaker"] == "marin"
+    assert call.duration_seconds is not None
+
+
+def test_marin_call_review_is_company_visible_and_keeps_human_findings(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    del api_db_override
+    callback, _ = seed_realtime_call(db_session, monkeypatch)
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id == callback.id)
+    )
+    assert call is not None
+    now = datetime.now(UTC)
+    callback.status = "completed"
+    callback.completed_at = now
+    callback.routing_metadata = {
+        **callback.routing_metadata,
+        "outcome": "interested",
+        "summary": "Interested owner asked for an acquisitions follow-up.",
+        "seller_details": {
+            "seller_name": "Sam Seller",
+            "street_address": "55 Auburn Avenue",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+        },
+        "transcript": [
+            {"speaker": "caller", "text": "I may sell if the offer makes sense."},
+            {"speaker": "marin", "text": "I can connect you with our acquisitions team."},
+        ],
+        "tool_events": [
+            {
+                "name": "save_seller_details",
+                "succeeded": True,
+                "occurred_at": now.isoformat(),
+            }
+        ],
+    }
+    call.status = "completed"
+    call.ended_at = now
+    call.duration_seconds = 74
+    call.disposition = "interested"
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "transcript": callback.routing_metadata["transcript"],
+    }
+    db_session.commit()
+
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    va_email = "marin-review-va@example.com"
+    created = client.post(
+        "/api/v1/operations/users",
+        headers=owner_headers,
+        json={
+            "email": va_email,
+            "display_name": "Marin Review VA",
+            "role_key": "prospecting_caller",
+        },
+    )
+    assert created.status_code == 201, created.text
+    va_headers = {"X-Dev-User-Email": va_email}
+
+    dashboard = client.get("/api/v1/voice/marin-calls", headers=va_headers)
+    assert dashboard.status_code == 200, dashboard.text
+    payload = dashboard.json()
+    assert payload["stats"]["total_calls"] == 1
+    assert payload["stats"]["total_unique_callers"] == 1
+    assert payload["stats"]["calls_today"] == 1
+    assert payload["items"][0]["seller_name"] == "Sam Seller"
+    assert payload["items"][0]["transcript_turn_count"] == 2
+
+    detail = client.get(f"/api/v1/voice/marin-calls/{callback.id}", headers=va_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["transcript"][0] == {
+        "speaker": "caller",
+        "text": "I may sell if the offer makes sense.",
+    }
+    assert detail.json()["tool_events"][0]["name"] == "save_seller_details"
+
+    reviewed = client.patch(
+        f"/api/v1/voice/marin-calls/{callback.id}/review",
+        headers=va_headers,
+        json={
+            "status": "flagged",
+            "flags": ["awkward_wording", "missed_intent"],
+            "notes": "Marin should have asked one shorter follow-up question.",
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["review"]["status"] == "flagged"
+    assert reviewed.json()["review"]["reviewer_name"] == "Marin Review VA"
+    assert reviewed.json()["needs_review"] is True
+
+    resolved = client.patch(
+        f"/api/v1/voice/marin-calls/{callback.id}/review",
+        headers=owner_headers,
+        json={
+            "status": "resolved",
+            "flags": ["awkward_wording", "missed_intent"],
+            "notes": "Prompt adjusted and verified.",
+        },
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["review"]["status"] == "resolved"
+    assert resolved.json()["needs_review"] is False
 
 
 def test_call_registration_accepts_destination_from_to_header(

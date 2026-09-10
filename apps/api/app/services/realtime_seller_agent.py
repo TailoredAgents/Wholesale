@@ -581,8 +581,10 @@ def mark_realtime_call_failed(
     call: RegisteredRealtimeCall,
     *,
     error: str,
+    transcript: list[dict[str, str]] | None = None,
 ) -> None:
     now = datetime.now(UTC)
+    saved_transcript = [dict(item) for item in (transcript or [])]
     callback = db.get(ProspectingInboundCallback, call.callback_id)
     record = db.get(CallRecord, call.call_record_id)
     if callback is not None:
@@ -591,6 +593,10 @@ def mark_realtime_call_failed(
         callback.routing_metadata = {
             **(callback.routing_metadata or {}),
             "error": error[:1000],
+            "outcome": "agent_failed",
+            "transcript": saved_transcript,
+            "transcript_complete": False,
+            "ended_at": now.isoformat(),
         }
     if record is not None:
         record.status = "failed"
@@ -599,8 +605,71 @@ def mark_realtime_call_failed(
         record.call_metadata = {
             **(record.call_metadata or {}),
             "error": error[:1000],
+            "outcome": "agent_failed",
+            "transcript": saved_transcript,
+            "transcript_complete": False,
         }
+        _set_call_duration(record, now)
+    if callback is not None:
+        communication = db.scalar(
+            select(CommunicationRecord).where(
+                CommunicationRecord.organization_id == callback.organization_id,
+                CommunicationRecord.provider == PROVIDER,
+                CommunicationRecord.provider_message_id == call.call_id,
+            )
+        )
+        if communication is not None:
+            metadata = dict(callback.routing_metadata or {})
+            communication.status = "failed"
+            communication.body = _communication_body(
+                metadata,
+                saved_transcript,
+                "agent_failed",
+            )
+            communication.communication_metadata = {
+                **(communication.communication_metadata or {}),
+                "error": error[:1000],
+                "outcome": "agent_failed",
+                "transcript": saved_transcript,
+                "transcript_complete": False,
+            }
+        db.add(
+            ActivityEvent(
+                organization_id=callback.organization_id,
+                actor_user_id=None,
+                entity_type="prospecting_inbound_callback",
+                entity_id=callback.id,
+                event_type="voice.ai_seller_callback_failed",
+                summary="Marin's seller callback failed and was saved for review.",
+            )
+        )
     db.commit()
+
+
+def checkpoint_realtime_transcript(
+    call: RegisteredRealtimeCall,
+    transcript: list[dict[str, str]],
+) -> None:
+    """Persist each completed turn so an interrupted monitor still leaves review evidence."""
+
+    saved_transcript = [dict(item) for item in transcript]
+    with SessionLocal() as db:
+        callback = db.get(ProspectingInboundCallback, call.callback_id)
+        record = db.get(CallRecord, call.call_record_id)
+        if callback is None or record is None or callback.status in {"completed", "failed", "canceled"}:
+            return
+        callback.routing_metadata = {
+            **(callback.routing_metadata or {}),
+            "transcript": saved_transcript,
+            "transcript_complete": False,
+            "transcript_checkpointed_at": datetime.now(UTC).isoformat(),
+        }
+        record.call_metadata = {
+            **(record.call_metadata or {}),
+            "transcript": saved_transcript,
+            "transcript_complete": False,
+        }
+        db.commit()
 
 
 def start_realtime_call_monitor(call: RegisteredRealtimeCall) -> None:
@@ -636,7 +705,13 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                     if message.type == aiohttp.WSMsgType.TEXT:
                         payload = json.loads(message.data)
                         event_type = str(payload.get("type", ""))
-                        _capture_transcript_event(transcript, payload)
+                        transcript_changed = _capture_transcript_event(transcript, payload)
+                        if transcript_changed:
+                            await asyncio.to_thread(
+                                checkpoint_realtime_transcript,
+                                call,
+                                transcript,
+                            )
                         if event_type == "response.done":
                             function_calls = _function_calls(payload)
                             if function_calls:
@@ -707,23 +782,30 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
         logger.exception("realtime_seller_agent_monitor_failed", call_id=call.call_id)
         await _safe_transfer(client, call.call_id, settings.openai_realtime_transfer_number)
         with SessionLocal() as db:
-            mark_realtime_call_failed(db, call, error=str(exc))
+            mark_realtime_call_failed(db, call, error=str(exc), transcript=transcript)
         return
     _finish_realtime_call(call, transcript)
 
 
-def _capture_transcript_event(transcript: list[dict[str, str]], payload: dict[str, Any]) -> None:
+def _capture_transcript_event(
+    transcript: list[dict[str, str]],
+    payload: dict[str, Any],
+) -> bool:
     event_type = str(payload.get("type", ""))
+    captured = False
     if event_type == "conversation.item.input_audio_transcription.completed":
         text = _clean(payload.get("transcript"), 4000)
         if text:
             transcript.append({"speaker": "caller", "text": text})
+            captured = True
     elif event_type in {"response.output_audio_transcript.done", "response.audio_transcript.done"}:
         text = _clean(payload.get("transcript"), 4000)
         if text:
             transcript.append({"speaker": AGENT_NAME.lower(), "text": text})
+            captured = True
     while sum(len(item["text"]) for item in transcript) > MAX_TRANSCRIPT_CHARS:
         transcript.pop(0)
+    return captured
 
 
 def _function_calls(payload: dict[str, Any]) -> list[dict[str, str]]:
@@ -828,10 +910,20 @@ def execute_realtime_tool(
                 result = {"ok": False, "error": str(exc)}
         tool_ids.append(tool_call_id)
         prior_results[tool_call_id] = result
+        current_metadata = dict(callback.routing_metadata or {})
+        tool_events = list(current_metadata.get("tool_events") or [])
+        tool_events.append(
+            {
+                "name": tool_name,
+                "succeeded": bool(result.get("ok")),
+                "occurred_at": datetime.now(UTC).isoformat(),
+            }
+        )
         callback.routing_metadata = {
-            **(callback.routing_metadata or {}),
+            **current_metadata,
             "tool_call_ids": tool_ids[-100:],
             "tool_results": dict(list(prior_results.items())[-50:]),
+            "tool_events": tool_events[-100:],
         }
         db.commit()
         return result
@@ -1282,6 +1374,7 @@ def _finish_realtime_call(
             **metadata,
             "outcome": outcome,
             "transcript": transcript,
+            "transcript_complete": True,
             "ended_at": now.isoformat(),
         }
         record.status = "completed"
@@ -1292,6 +1385,7 @@ def _finish_realtime_call(
             "outcome": outcome,
             "summary": metadata.get("summary"),
             "transcript": transcript,
+            "transcript_complete": True,
         }
         _set_call_duration(record, now)
         communication = db.scalar(
@@ -1309,6 +1403,7 @@ def _finish_realtime_call(
                 "outcome": outcome,
                 "summary": metadata.get("summary"),
                 "transcript": transcript,
+                "transcript_complete": True,
             }
         db.add(
             ActivityEvent(

@@ -28,6 +28,18 @@ The caller is treated as a possible homeowner returning a cold call, but Marin d
 - Wrong numbers and unrelated calls are closed cleanly without entering the seller pipeline.
 - Partial structured notes survive an interrupted call.
 
+## Call review and quality control
+
+- `Inbox -> Marin calls` is the company operational review workspace for the AI line.
+- The dashboard distinguishes total calls from unique callers and shows today, 7-day, and 30-day activity.
+- Every row includes the caller, time, duration, outcome, transcript availability, and linked seller context when Marin verified it.
+- Opening a call loads the caller/Marin transcript separately so the normal Inbox and the call list remain lightweight.
+- Staff can mark a call reviewed, flag a specific problem, add notes, and resolve the finding after the agent is corrected.
+- Failed, timed-out, incomplete, missing-transcript, and uncertain-transfer calls automatically enter the needs-review queue.
+- Completed transcript turns are checkpointed while the call is active. A later connection failure therefore retains the conversation collected before the failure.
+- Review records retain the reviewer, review time, issue categories, notes, model, voice, and prompt version.
+- Realtime caller transcription is a review aid rather than a guaranteed verbatim record. Audio recording remains disabled unless Stonegate separately enables its recording-consent and retention workflow.
+
 ## Agent tools
 
 - `lookup_callback_context`: Match caller-supplied identity or property details against Stonegate records.
@@ -85,3 +97,6 @@ OPENAI_REALTIME_MAX_CALL_SECONDS=900
 - A dropped call leaves a useful callback record and summary.
 - No automatic overdue task is created unless a callback time was agreed.
 - Operators can see agent readiness and the configured line in Communications settings.
+- Operational staff can see company-wide Marin call counts and inspect individual transcripts from Inbox.
+- A failed session keeps its partial transcript and is automatically marked for review.
+- Review flags and reviewer notes remain attached to the call after refresh.

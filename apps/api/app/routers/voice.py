@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
@@ -20,6 +20,9 @@ from app.schemas.staff_lead_alerts import (
 from app.schemas.voice import (
     CallTranscriptRead,
     CallTranscriptReview,
+    MarinCallDashboardRead,
+    MarinCallDetailRead,
+    MarinCallReviewUpdate,
     RealtimeSellerAgentReadinessRead,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
@@ -45,6 +48,11 @@ from app.services.call_intelligence import (
 )
 from app.services.call_recording_evidence import recording_audio_available
 from app.services.lead_lifecycle import LeadLifecycleConflictError
+from app.services.marin_call_review import (
+    get_marin_call,
+    list_marin_calls,
+    review_marin_call,
+)
 from app.services.meta_lead_ads import (
     requeue_staff_lead_alerts,
 )
@@ -81,6 +89,11 @@ quick_dial_dependency = require_permission(PermissionKeys.PLACE_CALLS)
 manage_lines_dependency = require_permission(PermissionKeys.MANAGE_VOICE_LINES)
 recording_dependency = require_permission(PermissionKeys.ACCESS_RECORDINGS)
 recording_management_dependency = require_permission(PermissionKeys.MANAGE_RECORDINGS)
+marin_calls_dependency = require_any_permission(
+    PermissionKeys.VIEW_CONVERSATIONS,
+    PermissionKeys.VIEW_ASSIGNED_CONVERSATIONS,
+    PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+)
 
 
 @router.post("/quick-dial", status_code=201)
@@ -294,6 +307,53 @@ def read_realtime_seller_agent_readiness(
     principal: Annotated[Principal, Depends(manage_lines_dependency)],
 ) -> RealtimeSellerAgentReadinessRead:
     return get_realtime_seller_agent_readiness(db, principal)
+
+
+@router.get("/marin-calls")
+def read_marin_calls(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(marin_calls_dependency)],
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> MarinCallDashboardRead:
+    response.headers["Cache-Control"] = "private, no-store"
+    return list_marin_calls(db, principal, days=days, limit=limit)
+
+
+@router.get("/marin-calls/{callback_id}")
+def read_marin_call(
+    callback_id: UUID,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(marin_calls_dependency)],
+) -> MarinCallDetailRead:
+    response.headers["Cache-Control"] = "private, no-store"
+    result = get_marin_call(db, principal, callback_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Marin call not found.")
+    return result
+
+
+@router.patch("/marin-calls/{callback_id}/review")
+def update_marin_call_review(
+    callback_id: UUID,
+    payload: MarinCallReviewUpdate,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(marin_calls_dependency)],
+) -> MarinCallDetailRead:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        result = review_marin_call(db, principal, callback_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Marin call not found.")
+    return result
 
 
 @router.post("/lines", status_code=201)

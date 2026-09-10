@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -142,6 +142,104 @@ class RealtimeSellerAgentReadinessRead(BaseModel):
     sip_uri: str | None
     line_id: UUID | None
     checks: list[VoiceReadinessCheckRead]
+
+
+MarinReviewFlag = Literal[
+    "awkward_wording",
+    "interruption",
+    "wrong_information",
+    "missed_intent",
+    "poor_qualification",
+    "failed_transfer",
+    "technical_failure",
+    "privacy_or_compliance",
+]
+
+
+class MarinCallReviewRead(BaseModel):
+    status: Literal["unreviewed", "reviewed", "flagged", "resolved"]
+    flags: list[MarinReviewFlag]
+    notes: str | None
+    reviewed_by_user_id: UUID | None
+    reviewer_name: str | None
+    reviewed_at: datetime | None
+
+
+class MarinCallReviewUpdate(BaseModel):
+    status: Literal["reviewed", "flagged", "resolved"]
+    flags: list[MarinReviewFlag] = Field(default_factory=list, max_length=8)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class MarinTranscriptTurnRead(BaseModel):
+    speaker: Literal["caller", "marin"]
+    text: str
+
+
+class MarinToolEventRead(BaseModel):
+    name: str
+    succeeded: bool
+    occurred_at: datetime | None
+
+
+class MarinCallListItemRead(BaseModel):
+    id: UUID
+    call_record_id: UUID | None
+    caller_number: str
+    seller_name: str | None
+    property_address: str | None
+    lead_id: UUID | None
+    status: str
+    outcome: str
+    summary: str | None
+    received_at: datetime
+    answered_at: datetime | None
+    completed_at: datetime | None
+    duration_seconds: int | None
+    transcript_available: bool
+    transcript_turn_count: int = Field(ge=0)
+    model: str | None
+    voice: str | None
+    prompt_version: str | None
+    error: str | None
+    needs_review: bool
+    review_reasons: list[str]
+    review: MarinCallReviewRead
+
+
+class MarinCallStatsRead(BaseModel):
+    timezone: str
+    total_calls: int = Field(ge=0)
+    total_unique_callers: int = Field(ge=0)
+    calls_today: int = Field(ge=0)
+    calls_7_days: int = Field(ge=0)
+    calls_30_days: int = Field(ge=0)
+    unique_callers_30_days: int = Field(ge=0)
+    repeat_callers_30_days: int = Field(ge=0)
+    completed_calls_30_days: int = Field(ge=0)
+    failed_calls_30_days: int = Field(ge=0)
+    transferred_calls_30_days: int = Field(ge=0)
+    scheduled_callbacks_30_days: int = Field(ge=0)
+    interested_calls_30_days: int = Field(ge=0)
+    leads_created_30_days: int = Field(ge=0)
+    needs_review: int = Field(ge=0)
+    average_duration_seconds_30_days: int | None
+
+
+class MarinCallDashboardRead(BaseModel):
+    items: list[MarinCallListItemRead]
+    total: int = Field(ge=0)
+    stats: MarinCallStatsRead
+    generated_at: datetime
+
+
+class MarinCallDetailRead(MarinCallListItemRead):
+    transcript: list[MarinTranscriptTurnRead]
+    captured_details: dict[str, Any]
+    tool_events: list[MarinToolEventRead]
+    callback_at: datetime | None
+    callback_reason: str | None
+    transfer_number: str | None
 
 
 class VoiceSessionRead(BaseModel):

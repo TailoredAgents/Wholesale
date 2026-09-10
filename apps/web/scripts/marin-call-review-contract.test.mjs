@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import test from "node:test";
+
+const root = resolve(import.meta.dirname, "../src/app/os/inbox");
+const workspace = readFileSync(
+  resolve(root, "marin-calls/marin-calls-workspace.tsx"),
+  "utf8",
+);
+const inbox = readFileSync(resolve(root, "inbox-workspace.tsx"), "utf8");
+const styles = readFileSync(resolve(root, "marin-calls/marin-calls.module.css"), "utf8");
+
+test("Inbox links directly to the Marin call review workspace", () => {
+  assert.match(inbox, /href="\/os\/inbox\/marin-calls"/);
+  assert.match(inbox, />\s*Marin calls\s*</);
+});
+
+test("Marin workspace separates the lightweight list from transcript detail", () => {
+  assert.match(workspace, /\/api\/v1\/voice\/marin-calls\?days=30&limit=200/);
+  assert.match(workspace, /\/api\/v1\/voice\/marin-calls\/\$\{callbackId\}/);
+  assert.match(workspace, /Caller and Marin transcript/);
+  assert.match(workspace, /Realtime transcripts are review aids/);
+});
+
+test("Marin workspace exposes operational counts and human review controls", () => {
+  for (const label of [
+    "Today",
+    "Last 7 days",
+    "Unique callers",
+    "Seller results",
+    "Human handoffs",
+    "Needs review",
+  ]) {
+    assert.match(workspace, new RegExp(label));
+  }
+  assert.match(workspace, /What should Marin improve\?/);
+  assert.match(workspace, /Save issue/);
+  assert.match(workspace, /Mark reviewed/);
+  assert.match(workspace, /Resolve/);
+});
+
+test("Marin workspace stays dense and independently scrollable", () => {
+  assert.match(styles, /height: calc\(100dvh - 124px\)/);
+  assert.match(styles, /grid-template-columns: minmax\(300px, 340px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /\.callList[\s\S]*overflow-y: auto/);
+  assert.match(styles, /\.transcriptColumn,[\s\S]*overflow-y: auto/);
+});

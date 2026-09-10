@@ -95,6 +95,27 @@
   gap: 8px;
 }
 
+.marinCallsLink {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #c6d9cd;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.marinCallsLink:hover {
+  border-color: #a9c6b4;
+  background: #e2efe7;
+}
+
 .emailStatusButton {
   min-height: 38px;
   padding: 0 12px;

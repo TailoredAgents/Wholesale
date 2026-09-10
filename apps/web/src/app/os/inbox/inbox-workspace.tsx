@@ -1812,6 +1812,10 @@ export function InboxWorkspace({
           </span>
         </div>
         <div className={styles.headerActions}>
+          <Link className={styles.marinCallsLink} href="/os/inbox/marin-calls">
+            <Bot size={16} aria-hidden="true" />
+            Marin calls
+          </Link>
           {canComposeGlobalEmail ? (
             <button
               className={styles.composeEmailButton}
