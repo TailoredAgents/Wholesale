@@ -50,6 +50,7 @@ type MarinCall = {
   lead_id: string | null;
   status: string;
   outcome: string;
+  capture_status: "none" | "provisional" | "qualified";
   summary: string | null;
   received_at: string;
   answered_at: string | null;
@@ -89,6 +90,8 @@ type MarinStats = {
   transferred_calls_30_days: number;
   scheduled_callbacks_30_days: number;
   interested_calls_30_days: number;
+  seller_callbacks_captured_30_days: number;
+  fully_qualified_sellers_30_days: number;
   leads_created_30_days: number;
   needs_review: number;
   average_duration_seconds_30_days: number | null;
@@ -406,9 +409,12 @@ export function MarinCallsWorkspace() {
         </article>
         <article>
           <UserRound size={17} aria-hidden="true" />
-          <span>Seller results</span>
-          <strong>{dashboard?.stats.interested_calls_30_days ?? 0}</strong>
-          <small>{dashboard?.stats.leads_created_30_days ?? 0} leads created</small>
+          <span>Seller callbacks saved</span>
+          <strong>{dashboard?.stats.seller_callbacks_captured_30_days ?? 0}</strong>
+          <small>
+            {dashboard?.stats.fully_qualified_sellers_30_days ?? 0} qualified ·{" "}
+            {dashboard?.stats.leads_created_30_days ?? 0} new records
+          </small>
         </article>
         <article>
           <ExternalLink size={17} aria-hidden="true" />
@@ -548,7 +554,12 @@ export function MarinCallsWorkspace() {
                   <div className={styles.callSummary}>
                     <div>
                       <span>Result</span>
-                      <strong>{labelize(detail.outcome)}</strong>
+                      <strong>
+                        {labelize(detail.outcome)}
+                        {detail.capture_status !== "none"
+                          ? ` · ${labelize(detail.capture_status)} lead`
+                          : ""}
+                      </strong>
                     </div>
                     <div>
                       <span>Received</span>

@@ -191,6 +191,7 @@ class MarinCallListItemRead(BaseModel):
     lead_id: UUID | None
     status: str
     outcome: str
+    capture_status: Literal["none", "provisional", "qualified"]
     summary: str | None
     received_at: datetime
     answered_at: datetime | None
@@ -221,6 +222,8 @@ class MarinCallStatsRead(BaseModel):
     transferred_calls_30_days: int = Field(ge=0)
     scheduled_callbacks_30_days: int = Field(ge=0)
     interested_calls_30_days: int = Field(ge=0)
+    seller_callbacks_captured_30_days: int = Field(ge=0)
+    fully_qualified_sellers_30_days: int = Field(ge=0)
     leads_created_30_days: int = Field(ge=0)
     needs_review: int = Field(ge=0)
     average_duration_seconds_30_days: int | None

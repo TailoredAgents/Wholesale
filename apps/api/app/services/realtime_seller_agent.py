@@ -50,8 +50,13 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v7"
+PROMPT_VERSION = "stonegate-seller-callback-v8"
 MAX_TRANSCRIPT_CHARS = 40_000
+SELLER_INTEREST_LEVELS = {
+    "open_to_offer",
+    "maybe",
+    "depends_on_numbers",
+}
 NATURAL_TOOL_RESPONSE_DELAYS = {
     "lookup_callback_context": 0.25,
     "schedule_human_callback": 0.75,
@@ -123,14 +128,16 @@ The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}
 - If verification fails, politely collect information as a new possible seller without revealing stored data.
 
 # Seller lead
-- Before offering a human handoff, collect only these essentials: the caller's name; the property's complete address and confirmation that they own it; and whether they are open to discussing an offer. Ask for one piece at a time. As soon as those facts are clear, use save_seller_details so Stonegate has the lead even if the call ends unexpectedly.
-- Once the essentials are known, immediately offer the human handoff. Do not continue qualifying them first.
+- The instant a caller genuinely says they are open, maybe open, interested if the numbers make sense, or asks what Stonegate would offer, use capture_seller_interest before asking another intake question. This preserves the callback using the incoming phone number even if the call ends early.
+- Do not use capture_seller_interest merely because someone asks who called, why Stonegate called, sounds curious, or asks to be removed. There must be an affirmative or conditional willingness to hear an offer or discuss selling.
+- After interest is captured, naturally collect the caller's name, the property's complete address, confirmation that they own it, and whether they are open to discussing an offer. Ask for one piece at a time. As soon as those facts are clear, use save_seller_details to finish qualifying the saved lead.
+- An interested caller does not have to finish the property intake before a human handoff. After capture_seller_interest succeeds, offer the human handoff when the caller is ready. Continue collecting useful details only while they are comfortable doing so.
 - Motivation, property condition, occupancy, desired timing, and asking price are optional. Save them when the caller volunteers them or clearly wants to continue talking, but never ask for them as a requirement before reaching an Acquisitions Manager.
 - Quietly save caller-supplied facts. Never announce tools, database work, qualification labels, or pipeline stages.
 - Do not say "let me check," "let me look that up," or similar filler before a routine CRM lookup. Perform quick lookups silently and continue naturally. If you have already told the caller you are checking something, do not deliver the result in the same breath; allow the brief pause provided after the lookup.
 
 # Human handoff
-- When an interested caller is ready to continue, first offer to connect them with an Acquisitions Manager now. Transfer only after they agree.
+- When an interested caller is ready to continue, first preserve their interest with capture_seller_interest, then offer to connect them with an Acquisitions Manager now. Transfer only after they agree.
 - If they prefer later, agree on a specific date and time, repeat it naturally for confirmation, and then use schedule_human_callback. This books the Acquisitions callback on Stonegate's internal calendar.
 - If they are interested but do not choose a specific time, save the lead and notes without inventing an appointment or follow-up task.
 
@@ -162,10 +169,44 @@ def realtime_tools() -> list[dict[str, Any]]:
         },
         {
             "type": "function",
+            "name": "capture_seller_interest",
+            "description": (
+                "Immediately preserve a potential seller once the caller affirmatively or "
+                "conditionally says they would consider selling or hearing an offer. The "
+                "incoming phone number anchors a provisional lead, so name and property details "
+                "are optional. Do not call this for curiosity alone, an unclear response, a "
+                "wrong number, a decline, or a do-not-contact request."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "interest_level": {
+                        "type": "string",
+                        "enum": ["open_to_offer", "maybe", "depends_on_numbers"],
+                    },
+                    "interest_basis": {
+                        "type": "string",
+                        "description": (
+                            "A short factual paraphrase of what the caller said that showed "
+                            "interest."
+                        ),
+                    },
+                    "seller_name": {"type": "string"},
+                    "property_type": {"type": "string"},
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "owner_confirmed": {"type": "boolean"},
+                },
+                "required": ["interest_level", "interest_basis"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
             "name": "save_seller_details",
             "description": (
-                "Save caller-supplied seller and property facts. Creates or updates a lead only "
-                "when owner_confirmed and seller_interested are both true."
+                "Finish qualifying an interested seller using caller-supplied identity and "
+                "property facts. Use capture_seller_interest first when interest becomes clear."
             ),
             "parameters": {
                 "type": "object",
@@ -898,6 +939,7 @@ def execute_realtime_tool(
             return prior if isinstance(prior, dict) else {"ok": True, "duplicate": True}
         handlers = {
             "lookup_callback_context": _tool_lookup_callback_context,
+            "capture_seller_interest": _tool_capture_seller_interest,
             "save_seller_details": _tool_save_seller_details,
             "schedule_human_callback": _tool_schedule_human_callback,
             "transfer_to_acquisitions": _tool_prepare_transfer,
@@ -1031,14 +1073,127 @@ def _tool_lookup_callback_context(
     }
 
 
+def _tool_capture_seller_interest(
+    db: Session,
+    callback: ProspectingInboundCallback,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    interest_level = str(arguments.get("interest_level") or "").strip()
+    if interest_level not in SELLER_INTEREST_LEVELS:
+        raise RealtimeSellerAgentError("Choose a supported seller interest level.")
+    interest_basis = _clean(arguments.get("interest_basis"), 500)
+    if not interest_basis:
+        raise RealtimeSellerAgentError("Record what the caller said that showed interest.")
+    seller_name = _clean(arguments.get("seller_name"), 255)
+    property_type = _clean(arguments.get("property_type"), 80)
+    city = _clean(arguments.get("city"), 120)
+    state = _clean(arguments.get("state"), 2)
+    if state and len(state) != 2:
+        raise RealtimeSellerAgentError("Use a two-letter property state when it is known.")
+
+    metadata = dict(callback.routing_metadata or {})
+    first_capture = not bool(metadata.get("seller_interest_captured_at"))
+    lead = _verified_lead(db, callback)
+    created = False
+    if lead is None:
+        lead = _create_realtime_provisional_lead(
+            db,
+            callback,
+            seller_name=seller_name,
+            property_type=property_type,
+            city=city,
+            state=state,
+            interest_level=interest_level,
+            interest_basis=interest_basis,
+            owner_confirmed=arguments.get("owner_confirmed") is True,
+        )
+        created = True
+    else:
+        _update_realtime_provisional_lead(
+            db,
+            lead,
+            seller_name=seller_name,
+            property_type=property_type,
+            city=city,
+            state=state,
+            interest_level=interest_level,
+            interest_basis=interest_basis,
+            owner_confirmed=arguments.get("owner_confirmed") is True,
+        )
+    # update_conversation_activity performs a populate_existing lead lock so
+    # persist captured facts before it refreshes the lead from the database.
+    db.flush()
+
+    contact = db.get(Contact, lead.contact_id)
+    property_record = db.get(Property, lead.property_id)
+    if contact is None or property_record is None:
+        raise RealtimeSellerAgentError("Seller interest could not be preserved.")
+    conversation = ensure_primary_conversation(db, lead)
+    _ensure_call_communication(db, callback, lead, contact, conversation.id)
+    now = datetime.now(UTC)
+    update_conversation_activity(conversation, direction="inbound", occurred_at=now, db=db)
+    callback.routing_metadata = {
+        **metadata,
+        "verified_lead_id": str(lead.id),
+        "verified_contact_id": str(contact.id),
+        "verified_property_id": str(property_record.id),
+        "lead_created_by_agent": bool(metadata.get("lead_created_by_agent")) or created,
+        "lead_capture_status": (
+            "qualified" if metadata.get("lead_capture_status") == "qualified" else "provisional"
+        ),
+        "seller_interest_captured_at": metadata.get("seller_interest_captured_at")
+        or now.isoformat(),
+        "seller_interest": {
+            "level": interest_level,
+            "basis": interest_basis,
+            "owner_confirmed": arguments.get("owner_confirmed") is True,
+            "captured_at": now.isoformat(),
+        },
+    }
+    if first_capture:
+        db.add(
+            ActivityEvent(
+                organization_id=lead.organization_id,
+                actor_user_id=None,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type="lead.interest_captured_from_ai_seller_callback",
+                summary=(
+                    "Marin preserved an interested seller callback before the full property "
+                    "intake was complete."
+                ),
+            )
+        )
+        _notify_realtime_lead(db, callback, lead, contact, created=created)
+        queue_staff_lead_alerts_for_lead(
+            db,
+            lead=lead,
+            source_type="openai_realtime_callback",
+            source_event_id=callback.id,
+            source_label="Marin interested callback",
+            source_entity_type="prospecting_inbound_callback",
+        )
+    db.flush()
+    return {
+        "ok": True,
+        "saved": True,
+        "lead_created": created,
+        "lead_id": str(lead.id),
+        "capture_status": callback.routing_metadata["lead_capture_status"],
+        "caller_phone_saved": True,
+        "property_details_complete": False,
+    }
+
+
 def _tool_save_seller_details(
     db: Session,
     callback: ProspectingInboundCallback,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     details = _seller_details(arguments)
+    metadata = dict(callback.routing_metadata or {})
     callback.routing_metadata = {
-        **(callback.routing_metadata or {}),
+        **metadata,
         "seller_details": details,
     }
     if not details["owner_confirmed"] or not details["seller_interested"]:
@@ -1051,6 +1206,9 @@ def _tool_save_seller_details(
         created = True
     else:
         _update_realtime_lead(db, lead, details)
+    # update_conversation_activity performs a populate_existing lead lock so
+    # persist qualified facts before it refreshes the lead from the database.
+    db.flush()
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
     if contact is None or property_record is None:
@@ -1064,7 +1222,11 @@ def _tool_save_seller_details(
         "verified_lead_id": str(lead.id),
         "verified_contact_id": str(contact.id),
         "verified_property_id": str(property_record.id),
-        "lead_created_by_agent": created,
+        "lead_created_by_agent": bool(metadata.get("lead_created_by_agent")) or created,
+        "lead_capture_status": "qualified",
+        "seller_interest_captured_at": metadata.get("seller_interest_captured_at")
+        or now.isoformat(),
+        "seller_fully_qualified_at": now.isoformat(),
     }
     db.add(
         ActivityEvent(
@@ -1454,6 +1616,163 @@ def _seller_details(arguments: dict[str, Any]) -> dict[str, Any]:
     return details
 
 
+def _create_realtime_provisional_lead(
+    db: Session,
+    callback: ProspectingInboundCallback,
+    *,
+    seller_name: str | None,
+    property_type: str | None,
+    city: str | None,
+    state: str | None,
+    interest_level: str,
+    interest_basis: str,
+    owner_confirmed: bool,
+) -> Lead:
+    contact = Contact(
+        organization_id=callback.organization_id,
+        legal_name=seller_name or f"Inbound seller {callback.normalized_caller}",
+        preferred_name=None,
+        contact_type="seller",
+        assigned_user_id=callback.assigned_user_id,
+    )
+    db.add(contact)
+    db.flush()
+    db.add(
+        ContactMethod(
+            organization_id=callback.organization_id,
+            contact_id=contact.id,
+            method_type="phone",
+            value=callback.normalized_caller,
+            normalized_value="".join(
+                character for character in callback.normalized_caller if character.isdigit()
+            ),
+            is_primary=True,
+        )
+    )
+    property_record = Property(
+        organization_id=callback.organization_id,
+        street_address="Address pending",
+        city=city or "Unknown",
+        state=(state.upper() if state else "GA"),
+        postal_code="00000",
+        county=None,
+        property_type=property_type,
+        normalized_address_key=None,
+    )
+    refresh_property_identity_keys(property_record)
+    db.add(property_record)
+    db.flush()
+    normalized_property_type = str(property_type or "").lower()
+    lead = Lead(
+        organization_id=callback.organization_id,
+        contact_id=contact.id,
+        property_id=property_record.id,
+        assigned_user_id=callback.assigned_user_id,
+        source="batchdialer_callback",
+        asset_class=(
+            "land"
+            if any(word in normalized_property_type for word in ("land", "lot", "acre"))
+            else "house"
+        ),
+        qualification_context={
+            "source": "openai_realtime_seller_callback",
+            "callback_id": str(callback.id),
+            "capture_status": "provisional",
+            "owner_confirmed": owner_confirmed,
+            "seller_interested": True,
+            "interest_level": interest_level,
+            "interest_basis": interest_basis,
+            "property_identity_complete": False,
+        },
+        stage_key="qualification_in_progress",
+        lead_temperature=None,
+        motivation=None,
+        desired_timeline=None,
+        property_condition=None,
+        occupancy_status=None,
+        asking_price=None,
+        mortgage_balance=None,
+        appointment_status=None,
+        next_follow_up_at=None,
+        archived_at=None,
+    )
+    db.add(lead)
+    db.flush()
+    ensure_primary_conversation(db, lead)
+    db.add(
+        ConsentRecord(
+            organization_id=callback.organization_id,
+            contact_id=contact.id,
+            channel="phone",
+            status="granted",
+            source="inbound_call",
+            wording_version="caller-initiated-v1",
+            wording="Potential seller initiated a call to the Stonegate seller callback line.",
+            normalized_address=callback.normalized_caller,
+            captured_ip=None,
+            user_agent=None,
+        )
+    )
+    return lead
+
+
+def _update_realtime_provisional_lead(
+    db: Session,
+    lead: Lead,
+    *,
+    seller_name: str | None,
+    property_type: str | None,
+    city: str | None,
+    state: str | None,
+    interest_level: str,
+    interest_basis: str,
+    owner_confirmed: bool,
+) -> None:
+    contact = db.get(Contact, lead.contact_id)
+    property_record = db.get(Property, lead.property_id)
+    if contact is None or property_record is None:
+        raise RealtimeSellerAgentError("The matched lead is incomplete.")
+    if seller_name and contact.legal_name.startswith(("Inbound caller ", "Inbound seller ")):
+        contact.legal_name = seller_name
+    if property_record.street_address in {"Address pending", "Unknown", ""}:
+        if city:
+            property_record.city = city
+        if state:
+            property_record.state = state.upper()
+    if property_type and not property_record.property_type:
+        property_record.property_type = property_type
+        normalized_property_type = property_type.lower()
+        if any(word in normalized_property_type for word in ("land", "lot", "acre")):
+            lead.asset_class = "land"
+    refresh_property_identity_keys(property_record)
+    if lead.stage_key in {"new", "contact_attempt_due", "attempting_contact", "contacted"}:
+        lead.stage_key = "qualification_in_progress"
+    lead.qualification_context = {
+        **(lead.qualification_context or {}),
+        "capture_status": (
+            "qualified"
+            if (lead.qualification_context or {}).get("capture_status") == "qualified"
+            else "provisional"
+        ),
+        "owner_confirmed": bool(
+            (lead.qualification_context or {}).get("owner_confirmed")
+        )
+        or owner_confirmed,
+        "seller_interested": True,
+        "property_identity_complete": bool(
+            (lead.qualification_context or {}).get("property_identity_complete")
+        ),
+        "openai_realtime_interest_capture": {
+            "capture_status": "provisional",
+            "owner_confirmed": owner_confirmed,
+            "seller_interested": True,
+            "interest_level": interest_level,
+            "interest_basis": interest_basis,
+            "updated_at": datetime.now(UTC).isoformat(),
+        },
+    }
+
+
 def _create_realtime_lead(
     db: Session,
     callback: ProspectingInboundCallback,
@@ -1504,8 +1823,10 @@ def _create_realtime_lead(
         qualification_context={
             "source": "openai_realtime_seller_callback",
             "callback_id": str(callback.id),
+            "capture_status": "qualified",
             "owner_confirmed": True,
             "seller_interested": True,
+            "property_identity_complete": True,
             "notes": details.get("notes"),
         },
         stage_key="qualification_in_progress",
@@ -1545,7 +1866,7 @@ def _update_realtime_lead(db: Session, lead: Lead, details: dict[str, Any]) -> N
     property_record = db.get(Property, lead.property_id)
     if contact is None or property_record is None:
         raise RealtimeSellerAgentError("The matched lead is incomplete.")
-    if contact.legal_name.startswith("Inbound caller "):
+    if contact.legal_name.startswith(("Inbound caller ", "Inbound seller ")):
         contact.legal_name = details["seller_name"]
     for field, value in (
         ("motivation", details.get("motivation")),
@@ -1563,11 +1884,20 @@ def _update_realtime_lead(db: Session, lead: Lead, details: dict[str, Any]) -> N
         property_record.postal_code = details.get("postal_code") or ""
     if not property_record.property_type and details.get("property_type"):
         property_record.property_type = details["property_type"]
+    normalized_property_type = str(details.get("property_type") or "").lower()
+    if any(word in normalized_property_type for word in ("land", "lot", "acre")):
+        lead.asset_class = "land"
+    elif any(word in normalized_property_type for word in ("house", "home", "residential")):
+        lead.asset_class = "house"
     refresh_property_identity_keys(property_record)
     if lead.stage_key in {"new", "contact_attempt_due", "attempting_contact", "contacted"}:
         lead.stage_key = "qualification_in_progress"
     lead.qualification_context = {
         **(lead.qualification_context or {}),
+        "capture_status": "qualified",
+        "owner_confirmed": True,
+        "seller_interested": True,
+        "property_identity_complete": True,
         "openai_realtime_seller_callback": {
             "owner_confirmed": True,
             "seller_interested": True,

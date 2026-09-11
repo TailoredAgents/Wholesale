@@ -28,12 +28,14 @@ test("Marin workspace exposes operational counts and human review controls", () 
     "Today",
     "Last 7 days",
     "Unique callers",
-    "Seller results",
+    "Seller callbacks saved",
     "Human handoffs",
     "Needs review",
   ]) {
     assert.match(workspace, new RegExp(label));
   }
+  assert.match(workspace, /seller_callbacks_captured_30_days/);
+  assert.match(workspace, /fully_qualified_sellers_30_days/);
   assert.match(workspace, /What should Marin improve\?/);
   assert.match(workspace, /Save issue/);
   assert.match(workspace, /Mark reviewed/);

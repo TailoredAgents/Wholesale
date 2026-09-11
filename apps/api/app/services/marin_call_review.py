@@ -125,6 +125,7 @@ def list_marin_calls(
         for row in stats_rows
         if row[1] is not None and row[1].duration_seconds is not None
     ]
+    capture_statuses = [_capture_status(row[0]) for row in stats_rows]
     stats = MarinCallStatsRead(
         timezone=timezone_name,
         total_calls=total_calls,
@@ -143,6 +144,12 @@ def list_marin_calls(
             _outcome(*row) == "callback_scheduled" for row in stats_rows
         ),
         interested_calls_30_days=sum(_outcome(*row) == "interested" for row in stats_rows),
+        seller_callbacks_captured_30_days=sum(
+            status in {"provisional", "qualified"} for status in capture_statuses
+        ),
+        fully_qualified_sellers_30_days=sum(
+            status == "qualified" for status in capture_statuses
+        ),
         leads_created_30_days=sum(
             bool((row[0].routing_metadata or {}).get("lead_created_by_agent"))
             for row in stats_rows
@@ -266,6 +273,7 @@ def _call_item(
         lead_id=identity.get("lead_id"),
         status=callback.status,
         outcome=_outcome(callback, record),
+        capture_status=_capture_status(callback),
         summary=_text(metadata.get("summary")),
         received_at=callback.received_at,
         answered_at=callback.answered_at,
@@ -476,6 +484,26 @@ def _outcome(
     if value:
         return str(value)
     return "in_progress" if callback.status not in TERMINAL_CALLBACK_STATUSES else "incomplete"
+
+
+def _capture_status(
+    callback: ProspectingInboundCallback,
+) -> Literal["none", "provisional", "qualified"]:
+    metadata = callback.routing_metadata or {}
+    value = metadata.get("lead_capture_status")
+    if value in {"provisional", "qualified"}:
+        return cast(Literal["provisional", "qualified"], value)
+    details = metadata.get("seller_details")
+    if (
+        isinstance(details, dict)
+        and details.get("owner_confirmed") is True
+        and details.get("seller_interested") is True
+        and metadata.get("verified_lead_id")
+    ):
+        return "qualified"
+    if metadata.get("seller_interest_captured_at") and metadata.get("verified_lead_id"):
+        return "provisional"
+    return "none"
 
 
 def _today_start(

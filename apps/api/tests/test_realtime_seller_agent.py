@@ -16,7 +16,9 @@ from app.models.foundation import (
     Appointment,
     CalendarEvent,
     CallRecord,
+    Contact,
     Lead,
+    Property,
     ProspectingInboundCallback,
     SuppressionRecord,
     Task,
@@ -28,6 +30,7 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.realtime_seller_agent import (
     NATURAL_TOOL_RESPONSE_DELAYS,
     RealtimeSellerAgentError,
+    _tool_capture_seller_interest,
     _tool_lookup_callback_context,
     _tool_record_call_outcome,
     _tool_save_seller_details,
@@ -187,11 +190,12 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert 'say "gracias por llamar" rather than "gracias por contestar."' in instructions
     assert "ask multiple questions in the opening" in instructions
     assert "only need two or three quick details" in instructions
-    assert "collect only these essentials" in instructions
-    assert "Once the essentials are known, immediately offer the human handoff" in instructions
+    assert "use capture_seller_interest before asking another intake question" in instructions
+    assert "There must be an affirmative or conditional willingness" in instructions
+    assert "does not have to finish the property intake before a human handoff" in instructions
     assert "never ask for them as a requirement" in instructions
     assert "A phone-number match alone is not identity verification." in instructions
-    assert "first offer to connect them with an Acquisitions Manager now" in instructions
+    assert "offer to connect them with an Acquisitions Manager now" in instructions
     assert "books the Acquisitions callback on Stonegate's internal calendar" in instructions
     assert "without inventing an appointment or follow-up task" in instructions
     assert 'Do not say "let me check,"' in instructions
@@ -201,6 +205,7 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     }
     assert {tool["name"] for tool in session["tools"]} == {
         "lookup_callback_context",
+        "capture_seller_interest",
         "save_seller_details",
         "schedule_human_callback",
         "transfer_to_acquisitions",
@@ -208,6 +213,78 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
         "wait_for_user",
         "finish_call",
     }
+
+
+def test_interest_is_preserved_before_full_property_intake(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    callback, _ = seed_realtime_call(db_session, monkeypatch)
+
+    captured = _tool_capture_seller_interest(
+        db_session,
+        callback,
+        {
+            "interest_level": "depends_on_numbers",
+            "interest_basis": "Caller said they may sell if the offer makes sense.",
+            "property_type": "vacant land",
+            "city": "Dalton",
+            "state": "GA",
+        },
+    )
+    db_session.flush()
+
+    assert captured["lead_created"] is True
+    assert captured["capture_status"] == "provisional"
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    assert lead.stage_key == "qualification_in_progress"
+    assert lead.asset_class == "land"
+    assert lead.qualification_context["capture_status"] == "provisional"
+    contact = db_session.get(Contact, lead.contact_id)
+    property_record = db_session.get(Property, lead.property_id)
+    assert contact is not None
+    assert contact.legal_name == f"Inbound seller {CALLER_NUMBER}"
+    assert property_record is not None
+    assert property_record.street_address == "Address pending"
+    assert callback.routing_metadata["lead_created_by_agent"] is True
+    assert callback.routing_metadata["lead_capture_status"] == "provisional"
+
+    scheduled_at = datetime.now(UTC) + timedelta(days=1)
+    scheduled = _tool_schedule_human_callback(
+        db_session,
+        callback,
+        {
+            "callback_at": scheduled_at.isoformat(),
+            "reason": "Caller wants to hear an offer from acquisitions.",
+            "caller_confirmed": True,
+        },
+    )
+    assert scheduled["scheduled"] is True
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 1
+
+    qualified = _tool_save_seller_details(
+        db_session,
+        callback,
+        seller_details(property_type="vacant land"),
+    )
+    db_session.flush()
+
+    assert qualified["lead_created"] is False
+    assert qualified["lead_id"] == str(lead.id)
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert callback.routing_metadata["lead_created_by_agent"] is True
+    assert callback.routing_metadata["lead_capture_status"] == "qualified"
+    db_session.refresh(lead)
+    db_session.refresh(contact)
+    db_session.refresh(property_record)
+    assert contact.legal_name == "Sam Seller"
+    assert property_record.street_address == "55 Auburn Avenue"
+    assert lead.asset_class == "land"
+    assert lead.qualification_context["capture_status"] == "qualified"
+    assert lead.qualification_context["property_identity_complete"] is True
 
 
 def test_call_registration_is_idempotent(
@@ -281,6 +358,8 @@ def test_marin_call_review_is_company_visible_and_keeps_human_findings(
     callback.routing_metadata = {
         **callback.routing_metadata,
         "outcome": "interested",
+        "lead_capture_status": "qualified",
+        "lead_created_by_agent": True,
         "summary": "Interested owner asked for an acquisitions follow-up.",
         "seller_details": {
             "seller_name": "Sam Seller",
@@ -332,7 +411,11 @@ def test_marin_call_review_is_company_visible_and_keeps_human_findings(
     assert payload["stats"]["total_calls"] == 1
     assert payload["stats"]["total_unique_callers"] == 1
     assert payload["stats"]["calls_today"] == 1
+    assert payload["stats"]["seller_callbacks_captured_30_days"] == 1
+    assert payload["stats"]["fully_qualified_sellers_30_days"] == 1
+    assert payload["stats"]["leads_created_30_days"] == 1
     assert payload["items"][0]["seller_name"] == "Sam Seller"
+    assert payload["items"][0]["capture_status"] == "qualified"
     assert payload["items"][0]["transcript_turn_count"] == 2
 
     detail = client.get(f"/api/v1/voice/marin-calls/{callback.id}", headers=va_headers)
