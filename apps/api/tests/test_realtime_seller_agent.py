@@ -175,8 +175,9 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert session["audio"]["input"]["transcription"]["model"] == "gpt-4o-transcribe"
     assert session["parallel_tool_calls"] is False
     assert session["max_output_tokens"] == 500
-    assert "Open warmly in two or three short sentences." in instructions
-    assert "if they are returning Stonegate's call" in instructions
+    assert "Open warmly in two or three very short sentences." in instructions
+    assert "around 25 to 30 spoken words" in instructions
+    assert "We may have called to see if you'd consider an offer on a property." in instructions
     assert "The example is not a script." in instructions
     assert "Vary the wording naturally" in instructions
     assert "Never imply that you know the caller" in instructions
