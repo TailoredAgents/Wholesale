@@ -12,8 +12,8 @@ The caller is treated as a possible homeowner returning a cold call, but Marin d
 2. OpenAI sends Stonegate a signed `realtime.call.incoming` webhook.
 3. Stonegate verifies the signature, confirms the called number is the configured AI line, creates one durable callback/call record, and accepts the call with `gpt-realtime-2.1` and the `marin` voice.
 4. A server-side WebSocket observes the call and handles narrowly scoped CRM tools.
-5. Marin opens neutrally: "Thank you for calling Stonegate Home Buyers. This is Marin. How can I help you?"
-6. Marin learns whether the caller is returning a call, verifies identity using information the caller supplies, and gathers seller/property details naturally, one question at a time.
+5. Marin opens with brief callback context: Stonegate may have called to ask whether the caller would consider an offer on a property. The prompt supplies a tone example, not a fixed script, so Marin can vary the wording and respond naturally.
+6. Marin establishes whether the caller is open to discussing a sale before collecting identity or property information, then gathers details naturally, one question at a time.
 7. Stonegate saves meaningful information as the conversation progresses. A lead is created or updated only after seller interest and property ownership are established.
 8. If requested or appropriate, the call is transferred to the 678 company line. If live help is unavailable, Marin records an agreed callback time.
 

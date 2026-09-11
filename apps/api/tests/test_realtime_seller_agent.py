@@ -175,13 +175,16 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert session["audio"]["input"]["transcription"]["model"] == "gpt-4o-transcribe"
     assert session["parallel_tool_calls"] is False
     assert session["max_output_tokens"] == 500
-    assert (
-        'Your first response is exactly: "Stonegate Home Buyers, this is Marin. How can I help?"'
-        in instructions
-    )
-    assert "Then stop and listen." in instructions
-    assert "offer choices, or ask multiple questions" in instructions
-    assert "This short receptionist greeting is the only fixed line." in instructions
+    assert "Open warmly in two or three short sentences." in instructions
+    assert "if they are returning Stonegate's call" in instructions
+    assert "The example is not a script." in instructions
+    assert "Vary the wording naturally" in instructions
+    assert "Never imply that you know the caller" in instructions
+    assert "Do not ask the caller to remember which property" in instructions
+    assert "before asking their name" in instructions
+    assert "do not guess" in instructions
+    assert 'say "gracias por llamar" rather than "gracias por contestar."' in instructions
+    assert "ask multiple questions in the opening" in instructions
     assert "only need two or three quick details" in instructions
     assert "collect only these essentials" in instructions
     assert "Once the essentials are known, immediately offer the human handoff" in instructions
