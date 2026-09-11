@@ -536,7 +536,41 @@
   border: 1px solid var(--line-soft);
   background: #fcfcfa;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.callPathNote {
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  background: #f8faf8;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.callPathNote svg {
+  flex: 0 0 auto;
+  color: var(--brand);
+}
+
+.callPathNote[data-status="ended_during_greeting"],
+.callPathNote[data-status="no_caller_response"],
+.callPathNote[data-status="caller_audio_not_transcribed"] {
+  border-color: #ead9aa;
+  background: #fffaf0;
+  color: #715515;
+}
+
+.callPathNote[data-status="technical_failure"] {
+  border-color: #e6b7ae;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .callSummary > div {
@@ -920,11 +954,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .callSummary > div:nth-child(2) {
+  .callSummary > div:nth-child(2n) {
     border-right: 0;
   }
 
-  .callSummary > div:nth-child(-n + 2) {
+  .callSummary > div:nth-child(-n + 4) {
     border-bottom: 1px solid var(--line-soft);
   }
 }

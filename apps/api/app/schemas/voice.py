@@ -182,6 +182,30 @@ class MarinToolEventRead(BaseModel):
     occurred_at: datetime | None
 
 
+MarinCallPathStatus = Literal[
+    "in_progress",
+    "conversation_started",
+    "ended_during_greeting",
+    "no_caller_response",
+    "caller_audio_not_transcribed",
+    "technical_failure",
+    "diagnostics_unavailable",
+]
+
+
+class MarinCallDiagnosticsRead(BaseModel):
+    call_path_status: MarinCallPathStatus
+    caller_speech_detected: bool
+    caller_speech_turns: int = Field(ge=0)
+    caller_transcript_turns: int = Field(ge=0)
+    transcription_failures: int = Field(ge=0)
+    discarded_transcripts: int = Field(ge=0)
+    opening_audio_started: bool
+    opening_audio_completed: bool
+    connection_close_type: str | None
+    connection_close_code: int | None
+
+
 class MarinCallListItemRead(BaseModel):
     id: UUID
     call_record_id: UUID | None
@@ -191,6 +215,7 @@ class MarinCallListItemRead(BaseModel):
     lead_id: UUID | None
     status: str
     outcome: str
+    call_path_status: MarinCallPathStatus
     capture_status: Literal["none", "provisional", "qualified"]
     summary: str | None
     received_at: datetime
@@ -222,6 +247,10 @@ class MarinCallStatsRead(BaseModel):
     transferred_calls_30_days: int = Field(ge=0)
     scheduled_callbacks_30_days: int = Field(ge=0)
     interested_calls_30_days: int = Field(ge=0)
+    conversations_started_30_days: int = Field(ge=0)
+    ended_during_greeting_30_days: int = Field(ge=0)
+    no_caller_response_30_days: int = Field(ge=0)
+    caller_audio_issues_30_days: int = Field(ge=0)
     seller_callbacks_captured_30_days: int = Field(ge=0)
     fully_qualified_sellers_30_days: int = Field(ge=0)
     leads_created_30_days: int = Field(ge=0)
@@ -238,6 +267,7 @@ class MarinCallDashboardRead(BaseModel):
 
 class MarinCallDetailRead(MarinCallListItemRead):
     transcript: list[MarinTranscriptTurnRead]
+    diagnostics: MarinCallDiagnosticsRead
     captured_details: dict[str, Any]
     tool_events: list[MarinToolEventRead]
     callback_at: datetime | None

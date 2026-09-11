@@ -23,6 +23,7 @@ from app.models.foundation import (
 from app.schemas.voice import (
     MarinCallDashboardRead,
     MarinCallDetailRead,
+    MarinCallDiagnosticsRead,
     MarinCallListItemRead,
     MarinCallReviewRead,
     MarinCallReviewUpdate,
@@ -31,6 +32,7 @@ from app.schemas.voice import (
     MarinToolEventRead,
     MarinTranscriptTurnRead,
 )
+from app.services.realtime_seller_agent import _is_suspected_transcription_hallucination
 
 PROVIDER = "openai_realtime"
 DEFAULT_TIMEZONE = "America/New_York"
@@ -110,15 +112,9 @@ def list_marin_calls(
         or 0
     )
     timezone_name, today_start = _today_start(db, principal.organization_id, now)
-    stats_rows = [
-        row
-        for row in rows
-        if _as_utc(row[0].received_at) >= now - timedelta(days=30)
-    ]
+    stats_rows = [row for row in rows if _as_utc(row[0].received_at) >= now - timedelta(days=30)]
     caller_counts = Counter(
-        row[0].normalized_caller
-        for row in stats_rows
-        if row[0].normalized_caller
+        row[0].normalized_caller for row in stats_rows if row[0].normalized_caller
     )
     durations = [
         row[1].duration_seconds
@@ -126,6 +122,7 @@ def list_marin_calls(
         if row[1] is not None and row[1].duration_seconds is not None
     ]
     capture_statuses = [_capture_status(row[0]) for row in stats_rows]
+    call_path_statuses = [_call_path_status(*row) for row in stats_rows]
     stats = MarinCallStatsRead(
         timezone=timezone_name,
         total_calls=total_calls,
@@ -144,15 +141,24 @@ def list_marin_calls(
             _outcome(*row) == "callback_scheduled" for row in stats_rows
         ),
         interested_calls_30_days=sum(_outcome(*row) == "interested" for row in stats_rows),
+        conversations_started_30_days=sum(
+            status == "conversation_started" for status in call_path_statuses
+        ),
+        ended_during_greeting_30_days=sum(
+            status == "ended_during_greeting" for status in call_path_statuses
+        ),
+        no_caller_response_30_days=sum(
+            status == "no_caller_response" for status in call_path_statuses
+        ),
+        caller_audio_issues_30_days=sum(
+            status == "caller_audio_not_transcribed" for status in call_path_statuses
+        ),
         seller_callbacks_captured_30_days=sum(
             status in {"provisional", "qualified"} for status in capture_statuses
         ),
-        fully_qualified_sellers_30_days=sum(
-            status == "qualified" for status in capture_statuses
-        ),
+        fully_qualified_sellers_30_days=sum(status == "qualified" for status in capture_statuses),
         leads_created_30_days=sum(
-            bool((row[0].routing_metadata or {}).get("lead_created_by_agent"))
-            for row in stats_rows
+            bool((row[0].routing_metadata or {}).get("lead_created_by_agent")) for row in stats_rows
         ),
         needs_review=sum(bool(_review_reasons(*row)) for row in stats_rows),
         average_duration_seconds_30_days=(
@@ -197,6 +203,7 @@ def get_marin_call(
     return MarinCallDetailRead(
         **_call_item(callback, record, identity).model_dump(),
         transcript=transcript,
+        diagnostics=_diagnostics(callback, record, transcript),
         captured_details=captured_details,
         tool_events=tool_events,
         callback_at=_parse_datetime(metadata.get("callback_at")),
@@ -273,6 +280,7 @@ def _call_item(
         lead_id=identity.get("lead_id"),
         status=callback.status,
         outcome=_outcome(callback, record),
+        call_path_status=_call_path_status(callback, record, transcript),
         capture_status=_capture_status(callback),
         summary=_text(metadata.get("summary")),
         received_at=callback.received_at,
@@ -384,6 +392,8 @@ def _transcript(
         text = _text(item.get("text"))
         if speaker not in {"caller", "marin"} or not text:
             continue
+        if speaker == "caller" and _is_suspected_transcription_hallucination(text):
+            continue
         turns.append(
             MarinTranscriptTurnRead(
                 speaker=cast(Literal["caller", "marin"], speaker),
@@ -465,6 +475,8 @@ def _review_reasons(
         reasons.append("No final outcome was recorded")
     if metadata.get("transfer_requested_at") and not metadata.get("transferred_at"):
         reasons.append("Transfer may not have completed")
+    if _call_path_status(callback, record) == "caller_audio_not_transcribed":
+        reasons.append("Caller audio was detected but not transcribed")
     if (
         callback.status in TERMINAL_CALLBACK_STATUSES
         and record is not None
@@ -473,6 +485,87 @@ def _review_reasons(
     ):
         reasons.append("Transcript is missing")
     return list(dict.fromkeys(reasons))
+
+
+def _diagnostics(
+    callback: ProspectingInboundCallback,
+    record: CallRecord | None,
+    transcript: list[MarinTranscriptTurnRead] | None = None,
+) -> MarinCallDiagnosticsRead:
+    raw = _diagnostic_metadata(callback, record)
+    return MarinCallDiagnosticsRead(
+        call_path_status=_call_path_status(callback, record, transcript),
+        caller_speech_detected=_diagnostic_count(raw, "caller_speech_started_count") > 0,
+        caller_speech_turns=_diagnostic_count(raw, "caller_speech_started_count"),
+        caller_transcript_turns=_diagnostic_count(raw, "caller_transcript_count"),
+        transcription_failures=_diagnostic_count(raw, "transcription_failed_count"),
+        discarded_transcripts=_diagnostic_count(raw, "discarded_transcription_count"),
+        opening_audio_started=_diagnostic_count(raw, "output_audio_started_count") > 0,
+        opening_audio_completed=_diagnostic_count(raw, "output_audio_stopped_count") > 0,
+        connection_close_type=_text(raw.get("monitor_close_type")),
+        connection_close_code=(
+            raw.get("monitor_close_code")
+            if isinstance(raw.get("monitor_close_code"), int)
+            else None
+        ),
+    )
+
+
+def _call_path_status(
+    callback: ProspectingInboundCallback,
+    record: CallRecord | None,
+    transcript: list[MarinTranscriptTurnRead] | None = None,
+) -> Literal[
+    "in_progress",
+    "conversation_started",
+    "ended_during_greeting",
+    "no_caller_response",
+    "caller_audio_not_transcribed",
+    "technical_failure",
+    "diagnostics_unavailable",
+]:
+    metadata = callback.routing_metadata or {}
+    if callback.status not in TERMINAL_CALLBACK_STATUSES:
+        return "in_progress"
+    if (
+        callback.status == "failed"
+        or _outcome(callback, record) == "agent_failed"
+        or metadata.get("error")
+    ):
+        return "technical_failure"
+    turns = transcript if transcript is not None else _transcript(callback, record)
+    if any(turn.speaker == "caller" for turn in turns):
+        return "conversation_started"
+    diagnostics = _diagnostic_metadata(callback, record)
+    if not diagnostics:
+        return "diagnostics_unavailable"
+    caller_speech = _diagnostic_count(diagnostics, "caller_speech_started_count")
+    transcription_failures = _diagnostic_count(diagnostics, "transcription_failed_count")
+    discarded = _diagnostic_count(diagnostics, "discarded_transcription_count")
+    if caller_speech or transcription_failures or discarded:
+        return "caller_audio_not_transcribed"
+    opening_started = _diagnostic_count(diagnostics, "output_audio_started_count") > 0
+    opening_completed = _diagnostic_count(diagnostics, "output_audio_stopped_count") > 0
+    if opening_started and not opening_completed:
+        return "ended_during_greeting"
+    if opening_completed:
+        return "no_caller_response"
+    return "diagnostics_unavailable"
+
+
+def _diagnostic_metadata(
+    callback: ProspectingInboundCallback,
+    record: CallRecord | None,
+) -> dict[str, Any]:
+    record_metadata = record.call_metadata or {} if record is not None else {}
+    callback_metadata = callback.routing_metadata or {}
+    raw = record_metadata.get("call_diagnostics") or callback_metadata.get("call_diagnostics")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _diagnostic_count(metadata: dict[str, Any], key: str) -> int:
+    value = metadata.get(key)
+    return max(0, value) if isinstance(value, int) else 0
 
 
 def _outcome(
@@ -511,15 +604,18 @@ def _today_start(
     organization_id: UUID,
     now: datetime,
 ) -> tuple[str, datetime]:
-    timezone_name = db.scalar(
-        select(VoiceLine.coverage_timezone)
-        .where(
-            VoiceLine.organization_id == organization_id,
-            VoiceLine.purpose_key == "seller_callback_ai",
-            VoiceLine.status == "active",
+    timezone_name = (
+        db.scalar(
+            select(VoiceLine.coverage_timezone)
+            .where(
+                VoiceLine.organization_id == organization_id,
+                VoiceLine.purpose_key == "seller_callback_ai",
+                VoiceLine.status == "active",
+            )
+            .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at)
         )
-        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at)
-    ) or DEFAULT_TIMEZONE
+        or DEFAULT_TIMEZONE
+    )
     try:
         local_timezone = ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:

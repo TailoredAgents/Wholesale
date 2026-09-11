@@ -41,6 +41,15 @@ type Review = {
   reviewed_at: string | null;
 };
 
+type CallPathStatus =
+  | "in_progress"
+  | "conversation_started"
+  | "ended_during_greeting"
+  | "no_caller_response"
+  | "caller_audio_not_transcribed"
+  | "technical_failure"
+  | "diagnostics_unavailable";
+
 type MarinCall = {
   id: string;
   call_record_id: string | null;
@@ -50,6 +59,7 @@ type MarinCall = {
   lead_id: string | null;
   status: string;
   outcome: string;
+  call_path_status: CallPathStatus;
   capture_status: "none" | "provisional" | "qualified";
   summary: string | null;
   received_at: string;
@@ -74,6 +84,18 @@ type MarinCallDetail = MarinCall & {
   callback_at: string | null;
   callback_reason: string | null;
   transfer_number: string | null;
+  diagnostics: {
+    call_path_status: CallPathStatus;
+    caller_speech_detected: boolean;
+    caller_speech_turns: number;
+    caller_transcript_turns: number;
+    transcription_failures: number;
+    discarded_transcripts: number;
+    opening_audio_started: boolean;
+    opening_audio_completed: boolean;
+    connection_close_type: string | null;
+    connection_close_code: number | null;
+  };
 };
 
 type MarinStats = {
@@ -90,6 +112,10 @@ type MarinStats = {
   transferred_calls_30_days: number;
   scheduled_callbacks_30_days: number;
   interested_calls_30_days: number;
+  conversations_started_30_days: number;
+  ended_during_greeting_30_days: number;
+  no_caller_response_30_days: number;
+  caller_audio_issues_30_days: number;
   seller_callbacks_captured_30_days: number;
   fully_qualified_sellers_30_days: number;
   leads_created_30_days: number;
@@ -176,6 +202,36 @@ function labelize(value: string) {
 function reviewLabel(review: Review) {
   if (review.status === "unreviewed") return "Not reviewed";
   return labelize(review.status);
+}
+
+function callPathLabel(status: CallPathStatus) {
+  const labels: Record<CallPathStatus, string> = {
+    in_progress: "In progress",
+    conversation_started: "Conversation started",
+    ended_during_greeting: "Ended during greeting",
+    no_caller_response: "No caller response",
+    caller_audio_not_transcribed: "Caller audio not transcribed",
+    technical_failure: "Technical failure",
+    diagnostics_unavailable: "Diagnostics unavailable",
+  };
+  return labels[status];
+}
+
+function callPathExplanation(detail: MarinCallDetail) {
+  const explanations: Record<CallPathStatus, string> = {
+    in_progress: "This call is still in progress.",
+    conversation_started: "Caller speech was detected and a caller transcript was captured.",
+    ended_during_greeting:
+      "The connection closed before Marin's opening audio finished, with no caller speech detected.",
+    no_caller_response:
+      "Marin's opening audio finished, but no caller speech was detected before disconnect.",
+    caller_audio_not_transcribed:
+      "Caller audio was detected, but transcription did not produce reliable caller text.",
+    technical_failure: "The call ended because the voice connection or agent encountered an error.",
+    diagnostics_unavailable:
+      "This call predates detailed audio diagnostics, so its exact disconnect point is unknown.",
+  };
+  return explanations[detail.call_path_status];
 }
 
 export function MarinCallsWorkspace() {
@@ -405,7 +461,10 @@ export function MarinCallsWorkspace() {
           <Users size={17} aria-hidden="true" />
           <span>Unique callers</span>
           <strong>{dashboard?.stats.unique_callers_30_days ?? 0}</strong>
-          <small>{dashboard?.stats.repeat_callers_30_days ?? 0} repeat callers</small>
+          <small>
+            {dashboard?.stats.conversations_started_30_days ?? 0} conversations ·{" "}
+            {dashboard?.stats.repeat_callers_30_days ?? 0} repeat
+          </small>
         </article>
         <article>
           <UserRound size={17} aria-hidden="true" />
@@ -426,7 +485,11 @@ export function MarinCallsWorkspace() {
           <Flag size={17} aria-hidden="true" />
           <span>Needs review</span>
           <strong>{dashboard?.stats.needs_review ?? 0}</strong>
-          <small>{dashboard?.stats.failed_calls_30_days ?? 0} technical failures</small>
+          <small>
+            {(dashboard?.stats.ended_during_greeting_30_days ?? 0) +
+              (dashboard?.stats.no_caller_response_30_days ?? 0)}{" "}
+            no-response · {dashboard?.stats.caller_audio_issues_30_days ?? 0} audio issues
+          </small>
         </article>
       </section>
 
@@ -570,9 +633,18 @@ export function MarinCallsWorkspace() {
                       <strong>{formatDuration(detail.duration_seconds)}</strong>
                     </div>
                     <div>
+                      <span>Call path</span>
+                      <strong>{callPathLabel(detail.call_path_status)}</strong>
+                    </div>
+                    <div>
                       <span>Agent version</span>
                       <strong>{detail.prompt_version || "Not recorded"}</strong>
                     </div>
+                  </div>
+
+                  <div className={styles.callPathNote} data-status={detail.call_path_status}>
+                    <PhoneIncoming size={15} aria-hidden="true" />
+                    <span>{callPathExplanation(detail)}</span>
                   </div>
 
                   {detail.summary ? (
@@ -605,6 +677,7 @@ export function MarinCallsWorkspace() {
                   </div>
                   <p className={styles.transcriptNotice}>
                     Realtime transcripts are review aids and may not exactly match what the caller said.
+                    Suspected prompt-generated text is removed.
                   </p>
                 </section>
 

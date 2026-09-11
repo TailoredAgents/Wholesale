@@ -28,13 +28,17 @@ from app.models.foundation import (
 from app.routers import openai_webhooks
 from app.services.bootstrap import bootstrap_foundation
 from app.services.realtime_seller_agent import (
+    LEGACY_TRANSCRIPTION_HINT,
     NATURAL_TOOL_RESPONSE_DELAYS,
     RealtimeSellerAgentError,
+    _capture_transcript_event,
+    _new_call_diagnostics,
     _tool_capture_seller_interest,
     _tool_lookup_callback_context,
     _tool_record_call_outcome,
     _tool_save_seller_details,
     _tool_schedule_human_callback,
+    _update_call_diagnostics,
     mark_realtime_call_failed,
     realtime_agent_instructions,
     realtime_session_configuration,
@@ -175,12 +179,14 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert session["reasoning"] == {"effort": "minimal"}
     assert session["audio"]["input"]["turn_detection"]["eagerness"] == "auto"
     assert session["audio"]["input"]["noise_reduction"] == {"type": "near_field"}
-    assert session["audio"]["input"]["transcription"]["model"] == "gpt-4o-transcribe"
+    assert session["audio"]["input"]["transcription"] == {"model": "gpt-4o-transcribe"}
+    assert session["include"] == ["item.input_audio_transcription.logprobs"]
     assert session["parallel_tool_calls"] is False
     assert session["max_output_tokens"] == 500
-    assert "Open warmly in two or three very short sentences." in instructions
-    assert "around 25 to 30 spoken words" in instructions
-    assert "We may have called to see if you'd consider an offer on a property." in instructions
+    assert "Open warmly in one or two brief sentences." in instructions
+    assert "12 to 16 spoken words" in instructions
+    assert "Thanks for calling back. Are you calling about a property?" in instructions
+    assert 'such as "what\'s on your mind today,"' in instructions
     assert "The example is not a script." in instructions
     assert "Vary the wording naturally" in instructions
     assert "Never imply that you know the caller" in instructions
@@ -213,6 +219,35 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
         "wait_for_user",
         "finish_call",
     }
+
+
+def test_realtime_transcription_discards_legacy_hint_hallucination() -> None:
+    transcript: list[dict[str, str]] = []
+    diagnostics = _new_call_diagnostics()
+    payload = {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "transcript": LEGACY_TRANSCRIPTION_HINT,
+    }
+
+    result = _capture_transcript_event(transcript, payload)
+    changed = _update_call_diagnostics(diagnostics, payload, transcript_result=result)
+
+    assert result == "discarded"
+    assert changed is True
+    assert transcript == []
+    assert diagnostics["transcription_completed_count"] == 1
+    assert diagnostics["discarded_transcription_count"] == 1
+    assert diagnostics["caller_transcript_count"] == 0
+
+    spanish_payload = {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "transcript": "Solo estoy devolviendo la llamada.",
+    }
+    result = _capture_transcript_event(transcript, spanish_payload)
+    _update_call_diagnostics(diagnostics, spanish_payload, transcript_result=result)
+    assert result == "captured"
+    assert transcript == [{"speaker": "caller", "text": "Solo estoy devolviendo la llamada."}]
+    assert diagnostics["caller_transcript_count"] == 1
 
 
 def test_interest_is_preserved_before_full_property_intake(
@@ -341,6 +376,74 @@ def test_failed_call_preserves_partial_transcript_for_review(
     assert call.duration_seconds is not None
 
 
+def test_marin_review_identifies_a_call_that_ended_during_the_greeting(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    del api_db_override
+    callback, _ = seed_realtime_call(db_session, monkeypatch)
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.prospecting_inbound_callback_id == callback.id)
+    )
+    assert call is not None
+    now = datetime.now(UTC)
+    transcript = [
+        {
+            "speaker": "marin",
+            "text": "Stonegate Home Buyers, this is Marin. Thanks for calling back.",
+        },
+        {"speaker": "caller", "text": LEGACY_TRANSCRIPTION_HINT},
+    ]
+    diagnostics = {
+        "version": 1,
+        "caller_speech_started_count": 0,
+        "caller_transcript_count": 0,
+        "transcription_failed_count": 0,
+        "discarded_transcription_count": 0,
+        "output_audio_started_count": 1,
+        "output_audio_stopped_count": 0,
+        "monitor_close_type": "close",
+        "monitor_close_code": 1000,
+    }
+    callback.status = "completed"
+    callback.completed_at = now
+    callback.routing_metadata = {
+        **callback.routing_metadata,
+        "outcome": "incomplete",
+        "transcript": transcript,
+        "call_diagnostics": diagnostics,
+    }
+    call.status = "completed"
+    call.ended_at = now
+    call.duration_seconds = 7
+    call.disposition = "incomplete"
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "transcript": transcript,
+        "call_diagnostics": diagnostics,
+    }
+    db_session.commit()
+
+    response = TestClient(app).get(
+        f"/api/v1/voice/marin-calls/{callback.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["call_path_status"] == "ended_during_greeting"
+    assert payload["diagnostics"]["opening_audio_started"] is True
+    assert payload["diagnostics"]["opening_audio_completed"] is False
+    assert payload["diagnostics"]["caller_speech_detected"] is False
+    assert payload["transcript"] == [
+        {
+            "speaker": "marin",
+            "text": "Stonegate Home Buyers, this is Marin. Thanks for calling back.",
+        }
+    ]
+
+
 def test_marin_call_review_is_company_visible_and_keeps_human_findings(
     db_session: Session,
     api_db_override: None,
@@ -379,6 +482,17 @@ def test_marin_call_review_is_company_visible_and_keeps_human_findings(
                 "occurred_at": now.isoformat(),
             }
         ],
+        "call_diagnostics": {
+            "version": 1,
+            "caller_speech_started_count": 1,
+            "caller_transcript_count": 1,
+            "transcription_failed_count": 0,
+            "discarded_transcription_count": 0,
+            "output_audio_started_count": 2,
+            "output_audio_stopped_count": 2,
+            "monitor_close_type": "close",
+            "monitor_close_code": 1000,
+        },
     }
     call.status = "completed"
     call.ended_at = now
@@ -411,11 +525,16 @@ def test_marin_call_review_is_company_visible_and_keeps_human_findings(
     assert payload["stats"]["total_calls"] == 1
     assert payload["stats"]["total_unique_callers"] == 1
     assert payload["stats"]["calls_today"] == 1
+    assert payload["stats"]["conversations_started_30_days"] == 1
+    assert payload["stats"]["ended_during_greeting_30_days"] == 0
+    assert payload["stats"]["no_caller_response_30_days"] == 0
+    assert payload["stats"]["caller_audio_issues_30_days"] == 0
     assert payload["stats"]["seller_callbacks_captured_30_days"] == 1
     assert payload["stats"]["fully_qualified_sellers_30_days"] == 1
     assert payload["stats"]["leads_created_30_days"] == 1
     assert payload["items"][0]["seller_name"] == "Sam Seller"
     assert payload["items"][0]["capture_status"] == "qualified"
+    assert payload["items"][0]["call_path_status"] == "conversation_started"
     assert payload["items"][0]["transcript_turn_count"] == 2
 
     detail = client.get(f"/api/v1/voice/marin-calls/{callback.id}", headers=va_headers)
@@ -425,6 +544,18 @@ def test_marin_call_review_is_company_visible_and_keeps_human_findings(
         "text": "I may sell if the offer makes sense.",
     }
     assert detail.json()["tool_events"][0]["name"] == "save_seller_details"
+    assert detail.json()["diagnostics"] == {
+        "call_path_status": "conversation_started",
+        "caller_speech_detected": True,
+        "caller_speech_turns": 1,
+        "caller_transcript_turns": 1,
+        "transcription_failures": 0,
+        "discarded_transcripts": 0,
+        "opening_audio_started": True,
+        "opening_audio_completed": True,
+        "connection_close_type": "close",
+        "connection_close_code": 1000,
+    }
 
     reviewed = client.patch(
         f"/api/v1/voice/marin-calls/{callback.id}/review",

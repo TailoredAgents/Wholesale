@@ -21,6 +21,8 @@ test("Marin workspace separates the lightweight list from transcript detail", ()
   assert.match(workspace, /\/api\/v1\/voice\/marin-calls\/\$\{callbackId\}/);
   assert.match(workspace, /Caller and Marin transcript/);
   assert.match(workspace, /Realtime transcripts are review aids/);
+  assert.match(workspace, /Suspected prompt-generated text is removed/);
+  assert.match(workspace, /callPathExplanation/);
 });
 
 test("Marin workspace exposes operational counts and human review controls", () => {
@@ -36,6 +38,9 @@ test("Marin workspace exposes operational counts and human review controls", () 
   }
   assert.match(workspace, /seller_callbacks_captured_30_days/);
   assert.match(workspace, /fully_qualified_sellers_30_days/);
+  assert.match(workspace, /conversations_started_30_days/);
+  assert.match(workspace, /ended_during_greeting_30_days/);
+  assert.match(workspace, /caller_audio_issues_30_days/);
   assert.match(workspace, /What should Marin improve\?/);
   assert.match(workspace, /Save issue/);
   assert.match(workspace, /Mark reviewed/);

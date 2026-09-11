@@ -50,8 +50,12 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v8"
+PROMPT_VERSION = "stonegate-seller-callback-v9"
 MAX_TRANSCRIPT_CHARS = 40_000
+LEGACY_TRANSCRIPTION_HINT = (
+    "Stonegate Home Buyers; Georgia real estate; seller callback; property address; "
+    "acreage; parcel; Acquisitions Manager; BatchDialer."
+)
 SELLER_INTEREST_LEVELS = {
     "open_to_offer",
     "maybe",
@@ -102,10 +106,10 @@ Most callers are property owners returning a cold call from a Stonegate team mem
 The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}.
 
 # Opening
-- Open warmly in two or three very short sentences. Identify Stonegate Home Buyers and yourself as Marin, briefly say that Stonegate may have called about making an offer on a property, and invite the caller to speak. Keep the entire opening around 25 to 30 spoken words, then stop and listen.
-- Example for tone only: "Thanks for calling Stonegate Home Buyers, this is Marin. We may have called to see if you'd consider an offer on a property. How can I help?"
+- Open warmly in one or two brief sentences. Identify Stonegate Home Buyers and yourself as Marin, thank the person for calling back, and ask whether they are calling about a property. Aim for 12 to 16 spoken words, then stop and listen.
+- Example for tone only: "Stonegate Home Buyers, this is Marin. Thanks for calling back. Are you calling about a property?"
 - The example is not a script. Vary the wording naturally while preserving its meaning, brevity, and honesty. Never imply that you know the caller, their property, or the exact reason Stonegate called.
-- Do not list choices, begin an intake checklist, or ask multiple questions in the opening.
+- Do not use vague small-talk prompts such as "what's on your mind today," list choices, begin an intake checklist, or ask multiple questions in the opening.
 
 # Conversation
 - Respond first to what the caller actually said. Do not front-load the intake process or answer a simple question with a speech.
@@ -328,8 +332,6 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
             "input": {
                 "transcription": {
                     "model": "gpt-4o-transcribe",
-                    "language": "en",
-                    "prompt": "Stonegate Home Buyers; Georgia real estate; seller callback; property address; acreage; parcel; Acquisitions Manager; BatchDialer.",
                 },
                 "noise_reduction": {"type": "near_field"},
                 "turn_detection": {
@@ -343,6 +345,7 @@ def realtime_session_configuration(settings: Settings) -> dict[str, Any]:
         },
         "tools": realtime_tools(),
         "tool_choice": "auto",
+        "include": ["item.input_audio_transcription.logprobs"],
         "parallel_tool_calls": False,
         "max_output_tokens": 500,
         "truncation": "auto",
@@ -628,9 +631,11 @@ def mark_realtime_call_failed(
     *,
     error: str,
     transcript: list[dict[str, str]] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> None:
     now = datetime.now(UTC)
     saved_transcript = [dict(item) for item in (transcript or [])]
+    saved_diagnostics = dict(diagnostics or {})
     callback = db.get(ProspectingInboundCallback, call.callback_id)
     record = db.get(CallRecord, call.call_record_id)
     if callback is not None:
@@ -642,6 +647,7 @@ def mark_realtime_call_failed(
             "outcome": "agent_failed",
             "transcript": saved_transcript,
             "transcript_complete": False,
+            "call_diagnostics": saved_diagnostics,
             "ended_at": now.isoformat(),
         }
     if record is not None:
@@ -654,6 +660,7 @@ def mark_realtime_call_failed(
             "outcome": "agent_failed",
             "transcript": saved_transcript,
             "transcript_complete": False,
+            "call_diagnostics": saved_diagnostics,
         }
         _set_call_duration(record, now)
     if callback is not None:
@@ -678,6 +685,7 @@ def mark_realtime_call_failed(
                 "outcome": "agent_failed",
                 "transcript": saved_transcript,
                 "transcript_complete": False,
+                "call_diagnostics": saved_diagnostics,
             }
         db.add(
             ActivityEvent(
@@ -695,25 +703,33 @@ def mark_realtime_call_failed(
 def checkpoint_realtime_transcript(
     call: RegisteredRealtimeCall,
     transcript: list[dict[str, str]],
+    diagnostics: dict[str, Any] | None = None,
 ) -> None:
     """Persist each completed turn so an interrupted monitor still leaves review evidence."""
 
     saved_transcript = [dict(item) for item in transcript]
+    saved_diagnostics = dict(diagnostics or {})
     with SessionLocal() as db:
         callback = db.get(ProspectingInboundCallback, call.callback_id)
         record = db.get(CallRecord, call.call_record_id)
-        if callback is None or record is None or callback.status in {"completed", "failed", "canceled"}:
+        if (
+            callback is None
+            or record is None
+            or callback.status in {"completed", "failed", "canceled"}
+        ):
             return
         callback.routing_metadata = {
             **(callback.routing_metadata or {}),
             "transcript": saved_transcript,
             "transcript_complete": False,
+            "call_diagnostics": saved_diagnostics,
             "transcript_checkpointed_at": datetime.now(UTC).isoformat(),
         }
         record.call_metadata = {
             **(record.call_metadata or {}),
             "transcript": saved_transcript,
             "transcript_complete": False,
+            "call_diagnostics": saved_diagnostics,
         }
         db.commit()
 
@@ -742,6 +758,7 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
     settings = get_settings()
     client = OpenAIRealtimeCallClient(settings)
     transcript: list[dict[str, str]] = []
+    diagnostics = _new_call_diagnostics()
     finish_after_response = False
     try:
         async with client.monitor(call.call_id) as websocket:
@@ -751,12 +768,18 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                     if message.type == aiohttp.WSMsgType.TEXT:
                         payload = json.loads(message.data)
                         event_type = str(payload.get("type", ""))
-                        transcript_changed = _capture_transcript_event(transcript, payload)
-                        if transcript_changed:
+                        transcript_result = _capture_transcript_event(transcript, payload)
+                        diagnostics_changed = _update_call_diagnostics(
+                            diagnostics,
+                            payload,
+                            transcript_result=transcript_result,
+                        )
+                        if transcript_result == "captured" or diagnostics_changed:
                             await asyncio.to_thread(
                                 checkpoint_realtime_transcript,
                                 call,
                                 transcript,
+                                diagnostics,
                             )
                         if event_type == "response.done":
                             function_calls = _function_calls(payload)
@@ -780,9 +803,7 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                                         continue
                                     natural_pause_seconds = max(
                                         natural_pause_seconds,
-                                        NATURAL_TOOL_RESPONSE_DELAYS.get(
-                                            tool_call["name"], 0.0
-                                        ),
+                                        NATURAL_TOOL_RESPONSE_DELAYS.get(tool_call["name"], 0.0),
                                     )
                                     if tool_call[
                                         "name"
@@ -790,6 +811,7 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                                         _finish_realtime_call(
                                             call,
                                             transcript,
+                                            diagnostics,
                                             forced_outcome="transferred",
                                         )
                                         return
@@ -806,7 +828,7 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                             elif finish_after_response:
                                 await asyncio.sleep(0.75)
                                 await client.hangup(call.call_id)
-                                _finish_realtime_call(call, transcript)
+                                _finish_realtime_call(call, transcript, diagnostics)
                                 return
                         elif event_type == "error":
                             logger.warning(
@@ -819,39 +841,153 @@ async def _monitor_realtime_call(call: RegisteredRealtimeCall) -> None:
                         aiohttp.WSMsgType.CLOSED,
                         aiohttp.WSMsgType.ERROR,
                     }:
+                        diagnostics["monitor_close_type"] = message.type.name.lower()
+                        diagnostics["monitor_close_code"] = (
+                            message.data if isinstance(message.data, int) else None
+                        )
+                        diagnostics["monitor_close_reason"] = _clean(message.extra, 500)
+                        diagnostics["monitor_closed_at"] = datetime.now(UTC).isoformat()
                         break
     except TimeoutError:
+        diagnostics["monitor_close_type"] = "call_time_limit"
+        diagnostics["monitor_closed_at"] = datetime.now(UTC).isoformat()
         await _safe_hangup(client, call.call_id)
-        _finish_realtime_call(call, transcript, forced_outcome="timed_out")
+        _finish_realtime_call(
+            call,
+            transcript,
+            diagnostics,
+            forced_outcome="timed_out",
+        )
         return
     except Exception as exc:
+        diagnostics["monitor_close_type"] = "monitor_error"
+        diagnostics["monitor_close_reason"] = _clean(str(exc), 500)
+        diagnostics["monitor_closed_at"] = datetime.now(UTC).isoformat()
         logger.exception("realtime_seller_agent_monitor_failed", call_id=call.call_id)
         await _safe_transfer(client, call.call_id, settings.openai_realtime_transfer_number)
         with SessionLocal() as db:
-            mark_realtime_call_failed(db, call, error=str(exc), transcript=transcript)
+            mark_realtime_call_failed(
+                db,
+                call,
+                error=str(exc),
+                transcript=transcript,
+                diagnostics=diagnostics,
+            )
         return
-    _finish_realtime_call(call, transcript)
+    _finish_realtime_call(call, transcript, diagnostics)
 
 
 def _capture_transcript_event(
     transcript: list[dict[str, str]],
     payload: dict[str, Any],
-) -> bool:
+) -> str:
     event_type = str(payload.get("type", ""))
-    captured = False
     if event_type == "conversation.item.input_audio_transcription.completed":
         text = _clean(payload.get("transcript"), 4000)
-        if text:
-            transcript.append({"speaker": "caller", "text": text})
-            captured = True
+        if not text:
+            return "empty"
+        if _is_suspected_transcription_hallucination(text):
+            return "discarded"
+        transcript.append({"speaker": "caller", "text": text})
+        captured = True
     elif event_type in {"response.output_audio_transcript.done", "response.audio_transcript.done"}:
         text = _clean(payload.get("transcript"), 4000)
-        if text:
-            transcript.append({"speaker": AGENT_NAME.lower(), "text": text})
-            captured = True
+        if not text:
+            return "empty"
+        transcript.append({"speaker": AGENT_NAME.lower(), "text": text})
+        captured = True
+    else:
+        return "ignored"
     while sum(len(item["text"]) for item in transcript) > MAX_TRANSCRIPT_CHARS:
         transcript.pop(0)
-    return captured
+    return "captured" if captured else "ignored"
+
+
+def _new_call_diagnostics() -> dict[str, Any]:
+    return {
+        "version": 1,
+        "caller_speech_started_count": 0,
+        "caller_speech_stopped_count": 0,
+        "caller_transcript_count": 0,
+        "transcription_completed_count": 0,
+        "transcription_failed_count": 0,
+        "discarded_transcription_count": 0,
+        "empty_transcription_count": 0,
+        "output_audio_started_count": 0,
+        "output_audio_stopped_count": 0,
+        "output_audio_cleared_count": 0,
+    }
+
+
+def _update_call_diagnostics(
+    diagnostics: dict[str, Any],
+    payload: dict[str, Any],
+    *,
+    transcript_result: str,
+) -> bool:
+    event_type = str(payload.get("type", ""))
+    now = datetime.now(UTC).isoformat()
+    counter_key: str | None = None
+    timestamp_key: str | None = None
+    if event_type == "input_audio_buffer.speech_started":
+        counter_key = "caller_speech_started_count"
+        timestamp_key = "first_caller_speech_started_at"
+    elif event_type == "input_audio_buffer.speech_stopped":
+        counter_key = "caller_speech_stopped_count"
+        timestamp_key = "last_caller_speech_stopped_at"
+    elif event_type == "conversation.item.input_audio_transcription.completed":
+        counter_key = "transcription_completed_count"
+        timestamp_key = "last_transcription_completed_at"
+    elif event_type == "conversation.item.input_audio_transcription.failed":
+        counter_key = "transcription_failed_count"
+        timestamp_key = "last_transcription_failed_at"
+        error = payload.get("error")
+        diagnostics["last_transcription_error"] = _clean(
+            error.get("message") if isinstance(error, dict) else error,
+            500,
+        )
+    elif event_type == "output_audio_buffer.started":
+        counter_key = "output_audio_started_count"
+        timestamp_key = "first_output_audio_started_at"
+    elif event_type == "output_audio_buffer.stopped":
+        counter_key = "output_audio_stopped_count"
+        timestamp_key = "last_output_audio_stopped_at"
+    elif event_type == "output_audio_buffer.cleared":
+        counter_key = "output_audio_cleared_count"
+        timestamp_key = "last_output_audio_cleared_at"
+
+    changed = counter_key is not None
+    if counter_key is not None:
+        diagnostics[counter_key] = int(diagnostics.get(counter_key) or 0) + 1
+    if timestamp_key is not None:
+        diagnostics.setdefault(timestamp_key, now)
+        if timestamp_key.startswith("last_"):
+            diagnostics[timestamp_key] = now
+
+    if event_type == "conversation.item.input_audio_transcription.completed":
+        if transcript_result == "captured":
+            diagnostics["caller_transcript_count"] = (
+                int(diagnostics.get("caller_transcript_count") or 0) + 1
+            )
+        elif transcript_result == "discarded":
+            diagnostics["discarded_transcription_count"] = (
+                int(diagnostics.get("discarded_transcription_count") or 0) + 1
+            )
+        elif transcript_result == "empty":
+            diagnostics["empty_transcription_count"] = (
+                int(diagnostics.get("empty_transcription_count") or 0) + 1
+            )
+    return changed
+
+
+def _is_suspected_transcription_hallucination(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+    legacy_hint = re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        LEGACY_TRANSCRIPTION_HINT.casefold(),
+    ).strip()
+    return normalized == legacy_hint
 
 
 def _function_calls(payload: dict[str, Any]) -> list[dict[str, str]]:
@@ -1524,6 +1660,7 @@ def mark_call_transferred(call_id: str) -> None:
 def _finish_realtime_call(
     call: RegisteredRealtimeCall,
     transcript: list[dict[str, str]],
+    diagnostics: dict[str, Any] | None = None,
     *,
     forced_outcome: str | None = None,
 ) -> None:
@@ -1534,6 +1671,7 @@ def _finish_realtime_call(
             return
         now = datetime.now(UTC)
         metadata = dict(callback.routing_metadata or {})
+        saved_diagnostics = dict(diagnostics or metadata.get("call_diagnostics") or {})
         outcome = forced_outcome or str(metadata.get("outcome") or "incomplete")
         callback.status = "completed"
         callback.completed_at = now
@@ -1542,6 +1680,7 @@ def _finish_realtime_call(
             "outcome": outcome,
             "transcript": transcript,
             "transcript_complete": True,
+            "call_diagnostics": saved_diagnostics,
             "ended_at": now.isoformat(),
         }
         record.status = "completed"
@@ -1553,6 +1692,7 @@ def _finish_realtime_call(
             "summary": metadata.get("summary"),
             "transcript": transcript,
             "transcript_complete": True,
+            "call_diagnostics": saved_diagnostics,
         }
         _set_call_duration(record, now)
         communication = db.scalar(
@@ -1571,6 +1711,7 @@ def _finish_realtime_call(
                 "summary": metadata.get("summary"),
                 "transcript": transcript,
                 "transcript_complete": True,
+                "call_diagnostics": saved_diagnostics,
             }
         db.add(
             ActivityEvent(
@@ -1754,9 +1895,7 @@ def _update_realtime_provisional_lead(
             if (lead.qualification_context or {}).get("capture_status") == "qualified"
             else "provisional"
         ),
-        "owner_confirmed": bool(
-            (lead.qualification_context or {}).get("owner_confirmed")
-        )
+        "owner_confirmed": bool((lead.qualification_context or {}).get("owner_confirmed"))
         or owner_confirmed,
         "seller_interested": True,
         "property_identity_complete": bool(
