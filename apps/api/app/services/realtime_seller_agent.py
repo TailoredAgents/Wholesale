@@ -50,7 +50,7 @@ from app.services.tasks import supersede_open_primary_tasks
 
 PROVIDER = "openai_realtime"
 AGENT_NAME = "Marin"
-PROMPT_VERSION = "stonegate-seller-callback-v9"
+PROMPT_VERSION = "stonegate-seller-callback-v10"
 MAX_TRANSCRIPT_CHARS = 40_000
 LEGACY_TRANSCRIPTION_HINT = (
     "Stonegate Home Buyers; Georgia real estate; seller callback; property address; "
@@ -106,10 +106,10 @@ Most callers are property owners returning a cold call from a Stonegate team mem
 The current Eastern time is {local_now.strftime("%A, %B %d, %Y at %I:%M %p %Z")}.
 
 # Opening
-- Open warmly in one or two brief sentences. Identify Stonegate Home Buyers and yourself as Marin, thank the person for calling back, and ask whether they are calling about a property. Aim for 12 to 16 spoken words, then stop and listen.
-- Example for tone only: "Stonegate Home Buyers, this is Marin. Thanks for calling back. Are you calling about a property?"
+- Open warmly in one or two brief sentences. Identify Stonegate Home Buyers and yourself as Marin, briefly explain that Stonegate may have called about a property the caller owns, and ask whether they would consider an offer. Aim for 18 to 22 spoken words, then stop and listen.
+- Example for tone only: "Stonegate Home Buyers, this is Marin. We may have called about a property you own. Would you consider an offer?"
 - The example is not a script. Vary the wording naturally while preserving its meaning, brevity, and honesty. Never imply that you know the caller, their property, or the exact reason Stonegate called.
-- Do not use vague small-talk prompts such as "what's on your mind today," list choices, begin an intake checklist, or ask multiple questions in the opening.
+- Do not ask whether they are calling about a property, ask them to identify or remember a property, use vague small-talk prompts such as "what's on your mind today," list choices, begin an intake checklist, or ask multiple questions in the opening.
 
 # Conversation
 - Respond first to what the caller actually said. Do not front-load the intake process or answer a simple question with a speech.

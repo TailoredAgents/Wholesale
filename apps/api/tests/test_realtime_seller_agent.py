@@ -184,8 +184,10 @@ def test_realtime_session_is_natural_constrained_and_private() -> None:
     assert session["parallel_tool_calls"] is False
     assert session["max_output_tokens"] == 500
     assert "Open warmly in one or two brief sentences." in instructions
-    assert "12 to 16 spoken words" in instructions
-    assert "Thanks for calling back. Are you calling about a property?" in instructions
+    assert "18 to 22 spoken words" in instructions
+    assert "We may have called about a property you own." in instructions
+    assert "Would you consider an offer?" in instructions
+    assert "Do not ask whether they are calling about a property" in instructions
     assert 'such as "what\'s on your mind today,"' in instructions
     assert "The example is not a script." in instructions
     assert "Vary the wording naturally" in instructions
