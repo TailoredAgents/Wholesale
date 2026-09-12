@@ -355,7 +355,8 @@ def process_elevenlabs_transcription(
     existing_metadata = dict(callback.routing_metadata or {})
     outcome = _outcome(existing_metadata, transcript, data, analysis)
     summary = _text(analysis.get("transcript_summary")) or existing_metadata.get("summary")
-    agent_name = _text(data.get("agent_name")) or AGENT_NAME
+    provider_agent_name = _text(data.get("agent_name"))
+    agent_name = AGENT_NAME
     diagnostics = _diagnostics(transcript, data, metadata)
     callback.status = "failed" if failed else "completed"
     callback.received_at = started_at or callback.received_at
@@ -365,6 +366,7 @@ def process_elevenlabs_transcription(
         **existing_metadata,
         "source": SOURCE,
         "agent_name": agent_name,
+        "provider_agent_name": provider_agent_name,
         "agent_id": agent_id,
         "version_id": _text(data.get("version_id")),
         "environment": _text(data.get("environment")),

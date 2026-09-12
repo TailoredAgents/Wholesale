@@ -256,7 +256,10 @@ def test_signed_post_call_saves_transcript_and_appears_in_call_review(
     callback = db_session.scalar(select(ProspectingInboundCallback))
     assert callback is not None
     assert callback.status == "completed"
-    assert callback.routing_metadata["agent_name"].startswith("Caroline")
+    assert callback.routing_metadata["agent_name"] == "Caroline"
+    assert callback.routing_metadata["provider_agent_name"] == (
+        "Caroline | Stonegate Seller Callback"
+    )
     assert callback.routing_metadata["transcript"][1] == {
         "speaker": "caller",
         "text": "I was returning a call about an offer.",
@@ -270,7 +273,7 @@ def test_signed_post_call_saves_transcript_and_appears_in_call_review(
     )
     assert dashboard.status_code == 200, dashboard.text
     assert dashboard.json()["stats"]["total_calls"] == 1
-    assert dashboard.json()["items"][0]["agent_name"].startswith("Caroline")
+    assert dashboard.json()["items"][0]["agent_name"] == "Caroline"
     assert dashboard.json()["items"][0]["transcript_turn_count"] == 2
 
 

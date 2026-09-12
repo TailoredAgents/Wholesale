@@ -298,13 +298,14 @@ function callPathLabel(status: CallPathStatus) {
 }
 
 function callPathExplanation(detail: MarinCallDetail) {
+  const agentName = detail.agent_name || "Caroline";
   const explanations: Record<CallPathStatus, string> = {
     in_progress: "This call is still in progress.",
     conversation_started: "Caller speech was detected and a caller transcript was captured.",
     ended_during_greeting:
-      "The connection closed before Marin's opening audio finished, with no caller speech detected.",
+      `The connection closed before ${agentName}'s opening audio finished, with no caller speech detected.`,
     no_caller_response:
-      "Marin's opening audio finished, but no caller speech was detected before disconnect.",
+      `${agentName}'s opening audio finished, but no caller speech was detected before disconnect.`,
     caller_audio_not_transcribed:
       "Caller audio was detected, but transcription did not produce reliable caller text.",
     technical_failure: "The call ended because the voice connection or agent encountered an error.",
@@ -510,7 +511,10 @@ export function MarinCallsWorkspace() {
         <div>
           <p className={styles.eyebrow}>Seller communications / quality</p>
           <h1>AI Seller Calls</h1>
-          <p>See every caller, inspect the conversation, and record exactly what needs improvement.</p>
+          <p>
+            Handled by Caroline. See every caller, inspect the conversation, and record exactly
+            what needs improvement.
+          </p>
         </div>
         <div className={styles.headerActions}>
           <Link className={styles.secondaryAction} href="/os/inbox">

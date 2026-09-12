@@ -133,7 +133,7 @@ services:
       - key: OPENAI_WEBHOOK_SECRET
         sync: false
       - key: SELLER_CALLBACK_AGENT_PROVIDER
-        value: openai_realtime
+        value: elevenlabs
       - key: ELEVENLABS_AGENT_ENABLED
         sync: false
       - key: ELEVENLABS_AGENT_ID
