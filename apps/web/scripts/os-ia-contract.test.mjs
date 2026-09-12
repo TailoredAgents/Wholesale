@@ -623,6 +623,23 @@ test("Inbox keeps the thread primary and collapses secondary email noise", () =>
   assert.match(attachment, /className=\{styles\.attachmentCopy\}/);
 });
 
+test("Inbox preserves usable mobile list, thread, composer, and details panes", () => {
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const inboxStyles = readFileSync(resolve(osSourceRoot, "inbox/inbox.module.css"), "utf8");
+
+  assert.match(inbox, /type MobilePane = "conversations" \| "thread" \| "details"/);
+  assert.match(inbox, /aria-label="Back to conversations"/);
+  assert.match(inbox, /aria-label="Back to conversation"/);
+  assert.match(inbox, /setMobilePane\("conversations"\)/);
+  assert.match(inbox, /setMobilePane\("thread"\)/);
+  assert.match(inboxStyles, /\.conversationPane\[data-mobile-active="true"\]/);
+  assert.match(inboxStyles, /\.threadPane\[data-mobile-active="true"\][\s\S]*height: 100%/);
+  assert.match(inboxStyles, /\.filterRail[\s\S]*overflow-x: auto/);
+  assert.match(inboxStyles, /\.mailboxRail[\s\S]*overflow-x: auto/);
+  assert.match(inboxStyles, /\.composer[\s\S]*max-height: min\(46dvh, 410px\)/);
+  assert.match(inboxStyles, /\.mobileBackButton[\s\S]*min-width: 40px/);
+});
+
 test("Lead contact permission control manages calls and SMS without a typed note", () => {
   const control = readFileSync(
     resolve(osSourceRoot, "_components/sms-permission-control.tsx"),

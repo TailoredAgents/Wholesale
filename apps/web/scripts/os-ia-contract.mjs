@@ -254,6 +254,16 @@ export const currentRouteInventory = [
     baselinePath: "/os/inbox",
   },
   {
+    routePattern: "/os/inbox/marin-calls",
+    source: "src/app/os/inbox/marin-calls/page.tsx",
+    targetWorkspace: "inbox",
+    targetCanonical: "/os/inbox/marin-calls",
+    migration: "keep",
+    queryParameters: [],
+    helpSections: ["Inbox"],
+    baselinePath: "/os/inbox/marin-calls",
+  },
+  {
     routePattern: "/os/tasks",
     source: "src/app/os/tasks/page.tsx",
     targetWorkspace: "tasks",

@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import {
   Archive,
+  ArrowLeft,
   ArrowRightLeft,
   Bot,
   CalendarClock,
@@ -1812,7 +1813,12 @@ export function InboxWorkspace({
           </span>
         </div>
         <div className={styles.headerActions}>
-          <Link className={styles.marinCallsLink} href="/os/inbox/marin-calls">
+          <Link
+            aria-label="Review AI seller calls"
+            className={styles.marinCallsLink}
+            href="/os/inbox/marin-calls"
+            title="Review AI seller calls"
+          >
             <Bot size={16} aria-hidden="true" />
             AI seller calls
           </Link>
@@ -2089,6 +2095,14 @@ export function InboxWorkspace({
           {detail && !detailLoading ? (
             <>
               <header className={styles.threadHeader}>
+                <button
+                  aria-label="Back to conversations"
+                  className={styles.mobileBackButton}
+                  onClick={() => setMobilePane("conversations")}
+                  type="button"
+                >
+                  <ArrowLeft size={19} aria-hidden="true" />
+                </button>
                 <div>
                   <div className={styles.threadTitleRow}>
                     <h3>{detail.preferred_name || detail.seller_name}</h3>
@@ -2849,6 +2863,14 @@ export function InboxWorkspace({
           ) : (
             <>
               <header className={styles.detailHeader}>
+                <button
+                  aria-label="Back to conversation"
+                  className={styles.mobileBackButton}
+                  onClick={() => setMobilePane("thread")}
+                  type="button"
+                >
+                  <ArrowLeft size={19} aria-hidden="true" />
+                </button>
                 <div>
                   <span>
                     {detail.conversation_type === "general"
