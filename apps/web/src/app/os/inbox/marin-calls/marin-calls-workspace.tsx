@@ -130,7 +130,30 @@ type Dashboard = {
   generated_at: string;
 };
 
-type FilterKey = "all" | "needs_review" | "unreviewed" | "flagged" | "failed";
+type FilterKey =
+  | "all"
+  | "today"
+  | "last_7_days"
+  | "unique_callers"
+  | "seller_callbacks"
+  | "human_handoffs"
+  | "needs_review"
+  | "unreviewed"
+  | "flagged"
+  | "failed";
+
+const filterLabels: Record<FilterKey, string> = {
+  all: "All calls",
+  today: "Today",
+  last_7_days: "Last 7 days",
+  unique_callers: "Unique callers",
+  seller_callbacks: "Seller callbacks saved",
+  human_handoffs: "Human handoffs",
+  needs_review: "Needs review",
+  unreviewed: "Unreviewed",
+  flagged: "Flagged",
+  failed: "Failed",
+};
 
 const flagOptions: Array<{ key: ReviewFlag; label: string }> = [
   { key: "awkward_wording", label: "Awkward wording" },
@@ -193,6 +216,62 @@ function formatDuration(seconds: number | null) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function dateKey(value: string, timezone: string) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return new Date(value).toISOString().slice(0, 10);
+  }
+}
+
+function callerKey(call: MarinCall) {
+  return call.caller_number.replace(/\D/g, "") || call.caller_number;
+}
+
+function filterMarinCalls(
+  calls: MarinCall[],
+  filter: FilterKey,
+  search: string,
+  generatedAt: string,
+  timezone: string,
+) {
+  const query = search.trim().toLowerCase();
+  const today = dateKey(generatedAt, timezone);
+  const sevenDaysAgo = new Date(generatedAt).getTime() - 7 * 24 * 60 * 60 * 1000;
+  const matchingCalls = calls.filter((item) => {
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "today" && dateKey(item.received_at, timezone) === today) ||
+      (filter === "last_7_days" && new Date(item.received_at).getTime() >= sevenDaysAgo) ||
+      filter === "unique_callers" ||
+      (filter === "seller_callbacks" && item.capture_status !== "none") ||
+      (filter === "human_handoffs" && item.outcome === "transferred") ||
+      (filter === "needs_review" && item.needs_review) ||
+      (filter === "unreviewed" && item.review.status === "unreviewed") ||
+      (filter === "flagged" && item.review.status === "flagged") ||
+      (filter === "failed" && item.status === "failed");
+    if (!matchesFilter) return false;
+    if (!query) return true;
+    return [item.caller_number, item.seller_name, item.property_address, item.summary]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  if (filter !== "unique_callers") return matchingCalls;
+  const seen = new Set<string>();
+  return matchingCalls.filter((item) => {
+    const key = callerKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function labelize(value: string) {
@@ -343,21 +422,38 @@ export function MarinCallsWorkspace() {
   }, [loadDashboard]);
 
   const visibleCalls = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (dashboard?.items ?? []).filter((item) => {
-      const matchesFilter =
-        filter === "all" ||
-        (filter === "needs_review" && item.needs_review) ||
-        (filter === "unreviewed" && item.review.status === "unreviewed") ||
-        (filter === "flagged" && item.review.status === "flagged") ||
-        (filter === "failed" && item.status === "failed");
-      if (!matchesFilter) return false;
-      if (!query) return true;
-      return [item.caller_number, item.seller_name, item.property_address, item.summary]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
-    });
-  }, [dashboard?.items, filter, search]);
+    const generatedAt = dashboard?.generated_at ?? new Date().toISOString();
+    const timezone = dashboard?.stats.timezone ?? "America/New_York";
+    return filterMarinCalls(
+      dashboard?.items ?? [],
+      filter,
+      search,
+      generatedAt,
+      timezone,
+    );
+  }, [dashboard?.generated_at, dashboard?.items, dashboard?.stats, filter, search]);
+
+  function applyFilter(nextFilter: FilterKey, nextSearch = search) {
+    const nextCalls = filterMarinCalls(
+      dashboard?.items ?? [],
+      nextFilter,
+      nextSearch,
+      dashboard?.generated_at ?? new Date().toISOString(),
+      dashboard?.stats.timezone ?? "America/New_York",
+    );
+    setFilter(nextFilter);
+    setSearch(nextSearch);
+    setSelectedId((current) =>
+      current && nextCalls.some((item) => item.id === current)
+        ? current
+        : nextCalls[0]?.id ?? null,
+    );
+    if (nextCalls.length === 0) setDetail(null);
+  }
+
+  function activateSummaryFilter(nextFilter: FilterKey) {
+    applyFilter(filter === nextFilter ? "all" : nextFilter, "");
+  }
 
   async function saveReview(status: "reviewed" | "flagged" | "resolved") {
     if (!detail || saving) return;
@@ -445,19 +541,40 @@ export function MarinCallsWorkspace() {
       ) : null}
 
       <section className={styles.statsGrid} aria-label="Marin call activity">
-        <article>
+        <button
+          aria-label={`Show ${dashboard?.stats.calls_today ?? 0} calls received today`}
+          aria-pressed={filter === "today"}
+          className={styles.statFilter}
+          data-active={filter === "today"}
+          onClick={() => activateSummaryFilter("today")}
+          type="button"
+        >
           <PhoneIncoming size={17} aria-hidden="true" />
           <span>Today</span>
           <strong>{dashboard?.stats.calls_today ?? 0}</strong>
           <small>{dashboard?.stats.timezone ?? "America/New_York"}</small>
-        </article>
-        <article>
+        </button>
+        <button
+          aria-label={`Show ${dashboard?.stats.calls_7_days ?? 0} calls from the last 7 days`}
+          aria-pressed={filter === "last_7_days"}
+          className={styles.statFilter}
+          data-active={filter === "last_7_days"}
+          onClick={() => activateSummaryFilter("last_7_days")}
+          type="button"
+        >
           <CalendarClock size={17} aria-hidden="true" />
           <span>Last 7 days</span>
           <strong>{dashboard?.stats.calls_7_days ?? 0}</strong>
           <small>{dashboard?.stats.calls_30_days ?? 0} in 30 days</small>
-        </article>
-        <article>
+        </button>
+        <button
+          aria-label={`Show the newest call from each of ${dashboard?.stats.unique_callers_30_days ?? 0} unique callers`}
+          aria-pressed={filter === "unique_callers"}
+          className={styles.statFilter}
+          data-active={filter === "unique_callers"}
+          onClick={() => activateSummaryFilter("unique_callers")}
+          type="button"
+        >
           <Users size={17} aria-hidden="true" />
           <span>Unique callers</span>
           <strong>{dashboard?.stats.unique_callers_30_days ?? 0}</strong>
@@ -465,8 +582,15 @@ export function MarinCallsWorkspace() {
             {dashboard?.stats.conversations_started_30_days ?? 0} conversations ·{" "}
             {dashboard?.stats.repeat_callers_30_days ?? 0} repeat
           </small>
-        </article>
-        <article>
+        </button>
+        <button
+          aria-label={`Show ${dashboard?.stats.seller_callbacks_captured_30_days ?? 0} saved seller callbacks`}
+          aria-pressed={filter === "seller_callbacks"}
+          className={styles.statFilter}
+          data-active={filter === "seller_callbacks"}
+          onClick={() => activateSummaryFilter("seller_callbacks")}
+          type="button"
+        >
           <UserRound size={17} aria-hidden="true" />
           <span>Seller callbacks saved</span>
           <strong>{dashboard?.stats.seller_callbacks_captured_30_days ?? 0}</strong>
@@ -474,14 +598,29 @@ export function MarinCallsWorkspace() {
             {dashboard?.stats.fully_qualified_sellers_30_days ?? 0} qualified ·{" "}
             {dashboard?.stats.leads_created_30_days ?? 0} new records
           </small>
-        </article>
-        <article>
+        </button>
+        <button
+          aria-label={`Show ${dashboard?.stats.transferred_calls_30_days ?? 0} human handoffs`}
+          aria-pressed={filter === "human_handoffs"}
+          className={styles.statFilter}
+          data-active={filter === "human_handoffs"}
+          onClick={() => activateSummaryFilter("human_handoffs")}
+          type="button"
+        >
           <ExternalLink size={17} aria-hidden="true" />
           <span>Human handoffs</span>
           <strong>{dashboard?.stats.transferred_calls_30_days ?? 0}</strong>
           <small>{dashboard?.stats.scheduled_callbacks_30_days ?? 0} callbacks booked</small>
-        </article>
-        <article data-alert={(dashboard?.stats.needs_review ?? 0) > 0}>
+        </button>
+        <button
+          aria-label={`Show ${dashboard?.stats.needs_review ?? 0} calls that need review`}
+          aria-pressed={filter === "needs_review"}
+          className={styles.statFilter}
+          data-active={filter === "needs_review"}
+          data-alert={(dashboard?.stats.needs_review ?? 0) > 0}
+          onClick={() => activateSummaryFilter("needs_review")}
+          type="button"
+        >
           <Flag size={17} aria-hidden="true" />
           <span>Needs review</span>
           <strong>{dashboard?.stats.needs_review ?? 0}</strong>
@@ -490,7 +629,7 @@ export function MarinCallsWorkspace() {
               (dashboard?.stats.no_caller_response_30_days ?? 0)}{" "}
             no-response · {dashboard?.stats.caller_audio_issues_30_days ?? 0} audio issues
           </small>
-        </article>
+        </button>
       </section>
 
       <section className={styles.workspace}>
@@ -498,7 +637,9 @@ export function MarinCallsWorkspace() {
           <div className={styles.railHeader}>
             <div>
               <p>Recent calls</p>
-              <strong>{dashboard?.total ?? 0} in this period</strong>
+              <strong aria-live="polite">
+                {visibleCalls.length} · {filterLabels[filter]}
+              </strong>
             </div>
             {loading ? <RefreshCw className={styles.spin} size={16} aria-label="Loading" /> : null}
           </div>
@@ -506,7 +647,7 @@ export function MarinCallsWorkspace() {
             <Search size={15} aria-hidden="true" />
             <span className={styles.visuallyHidden}>Search Marin calls</span>
             <input
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => applyFilter(filter, event.target.value)}
               placeholder="Search caller, seller, or property"
               type="search"
               value={search}
@@ -526,7 +667,7 @@ export function MarinCallsWorkspace() {
                 aria-pressed={filter === key}
                 data-active={filter === key}
                 key={key}
-                onClick={() => setFilter(key)}
+                onClick={() => applyFilter(key)}
                 type="button"
               >
                 {label}

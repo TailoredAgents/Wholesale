@@ -47,6 +47,24 @@ test("Marin workspace exposes operational counts and human review controls", () 
   assert.match(workspace, /Resolve/);
 });
 
+test("Marin activity metrics filter the call list", () => {
+  for (const filter of [
+    "today",
+    "last_7_days",
+    "unique_callers",
+    "seller_callbacks",
+    "human_handoffs",
+    "needs_review",
+  ]) {
+    assert.match(workspace, new RegExp(`activateSummaryFilter\\(\"${filter}\"\\)`));
+  }
+  assert.match(workspace, /aria-pressed=\{filter === "today"\}/);
+  assert.match(workspace, /item\.capture_status !== "none"/);
+  assert.match(workspace, /item\.outcome === "transferred"/);
+  assert.match(workspace, /const seen = new Set<string>\(\)/);
+  assert.match(styles, /\.statFilter\[data-active="true"\]/);
+});
+
 test("Marin workspace stays dense and independently scrollable", () => {
   assert.match(styles, /height: calc\(100dvh - 124px\)/);
   assert.match(styles, /grid-template-columns: minmax\(300px, 340px\) minmax\(0, 1fr\)/);
