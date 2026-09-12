@@ -197,6 +197,40 @@ class Settings(BaseSettings):
         le=3600,
         validation_alias="OPENAI_REALTIME_MAX_CALL_SECONDS",
     )
+    seller_callback_agent_provider: Literal["openai_realtime", "elevenlabs"] = Field(
+        default="openai_realtime",
+        validation_alias="SELLER_CALLBACK_AGENT_PROVIDER",
+    )
+    elevenlabs_agent_enabled: bool = Field(
+        default=False,
+        validation_alias="ELEVENLABS_AGENT_ENABLED",
+    )
+    elevenlabs_agent_id: str | None = Field(
+        default=None,
+        validation_alias="ELEVENLABS_AGENT_ID",
+    )
+    elevenlabs_webhook_secret: str | None = Field(
+        default=None,
+        validation_alias="ELEVENLABS_WEBHOOK_SECRET",
+    )
+    elevenlabs_tool_secret: str | None = Field(
+        default=None,
+        validation_alias="ELEVENLABS_TOOL_SECRET",
+    )
+    elevenlabs_line_number: str = Field(
+        default="+14708887952",
+        validation_alias="ELEVENLABS_LINE_NUMBER",
+    )
+    elevenlabs_transfer_number: str = Field(
+        default="+16785417725",
+        validation_alias="ELEVENLABS_TRANSFER_NUMBER",
+    )
+    elevenlabs_webhook_max_bytes: int = Field(
+        default=2_000_000,
+        ge=10_000,
+        le=10_000_000,
+        validation_alias="ELEVENLABS_WEBHOOK_MAX_BYTES",
+    )
     openai_project_id: str | None = Field(
         default=None,
         validation_alias="OPENAI_PROJECT_ID",
@@ -1245,6 +1279,32 @@ class Settings(BaseSettings):
     @property
     def openai_realtime_voice_configured(self) -> bool:
         return not self.openai_realtime_voice_configuration_blockers
+
+    @property
+    def elevenlabs_agent_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.elevenlabs_agent_enabled:
+            blockers.append("ELEVENLABS_AGENT_ENABLED=true")
+        for configured, variable in (
+            (self.elevenlabs_agent_id, "ELEVENLABS_AGENT_ID"),
+            (self.elevenlabs_webhook_secret, "ELEVENLABS_WEBHOOK_SECRET"),
+            (self.elevenlabs_tool_secret, "ELEVENLABS_TOOL_SECRET"),
+            (self.elevenlabs_line_number, "ELEVENLABS_LINE_NUMBER"),
+            (self.elevenlabs_transfer_number, "ELEVENLABS_TRANSFER_NUMBER"),
+        ):
+            if not str(configured or "").strip():
+                blockers.append(variable)
+        if self.elevenlabs_agent_id and not self.elevenlabs_agent_id.strip().startswith("agent_"):
+            blockers.append("ELEVENLABS_AGENT_ID must start with agent_")
+        if _normalized_phone(self.elevenlabs_line_number) != "+14708887952":
+            blockers.append("ELEVENLABS_LINE_NUMBER must be +14708887952")
+        if _normalized_phone(self.elevenlabs_transfer_number) != "+16785417725":
+            blockers.append("ELEVENLABS_TRANSFER_NUMBER must be +16785417725")
+        return tuple(blockers)
+
+    @property
+    def elevenlabs_agent_configured(self) -> bool:
+        return not self.elevenlabs_agent_configuration_blockers
 
     @property
     def google_data_manager_conversion_actions(self) -> dict[str, str]:

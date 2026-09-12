@@ -1050,66 +1050,96 @@ def execute_realtime_tool(
     tool_call_id: str,
     tool_name: str,
     arguments: dict[str, Any],
+    *,
+    provider: str = PROVIDER,
 ) -> dict[str, Any]:
     with SessionLocal() as db:
-        callback = db.scalar(
-            select(ProspectingInboundCallback).where(
-                ProspectingInboundCallback.provider == PROVIDER,
-                ProspectingInboundCallback.provider_call_id == call_id,
-            )
+        return execute_seller_agent_tool(
+            db,
+            call_id=call_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            provider=provider,
         )
-        if callback is None:
-            return {"ok": False, "error": "The current call record is unavailable."}
-        metadata = dict(callback.routing_metadata or {})
-        tool_ids = list(metadata.get("tool_call_ids") or [])
-        prior_results = dict(metadata.get("tool_results") or {})
-        if tool_call_id in tool_ids:
-            if tool_name == "transfer_to_acquisitions" and metadata.get("transferred_at"):
-                return {
-                    "ok": True,
-                    "should_transfer": False,
-                    "transferred": True,
-                    "duplicate": True,
-                }
-            prior = prior_results.get(tool_call_id)
-            return prior if isinstance(prior, dict) else {"ok": True, "duplicate": True}
-        handlers = {
-            "lookup_callback_context": _tool_lookup_callback_context,
-            "capture_seller_interest": _tool_capture_seller_interest,
-            "save_seller_details": _tool_save_seller_details,
-            "schedule_human_callback": _tool_schedule_human_callback,
-            "transfer_to_acquisitions": _tool_prepare_transfer,
-            "record_call_outcome": _tool_record_call_outcome,
-            "wait_for_user": _tool_wait_for_user,
-            "finish_call": _tool_finish_call,
-        }
-        handler = handlers.get(tool_name)
-        if handler is None:
-            result: dict[str, Any] = {"ok": False, "error": "Unsupported tool."}
-        else:
-            try:
-                result = handler(db, callback, arguments)
-            except (RealtimeSellerAgentError, ValueError) as exc:
-                result = {"ok": False, "error": str(exc)}
-        tool_ids.append(tool_call_id)
-        prior_results[tool_call_id] = result
-        current_metadata = dict(callback.routing_metadata or {})
-        tool_events = list(current_metadata.get("tool_events") or [])
-        tool_events.append(
-            {
-                "name": tool_name,
-                "succeeded": bool(result.get("ok")),
-                "occurred_at": datetime.now(UTC).isoformat(),
+
+
+def execute_seller_agent_tool(
+    db: Session,
+    *,
+    call_id: str,
+    tool_call_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    provider: str,
+) -> dict[str, Any]:
+    callback = db.scalar(
+        select(ProspectingInboundCallback).where(
+            ProspectingInboundCallback.provider == provider,
+            ProspectingInboundCallback.provider_call_id == call_id,
+        )
+    )
+    if callback is None:
+        return {"ok": False, "error": "The current call record is unavailable."}
+    metadata = dict(callback.routing_metadata or {})
+    tool_ids = list(metadata.get("tool_call_ids") or [])
+    prior_results = dict(metadata.get("tool_results") or {})
+    if tool_call_id in tool_ids:
+        if tool_name == "transfer_to_acquisitions" and metadata.get("transferred_at"):
+            return {
+                "ok": True,
+                "should_transfer": False,
+                "transferred": True,
+                "duplicate": True,
             }
-        )
-        callback.routing_metadata = {
-            **current_metadata,
-            "tool_call_ids": tool_ids[-100:],
-            "tool_results": dict(list(prior_results.items())[-50:]),
-            "tool_events": tool_events[-100:],
+        prior = prior_results.get(tool_call_id)
+        return prior if isinstance(prior, dict) else {"ok": True, "duplicate": True}
+    handlers = {
+        "lookup_callback_context": _tool_lookup_callback_context,
+        "capture_seller_interest": _tool_capture_seller_interest,
+        "save_seller_details": _tool_save_seller_details,
+        "schedule_human_callback": _tool_schedule_human_callback,
+        "transfer_to_acquisitions": _tool_prepare_transfer,
+        "record_call_outcome": _tool_record_call_outcome,
+        "wait_for_user": _tool_wait_for_user,
+        "finish_call": _tool_finish_call,
+    }
+    handler = handlers.get(tool_name)
+    if handler is None:
+        result: dict[str, Any] = {"ok": False, "error": "Unsupported tool."}
+    else:
+        try:
+            result = handler(db, callback, arguments)
+        except (RealtimeSellerAgentError, ValueError) as exc:
+            result = {"ok": False, "error": str(exc)}
+    tool_ids.append(tool_call_id)
+    prior_results[tool_call_id] = result
+    current_metadata = dict(callback.routing_metadata or {})
+    tool_events = list(current_metadata.get("tool_events") or [])
+    tool_events.append(
+        {
+            "name": tool_name,
+            "succeeded": bool(result.get("ok")),
+            "occurred_at": datetime.now(UTC).isoformat(),
         }
-        db.commit()
-        return result
+    )
+    callback.routing_metadata = {
+        **current_metadata,
+        "tool_call_ids": tool_ids[-100:],
+        "tool_results": dict(list(prior_results.items())[-50:]),
+        "tool_events": tool_events[-100:],
+    }
+    db.commit()
+    return result
+
+
+def _callback_agent_name(callback: ProspectingInboundCallback) -> str:
+    value = (callback.routing_metadata or {}).get("agent_name")
+    return value.strip() if isinstance(value, str) and value.strip() else AGENT_NAME
+
+
+def _callback_source(callback: ProspectingInboundCallback) -> str:
+    return f"{callback.provider}_seller_callback"
 
 
 def _tool_lookup_callback_context(
@@ -1287,6 +1317,7 @@ def _tool_capture_seller_interest(
         },
     }
     if first_capture:
+        agent_name = _callback_agent_name(callback)
         db.add(
             ActivityEvent(
                 organization_id=lead.organization_id,
@@ -1295,7 +1326,7 @@ def _tool_capture_seller_interest(
                 entity_id=lead.id,
                 event_type="lead.interest_captured_from_ai_seller_callback",
                 summary=(
-                    "Marin preserved an interested seller callback before the full property "
+                    f"{agent_name} preserved an interested seller callback before the full property "
                     "intake was complete."
                 ),
             )
@@ -1304,9 +1335,9 @@ def _tool_capture_seller_interest(
         queue_staff_lead_alerts_for_lead(
             db,
             lead=lead,
-            source_type="openai_realtime_callback",
+            source_type=f"{callback.provider}_callback",
             source_event_id=callback.id,
-            source_label="Marin interested callback",
+            source_label=f"{agent_name} interested callback",
             source_entity_type="prospecting_inbound_callback",
         )
     db.flush()
@@ -1376,9 +1407,9 @@ def _tool_save_seller_details(
                 else "lead.updated_from_ai_seller_callback"
             ),
             summary=(
-                "Marin created this lead from a verified interested seller callback."
+                f"{_callback_agent_name(callback)} created this lead from a verified interested seller callback."
                 if created
-                else "Marin added verified seller details from an inbound callback."
+                else f"{_callback_agent_name(callback)} added verified seller details from an inbound callback."
             ),
         )
     )
@@ -1387,9 +1418,9 @@ def _tool_save_seller_details(
         queue_staff_lead_alerts_for_lead(
             db,
             lead=lead,
-            source_type="openai_realtime_callback",
+            source_type=f"{callback.provider}_callback",
             source_event_id=callback.id,
-            source_label="Marin callback",
+            source_label=f"{_callback_agent_name(callback)} callback",
             source_entity_type="prospecting_inbound_callback",
         )
     db.flush()
@@ -1445,9 +1476,9 @@ def _tool_schedule_human_callback(
             outcome=None,
             external_calendar_id=None,
             appointment_metadata={
-                "source": "openai_realtime_seller_callback",
+                "source": _callback_source(callback),
                 "callback_id": str(callback.id),
-                "agent_name": AGENT_NAME,
+                "agent_name": _callback_agent_name(callback),
             },
         )
         db.add(appointment)
@@ -1462,9 +1493,9 @@ def _tool_schedule_human_callback(
         appointment.notes = reason
         appointment.appointment_metadata = {
             **(appointment.appointment_metadata or {}),
-            "source": "openai_realtime_seller_callback",
+            "source": _callback_source(callback),
             "callback_id": str(callback.id),
-            "agent_name": AGENT_NAME,
+            "agent_name": _callback_agent_name(callback),
         }
     upsert_internal_calendar_event(db, appointment)
     existing = db.scalar(
@@ -1525,8 +1556,11 @@ def _tool_schedule_human_callback(
             actor_user_id=None,
             entity_type="lead",
             entity_id=lead.id,
-            event_type="lead.appointment_scheduled_by_marin",
-            summary=f"Marin booked an Acquisitions callback for {due_at.isoformat()}.",
+            event_type="lead.appointment_scheduled_by_ai_agent",
+            summary=(
+                f"{_callback_agent_name(callback)} booked an Acquisitions callback for "
+                f"{due_at.isoformat()}."
+            ),
         )
     )
     create_notification(
@@ -1534,12 +1568,12 @@ def _tool_schedule_human_callback(
         organization_id=lead.organization_id,
         recipient_user_id=appointment.owner_user_id,
         notification_type="appointment_scheduled",
-        title="Seller callback booked by Marin",
+        title=f"Seller callback booked by {_callback_agent_name(callback)}",
         body=f"An interested seller agreed to a phone appointment at {due_at.isoformat()}.",
         entity_type="appointment",
         entity_id=appointment.id,
         action_url=f"/os/leads/{lead.id}?tab=communications",
-        dedupe_key=f"marin-appointment:{appointment.id}",
+        dedupe_key=f"ai-agent-appointment:{appointment.id}",
     )
     db.flush()
     return {
@@ -1816,7 +1850,7 @@ def _create_realtime_provisional_lead(
             else "house"
         ),
         qualification_context={
-            "source": "openai_realtime_seller_callback",
+            "source": _callback_source(callback),
             "callback_id": str(callback.id),
             "capture_status": "provisional",
             "owner_confirmed": owner_confirmed,
@@ -1960,7 +1994,7 @@ def _create_realtime_lead(
         source="batchdialer_callback",
         asset_class=("land" if any(word in property_type for word in ("land", "lot")) else "house"),
         qualification_context={
-            "source": "openai_realtime_seller_callback",
+            "source": _callback_source(callback),
             "callback_id": str(callback.id),
             "capture_status": "qualified",
             "owner_confirmed": True,
@@ -2056,7 +2090,7 @@ def _ensure_call_communication(
     existing = db.scalar(
         select(CommunicationRecord).where(
             CommunicationRecord.organization_id == callback.organization_id,
-            CommunicationRecord.provider == PROVIDER,
+            CommunicationRecord.provider == callback.provider,
             CommunicationRecord.provider_message_id == callback.provider_call_id,
         )
     )
@@ -2073,15 +2107,15 @@ def _ensure_call_communication(
         direction="inbound",
         channel="call",
         status="in-progress",
-        provider=PROVIDER,
+        provider=callback.provider,
         provider_message_id=callback.provider_call_id,
-        subject="Inbound seller callback with Marin",
-        body="Inbound seller callback is in progress with Marin.",
+        subject=f"Inbound seller callback with {_callback_agent_name(callback)}",
+        body=f"Inbound seller callback is in progress with {_callback_agent_name(callback)}.",
         occurred_at=callback.received_at,
         external_payload={"call_id": callback.provider_call_id},
         communication_metadata={
-            "source": "openai_realtime_sip",
-            "agent_name": AGENT_NAME,
+            "source": _callback_source(callback),
+            "agent_name": _callback_agent_name(callback),
             "callback_id": str(callback.id),
         },
     )
@@ -2105,8 +2139,15 @@ def _notify_realtime_lead(
             organization_id=callback.organization_id,
             recipient_user_id=recipient_id,
             notification_type="ai_seller_callback",
-            title=("New interested seller callback" if created else "Seller called Marin"),
-            body=f"{contact.legal_name} is speaking with Marin about a property sale.",
+            title=(
+                "New interested seller callback"
+                if created
+                else f"Seller called {_callback_agent_name(callback)}"
+            ),
+            body=(
+                f"{contact.legal_name} is speaking with {_callback_agent_name(callback)} "
+                "about a property sale."
+            ),
             entity_type="lead",
             entity_id=lead.id,
             action_url=f"/os/leads/{lead.id}",
@@ -2135,8 +2176,8 @@ def _suppress_callback_number(db: Session, callback: ProspectingInboundCallback)
                     normalized_address=callback.normalized_caller,
                     status="active",
                     reason="Caller explicitly asked Stonegate not to contact them.",
-                    source="openai_realtime_seller_callback",
-                    provider=PROVIDER,
+                    source=_callback_source(callback),
+                    provider=callback.provider,
                     external_event_id=callback.provider_call_id,
                     suppressed_at=now,
                     lifted_at=None,
@@ -2147,8 +2188,8 @@ def _suppress_callback_number(db: Session, callback: ProspectingInboundCallback)
             existing.contact_id = existing.contact_id or contact_id
             existing.status = "active"
             existing.reason = "Caller explicitly asked Stonegate not to contact them."
-            existing.source = "openai_realtime_seller_callback"
-            existing.provider = PROVIDER
+            existing.source = _callback_source(callback)
+            existing.provider = callback.provider
             existing.external_event_id = callback.provider_call_id
             existing.suppressed_at = now
             existing.lifted_at = None

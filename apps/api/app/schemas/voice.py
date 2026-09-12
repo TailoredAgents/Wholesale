@@ -133,12 +133,15 @@ class VoiceProviderReadinessRead(BaseModel):
 class RealtimeSellerAgentReadinessRead(BaseModel):
     configured: bool
     enabled: bool
+    provider: Literal["openai_realtime", "elevenlabs"]
     agent_name: str
     model: str
     voice: str
     ai_line_number: str
     human_transfer_number: str
     webhook_url: str
+    initiation_webhook_url: str | None
+    tools_base_url: str | None
     sip_uri: str | None
     line_id: UUID | None
     checks: list[VoiceReadinessCheckRead]
@@ -209,6 +212,7 @@ class MarinCallDiagnosticsRead(BaseModel):
 class MarinCallListItemRead(BaseModel):
     id: UUID
     call_record_id: UUID | None
+    agent_name: str
     caller_number: str
     seller_name: str | None
     property_address: str | None

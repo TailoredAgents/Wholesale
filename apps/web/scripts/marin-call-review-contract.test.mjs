@@ -11,15 +11,15 @@ const workspace = readFileSync(
 const inbox = readFileSync(resolve(root, "inbox-workspace.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "marin-calls/marin-calls.module.css"), "utf8");
 
-test("Inbox links directly to the Marin call review workspace", () => {
+test("Inbox links directly to the AI seller call review workspace", () => {
   assert.match(inbox, /href="\/os\/inbox\/marin-calls"/);
-  assert.match(inbox, />\s*Marin calls\s*</);
+  assert.match(inbox, />\s*AI seller calls\s*</);
 });
 
 test("Marin workspace separates the lightweight list from transcript detail", () => {
   assert.match(workspace, /\/api\/v1\/voice\/marin-calls\?days=30&limit=200/);
   assert.match(workspace, /\/api\/v1\/voice\/marin-calls\/\$\{callbackId\}/);
-  assert.match(workspace, /Caller and Marin transcript/);
+  assert.match(workspace, /Caller and \{detail\.agent_name\} transcript/);
   assert.match(workspace, /Realtime transcripts are review aids/);
   assert.match(workspace, /Suspected prompt-generated text is removed/);
   assert.match(workspace, /callPathExplanation/);
@@ -41,7 +41,7 @@ test("Marin workspace exposes operational counts and human review controls", () 
   assert.match(workspace, /conversations_started_30_days/);
   assert.match(workspace, /ended_during_greeting_30_days/);
   assert.match(workspace, /caller_audio_issues_30_days/);
-  assert.match(workspace, /What should Marin improve\?/);
+  assert.match(workspace, /What should \{detail\.agent_name\} improve\?/);
   assert.match(workspace, /Save issue/);
   assert.match(workspace, /Mark reviewed/);
   assert.match(workspace, /Resolve/);

@@ -251,8 +251,17 @@ def ensure_default_voice_line(
     phone_number = format_e164(settings.twilio_voice_from_number)
     if not phone_number:
         return None
-    realtime_number = format_e164(settings.openai_realtime_line_number)
-    transfer_number = format_e164(settings.openai_realtime_transfer_number)
+    use_elevenlabs = settings.seller_callback_agent_provider == "elevenlabs"
+    realtime_number = format_e164(
+        settings.elevenlabs_line_number
+        if use_elevenlabs
+        else settings.openai_realtime_line_number
+    )
+    transfer_number = format_e164(
+        settings.elevenlabs_transfer_number
+        if use_elevenlabs
+        else settings.openai_realtime_transfer_number
+    )
     realtime_line = (
         db.scalar(
             select(VoiceLine).where(
@@ -266,7 +275,11 @@ def ensure_default_voice_line(
     if (
         transfer_number
         and (
-            settings.openai_realtime_voice_enabled
+            (
+                settings.elevenlabs_agent_enabled
+                if use_elevenlabs
+                else settings.openai_realtime_voice_enabled
+            )
             or (realtime_line is not None and realtime_line.purpose_key == "seller_callback_ai")
         )
     ):
@@ -324,8 +337,17 @@ def ensure_realtime_seller_voice_line(
     admin_user: User | None,
 ) -> VoiceLine | None:
     settings = get_settings()
-    phone_number = format_e164(settings.openai_realtime_line_number)
-    human_number = format_e164(settings.openai_realtime_transfer_number)
+    use_elevenlabs = settings.seller_callback_agent_provider == "elevenlabs"
+    phone_number = format_e164(
+        settings.elevenlabs_line_number
+        if use_elevenlabs
+        else settings.openai_realtime_line_number
+    )
+    human_number = format_e164(
+        settings.elevenlabs_transfer_number
+        if use_elevenlabs
+        else settings.openai_realtime_transfer_number
+    )
     if not phone_number or phone_number == human_number:
         return None
     line = db.scalar(
@@ -334,10 +356,18 @@ def ensure_realtime_seller_voice_line(
             VoiceLine.phone_number == phone_number,
         )
     )
-    if not settings.openai_realtime_voice_enabled and (
+    provider_enabled = (
+        settings.elevenlabs_agent_enabled
+        if use_elevenlabs
+        else settings.openai_realtime_voice_enabled
+    )
+    if not provider_enabled and (
         line is None or line.purpose_key != "seller_callback_ai"
     ):
         return None
+    inbound_route = "elevenlabs" if use_elevenlabs else "openai_realtime"
+    agent_name = "Caroline" if use_elevenlabs else "Marin"
+    source = "elevenlabs_bootstrap" if use_elevenlabs else "openai_realtime_bootstrap"
     if line is None:
         line = VoiceLine(
             organization_id=organization.id,
@@ -346,36 +376,36 @@ def ensure_realtime_seller_voice_line(
             provider="twilio",
             provider_phone_number_id=None,
             phone_number=phone_number,
-            label="Marin seller callback",
+            label=f"{agent_name} seller callback",
             department_key="acquisitions",
             purpose_key="seller_callback_ai",
             status="active",
             is_default=False,
-            inbound_route="openai_realtime",
+            inbound_route=inbound_route,
             ring_strategy="simultaneous",
             coverage_timezone=settings.twilio_voice_timezone,
             coverage_start_hour=0,
             coverage_end_hour=24,
             missed_call_action="fallback_then_voicemail",
-            line_metadata={"source": "openai_realtime_bootstrap", "agent_name": "Marin"},
+            line_metadata={"source": source, "agent_name": agent_name},
         )
         db.add(line)
         db.flush()
         return line
-    line.label = "Marin seller callback"
+    line.label = f"{agent_name} seller callback"
     line.department_key = "acquisitions"
     line.purpose_key = "seller_callback_ai"
     line.status = "active"
     line.is_default = False
-    line.inbound_route = "openai_realtime"
+    line.inbound_route = inbound_route
     line.coverage_start_hour = 0
     line.coverage_end_hour = 24
     if line.assigned_user_id is None and admin_user is not None:
         line.assigned_user_id = admin_user.id
     line.line_metadata = {
         **(line.line_metadata or {}),
-        "source": "openai_realtime_bootstrap",
-        "agent_name": "Marin",
+        "source": source,
+        "agent_name": agent_name,
     }
     return line
 

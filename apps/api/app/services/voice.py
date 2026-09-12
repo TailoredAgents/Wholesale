@@ -119,7 +119,12 @@ from app.services.prospecting_voice import (
     validate_prospecting_connect_intent,
 )
 
-VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user", "openai_realtime"}
+VOICE_LINE_ROUTES = {
+    "conversation_owner",
+    "assigned_user",
+    "openai_realtime",
+    "elevenlabs",
+}
 VOICE_LINE_STATUSES = {"active", "inactive"}
 VOICE_LINE_RING_STRATEGIES = {"sequential", "simultaneous"}
 VOICE_LINE_DEPARTMENT_PURPOSES = {
@@ -418,8 +423,17 @@ def get_realtime_seller_agent_readiness(
     principal: Principal,
 ) -> RealtimeSellerAgentReadinessRead:
     settings = get_settings()
-    ai_number = format_e164(settings.openai_realtime_line_number)
-    transfer_number = format_e164(settings.openai_realtime_transfer_number)
+    use_elevenlabs = settings.seller_callback_agent_provider == "elevenlabs"
+    ai_number = format_e164(
+        settings.elevenlabs_line_number
+        if use_elevenlabs
+        else settings.openai_realtime_line_number
+    )
+    transfer_number = format_e164(
+        settings.elevenlabs_transfer_number
+        if use_elevenlabs
+        else settings.openai_realtime_transfer_number
+    )
     line = (
         db.scalar(
             select(VoiceLine).where(
@@ -434,34 +448,61 @@ def get_realtime_seller_agent_readiness(
         else None
     )
     base_url = (settings.twilio_webhook_base_url or "https://api.stonegatehb.com").rstrip("/")
-    openai_ready = all(
-        (
-            bool(settings.openai_api_key),
-            bool(settings.openai_webhook_secret),
-            bool(settings.openai_project_id),
-            bool(settings.openai_project_id and settings.openai_project_id.startswith("proj_")),
+    provider_ready = (
+        all(
+            (
+                bool(settings.elevenlabs_agent_id),
+                bool(settings.elevenlabs_webhook_secret),
+                bool(settings.elevenlabs_tool_secret),
+            )
+        )
+        if use_elevenlabs
+        else all(
+            (
+                bool(settings.openai_api_key),
+                bool(settings.openai_webhook_secret),
+                bool(settings.openai_project_id),
+                bool(
+                    settings.openai_project_id
+                    and settings.openai_project_id.startswith("proj_")
+                ),
+            )
         )
     )
+    enabled = (
+        settings.elevenlabs_agent_enabled
+        if use_elevenlabs
+        else settings.openai_realtime_voice_enabled
+    )
+    agent_name = "Caroline" if use_elevenlabs else "Marin"
     checks = [
         VoiceReadinessCheckRead(
             key="feature",
-            label="Marin seller callback agent",
+            label=f"{agent_name} seller callback agent",
             required=True,
-            ready=settings.openai_realtime_voice_enabled,
+            ready=enabled,
             detail=(
                 "Realtime seller callbacks are enabled."
-                if settings.openai_realtime_voice_enabled
-                else "Enable only after the OpenAI webhook and Twilio SIP trunk are connected."
+                if enabled
+                else "Enable only after the provider webhooks and phone routing are connected."
             ),
         ),
         VoiceReadinessCheckRead(
-            key="openai",
-            label="OpenAI project and webhook",
+            key="elevenlabs" if use_elevenlabs else "openai",
+            label=(
+                "ElevenLabs agent and webhooks"
+                if use_elevenlabs
+                else "OpenAI project and webhook"
+            ),
             required=True,
-            ready=openai_ready,
+            ready=provider_ready,
             detail=(
-                "API key, project ID, and signed webhook secret are present."
-                if openai_ready
+                "Agent ID and both webhook secrets are present."
+                if use_elevenlabs and provider_ready
+                else "Add the ElevenLabs agent ID and webhook secrets in Render."
+                if use_elevenlabs
+                else "API key, project ID, and signed webhook secret are present."
+                if provider_ready
                 else "Add the OpenAI project ID and webhook signing secret in Render."
             ),
         ),
@@ -471,7 +512,7 @@ def get_realtime_seller_agent_readiness(
             required=True,
             ready=line is not None,
             detail=(
-                f"{line.label} is reserved for Marin."
+                f"{line.label} is reserved for {agent_name}."
                 if line is not None
                 else "Configure +1 (470) 888-7952 as Acquisitions / Seller callback AI."
             ),
@@ -484,22 +525,61 @@ def get_realtime_seller_agent_readiness(
             detail=(
                 "Live transfers go only to +1 (678) 541-7725."
                 if transfer_number == "+16785417725"
-                else "Set OPENAI_REALTIME_TRANSFER_NUMBER to +16785417725."
+                else (
+                    "Set ELEVENLABS_TRANSFER_NUMBER to +16785417725."
+                    if use_elevenlabs
+                    else "Set OPENAI_REALTIME_TRANSFER_NUMBER to +16785417725."
+                )
             ),
         ),
     ]
     project_id = (settings.openai_project_id or "").strip()
     return RealtimeSellerAgentReadinessRead(
-        configured=settings.openai_realtime_voice_configured
+        configured=(
+            settings.elevenlabs_agent_configured
+            if use_elevenlabs
+            else settings.openai_realtime_voice_configured
+        )
         and all(check.ready for check in checks if check.required),
-        enabled=settings.openai_realtime_voice_enabled,
-        agent_name="Marin",
-        model=settings.openai_realtime_model,
-        voice=settings.openai_realtime_voice,
-        ai_line_number=ai_number or settings.openai_realtime_line_number,
-        human_transfer_number=transfer_number or settings.openai_realtime_transfer_number,
-        webhook_url=f"{base_url}/api/v1/webhooks/openai/realtime",
-        sip_uri=(f"sip:{project_id}@sip.api.openai.com;transport=tls" if project_id else None),
+        enabled=enabled,
+        provider=settings.seller_callback_agent_provider,
+        agent_name=agent_name,
+        model="GPT-4.1 Mini (ElevenLabs)" if use_elevenlabs else settings.openai_realtime_model,
+        voice="ElevenLabs agent voice" if use_elevenlabs else settings.openai_realtime_voice,
+        ai_line_number=ai_number
+        or (
+            settings.elevenlabs_line_number
+            if use_elevenlabs
+            else settings.openai_realtime_line_number
+        ),
+        human_transfer_number=transfer_number
+        or (
+            settings.elevenlabs_transfer_number
+            if use_elevenlabs
+            else settings.openai_realtime_transfer_number
+        ),
+        webhook_url=(
+            f"{base_url}/api/v1/webhooks/elevenlabs/post-call"
+            if use_elevenlabs
+            else f"{base_url}/api/v1/webhooks/openai/realtime"
+        ),
+        initiation_webhook_url=(
+            f"{base_url}/api/v1/webhooks/elevenlabs/conversation-initiation"
+            if use_elevenlabs
+            else None
+        ),
+        tools_base_url=(
+            f"{base_url}/api/v1/webhooks/elevenlabs/tools"
+            if use_elevenlabs
+            else None
+        ),
+        sip_uri=(
+            None
+            if use_elevenlabs
+            else f"sip:{project_id}@sip.api.openai.com;transport=tls"
+            if project_id
+            else None
+        ),
         line_id=line.id if line is not None else None,
         checks=checks,
     )
@@ -1536,6 +1616,10 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     line = find_voice_line_by_number(db, recipient)
     if line is None or not settings.twilio_voice_configured:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
+    if line.purpose_key == "seller_callback_ai":
+        raise VoiceConfigurationError(
+            "The seller callback AI line must enter through its configured AI provider."
+        )
     if line.purpose_key == "prospecting_outbound":
         return process_prospecting_inbound_callback(
             db,
@@ -3157,14 +3241,14 @@ def validate_realtime_line_route(
     is_default: bool,
 ) -> None:
     if purpose_key == "seller_callback_ai":
-        if inbound_route != "openai_realtime":
-            raise ValueError("The seller callback AI line must use OpenAI Realtime routing.")
+        if inbound_route not in {"openai_realtime", "elevenlabs"}:
+            raise ValueError("The seller callback AI line must use an AI provider route.")
         if is_default:
             raise ValueError(
                 "The seller callback AI line cannot be the default human calling line."
             )
-    elif inbound_route == "openai_realtime":
-        raise ValueError("OpenAI Realtime routing is reserved for the seller callback AI line.")
+    elif inbound_route in {"openai_realtime", "elevenlabs"}:
+        raise ValueError("AI routing is reserved for the seller callback AI line.")
 
 
 def conversation_activity_entity(

@@ -132,6 +132,22 @@ services:
         sync: false
       - key: OPENAI_WEBHOOK_SECRET
         sync: false
+      - key: SELLER_CALLBACK_AGENT_PROVIDER
+        value: openai_realtime
+      - key: ELEVENLABS_AGENT_ENABLED
+        sync: false
+      - key: ELEVENLABS_AGENT_ID
+        sync: false
+      - key: ELEVENLABS_WEBHOOK_SECRET
+        sync: false
+      - key: ELEVENLABS_TOOL_SECRET
+        sync: false
+      - key: ELEVENLABS_LINE_NUMBER
+        value: +14708887952
+      - key: ELEVENLABS_TRANSFER_NUMBER
+        value: +16785417725
+      - key: ELEVENLABS_WEBHOOK_MAX_BYTES
+        value: 2000000
       - key: CALL_TRANSCRIPTION_ENABLED
         value: true
       - key: CALL_TRANSCRIPTION_POLL_SECONDS

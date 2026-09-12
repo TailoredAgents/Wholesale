@@ -34,7 +34,7 @@ from app.schemas.voice import (
 )
 from app.services.realtime_seller_agent import _is_suspected_transcription_hallucination
 
-PROVIDER = "openai_realtime"
+PROVIDERS = frozenset({"openai_realtime", "elevenlabs"})
 DEFAULT_TIMEZONE = "America/New_York"
 TERMINAL_CALLBACK_STATUSES = frozenset({"completed", "failed", "canceled"})
 KNOWN_REVIEW_FLAGS = frozenset(
@@ -72,7 +72,7 @@ def list_marin_calls(
             )
             .where(
                 ProspectingInboundCallback.organization_id == principal.organization_id,
-                ProspectingInboundCallback.provider == PROVIDER,
+                ProspectingInboundCallback.provider.in_(PROVIDERS),
                 ProspectingInboundCallback.received_at >= query_start,
             )
             .order_by(
@@ -97,7 +97,7 @@ def list_marin_calls(
             .select_from(ProspectingInboundCallback)
             .where(
                 ProspectingInboundCallback.organization_id == principal.organization_id,
-                ProspectingInboundCallback.provider == PROVIDER,
+                ProspectingInboundCallback.provider.in_(PROVIDERS),
             )
         )
         or 0
@@ -106,7 +106,7 @@ def list_marin_calls(
         db.scalar(
             select(func.count(func.distinct(ProspectingInboundCallback.normalized_caller))).where(
                 ProspectingInboundCallback.organization_id == principal.organization_id,
-                ProspectingInboundCallback.provider == PROVIDER,
+                ProspectingInboundCallback.provider.in_(PROVIDERS),
             )
         )
         or 0
@@ -186,7 +186,7 @@ def get_marin_call(
         )
         .where(
             ProspectingInboundCallback.organization_id == principal.organization_id,
-            ProspectingInboundCallback.provider == PROVIDER,
+            ProspectingInboundCallback.provider.in_(PROVIDERS),
             ProspectingInboundCallback.id == callback_id,
         )
     ).one_or_none()
@@ -221,7 +221,7 @@ def review_marin_call(
     callback = db.scalar(
         select(ProspectingInboundCallback).where(
             ProspectingInboundCallback.organization_id == principal.organization_id,
-            ProspectingInboundCallback.provider == PROVIDER,
+            ProspectingInboundCallback.provider.in_(PROVIDERS),
             ProspectingInboundCallback.id == callback_id,
         )
     )
@@ -251,11 +251,14 @@ def review_marin_call(
             actor_user_id=principal.user_id,
             entity_type="prospecting_inbound_callback",
             entity_id=callback.id,
-            event_type=f"voice.marin_call_{payload.status}",
+            event_type=f"voice.ai_seller_call_{payload.status}",
             summary=(
-                f"Marin call marked {payload.status}."
+                f"{_agent_name(callback)} call marked {payload.status}."
                 if not flags
-                else f"Marin call marked {payload.status}: {', '.join(flags)}."
+                else (
+                    f"{_agent_name(callback)} call marked {payload.status}: "
+                    f"{', '.join(flags)}."
+                )
             ),
         )
     )
@@ -274,6 +277,7 @@ def _call_item(
     return MarinCallListItemRead(
         id=callback.id,
         call_record_id=record.id if record is not None else None,
+        agent_name=_agent_name(callback),
         caller_number=callback.caller_number,
         seller_name=identity.get("seller_name"),
         property_address=identity.get("property_address"),
@@ -297,6 +301,11 @@ def _call_item(
         review_reasons=reasons,
         review=_review(metadata),
     )
+
+
+def _agent_name(callback: ProspectingInboundCallback) -> str:
+    value = (callback.routing_metadata or {}).get("agent_name")
+    return value.strip() if isinstance(value, str) and value.strip() else "AI agent"
 
 
 def _identity_context(

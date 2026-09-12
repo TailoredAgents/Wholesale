@@ -70,12 +70,15 @@ type VoiceReadiness = {
 type RealtimeVoiceReadiness = {
   configured: boolean;
   enabled: boolean;
+  provider: "openai_realtime" | "elevenlabs";
   agent_name: string;
   model: string;
   voice: string;
   ai_line_number: string;
   human_transfer_number: string;
   webhook_url: string;
+  initiation_webhook_url: string | null;
+  tools_base_url: string | null;
   sip_uri: string | null;
   line_id: string | null;
   checks: VoiceReadiness["checks"];
@@ -454,7 +457,14 @@ export function VoiceLineSettings() {
           </div>
           <div className={styles.voiceUrls}>
             {([
-              ["OpenAI webhook", realtimeReadiness.webhook_url],
+              [
+                realtimeReadiness.provider === "elevenlabs"
+                  ? "ElevenLabs post-call webhook"
+                  : "OpenAI webhook",
+                realtimeReadiness.webhook_url,
+              ],
+              ["ElevenLabs call-start webhook", realtimeReadiness.initiation_webhook_url],
+              ["ElevenLabs CRM tools base URL", realtimeReadiness.tools_base_url],
               ["Twilio Origination SIP URI", realtimeReadiness.sip_uri],
             ] satisfies Array<[string, string | null]>).map(([label, value]) => value ? (
               <div key={label}>
@@ -472,7 +482,9 @@ export function VoiceLineSettings() {
           </div>
           <p>
             Uses {realtimeReadiness.model} with the {realtimeReadiness.voice} voice. Keep the
-            feature off until OpenAI and Twilio are connected and the 404 fallback is verified.
+            feature off until {realtimeReadiness.provider === "elevenlabs"
+              ? "ElevenLabs webhooks and Twilio are connected"
+              : "OpenAI and Twilio are connected"} and the human fallback is verified.
           </p>
         </div>
       ) : null}
@@ -599,6 +611,7 @@ export function VoiceLineSettings() {
                 <option value="conversation_owner">Conversation owner</option>
                 <option value="assigned_user">Primary owner</option>
                 <option value="openai_realtime">OpenAI Realtime (Marin)</option>
+                <option value="elevenlabs">ElevenLabs Agent (Caroline)</option>
               </select>
             </label>
             <label>
@@ -710,6 +723,7 @@ export function VoiceLineSettings() {
               <option value="conversation_owner">Conversation owner</option>
               <option value="assigned_user">Primary owner</option>
               <option value="openai_realtime">OpenAI Realtime (Marin)</option>
+              <option value="elevenlabs">ElevenLabs Agent (Caroline)</option>
             </select>
           </label>
           <label>

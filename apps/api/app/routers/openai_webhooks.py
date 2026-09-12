@@ -46,6 +46,14 @@ async def openai_realtime_webhook(
     if event.get("type") != "realtime.call.incoming":
         return Response(status_code=204)
     call_id = _event_call_id(event)
+    if settings.seller_callback_agent_provider != "openai_realtime":
+        await _reject_if_possible(call_id, status_code=480)
+        logger.warning(
+            "realtime_seller_agent_provider_inactive",
+            call_id=call_id,
+            active_provider=settings.seller_callback_agent_provider,
+        )
+        return Response(status_code=204)
     if not settings.openai_realtime_voice_configured:
         await _reject_if_possible(call_id, status_code=480)
         logger.warning(

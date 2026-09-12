@@ -53,6 +53,7 @@ type CallPathStatus =
 type MarinCall = {
   id: string;
   call_record_id: string | null;
+  agent_name: string;
   caller_number: string;
   seller_name: string | null;
   property_address: string | null;
@@ -368,7 +369,7 @@ export function MarinCallsWorkspace() {
             : payload.items[0]?.id ?? null,
         );
       } catch (failure) {
-        setError(failure instanceof Error ? failure.message : "Unable to load Marin calls.");
+        setError(failure instanceof Error ? failure.message : "Unable to load AI seller calls.");
       } finally {
         if (!quiet) setLoading(false);
       }
@@ -508,7 +509,7 @@ export function MarinCallsWorkspace() {
       <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>Seller communications / quality</p>
-          <h1>Marin Calls</h1>
+          <h1>AI Seller Calls</h1>
           <p>See every caller, inspect the conversation, and record exactly what needs improvement.</p>
         </div>
         <div className={styles.headerActions}>
@@ -540,7 +541,7 @@ export function MarinCallsWorkspace() {
         </div>
       ) : null}
 
-      <section className={styles.statsGrid} aria-label="Marin call activity">
+      <section className={styles.statsGrid} aria-label="AI seller call activity">
         <button
           aria-label={`Show ${dashboard?.stats.calls_today ?? 0} calls received today`}
           aria-pressed={filter === "today"}
@@ -633,7 +634,7 @@ export function MarinCallsWorkspace() {
       </section>
 
       <section className={styles.workspace}>
-        <aside className={styles.callRail} aria-label="Marin call list">
+        <aside className={styles.callRail} aria-label="AI seller call list">
           <div className={styles.railHeader}>
             <div>
               <p>Recent calls</p>
@@ -645,7 +646,7 @@ export function MarinCallsWorkspace() {
           </div>
           <label className={styles.searchBox}>
             <Search size={15} aria-hidden="true" />
-            <span className={styles.visuallyHidden}>Search Marin calls</span>
+            <span className={styles.visuallyHidden}>Search AI seller calls</span>
             <input
               onChange={(event) => applyFilter(filter, event.target.value)}
               placeholder="Search caller, seller, or property"
@@ -715,7 +716,7 @@ export function MarinCallsWorkspace() {
           {!detail && !detailLoading ? (
             <div className={styles.emptyDetail}>
               <Bot size={28} aria-hidden="true" />
-              <strong>Select a Marin call</strong>
+              <strong>Select an AI seller call</strong>
               <span>The transcript and quality review will appear here.</span>
             </div>
           ) : null}
@@ -790,7 +791,7 @@ export function MarinCallsWorkspace() {
 
                   {detail.summary ? (
                     <div className={styles.summaryNote}>
-                      <span>Marin’s summary</span>
+                      <span>{detail.agent_name}’s summary</span>
                       <p>{detail.summary}</p>
                     </div>
                   ) : null}
@@ -798,7 +799,7 @@ export function MarinCallsWorkspace() {
                   <div className={styles.sectionHeading}>
                     <div>
                       <p>Conversation</p>
-                      <h3>Caller and Marin transcript</h3>
+                      <h3>Caller and {detail.agent_name} transcript</h3>
                     </div>
                     <span>{detail.transcript.length} turns</span>
                   </div>
@@ -811,7 +812,7 @@ export function MarinCallsWorkspace() {
                     ) : null}
                     {detail.transcript.map((turn, index) => (
                       <div className={styles.transcriptTurn} data-speaker={turn.speaker} key={`${turn.speaker}-${index}`}>
-                        <strong>{turn.speaker === "caller" ? "Caller" : "Marin"}</strong>
+                        <strong>{turn.speaker === "caller" ? "Caller" : detail.agent_name}</strong>
                         <p>{turn.text}</p>
                       </div>
                     ))}
@@ -822,12 +823,12 @@ export function MarinCallsWorkspace() {
                   </p>
                 </section>
 
-                <aside className={styles.reviewPane} aria-label="Marin quality review">
+                <aside className={styles.reviewPane} aria-label={`${detail.agent_name} quality review`}>
                   <section>
                     <div className={styles.sectionHeading}>
                       <div>
                         <p>Human review</p>
-                        <h3>What should Marin improve?</h3>
+                        <h3>What should {detail.agent_name} improve?</h3>
                       </div>
                     </div>
                     <div className={styles.flagGrid}>
@@ -846,7 +847,7 @@ export function MarinCallsWorkspace() {
                       <span>Reviewer notes</span>
                       <textarea
                         onChange={(event) => setReviewNotes(event.target.value)}
-                        placeholder="What happened, and what should Marin do differently?"
+                        placeholder={`What happened, and what should ${detail.agent_name} do differently?`}
                         rows={5}
                         value={reviewNotes}
                       />
@@ -903,7 +904,7 @@ export function MarinCallsWorkspace() {
                       <div className={styles.sectionHeading}>
                         <div>
                           <p>System activity</p>
-                          <h3>Actions Marin took</h3>
+                          <h3>Actions {detail.agent_name} took</h3>
                         </div>
                       </div>
                       <ul className={styles.toolEvents}>

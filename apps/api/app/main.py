@@ -13,6 +13,7 @@ from app.routers import (
     dashboard,
     deals,
     dispositions,
+    elevenlabs_webhooks,
     email,
     esign_webhooks,
     field_operations,
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(deals.router)
     app.include_router(dispositions.router)
+    app.include_router(elevenlabs_webhooks.router)
     app.include_router(email.router)
     app.include_router(esign_webhooks.router)
     app.include_router(field_operations.router)

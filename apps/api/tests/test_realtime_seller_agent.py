@@ -898,3 +898,40 @@ def test_incoming_webhook_accepts_once_and_starts_monitor(
     assert callback.status == "answered"
     user = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
     assert user is not None
+
+
+def test_openai_webhook_rejects_call_when_elevenlabs_is_active(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    del db_session, api_db_override
+    configure_realtime(monkeypatch)
+    monkeypatch.setenv("SELLER_CALLBACK_AGENT_PROVIDER", "elevenlabs")
+    get_settings.cache_clear()
+    rejected: list[tuple[str, int]] = []
+
+    class FakeRealtimeClient:
+        def __init__(self, settings: Settings) -> None:
+            del settings
+
+        async def accept(self, call_id: str, session: dict[str, Any]) -> None:
+            raise AssertionError((call_id, session))
+
+        async def reject(self, call_id: str, *, status_code: int = 480) -> None:
+            rejected.append((call_id, status_code))
+
+    monkeypatch.setattr(
+        openai_webhooks,
+        "unwrap_openai_webhook",
+        lambda body, headers, settings: incoming_event("rtc_inactive_provider"),
+    )
+    monkeypatch.setattr(openai_webhooks, "OpenAIRealtimeCallClient", FakeRealtimeClient)
+
+    response = TestClient(app).post(
+        "/api/v1/webhooks/openai/realtime",
+        content=b"{}",
+    )
+
+    assert response.status_code == 204
+    assert rejected == [("rtc_inactive_provider", 480)]

@@ -1814,7 +1814,7 @@ export function InboxWorkspace({
         <div className={styles.headerActions}>
           <Link className={styles.marinCallsLink} href="/os/inbox/marin-calls">
             <Bot size={16} aria-hidden="true" />
-            Marin calls
+            AI seller calls
           </Link>
           {canComposeGlobalEmail ? (
             <button
