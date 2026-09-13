@@ -132,6 +132,22 @@ async def elevenlabs_post_call(
     event_type = _optional_text(event.get("type"))
     try:
         if event_type == "post_call_transcription":
+            if _is_non_telephony_conversation(event):
+                data = event.get("data")
+                conversation_id = (
+                    _optional_text(data.get("conversation_id"))
+                    if isinstance(data, dict)
+                    else None
+                )
+                logger.info(
+                    "elevenlabs_post_call_ignored_non_telephony",
+                    conversation_id=conversation_id,
+                )
+                return {
+                    "received": True,
+                    "ignored": True,
+                    "reason": "non_telephony_conversation",
+                }
             registered = process_elevenlabs_transcription(db, event, settings)
             return {
                 "received": True,
@@ -156,6 +172,30 @@ async def elevenlabs_post_call(
             detail=str(exc),
         ) from exc
     return {"received": True, "ignored": True}
+
+
+def _is_non_telephony_conversation(event: dict[str, Any]) -> bool:
+    """Identify explicit browser previews before applying phone-call validation."""
+
+    data = event.get("data")
+    if not isinstance(data, dict):
+        return False
+    metadata = data.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    if isinstance(metadata.get("phone_call"), dict):
+        return False
+    initiation = data.get("conversation_initiation_client_data")
+    initiation = initiation if isinstance(initiation, dict) else {}
+    source_info = initiation.get("source_info")
+    source_info = source_info if isinstance(source_info, dict) else {}
+    dynamic = initiation.get("dynamic_variables")
+    dynamic = dynamic if isinstance(dynamic, dict) else {}
+    sources = {
+        _optional_text(metadata.get("conversation_initiation_source")),
+        _optional_text(source_info.get("source")),
+        _optional_text(dynamic.get("system__channel")),
+    }
+    return bool(sources & {"widget", "websocket"})
 
 
 def _require_elevenlabs_enabled(settings: Settings) -> None:

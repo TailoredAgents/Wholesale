@@ -277,6 +277,59 @@ def test_signed_post_call_saves_transcript_and_appears_in_call_review(
     assert dashboard.json()["items"][0]["transcript_turn_count"] == 2
 
 
+def test_signed_widget_preview_is_acknowledged_without_creating_a_call(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    del api_db_override
+    seed_foundation(db_session, monkeypatch)
+    client = TestClient(app)
+    timestamp = round(datetime.now(UTC).timestamp())
+    event: dict[str, object] = {
+        "type": "post_call_transcription",
+        "event_timestamp": timestamp,
+        "data": {
+            "agent_id": AGENT_ID,
+            "conversation_id": "conv_widget_preview_1",
+            "status": "done",
+            "metadata": {
+                "conversation_initiation_source": "widget",
+                "phone_call": None,
+            },
+            "conversation_initiation_client_data": {
+                "source_info": {"source": "widget"},
+                "dynamic_variables": {"system__channel": "widget"},
+            },
+            "transcript": [
+                {
+                    "role": "agent",
+                    "message": "Hi, thanks for calling Stonegate Home Buyers.",
+                }
+            ],
+        },
+    }
+    headers = signed_headers(event, timestamp=timestamp)
+    raw_body = headers.pop("X-Raw-Body")
+
+    response = client.post(
+        "/api/v1/webhooks/elevenlabs/post-call",
+        headers=headers,
+        content=raw_body,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "received": True,
+        "ignored": True,
+        "reason": "non_telephony_conversation",
+    }
+    assert (
+        db_session.scalar(select(func.count()).select_from(ProspectingInboundCallback)) == 0
+    )
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 0
+
+
 def test_signed_call_initiation_failure_is_saved_for_review(
     db_session: Session,
     api_db_override: None,
