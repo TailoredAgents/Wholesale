@@ -99,6 +99,11 @@
 .reminderForm label { display: grid; gap: 4px; }
 .reminderForm label > span { color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
 .reminderForm input { width: 100%; min-height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text); font: inherit; font-size: 11px; }
+.reminderForm .reminderSmsOption { grid-template-columns: auto 1fr; align-items: start; gap: 8px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 5px; background: var(--surface); cursor: pointer; }
+.reminderForm .reminderSmsOption > input { width: 15px; min-height: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--brand); }
+.reminderSmsOption > span { display: grid; gap: 2px; color: var(--text); font-size: 10px; text-transform: none; }
+.reminderSmsOption strong { font-size: 10px; }
+.reminderSmsOption small { color: var(--muted); font-size: 9px; font-weight: 500; line-height: 1.35; }
 .reminderForm > small { color: #795a16; font-size: 9px; line-height: 1.4; }
 .reminderPresets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
 .reminderPresets button { min-width: 0; padding-inline: 4px; }

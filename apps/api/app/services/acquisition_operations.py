@@ -85,6 +85,7 @@ from app.services.lead_lifecycle import (
 )
 from app.services.leads import get_lead_detail
 from app.services.property_validation import canonical_address_key
+from app.services.staff_lead_alerts import queue_staff_task_reminder_alert
 from app.services.tasks import supersede_open_primary_tasks
 
 OPERATIONAL_ROLE_KEYS = {
@@ -2324,34 +2325,41 @@ def process_next_acquisition_reminder(db: Session, _settings: Settings) -> UUID 
         overdue_task = locked_overdue_task
         assert overdue_task.responsible_user_id is not None
         dedupe_key = f"overdue-task:{overdue_task.id}"
-        if notification_exists(
+        notification_already_exists = notification_exists(
             db,
             overdue_task.organization_id,
             overdue_task.responsible_user_id,
             dedupe_key,
-        ):
-            continue
-        item = create_notification(
-            db,
-            organization_id=overdue_task.organization_id,
-            recipient_user_id=overdue_task.responsible_user_id,
-            notification_type="overdue_task",
-            title=(
-                "Reminder due"
-                if overdue_task.task_type == "follow_up"
-                else "Task due"
-            ),
-            body=overdue_task.title,
-            entity_type="task",
-            entity_id=overdue_task.id,
-            action_url=(
-                f"/os/leads/{overdue_task.lead_id}" if overdue_task.lead_id else "/os/tasks"
-            ),
-            dedupe_key=dedupe_key,
         )
-        if item is not None:
+        item = None
+        if not notification_already_exists:
+            item = create_notification(
+                db,
+                organization_id=overdue_task.organization_id,
+                recipient_user_id=overdue_task.responsible_user_id,
+                notification_type="overdue_task",
+                title=(
+                    "Reminder due"
+                    if overdue_task.task_type == "follow_up"
+                    else "Task due"
+                ),
+                body=overdue_task.title,
+                entity_type="task",
+                entity_id=overdue_task.id,
+                action_url=(
+                    f"/os/leads/{overdue_task.lead_id}"
+                    if overdue_task.lead_id
+                    else "/os/tasks"
+                ),
+                dedupe_key=dedupe_key,
+            )
+        sms_alert = queue_staff_task_reminder_alert(db, task=overdue_task)
+        if item is not None or sms_alert is not None:
             db.commit()
-            return item.id
+            if item is not None:
+                return item.id
+            if sms_alert is not None:
+                return sms_alert.id
     db.commit()
     return None
 

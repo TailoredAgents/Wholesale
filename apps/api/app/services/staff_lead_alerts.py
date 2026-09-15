@@ -19,6 +19,7 @@ from app.models.foundation import (
     Notification,
     Property,
     StaffLeadAlert,
+    Task,
     User,
     VoiceLine,
 )
@@ -30,6 +31,7 @@ STAFF_ALERT_RECOVERY_WINDOW = timedelta(hours=24)
 WEBSITE_STAGE_1_ALERT_SOURCE_TYPE = "website_form_stage_1"
 WEBSITE_STAGE_2_ALERT_SOURCE_TYPE = "website_form"
 WEBSITE_STAGE_ALERT_FLOW_VERSION = "website-staged-alerts-v1"
+TASK_REMINDER_ALERT_SOURCE_TYPE = "task_reminder"
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,71 @@ def _ready_staff_alert_recipients(
         missing_phone=missing_phone,
         invalid_phone=invalid_phone,
     )
+
+
+def queue_staff_task_reminder_alert(
+    db: Session,
+    *,
+    task: Task,
+) -> StaffLeadAlert | None:
+    """Queue one SMS for an explicitly opted-in manual reminder."""
+    if (
+        not task.sms_notification_enabled
+        or task.task_type != "follow_up"
+        or task.responsible_user_id is None
+    ):
+        return None
+    existing = db.scalar(
+        select(StaffLeadAlert).where(
+            StaffLeadAlert.organization_id == task.organization_id,
+            StaffLeadAlert.source_type == TASK_REMINDER_ALERT_SOURCE_TYPE,
+            StaffLeadAlert.source_event_id == task.id,
+            StaffLeadAlert.recipient_user_id == task.responsible_user_id,
+        )
+    )
+    if existing is not None:
+        return None
+    recipient = db.scalar(
+        select(User).where(
+            User.organization_id == task.organization_id,
+            User.id == task.responsible_user_id,
+            User.is_active.is_(True),
+        )
+    )
+    if recipient is None:
+        return None
+    phone = format_e164(recipient.voice_forwarding_number or "")
+    if phone is None:
+        return None
+    alert = StaffLeadAlert(
+        organization_id=task.organization_id,
+        meta_lead_event_id=None,
+        source_type=TASK_REMINDER_ALERT_SOURCE_TYPE,
+        source_event_id=task.id,
+        lead_id=task.lead_id,
+        conversation_id=None,
+        recipient_user_id=recipient.id,
+        recipient_phone=phone,
+        message_body=(
+            f"Stonegate reminder: {task.title}. "
+            f"Open: https://www.stonegatehb.com/os/leads/{task.lead_id}"
+            if task.lead_id is not None
+            else f"Stonegate reminder: {task.title}. Open: https://www.stonegatehb.com/os/tasks"
+        ),
+        status="pending",
+        attempt_count=0,
+        last_attempt_at=None,
+        next_attempt_at=None,
+        sent_at=None,
+        delivered_at=None,
+        provider=None,
+        provider_message_id=None,
+        provider_response=None,
+        last_error=None,
+    )
+    db.add(alert)
+    db.flush()
+    return alert
 
 
 def queue_staff_lead_alerts_for_lead(

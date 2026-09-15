@@ -1014,6 +1014,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 status=task.status,
                 priority=task.priority,
                 due_at=task.due_at,
+                sms_notification_enabled=task.sms_notification_enabled,
                 completed_at=task.completed_at,
             )
             for task in open_tasks
@@ -1784,18 +1785,37 @@ def create_lead_follow_up_task(
         return None
     require_lead_open_for_work(lead)
 
+    responsible_user_id = lead.assigned_user_id or principal.user_id
+    if payload.sms_notification_enabled:
+        responsible_user = db.scalar(
+            select(User).where(
+                User.organization_id == principal.organization_id,
+                User.id == responsible_user_id,
+                User.is_active.is_(True),
+            )
+        )
+        if (
+            responsible_user is None
+            or format_e164(responsible_user.voice_forwarding_number or "") is None
+        ):
+            raise ValueError(
+                "The assigned user needs a valid cellphone in Settings > Communications "
+                "before SMS reminders can be enabled."
+            )
+
     supersede_open_primary_tasks(db, lead_id=lead.id)
     task = Task(
         organization_id=principal.organization_id,
         lead_id=lead.id,
         deal_id=None,
-        responsible_user_id=lead.assigned_user_id or principal.user_id,
+        responsible_user_id=responsible_user_id,
         task_type="follow_up",
         work_kind="primary_next_action",
         title=payload.title,
         status="open",
         priority=payload.priority,
         due_at=payload.due_at,
+        sms_notification_enabled=payload.sms_notification_enabled,
         completed_at=None,
     )
     db.add(task)
@@ -1831,6 +1851,7 @@ def create_lead_follow_up_task(
                 "title": task.title,
                 "priority": task.priority,
                 "due_at": task.due_at.isoformat() if task.due_at else None,
+                "sms_notification_enabled": task.sms_notification_enabled,
             },
             reason="Manual lead follow-up task",
         )

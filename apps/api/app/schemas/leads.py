@@ -236,6 +236,7 @@ class LeadTaskRead(BaseModel):
     status: str
     priority: str
     due_at: datetime | None
+    sms_notification_enabled: bool
     completed_at: datetime | None
 
 
@@ -1164,6 +1165,7 @@ class LeadFollowUpTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     due_at: datetime
     priority: str = Field(default="normal", max_length=80)
+    sms_notification_enabled: bool = False
 
 
 class LeadCommunicationCreate(BaseModel):

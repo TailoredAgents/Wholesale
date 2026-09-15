@@ -81,6 +81,7 @@ export function LeadActionForm({ leadId }: { leadId: string }) {
           title: formString(formData, "title"),
           priority: formString(formData, "priority") || "normal",
           due_at: optionalDateTime(formData, "due_at"),
+          sms_notification_enabled: formData.get("sms_notification_enabled") === "on",
         }),
       });
 
@@ -134,6 +135,13 @@ export function LeadActionForm({ leadId }: { leadId: string }) {
             </select>
           </label>
         </div>
+        <label className={styles.smsReminderOption}>
+          <input name="sms_notification_enabled" type="checkbox" />
+          <span>
+            <strong>Text the assigned user when due</strong>
+            <small>Uses their cellphone saved under Settings &gt; Communications.</small>
+          </span>
+        </label>
         <button disabled={taskStatus === "saving"} type="submit">
           Create follow-up
         </button>

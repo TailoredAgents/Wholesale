@@ -17,7 +17,9 @@ A human task is appropriate when there is a concrete obligation, including:
 Creating or importing a seller lead does not create a reminder. New website and BatchDialer leads
 remain visible through their stage, qualification state, inbox activity, and new-lead alerts until
 a team member deliberately chooses **Set reminder**. A reminder can be set for any exact date and
-time, rescheduled, or marked done directly from Leads.
+time, rescheduled, or marked done directly from Leads. **Text the assigned user when due** is an
+optional per-reminder choice and stays off by default. When selected, Stonegate sends one internal
+SMS to that user's saved cellphone in addition to the normal in-app notification.
 
 Completing a primary next action requires an outcome so the history remains useful. Creating the
 next action is optional and must be selected deliberately. An active record may therefore have no

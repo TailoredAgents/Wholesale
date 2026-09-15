@@ -588,6 +588,7 @@ def _overview_context(
                 else None
             ),
             due_status=get_due_status(task, now),
+            sms_notification_enabled=task.sms_notification_enabled,
         )
         for deal_id, task in primary_task_by_deal.items()
     }

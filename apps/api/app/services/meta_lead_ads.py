@@ -664,6 +664,8 @@ def process_next_staff_lead_alert(
                     "purpose": (
                         "staff_inbound_sms_alert"
                         if alert.source_type == "inbound_sms"
+                        else "staff_task_reminder"
+                        if alert.source_type == "task_reminder"
                         else "staff_new_lead_alert"
                     ),
                     "source_type": alert.source_type,

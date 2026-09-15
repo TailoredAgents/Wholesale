@@ -15,10 +15,13 @@ from app.models.foundation import (
     Lead,
     LeadMergeEvent,
     Notification,
+    StaffLeadAlert,
     Task,
+    User,
 )
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.bootstrap import bootstrap_foundation
+from app.services.meta_lead_ads import process_next_staff_lead_alert
 
 OWNER_EMAIL = "owner@example.com"
 VA_EMAIL = "caller@example.com"
@@ -450,3 +453,74 @@ def test_worker_labels_a_manually_scheduled_follow_up_as_a_due_reminder(
     assert notification is not None
     assert notification.title == "Reminder due"
     assert notification.body == "Call the seller about the updated timeline"
+
+
+def test_manual_reminder_can_queue_one_sms_for_the_assigned_user(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+16785550123"
+    db_session.commit()
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead = create_lead(client, headers, "403 Text Reminder Ave")
+    response = client.post(
+        f"/api/v1/leads/{lead['id']}/tasks",
+        headers=headers,
+        json={
+            "title": "Call the seller about the six-month follow-up",
+            "due_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+            "priority": "normal",
+            "sms_notification_enabled": True,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["primary_next_action"]["sms_notification_enabled"] is True
+
+    notification_id = process_next_acquisition_reminder(db_session, get_settings())
+
+    assert notification_id is not None
+    alert = db_session.scalar(
+        select(StaffLeadAlert).where(StaffLeadAlert.source_type == "task_reminder")
+    )
+    assert alert is not None
+    assert alert.recipient_user_id == owner.id
+    assert alert.recipient_phone == "+16785550123"
+    assert alert.status == "pending"
+    assert "six-month follow-up" in alert.message_body
+    assert process_next_acquisition_reminder(db_session, get_settings()) is None
+
+    delivered_id = process_next_staff_lead_alert(
+        db_session,
+        get_settings().model_copy(update={"staff_lead_alert_sms_mode": "simulate"}),
+    )
+    assert delivered_id == alert.id
+    db_session.refresh(alert)
+    assert alert.status == "simulated"
+
+
+def test_manual_sms_reminder_requires_an_assigned_user_cellphone(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead = create_lead(client, headers, "404 Missing Cellphone Ave")
+
+    response = client.post(
+        f"/api/v1/leads/{lead['id']}/tasks",
+        headers=headers,
+        json={
+            "title": "Call the seller later",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "priority": "normal",
+            "sms_notification_enabled": True,
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "valid cellphone" in response.json()["detail"]

@@ -136,6 +136,7 @@ class PrimaryNextActionRead(BaseModel):
     responsible_user_id: UUID | None
     responsible_user_email: str | None
     due_status: str
+    sms_notification_enabled: bool
 
 
 class TaskRead(BaseModel):
@@ -148,6 +149,7 @@ class TaskRead(BaseModel):
     status: str
     priority: str
     due_at: datetime | None
+    sms_notification_enabled: bool
     completed_at: datetime | None
     completed_by_user_id: UUID | None
     outcome: str | None

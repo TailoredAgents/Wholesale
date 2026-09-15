@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Bell, Check, Clock3 } from "lucide-react";
+import { Bell, Check, Clock3, MessageSquareText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
@@ -53,6 +53,9 @@ export function LeadReminderControl({
   const [title, setTitle] = useState(
     reminder?.title ?? `Follow up with ${lead.seller_name}`,
   );
+  const [smsNotificationEnabled, setSmsNotificationEnabled] = useState(
+    reminder?.sms_notification_enabled ?? false,
+  );
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -63,6 +66,7 @@ export function LeadReminderControl({
         : suggestedDate(1),
     );
     setTitle(reminder?.title ?? `Follow up with ${lead.seller_name}`);
+    setSmsNotificationEnabled(reminder?.sms_notification_enabled ?? false);
     setNotice(null);
     setEditing(true);
   }
@@ -87,6 +91,7 @@ export function LeadReminderControl({
           title: title.trim() || `Follow up with ${lead.seller_name}`,
           due_at: new Date(dueAt).toISOString(),
           priority: "normal",
+          sms_notification_enabled: smsNotificationEnabled,
         }),
       });
       const body = await response.json().catch(() => null) as { detail?: unknown } | null;
@@ -149,6 +154,9 @@ export function LeadReminderControl({
             <div>
               <strong>{reminder.title}</strong>
               <span><Clock3 aria-hidden="true" size={13} />{formatDateTime(reminder.due_at)}</span>
+              {reminder.sms_notification_enabled ? (
+                <span><MessageSquareText aria-hidden="true" size={13} />SMS notification on</span>
+              ) : null}
             </div>
             {canEdit ? (
               <button disabled={busy} onClick={() => void completeReminder()} type="button">
@@ -186,6 +194,17 @@ export function LeadReminderControl({
               type="text"
               value={title}
             />
+          </label>
+          <label className={styles.reminderSmsOption}>
+            <input
+              checked={smsNotificationEnabled}
+              onChange={(event) => setSmsNotificationEnabled(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <strong>Text the assigned user when due</strong>
+              <small>Uses their cellphone saved under Settings &gt; Communications.</small>
+            </span>
           </label>
           {lead.primary_next_action && !reminder ? (
             <small>This replaces the current next action: {lead.primary_next_action.title}</small>

@@ -962,6 +962,7 @@ def get_primary_next_action(
         responsible_user_id=task.responsible_user_id,
         responsible_user_email=user.email if user else None,
         due_status=get_due_status(task, datetime.now(UTC)),
+        sms_notification_enabled=task.sms_notification_enabled,
     )
 
 
@@ -1022,6 +1023,7 @@ def task_to_read(task: Task) -> TaskRead:
         status=task.status,
         priority=task.priority,
         due_at=task.due_at,
+        sms_notification_enabled=task.sms_notification_enabled,
         completed_at=task.completed_at,
         completed_by_user_id=task.completed_by_user_id,
         outcome=task.outcome,

@@ -53,6 +53,9 @@ test("seller reminders are explicit, easy to schedule, and easy to finish", () =
   assert.match(leadsWorkspace, /lead=\{selectedLead\}/);
   assert.match(reminderControl, /Set reminder/);
   assert.match(reminderControl, />6 months</);
+  assert.match(reminderControl, /sms_notification_enabled: smsNotificationEnabled/);
+  assert.match(reminderControl, /Text the assigned user when due/);
+  assert.match(reminderControl, /SMS notification on/);
   assert.match(reminderControl, /\/api\/v1\/leads\/\$\{lead\.id\}\/tasks/);
   assert.match(reminderControl, /\/api\/v1\/tasks\/\$\{reminder\.task_id\}\/complete/);
   assert.match(reminderControl, />Done/);

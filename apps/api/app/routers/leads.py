@@ -283,7 +283,13 @@ def create_follow_up_task(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadDetail:
-    lead = create_lead_follow_up_task(db, principal, lead_id, payload)
+    try:
+        lead = create_lead_follow_up_task(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

@@ -89,6 +89,7 @@ export type LeadListItem = {
     responsible_user_id: string | null;
     responsible_user_email: string | null;
     due_status: string;
+    sms_notification_enabled: boolean;
   } | null;
   archived_at: string | null;
   close_out_disposition: "dead" | "disqualified" | null;
