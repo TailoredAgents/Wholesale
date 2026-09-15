@@ -1471,7 +1471,7 @@ function InvestorConversation({
         ))}</ol>
       ) : <p>No conversation has been recorded yet. Use the controls below to start one.</p>}
       <footer>
-        <span>Shared with the canonical buyer relationship and Inbox history.</span>
+        <span>Shared with the canonical buyer relationship and conversation history.</span>
       </footer>
     </section>
   );

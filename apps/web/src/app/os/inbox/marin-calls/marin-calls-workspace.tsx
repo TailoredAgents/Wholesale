@@ -519,7 +519,7 @@ export function MarinCallsWorkspace() {
         <div className={styles.headerActions}>
           <Link className={styles.secondaryAction} href="/os/inbox">
             <ArrowLeft size={16} aria-hidden="true" />
-            Inbox
+            Conversations
           </Link>
           <button
             className={styles.primaryAction}

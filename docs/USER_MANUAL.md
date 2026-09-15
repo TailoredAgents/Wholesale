@@ -326,7 +326,7 @@ primary workspaces. Recent destinations return to recently opened OS pages. On m
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
 
 Quick Dial is a deliberate manual-call workflow. If the outside number already belongs to a saved
-seller, buyer, or business contact, Stonegate reuses that Inbox relationship without requiring a
+seller, buyer, or business contact, Stonegate reuses that conversation relationship without requiring a
 separate recorded phone-permission field. An active phone or all-channel Do Not Call suppression
 still blocks the call.
 
@@ -335,7 +335,7 @@ still blocks the call.
 | Workspace | Route |
 | --- | --- |
 | Home | `/os` |
-| Inbox | `/os/inbox` |
+| Conversations | `/os/inbox` |
 | Tasks | `/os/tasks` |
 | Calendar | `/os/calendar` |
 | Prospecting | `/os/prospecting` |
@@ -1165,9 +1165,9 @@ See `LAND_ACQUISITION_OPERATIONS_PLAYBOOK.md` for the complete Land procedure an
 
 Copilot review does not automatically change lead fields or send the draft.
 
-## 5. Inbox And Communications
+## 5. Conversations And Communications
 
-Open **Inbox**. The three-panel layout is:
+Open **Conversations**. The three-panel layout is:
 
 - Left: conversation and mailbox views.
 - Middle: one chronological timeline and the channel composer.
@@ -1187,7 +1187,7 @@ Conversation views:
 Email mailbox groups appear below the general views when the employee can access them:
 
 - **My addresses:** named addresses owned by or granted to the employee.
-- **Team inboxes:** department or team addresses the employee may use.
+- **Team conversations:** department or team addresses the employee may use.
 - **Restricted:** private addresses such as accounting that require exact access.
 
 Composer modes:
@@ -1223,7 +1223,7 @@ copy. A message that contains only photos still appears in the timeline; it does
 caption. Non-browser photo formats appear as a secure downloadable attachment instead of a broken
 preview.
 
-MMS photos remain private to users who can open that Inbox conversation. Stonegate stores its own
+MMS photos remain private to users who can open that conversation. Stonegate stores its own
 copy rather than making the seller's Twilio media link public. After MMS support is deployed, the
 communications worker also attempts to restore photos from already-received Twilio MMS events when
 Twilio still retains the media, so the seller does not normally need to resend recent photos.
@@ -1235,11 +1235,11 @@ provider state.
 
 ### Record SMS Permission Obtained Elsewhere
 
-The Inbox right sidebar and the seller record's Contact panel show **SMS permission: Permissioned**
+The Conversations right sidebar and the seller record's Contact panel show **SMS permission: Permissioned**
 or **Not permissioned**. If the seller granted or withdrew permission outside the website form, an
 authorized employee can document it without creating a second lead:
 
-1. Open the seller in **Inbox** or open the full seller record.
+1. Open the seller in **Conversations** or open the full seller record.
 2. In the Contact panel, expand **Edit SMS permission**.
 3. Choose **Permissioned** or **Not permissioned**.
 4. Choose where the decision came from: phone call, in person, Facebook, seller text, written form,
@@ -1273,8 +1273,8 @@ Replying or otherwise resolving the wait state clears the associated response al
 
 ### Handle An Incoming Text
 
-An incoming seller or buyer text is saved in Inbox immediately and marks the thread unread and
-needing a reply. Stonegate also sends a minimal alert with an Inbox link to every active employee
+An incoming seller or buyer text is saved in Conversations immediately and marks the thread unread and
+needing a reply. Stonegate also sends a minimal alert with a Conversations link to every active employee
 who has **Settings > Communications > Text all inbound messages** enabled and a valid cellphone.
 Open the link and reply from Stonegate; do not reply to the personal-phone alert.
 
@@ -1308,7 +1308,7 @@ delivered, bounced, complained, failed, or suppressed state when shown.
 Use **Compose** when Stonegate needs to email a closing contact, buyer, vendor, contractor, or
 other person without an existing conversation. Do not create a fake property lead.
 
-1. Select **Compose** in the Inbox header.
+1. Select **Compose** in the Conversations header.
 2. Select the correct **From** address.
 3. Enter one or more **To** addresses separated by commas or semicolons.
 4. After entering at least two characters, select a known Stonegate contact suggestion when it
@@ -1321,7 +1321,7 @@ other person without an existing conversation. Do not create a fake property lea
 10. Add attachments.
 11. Select **Send** once.
 
-Stonegate creates a general company conversation and opens it in Inbox. Future replies should
+Stonegate creates a general company conversation and opens it in Conversations. Future replies should
 return to that thread through the selected receiving alias. General conversations support email
 only until they are deliberately connected to another business context.
 
@@ -1335,9 +1335,9 @@ right panel:
   keeps the complete email thread on the new lead, creates the first follow-up task, and queues AI
   preparation and property research.
 - **Link to existing lead:** select the seller already in Stonegate. The messages, attachments,
-  and sender email are merged into that seller's canonical Inbox thread.
+  and sender email are merged into that seller's canonical conversation thread.
 - **Mark non-lead and archive:** classify vendor, administrative, spam, or other handled mail and
-  remove it from active Inbox views without deleting it.
+  remove it from active Conversations views without deleting it.
 
 Use **Archived** to review retained mail. Select **Restore to inbox** when a general conversation
 was classified incorrectly. Do not convert receipts, account notices, vendors, or unsolicited

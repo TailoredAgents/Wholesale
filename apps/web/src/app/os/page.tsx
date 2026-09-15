@@ -182,7 +182,7 @@ export default async function Home() {
       <PageHeader
         actions={
           <div className={styles.headerActions}>
-            <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Inbox</Link>
+            <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Conversations</Link>
             <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Tasks</Link>
             <Link href="/os/calendar"><CalendarDays aria-hidden="true" size={16} />Calendar</Link>
             {executiveCopilot ? (

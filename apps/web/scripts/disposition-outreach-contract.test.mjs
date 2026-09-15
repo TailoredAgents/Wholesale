@@ -134,11 +134,11 @@ test("company roles can view dispositions while outreach management remains sepa
   );
 });
 
-test("delivery monitoring links to the canonical Buyer Inbox when available", () => {
+test("delivery monitoring links to the canonical buyer conversation when available", () => {
   assert.match(api, /conversation_id: string \| null/);
   assert.match(outreach, /\/os\/inbox\?conversation=/);
   assert.match(outreach, /\/os\/buyers\?buyer=/);
-  assert.match(outreach, /Open Buyer Inbox/);
+  assert.match(outreach, /Open buyer conversation/);
   assert.match(outreach, /delivery_counts/);
   assert.match(outreach, /Revision history/);
 });

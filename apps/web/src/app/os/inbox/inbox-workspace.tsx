@@ -1806,8 +1806,8 @@ export function InboxWorkspace({
       <div className={styles.inboxPage}>
         <header className={styles.pageHeader}>
         <div>
-          <p className={styles.eyebrow}>Seller communications</p>
-          <h1>Inbox</h1>
+          <p className={styles.eyebrow}>Company communications</p>
+          <h1>Conversations</h1>
           <span className={styles.headerSummary}>
             {counts.needs_reply} need reply · {counts.overdue} overdue · {counts.unread} unread
           </span>
@@ -1878,14 +1878,14 @@ export function InboxWorkspace({
           </div>
         ) : null}
 
-        <nav className={styles.mobilePaneNav} aria-label="Inbox panes">
+        <nav className={styles.mobilePaneNav} aria-label="Conversation panes">
         <button
           className={mobilePane === "conversations" ? styles.activeMobilePane : undefined}
           onClick={() => setMobilePane("conversations")}
           type="button"
         >
           <Inbox size={16} aria-hidden="true" />
-          Inbox
+          Conversations
         </button>
         <button
           className={mobilePane === "thread" ? styles.activeMobilePane : undefined}
@@ -1909,7 +1909,7 @@ export function InboxWorkspace({
 
         <section
           className={styles.inboxFrame}
-          aria-label="Shared conversation inbox"
+          aria-label="Shared conversations"
           data-detail-open={detailPaneOpen}
         >
         <aside
@@ -1940,9 +1940,9 @@ export function InboxWorkspace({
               );
             })}
             <label className={styles.secondaryFilterSelect}>
-              <span className={styles.visuallyHidden}>More inbox views</span>
+              <span className={styles.visuallyHidden}>More conversation views</span>
               <select
-                aria-label="More inbox views"
+                aria-label="More conversation views"
                 onChange={(event) => {
                   if (!event.target.value) return;
                   setMailboxAliasId(null);
@@ -1965,7 +1965,7 @@ export function InboxWorkspace({
               {(
                 [
                   ["My addresses", mailboxGroups.mine],
-                  ["Team inboxes", mailboxGroups.team],
+                  ["Team conversations", mailboxGroups.team],
                   ["Restricted", mailboxGroups.restricted],
                 ] as const
               ).map(([label, aliases]) =>

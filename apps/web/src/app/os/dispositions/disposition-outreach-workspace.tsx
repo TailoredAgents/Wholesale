@@ -127,7 +127,7 @@ function DeliveryCard({ delivery }: { delivery: DispositionOutreachDelivery }) {
       </dl>
       {delivery.exclusion_reason ? <p className={styles.deliveryError}>{delivery.exclusion_reason}</p> : null}
       <Link href={deliveryLink(delivery)}>
-        {delivery.conversation_id ? "Open Buyer Inbox" : "Open buyer record"}
+        {delivery.conversation_id ? "Open buyer conversation" : "Open buyer record"}
         <ExternalLink aria-hidden="true" size={13} />
       </Link>
     </article>

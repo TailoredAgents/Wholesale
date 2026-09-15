@@ -2,7 +2,7 @@
 
 Status: Active
 
-Revised: September 7, 2026
+Revised: September 15, 2026
 
 Navigation decision: [CRM_NAVIGATION_MODEL_DECISION.md](CRM_NAVIGATION_MODEL_DECISION.md)
 
@@ -105,7 +105,7 @@ Deliverables:
 
 Owner: Codex
 
-Status: In progress — global shell and Home complete
+Status: In progress — global shell and Home complete; navigation foundation shipped
 
 Before modifying a major page, Codex will define its target blueprint:
 
@@ -138,7 +138,7 @@ Phase exit condition: The selected page has a coherent target state before imple
 
 Owner: Codex
 
-Status: Pending
+Status: In progress — first structural slice defined
 
 Codex will turn the target architecture and blueprints into small, dependency-aware slices. Each slice must:
 
@@ -161,11 +161,24 @@ Highest-value structural candidates currently are:
 
 These are candidates until Phase 4 determines exact scope.
 
+### First structural slice — September 15, 2026
+
+The first rollback-safe navigation slice establishes the approved company map without changing
+permissions, records, or bookmarked URLs:
+
+- **Inbox** is now presented to employees as **Conversations** while `/os/inbox` remains stable.
+- The broad **Operations** section is split into **CRM** and **Outreach**.
+- **CRM** contains Leads, Deals, and Buyers during the transition to a unified Contacts directory.
+- **Outreach** contains Prospecting and Dispositions.
+- Work, Business, and Administration keep their existing responsibilities.
+- Tasks and Buyers remain visible until their replacement experiences are complete; this slice
+  does not remove a working destination before its successor exists.
+
 ## Phase 6 - Focused implementation
 
 Owner: Codex
 
-Status: Pending
+Status: In progress — navigation foundation implemented
 
 For each approved slice, Codex will:
 

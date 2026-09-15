@@ -1,6 +1,6 @@
 # Global Shell and Home Blueprint
 
-Status: Approved target for future implementation; design only
+Status: Approved target; navigation foundation in implementation
 
 Blueprint date: September 7, 2026
 
@@ -25,7 +25,9 @@ Stonegate should use one stable operating shell and one clear starting page:
 
 Tasks remain durable records, but employees should not need a separate top-level Tasks concept to determine what to do. Home becomes the workbench over those tasks, approvals, replies, and operational exceptions.
 
-This blueprint does not authorize product code changes. It fixes the target behavior before implementation begins.
+This blueprint fixes the target behavior before each implementation slice begins. The first
+navigation slice is now active: employees see **Conversations**, **CRM**, and **Outreach** while
+existing routes and access rules remain intact.
 
 ## Scope
 

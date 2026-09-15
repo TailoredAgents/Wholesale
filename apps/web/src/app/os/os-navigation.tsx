@@ -29,7 +29,7 @@ export type OsNavItem = {
 };
 
 export type OsNavGroup = {
-  label: "Work" | "Operations" | "Business" | "Administration";
+  label: "Work" | "CRM" | "Outreach" | "Business" | "Administration";
   items: OsNavItem[];
 };
 
@@ -75,7 +75,7 @@ export const osNavGroups: OsNavGroup[] = [
       },
       {
         href: "/os/inbox",
-        label: "Inbox",
+        label: "Conversations",
         icon: Inbox,
         roles: workRoles,
         anyPermissions: [
@@ -114,26 +114,8 @@ export const osNavGroups: OsNavGroup[] = [
     ],
   },
   {
-    label: "Operations",
+    label: "CRM",
     items: [
-      {
-        href: "/os/prospecting",
-        label: "Prospecting",
-        icon: PhoneCall,
-        roles: [
-          "administrator",
-          "acquisition_manager",
-          "operations_assistant",
-          "prospecting_caller",
-          "marketing_manager",
-        ],
-        anyPermissions: [
-          "operations:manage",
-          "calling_lists:work_assigned",
-          "communications:send_bulk",
-        ],
-        activePaths: ["/os/campaigns"],
-      },
       {
         href: "/os/leads",
         label: "Leads",
@@ -141,19 +123,6 @@ export const osNavGroups: OsNavGroup[] = [
         roles: ["administrator", "operations_assistant", ...acquisitionRoles],
         anyPermissions: ["leads:view", "leads:view_assigned"],
         activePaths: ["/os/lead-manager", "/os/pipeline", "/os/underwriting"],
-      },
-      {
-        href: "/os/deals?view=disposition&scope=team",
-        label: "Dispositions",
-        icon: Megaphone,
-        roles: [],
-        anyPermissions: [],
-        allPermissions: ["dispositions:view"],
-        activeHrefs: [
-          "/os/deals?view=disposition",
-          "/os/deals?tab=disposition",
-        ],
-        activePaths: ["/os/dispositions"],
       },
       {
         href: "/os/deals",
@@ -178,6 +147,42 @@ export const osNavGroups: OsNavGroup[] = [
         icon: Building2,
         roles: ["administrator", "operations_assistant", ...dispositionRoles],
         anyPermissions: ["buyers:view"],
+      },
+    ],
+  },
+  {
+    label: "Outreach",
+    items: [
+      {
+        href: "/os/prospecting",
+        label: "Prospecting",
+        icon: PhoneCall,
+        roles: [
+          "administrator",
+          "acquisition_manager",
+          "operations_assistant",
+          "prospecting_caller",
+          "marketing_manager",
+        ],
+        anyPermissions: [
+          "operations:manage",
+          "calling_lists:work_assigned",
+          "communications:send_bulk",
+        ],
+        activePaths: ["/os/campaigns"],
+      },
+      {
+        href: "/os/deals?view=disposition&scope=team",
+        label: "Dispositions",
+        icon: Megaphone,
+        roles: [],
+        anyPermissions: [],
+        allPermissions: ["dispositions:view"],
+        activeHrefs: [
+          "/os/deals?view=disposition",
+          "/os/deals?tab=disposition",
+        ],
+        activePaths: ["/os/dispositions"],
       },
     ],
   },

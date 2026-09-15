@@ -1,6 +1,9 @@
 # Stonegate Lead Manager User Manual
 
-Last verified: August 2, 2026
+Last verified: September 15, 2026
+
+Navigation note: the communication workspace formerly labeled **Inbox** is now **Conversations**.
+The `/os/inbox` route and all existing conversation history remain unchanged.
 
 ## Who This Guide Is For
 
@@ -10,7 +13,7 @@ seller needs, deciding the correct next step, and scheduling qualified appointme
 You do not need technical knowledge to use Stonegate. The instructions below use the same names
 that appear on the screen.
 
-This is the short daily guide for the Lead Manager role. Use `USER_MANUAL.md` for complete Inbox,
+This is the short daily guide for the Lead Manager role. Use `USER_MANUAL.md` for complete Conversations,
 Calendar, administration, provider-status, and troubleshooting instructions.
 
 ## Your Job In One Sentence

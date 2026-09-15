@@ -227,7 +227,7 @@ export function GlobalEmailCompose({
       try {
         await onSent(result.conversation_id);
       } catch {
-        setError("Email sent, but the Inbox could not refresh. Close this window and refresh.");
+        setError("Email sent, but Conversations could not refresh. Close this window and refresh.");
       }
     } catch (submitError) {
       setStatus("idle");

@@ -1,6 +1,9 @@
 # Stonegate Staff Role Manuals
 
-Last verified: September 1, 2026
+Last verified: September 15, 2026
+
+Navigation note: the communication workspace formerly labeled **Inbox** is now **Conversations**.
+The `/os/inbox` route and all existing conversation history remain unchanged.
 
 ## How To Use This Guide
 

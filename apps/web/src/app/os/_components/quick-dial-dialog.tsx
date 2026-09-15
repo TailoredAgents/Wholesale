@@ -404,7 +404,7 @@ export function QuickDialDialog({
               {webPhone.incomingEnabled
                 ? "This browser will ring with your configured Stonegate cellphone. First answer wins."
                 : "Turn on incoming calls to answer Stonegate callbacks here while this OS tab stays open."}
-              {" "}A matching contact is reused; otherwise a business contact is created and the call is saved in Inbox.
+              {" "}A matching contact is reused; otherwise a business contact is created and the call is saved in Conversations.
             </p>
             <button
               aria-pressed={webPhone.incomingEnabled}

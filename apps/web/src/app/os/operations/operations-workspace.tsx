@@ -589,7 +589,7 @@ export function OperationsWorkspace({
             ) : null}
             <form className={styles.inlineForm} onSubmit={submitSavedView}>
               <label><span>Saved view name</span><input name="name" required placeholder="My scheduled visits" /></label>
-              <label><span>View</span><select name="resource_type"><option value="appointments">Appointments</option><option value="calling_lists">Calling lists</option><option value="leads">Leads</option><option value="inbox">Inbox</option></select></label>
+              <label><span>View</span><select name="resource_type"><option value="appointments">Appointments</option><option value="calling_lists">Calling lists</option><option value="leads">Leads</option><option value="inbox">Conversations</option></select></label>
               <button type="submit">Save view</button>
             </form>
           </div>

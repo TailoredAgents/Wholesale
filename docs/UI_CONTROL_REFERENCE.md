@@ -76,7 +76,7 @@ is relevant and the required permission is present.
 | Workspace | Typical authorized roles | Permission signal |
 | --- | --- | --- |
 | Home | Administrator, Operations Assistant, Lead Manager, Acquisitions, Dispositions, Finance, Marketing | Relevant role permission |
-| Inbox | Operations Assistant, Lead Manager, Acquisitions | `communications:view_conversations` |
+| Conversations | Operations Assistant, Lead Manager, Acquisitions | `communications:view_conversations` |
 | Tasks | Administrator, Operations Assistant, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
 | Calendar | Operations Assistant, Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
 | Prospecting | Operations Assistant, Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned`; Analytics requires `operations:manage`; native Dialer Control and Pilot Acceptance are dormant |
@@ -331,15 +331,15 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Table / Board | Changes display while preserving saved view, search, owner, and selected seller | Board mode clears a single-stage filter so the complete pipeline can accept moves |
 | Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
 | Seller row | Selects the local seller preview | Does not edit the lead |
-| Primary next-action link | Opens Lead Queue, Inbox, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
-| **Conversation** | Opens Inbox on this seller | Requires conversation access; absent for an address-only record until contact details are completed |
+| Primary next-action link | Opens Lead Queue, Conversations, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
+| **Conversation** | Opens Conversations on this seller | Requires conversation access; absent for an address-only record until contact details are completed |
 | **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
 | **Close out lead** | Opens the business close-out dialog | Active leads only; requires `leads:edit` |
 | Dead / Disqualified | Records why routine seller work should end | One disposition is required |
 | Close-out reason | Preserves the business reason in activity and audit history | At least 10 characters required |
-| Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes the Lead Queue case and Inbox conversation; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
+| Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes the Lead Queue case and conversation; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
 | Closed Leads link | Opens dead and disqualified seller opportunities | Requires lead visibility |
 | Archived Leads link | Opens confirmed duplicate and test records | Requires lifecycle visibility; Administrative archive is not a business disposition |
 
@@ -352,7 +352,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | **Reopen lead** | Opens the controlled reactivation dialog | Requires `leads:edit` |
 | Reason for reopening | Records why seller work should resume | At least 10 characters required |
 | Next action / Next action due | Creates one new primary follow-up task and returns the seller to active Leads | A future due date and clear title are required |
-| Inbound seller email, SMS, or call | Automatically reopens a closed lead, restores the Inbox route, and creates urgent response work | Genuine inbound contact only; SMS opt-out keywords do not reopen the lead |
+| Inbound seller email, SMS, or call | Automatically reopens a closed lead, restores the Conversations route, and creates urgent response work | Genuine inbound contact only; SMS opt-out keywords do not reopen the lead |
 
 ## Archived Leads
 
@@ -382,7 +382,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | **Under Contract - record signed agreement** | Opens the exact executed-contract upload instead of applying a label-only stage mutation | House and Land; requires `contracts:record_executed` or legacy-compatible `contracts:modify`, no conflicting executed workflow, and the evidence described under Contract Tab |
 | Saving / result notice | Shows the in-progress move and its success or failure | A rejected or stale move restores the prior column and refreshes current server state |
 | Card action | Opens the recommended workspace for current operating status | Navigation only |
-| Conversation | Opens Inbox for the lead | Requires conversation access |
+| Conversation | Opens Conversations for the lead | Requires conversation access |
 | Full record | Opens the complete lead record | Requires lead access |
 | Close pipeline context | Closes the mobile detail drawer | Mobile only |
 
@@ -418,7 +418,7 @@ plans in **Settings > Workflows**.
 | Needs attention | Lists operational notifications | Read-only until a notification is selected |
 | **Mark read** | Records the notification as read | Hidden after it has been read |
 | Saved view name | Names a reusable Operations view | Required to save |
-| View | Selects Appointments, Calling lists, Leads, or Inbox as the destination | Required |
+| View | Selects Appointments, Calling lists, Leads, or Conversations as the destination | Required |
 | **Save view** | Creates the reusable view | Requires a name and view |
 
 ### Markets And Campaigns Tab
@@ -818,13 +818,13 @@ Lead Queue views are **Copilot**, **Today**, **Qualification**, **Performance**,
 | Qualification standards | Shows version history and current status | Read-only |
 | **Approve** | Activates a draft standard | Manager only |
 
-## Inbox
+## Conversations
 
-The Inbox is the communications workspace. It combines SMS, email, calls, recordings,
+Conversations is the communications workspace. It combines SMS, email, calls, recordings,
 transcripts, internal notes, assignment, and AI call notes without splitting the seller
 history into separate channel threads.
 
-### Inbox Navigation And Filters
+### Conversation Navigation And Filters
 
 | Control | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -835,14 +835,14 @@ history into separate channel threads.
 | **Appointments** | Shows conversations linked to scheduled appointments | Read-only filter |
 | **Unread** | Shows conversations with unread activity | Read-only filter |
 | Mailbox group: **My addresses** | Filters email conversations sent to an address assigned to the user | Requires an active sender assignment |
-| Mailbox group: **Team inboxes** | Filters email routed to a shared team address | Requires team mailbox access |
+| Mailbox group: **Team conversations** | Filters email routed to a shared team address | Requires team mailbox access |
 | Mailbox group: **Restricted** | Shows restricted correspondence only to authorized roles | Hidden without permission |
 | Search | Finds a conversation by seller, property, phone, email, or message context | Searches visible records only |
 | Conversation row | Opens the unified timeline and seller detail panel | Requires conversation access |
 | Right-panel **SMS permission** | Shows **Permissioned** or **Not permissioned** for the selected seller | Read-only status is visible with the seller context; editing requires lead-edit or SMS-send authority |
 | **Compose** | Opens the global email composer without requiring a property lead | Requires outbound email permission and an active sender |
-| **Refresh** | Reloads conversation and provider status | Available while Inbox is open |
-| Mobile **Inbox / Thread / Details** | Changes the active pane on narrow screens | Mobile layout only |
+| **Refresh** | Reloads conversation and provider status | Available while Conversations is open |
+| Mobile **Conversations / Thread / Details** | Changes the active pane on narrow screens | Mobile layout only |
 
 ### Unified Timeline
 
@@ -884,7 +884,7 @@ history into separate channel threads.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **SMS permission: Permissioned / Not permissioned** | Shows the latest recorded seller SMS decision in the Inbox right sidebar and seller-record Contact panel | A missing or revoked record remains **Not permissioned** |
+| **SMS permission: Permissioned / Not permissioned** | Shows the latest recorded seller SMS decision in the Conversations right sidebar and seller-record Contact panel | A missing or revoked record remains **Not permissioned** |
 | **Edit SMS permission** | Opens the staff documentation form | Available to authorized lead-edit or SMS-send staff while the lead is open |
 | Status | Records a new permission grant or revocation | Appends a new record; it does not rewrite prior evidence |
 | Where was this decision confirmed? | Identifies phone call, in person, Facebook, seller text, written form, or another documented source | Required for every staff-recorded change |
@@ -916,7 +916,7 @@ separate eligibility controls.
 | **Incoming on** / green ready dot | Confirms this browser is registered; selecting it turns browser ringing off | Reloading, closing the tab, signing out, or selecting the control turns it off without changing cellphone forwarding |
 | **Answer incoming call** | Answers the displayed seller, buyer, or business caller in the browser | Appears only while an inbound browser call is ringing |
 | **Decline incoming call** | Declines only this browser leg; another configured browser or cellphone may still answer | Appears only while an inbound browser call is ringing |
-| **Call in browser** | Places a deliberate manual call from the authorized Stonegate line and records or reuses its Inbox thread | Requires a valid outside number, microphone permission, and available Twilio browser Voice; recorded permission is advisory, while an active Do Not Call suppression still blocks the call |
+| **Call in browser** | Places a deliberate manual call from the authorized Stonegate line and records or reuses its conversation thread | Requires a valid outside number, microphone permission, and available Twilio browser Voice; recorded permission is advisory, while an active Do Not Call suppression still blocks the call |
 | Call-quality notice | Warns when the live browser connection is degraded and confirms when it recovers | Check the internet connection or headset if the warning remains visible |
 | Final call result | Shows completed, busy, no answer, canceled, or failed from Stonegate's saved provider result | May update briefly after browser audio closes while the final signed Twilio callback arrives |
 

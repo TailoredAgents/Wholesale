@@ -1,6 +1,7 @@
 export const targetGroups = [
   { id: "work", label: "Work" },
-  { id: "operations", label: "Operations" },
+  { id: "crm", label: "CRM" },
+  { id: "outreach", label: "Outreach" },
   { id: "business", label: "Business" },
   { id: "administration", label: "Administration" },
 ];
@@ -15,7 +16,7 @@ export const targetDestinations = [
   },
   {
     id: "inbox",
-    label: "Inbox",
+    label: "Conversations",
     group: "work",
     canonicalRoute: "/os/inbox",
     anyPermissions: [
@@ -48,40 +49,40 @@ export const targetDestinations = [
     ],
   },
   {
-    id: "prospecting",
-    label: "Prospecting",
-    group: "operations",
-    canonicalRoute: "/os/prospecting",
-    anyPermissions: ["operations:manage", "calling_lists:work_assigned"],
-  },
-  {
     id: "seller-leads",
     label: "Leads",
-    group: "operations",
+    group: "crm",
     canonicalRoute: "/os/leads",
     anyPermissions: ["leads:view", "leads:view_assigned"],
   },
   {
-    id: "dispositions",
-    label: "Dispositions",
-    group: "operations",
-    canonicalRoute: "/os/deals?view=disposition&scope=team",
-    anyPermissions: [],
-    allPermissions: ["dispositions:view"],
-  },
-  {
     id: "deals",
     label: "Deals",
-    group: "operations",
+    group: "crm",
     canonicalRoute: "/os/deals",
     anyPermissions: ["deals:view"],
   },
   {
     id: "buyers",
     label: "Buyers",
-    group: "operations",
+    group: "crm",
     canonicalRoute: "/os/buyers",
     anyPermissions: ["buyers:view"],
+  },
+  {
+    id: "prospecting",
+    label: "Prospecting",
+    group: "outreach",
+    canonicalRoute: "/os/prospecting",
+    anyPermissions: ["operations:manage", "calling_lists:work_assigned"],
+  },
+  {
+    id: "dispositions",
+    label: "Dispositions",
+    group: "outreach",
+    canonicalRoute: "/os/deals?view=disposition&scope=team",
+    anyPermissions: [],
+    allPermissions: ["dispositions:view"],
   },
   {
     id: "finance",
@@ -145,11 +146,11 @@ export const targetRoleExperiences = [
       "inbox",
       "tasks",
       "calendar",
-      "prospecting",
       "seller-leads",
-      "dispositions",
       "deals",
       "buyers",
+      "prospecting",
+      "dispositions",
       "marketing",
       "settings",
     ],
@@ -162,22 +163,22 @@ export const targetRoleExperiences = [
       "inbox",
       "tasks",
       "calendar",
-      "prospecting",
       "seller-leads",
-      "dispositions",
       "deals",
       "buyers",
+      "prospecting",
+      "dispositions",
     ],
   },
   {
     role: "acquisition_manager",
     defaultRoute: "/os/leads?view=queue",
-    destinations: ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "dispositions"],
+    destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "prospecting", "dispositions"],
   },
   {
     role: "acquisition_rep",
     defaultRoute: "/os/calendar?view=day",
-    destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "dispositions", "deals"],
+    destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "deals", "dispositions"],
   },
   {
     role: "prospecting_caller",
@@ -187,17 +188,17 @@ export const targetRoleExperiences = [
   {
     role: "disposition_manager",
     defaultRoute: "/os/deals?view=disposition",
-    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals", "buyers"],
+    destinations: ["home", "inbox", "tasks", "calendar", "deals", "buyers", "dispositions"],
   },
   {
     role: "disposition_rep",
     defaultRoute: "/os/deals?view=disposition",
-    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals", "buyers"],
+    destinations: ["home", "inbox", "tasks", "calendar", "deals", "buyers", "dispositions"],
   },
   {
     role: "transaction_coordinator",
     defaultRoute: "/os/deals?view=closing-exceptions",
-    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals"],
+    destinations: ["home", "inbox", "tasks", "calendar", "deals", "dispositions"],
   },
   {
     role: "marketing_manager",
@@ -207,17 +208,17 @@ export const targetRoleExperiences = [
   {
     role: "finance_accounting",
     defaultRoute: "/os/finance",
-    destinations: ["home", "inbox", "tasks", "calendar", "dispositions", "deals", "finance"],
+    destinations: ["home", "inbox", "tasks", "calendar", "deals", "dispositions", "finance"],
   },
   {
     role: "read_only_partner",
     defaultRoute: "/os/deals",
-    destinations: ["dispositions", "deals"],
+    destinations: ["deals", "dispositions"],
   },
   {
     role: "restricted_vendor",
     defaultRoute: "/os/deals",
-    destinations: ["dispositions", "deals"],
+    destinations: ["deals", "dispositions"],
   },
   {
     role: "ai_service",
@@ -250,7 +251,7 @@ export const currentRouteInventory = [
       { name: "manage", status: "consumed" },
       { name: "view", status: "consumed" },
     ],
-    helpSections: ["Inbox"],
+    helpSections: ["Conversations"],
     baselinePath: "/os/inbox",
   },
   {
@@ -260,7 +261,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/inbox/marin-calls",
     migration: "keep",
     queryParameters: [],
-    helpSections: ["Inbox"],
+    helpSections: ["Conversations"],
     baselinePath: "/os/inbox/marin-calls",
   },
   {
@@ -582,7 +583,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/settings/communications",
     migration: "ia3-owned-section",
     queryParameters: [],
-    helpSections: ["Inbox"],
+    helpSections: ["Conversations"],
     baselinePath: "/os/settings/communications",
   },
   {
@@ -848,6 +849,7 @@ export const roleInventory = targetRoleExperiences.map((experience) => experienc
 
 export const vocabulary = [
   { current: "Dashboard", target: "Home" },
+  { current: "Inbox", target: "Conversations" },
   { current: "Work Queue", target: "Tasks" },
   { current: "Campaigns", target: "Prospecting > Campaigns" },
   { current: "Lead Desk", target: "Leads > Needs Qualification" },
@@ -881,7 +883,7 @@ export const controlReferenceSections = [
   { heading: "Prospecting Analytics", owner: "prospecting" },
   { heading: "Historical Prospecting Pilot Acceptance — Dormant", owner: "prospecting" },
   { heading: "Leads: Lead Queue", owner: "seller-leads" },
-  { heading: "Inbox", owner: "inbox" },
+  { heading: "Conversations", owner: "inbox" },
   { heading: "Appointment Workspace", owner: "calendar" },
   { heading: "Seller Record", owner: "seller-leads" },
   { heading: "Valuation And Offer", owner: "seller-leads" },

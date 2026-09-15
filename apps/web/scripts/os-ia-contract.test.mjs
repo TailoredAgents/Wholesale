@@ -113,7 +113,7 @@ test("target navigation contains exactly 12 unique destinations in approved grou
   assert.ok(unique(targetDestinations.map((destination) => destination.canonicalRoute)));
   assert.deepEqual(
     targetGroups.map((group) => group.id),
-    ["work", "operations", "business", "administration"],
+    ["work", "crm", "outreach", "business", "administration"],
   );
   const groupIds = new Set(targetGroups.map((group) => group.id));
   for (const destination of targetDestinations) {
@@ -145,7 +145,7 @@ test("target role visibility is complete, bounded, and least-privilege for servi
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "operations_assistant")
       ?.destinations,
-    ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads", "dispositions", "deals", "buyers"],
+    ["home", "inbox", "tasks", "calendar", "seller-leads", "deals", "buyers", "prospecting", "dispositions"],
   );
   assert.deepEqual(
     targetRoleExperiences.find((experience) => experience.role === "ai_service")?.destinations,
@@ -186,6 +186,33 @@ test("live primary navigation matches the approved 12-destination target", () =>
     (item) => `${item.canonicalRoute}|${item.label}`,
   );
   assert.deepEqual(sorted(contractItems), sorted(sourceItems));
+  const sourceGroups = [...primarySource.matchAll(
+    /label:\s*"([^"]+)",\s+items:\s*\[([\s\S]*?)\r?\n    \],\r?\n  \},/g,
+  )].map((match) => ({
+    label: match[1],
+    items: [...match[2].matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g)]
+      .map((item) => `${item[1]}|${item[2]}`),
+  }));
+  assert.deepEqual(
+    sourceGroups.map((group) => group.label),
+    targetGroups.map((group) => group.label),
+  );
+  for (const group of targetGroups) {
+    assert.deepEqual(
+      sourceGroups.find((candidate) => candidate.label === group.label)?.items,
+      targetDestinations
+        .filter((destination) => destination.group === group.id)
+        .map((destination) => `${destination.canonicalRoute}|${destination.label}`),
+    );
+  }
+  assert.equal(
+    targetDestinations.find((item) => item.id === "inbox")?.label,
+    "Conversations",
+  );
+  assert.equal(
+    targetDestinations.find((item) => item.id === "inbox")?.canonicalRoute,
+    "/os/inbox",
+  );
   for (const item of targetDestinations) {
     assert.ok(routeInventoryForPath(item.canonicalRoute), `${item.canonicalRoute} has no route owner`);
   }

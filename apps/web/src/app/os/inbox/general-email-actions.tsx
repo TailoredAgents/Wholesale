@@ -267,7 +267,7 @@ export function GeneralEmailActions({
       </Dialog>
 
       <Dialog
-        description="This keeps the correspondence for your records but removes it from active Inbox views."
+        description="This keeps the correspondence for your records but removes it from active Conversations views."
         footer={
           <>
             <Button onClick={() => setDialog(null)} type="button" variant="quiet">Cancel</Button>

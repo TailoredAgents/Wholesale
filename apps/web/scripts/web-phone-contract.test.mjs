@@ -129,7 +129,7 @@ test("the OS exposes governed Quick Dial without creating a seller lead", () => 
   assert.match(quickDial, /purpose,/);
   assert.match(quickDial, /callIntentId: payload\.intent\.id/);
   assert.match(quickDial, /fromNumber: payload\.intent\.from_number/);
-  assert.match(quickDial, /business contact is created and the call is saved in Inbox/);
+  assert.match(quickDial, /business contact is created and the call is saved in Conversations/);
   assert.match(quickDial, /useRef<string \| null>\(null\)/);
   assert.match(quickDial, /new AbortController\(\)/);
   assert.match(quickDial, /signal: controller\.signal/);
