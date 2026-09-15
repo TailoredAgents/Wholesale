@@ -206,6 +206,16 @@ def test_mailbox_notification_deduplicates_assignee_watcher_and_alias_grant(
     assert overview["overdue_count"] == 0
     assert overview["by_alias"][0]["scope_id"] == str(alias.id)
     assert overview["by_assignee"][0]["scope_id"] == str(assignee.id)
+    attention_response = client.get(
+        "/api/v1/inbox/attention-summary",
+        headers={"X-Dev-User-Email": assignee.email},
+    )
+    assert attention_response.status_code == 200, attention_response.text
+    assert attention_response.json() == {
+        "needs_reply_count": 1,
+        "overdue_reply_count": 0,
+        "unassigned_needs_reply_count": 0,
+    }
 
     read_response = client.patch(
         f"/api/v1/inbox/conversations/{conversation.id}/read",

@@ -64,6 +64,7 @@ from app.schemas.inbox import (
     GeneralConversationLeadCreate,
     GeneralConversationLeadLink,
     InboxAssigneeRead,
+    InboxAttentionSummaryRead,
     MailboxResponseBucketRead,
     MailboxResponseOverviewRead,
     SmsEligibilityRead,
@@ -1357,6 +1358,66 @@ def get_mailbox_response_overview(
             key_name="assigned_user_id",
             labels=user_labels,
             empty_label="Unassigned",
+        ),
+    )
+
+
+def get_inbox_attention_summary(
+    db: Session,
+    principal: Principal,
+) -> InboxAttentionSummaryRead:
+    """Return reply-work counts without hydrating the full inbox workspace."""
+    latest_channel = (
+        select(CommunicationRecord.channel)
+        .where(
+            CommunicationRecord.organization_id == Conversation.organization_id,
+            CommunicationRecord.conversation_id == Conversation.id,
+            CommunicationRecord.direction == "inbound",
+        )
+        .order_by(
+            CommunicationRecord.occurred_at.desc(),
+            CommunicationRecord.created_at.desc(),
+        )
+        .limit(1)
+        .correlate(Conversation)
+        .scalar_subquery()
+    )
+    filters = [
+        Conversation.organization_id == principal.organization_id,
+        Conversation.status == "open",
+        Conversation.last_inbound_at.is_not(None),
+        or_(
+            Conversation.last_outbound_at.is_(None),
+            Conversation.last_inbound_at > Conversation.last_outbound_at,
+        ),
+        or_(latest_channel.is_(None), latest_channel.in_(("email", "sms"))),
+    ]
+    if not principal_has_owner_mailbox_access(db, principal):
+        filters.append(conversation_access_filter(db, principal))
+
+    rows = db.execute(
+        select(Conversation, latest_channel.label("latest_inbound_channel"))
+        .where(*filters)
+        .order_by(Conversation.last_inbound_at.asc())
+    ).all()
+    settings = get_settings()
+    response_rows = [
+        (
+            conversation,
+            mailbox_response_status(
+                conversation,
+                settings,
+                latest_inbound_channel=channel,
+            ),
+        )
+        for conversation, channel in rows
+    ]
+    return InboxAttentionSummaryRead(
+        needs_reply_count=len(response_rows),
+        overdue_reply_count=sum(response.state == "overdue" for _, response in response_rows),
+        unassigned_needs_reply_count=sum(
+            conversation.assigned_user_id is None and conversation.assigned_team_id is None
+            for conversation, _ in response_rows
         ),
     )
 

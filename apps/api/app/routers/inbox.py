@@ -20,6 +20,7 @@ from app.schemas.inbox import (
     GeneralConversationLeadCreate,
     GeneralConversationLeadLink,
     InboxAssigneeListResponse,
+    InboxAttentionSummaryRead,
     MailboxResponseOverviewRead,
     SmsSendRead,
     SmsSendRequest,
@@ -30,6 +31,7 @@ from app.services.inbox import (
     convert_general_conversation_to_lead,
     get_conversation_detail,
     get_inbox_attachment_content,
+    get_inbox_attention_summary,
     get_mailbox_response_overview,
     handoff_conversation,
     link_general_conversation_to_lead,
@@ -95,6 +97,14 @@ def read_mailbox_response_overview(
     principal: Annotated[Principal, Depends(view_inbox_dependency)],
 ) -> MailboxResponseOverviewRead:
     return get_mailbox_response_overview(db, principal)
+
+
+@router.get("/attention-summary")
+def read_inbox_attention_summary(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_inbox_dependency)],
+) -> InboxAttentionSummaryRead:
+    return get_inbox_attention_summary(db, principal)
 
 
 @router.get("/conversations/{conversation_id}")

@@ -180,6 +180,12 @@ class MailboxResponseOverviewRead(BaseModel):
     by_assignee: list[MailboxResponseBucketRead]
 
 
+class InboxAttentionSummaryRead(BaseModel):
+    needs_reply_count: int
+    overdue_reply_count: int
+    unassigned_needs_reply_count: int
+
+
 class ConversationHandoffRequest(BaseModel):
     assigned_user_id: UUID
     queue_key: str = Field(min_length=1, max_length=120)

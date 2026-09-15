@@ -4,9 +4,8 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  Inbox,
   ListChecks,
-  UserRoundCheck,
+  MessageSquareReply,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -15,8 +14,8 @@ import {
   getDashboardData,
   getExecutiveCopilotOverview,
   getFieldOperationsOverview,
+  getInboxAttentionSummary,
   getWorkspaceProfile,
-  type LeadListItem,
   type SpeedToLeadTask,
 } from "../lib/api";
 import { StatusBadge } from "./_components/design-system";
@@ -47,10 +46,10 @@ type PriorityItem = {
 
 function dashboardDescription(roleKeys: string[]) {
   if (roleKeys.includes("acquisition_rep")) {
-    return "Your assigned seller follow-up, meetings, and offer preparation in priority order.";
+    return "Your seller replies, manual reminders, meetings, and offer preparation in priority order.";
   }
   if (roleKeys.includes("acquisition_manager")) {
-    return "Team response, qualification, scheduling, and offer exceptions that need intervention.";
+    return "Team replies, reminders, scheduled commitments, and offer exceptions that need attention.";
   }
   if (roleKeys.some((role) => ["owner", "founder_operator", "ceo"].includes(role))) {
     return "Company priorities, seller response, appointments, and deal-readiness exceptions.";
@@ -66,40 +65,34 @@ function taskPriority(task: SpeedToLeadTask): PriorityItem {
     title: task.title,
     detail: `${task.seller_name ?? "Operational work"} · ${formatDateTime(task.due_at)}`,
     href: `/os/tasks?item=task:${task.task_id}`,
-    status: isOverdue ? "Overdue" : "Due next",
+    status: isOverdue ? "Overdue" : "Due today",
     tone: isOverdue ? "danger" : "warning",
     task,
   };
 }
 
-function leadPriority(
-  lead: LeadListItem,
-  category: string,
-  status: string,
-  href: string,
-  tone: PriorityItem["tone"],
-): PriorityItem {
-  return {
-    id: `${category}-${lead.id}`,
-    category,
-    title: lead.seller_name,
-    detail: lead.property_address,
-    href,
-    status,
-    tone,
-  };
+function companyDateKey(value: string | Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).formatToParts(typeof value === "string" ? new Date(value) : value);
+  const keyed = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${keyed.year}-${keyed.month}-${keyed.day}`;
 }
 
 function isToday(value: string) {
-  return new Date(value).toDateString() === new Date().toDateString();
+  return companyDateKey(value) === companyDateKey(new Date());
 }
 
 export default async function Home() {
-  const [dashboard, profile, fieldResult, executiveCopilot] = await Promise.all([
+  const [dashboard, profile, fieldResult, executiveCopilot, inboxAttention] = await Promise.all([
     getDashboardData(),
     getWorkspaceProfile(),
     getFieldOperationsOverview(),
     getExecutiveCopilotOverview(30),
+    getInboxAttentionSummary(),
   ]);
   const roleKeys = profile?.role_keys ?? [];
   const individualAcquisitions = roleKeys.includes("acquisition_rep") &&
@@ -116,21 +109,47 @@ export default async function Home() {
       !profile ||
       appointment.closer_name.toLowerCase() === profile.display_name.toLowerCase(),
   );
-  const { overdueTasks, dueTasks, needsQualification, appointmentQueue, offerQueue } =
+  const { overdueTasks, dueTasks, offerQueue } =
     getWorkspaceQueues(scopedLeads, scopedTasks);
   const speedTaskIds = new Set(dashboard.speedToLeadQueue.map((task) => task.task_id));
   const scopedSpeedTasks = scopedTasks.filter((task) => speedTaskIds.has(task.task_id));
   const seenTaskIds = new Set<string>();
   const seenLeadIds = new Set<string>();
   const priorities: PriorityItem[] = [];
+  const todayKey = companyDateKey(new Date());
+  const manualRemindersDue = scopedLeads.filter((lead) => {
+    const reminder = lead.primary_next_action;
+    return Boolean(
+      reminder?.action_type === "follow_up" &&
+      reminder.due_at &&
+      companyDateKey(reminder.due_at) <= todayKey,
+    );
+  });
+  const tasksDueToday = dueTasks.filter((task) => task.due_at && isToday(task.due_at));
 
-  for (const task of [...overdueTasks, ...scopedSpeedTasks, ...dueTasks]) {
+  if (inboxAttention.needs_reply_count > 0) {
+    priorities.push({
+      id: "inbox-needs-reply",
+      category: "Conversations",
+      title: `${inboxAttention.needs_reply_count} ${
+        inboxAttention.needs_reply_count === 1 ? "conversation needs" : "conversations need"
+      } a reply`,
+      detail: inboxAttention.overdue_reply_count > 0
+        ? `${inboxAttention.overdue_reply_count} beyond the response target`
+        : "Waiting for a team response",
+      href: "/os/inbox?view=needs_reply",
+      status: inboxAttention.overdue_reply_count > 0 ? "Overdue" : "Waiting",
+      tone: inboxAttention.overdue_reply_count > 0 ? "danger" : "warning",
+    });
+  }
+
+  for (const task of [...overdueTasks, ...scopedSpeedTasks, ...tasksDueToday]) {
     if (seenTaskIds.has(task.task_id)) continue;
     priorities.push(taskPriority(task));
     seenTaskIds.add(task.task_id);
     if (task.lead_id) seenLeadIds.add(task.lead_id);
   }
-  for (const appointment of scopedAppointments) {
+  for (const appointment of scopedAppointments.filter((item) => isToday(item.scheduled_start_at))) {
     if (seenLeadIds.has(appointment.lead_id)) continue;
     priorities.push({
       id: `appointment-${appointment.id}`,
@@ -143,27 +162,6 @@ export default async function Home() {
     });
     seenLeadIds.add(appointment.lead_id);
   }
-  for (const lead of needsQualification) {
-    if (seenLeadIds.has(lead.id)) continue;
-    priorities.push(
-      leadPriority(
-        lead,
-        "Qualification",
-        "Needs review",
-        `/os/leads/${lead.id}`,
-        "warning",
-      ),
-    );
-    seenLeadIds.add(lead.id);
-  }
-  for (const lead of offerQueue) {
-    if (seenLeadIds.has(lead.id)) continue;
-    priorities.push(
-      leadPriority(lead, "Offer preparation", "Ready for work", `/os/leads/${lead.id}`, "info"),
-    );
-    seenLeadIds.add(lead.id);
-  }
-
   const unassignedLeads = dashboard.leads.filter((lead) => !lead.assigned_user_email).length;
   const todayAppointments = scopedAppointments.filter((appointment) =>
     isToday(appointment.scheduled_start_at),
@@ -182,9 +180,9 @@ export default async function Home() {
       <PageHeader
         actions={
           <div className={styles.headerActions}>
-            <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Conversations</Link>
-            <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Tasks</Link>
-            <Link href="/os/calendar"><CalendarDays aria-hidden="true" size={16} />Calendar</Link>
+            <Link className={styles.primaryHeaderAction} href="/os/leads?view=today">
+              <ListChecks aria-hidden="true" size={16} />Open Today
+            </Link>
             {executiveCopilot ? (
               <ManagementCopilotLauncher
                 endpointBase="/api/v1/dashboard/executive-copilot"
@@ -209,25 +207,25 @@ export default async function Home() {
         </div>
       ) : null}
       <section className={styles.dailyMetrics} aria-label="Daily work summary">
-        <Link className={styles.dangerMetric} href="/os/tasks?view=overdue">
-          <span><Clock3 aria-hidden="true" size={16} />Overdue</span>
-          <strong>{overdueTasks.length}</strong>
-          <small>Follow-up past due</small>
+        <Link className={styles.dangerMetric} href="/os/inbox?view=needs_reply">
+          <span><MessageSquareReply aria-hidden="true" size={16} />Needs reply</span>
+          <strong>{inboxAttention.needs_reply_count}</strong>
+          <small>{inboxAttention.overdue_reply_count} beyond response target</small>
         </Link>
-        <Link className={styles.warningMetric} href="/os/leads?view=needs_qualification">
-          <span><UserRoundCheck aria-hidden="true" size={16} />Qualification</span>
-          <strong>{needsQualification.length}</strong>
-          <small>Seller records incomplete</small>
+        <Link className={styles.warningMetric} href="/os/leads?view=today">
+          <span><Clock3 aria-hidden="true" size={16} />Reminders due</span>
+          <strong>{manualRemindersDue.length}</strong>
+          <small>Only reminders set by your team</small>
         </Link>
         <Link className={styles.infoMetric} href="/os/calendar">
           <span><CalendarDays aria-hidden="true" size={16} />Meetings today</span>
           <strong>{todayAppointments}</strong>
-          <small>{appointmentQueue.length} awaiting appointment work</small>
+          <small>Scheduled commitments only</small>
         </Link>
         <Link className={styles.brandMetric} href="/os/leads?view=underwriting">
           <span><CheckCircle2 aria-hidden="true" size={16} />Offer prep</span>
           <strong>{offerQueue.length}</strong>
-          <small>Underwriting or approval</small>
+          <small>Underwriting and approval stages</small>
         </Link>
       </section>
 
@@ -238,7 +236,7 @@ export default async function Home() {
               <p>Priority order</p>
               <h2 id="priority-heading">Work requiring attention</h2>
             </div>
-            <Link href="/os/tasks">Open full queue <ArrowRight aria-hidden="true" size={15} /></Link>
+            <Link href="/os/leads?view=today">Open Today <ArrowRight aria-hidden="true" size={15} /></Link>
           </header>
           <div className={styles.priorityList}>
             {priorities.slice(0, 8).map((item) => (
@@ -262,8 +260,8 @@ export default async function Home() {
             {!priorities.length ? (
               <div className={styles.clearState}>
                 <CheckCircle2 aria-hidden="true" size={24} />
-                <strong>No priority exceptions</strong>
-                <span>Open seller work will appear here in due-time order.</span>
+                <strong>Nothing needs attention</strong>
+                <span>New replies, due reminders, and scheduled work will appear here.</span>
               </div>
             ) : null}
           </div>
@@ -271,23 +269,31 @@ export default async function Home() {
 
         <aside className={styles.exceptionPanel} aria-labelledby="exceptions-heading">
           <header>
-            <p>Exceptions</p>
-            <h2 id="exceptions-heading">Needs intervention</h2>
+            <p>Live workload</p>
+            <h2 id="exceptions-heading">
+              {individualAcquisitions ? "My work snapshot" : "Company snapshot"}
+            </h2>
           </header>
           <div>
-            <Link href="/os/inbox?view=unread">
-              <span>Unread conversations</span>
-              <strong>{profile?.unread_notification_count ?? 0}</strong>
+            <Link href="/os/inbox?view=needs_reply">
+              <span>Conversations needing reply</span>
+              <strong>{inboxAttention.needs_reply_count}</strong>
             </Link>
+            {showTeamExceptions ? (
+              <Link href="/os/inbox?view=needs_reply">
+                <span>Unassigned conversations</span>
+                <strong>{inboxAttention.unassigned_needs_reply_count}</strong>
+              </Link>
+            ) : null}
             {showTeamExceptions ? (
               <Link href="/os/leads">
                 <span>Unassigned seller leads</span>
                 <strong>{unassignedLeads}</strong>
               </Link>
             ) : null}
-            <Link href="/os/tasks?view=unscheduled">
-              <span>Tasks without due dates</span>
-              <strong>{scopedTasks.filter((task) => task.due_status === "unscheduled").length}</strong>
+            <Link href="/os/leads?view=today">
+              <span>Manual reminders due</span>
+              <strong>{manualRemindersDue.length}</strong>
             </Link>
             <Link href="/os/tasks?view=approvals">
               <span>Offers pending approval</span>

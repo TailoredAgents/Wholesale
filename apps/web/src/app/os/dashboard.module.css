@@ -28,6 +28,18 @@
   color: var(--sg-color-brand-strong);
 }
 
+.headerActions .primaryHeaderAction {
+  border-color: var(--sg-color-brand);
+  background: var(--sg-color-brand);
+  color: #fff;
+}
+
+.headerActions .primaryHeaderAction:hover {
+  border-color: var(--sg-color-brand-strong);
+  background: var(--sg-color-brand-strong);
+  color: #fff;
+}
+
 .connectionWarning {
   padding: 12px 14px;
   border: 1px solid var(--sg-color-warning);

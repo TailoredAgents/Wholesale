@@ -30,6 +30,8 @@ const leadStageBadgeStyles = readFileSync(
   "utf8",
 );
 const osUtils = readFileSync(resolve(appRoot, "os/os-utils.ts"), "utf8");
+const homePage = readFileSync(resolve(appRoot, "os/page.tsx"), "utf8");
+const apiSource = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
 
 test("AI operations stay out of human task and due-date views", () => {
   assert.match(tasksWorkspace, /if \(item\.item_type === "ai_work"\)/);
@@ -104,4 +106,18 @@ test("lead stages use one consistent, distinct color system", () => {
     assert.match(leadStageBadgeStyles, new RegExp(`data-stage="${stage}"`));
   }
   assert.doesNotMatch(leadsWorkspace, /function stageTone/);
+});
+
+test("Home shows real reply work and manual reminders instead of synthetic urgency", () => {
+  assert.match(apiSource, /getInboxAttentionSummary/);
+  assert.match(apiSource, /\/api\/v1\/inbox\/attention-summary/);
+  assert.match(homePage, /inboxAttention\.needs_reply_count/);
+  assert.match(homePage, /reminder\?\.action_type === "follow_up"/);
+  assert.match(homePage, /Only reminders set by your team/);
+  assert.match(homePage, /Scheduled commitments only/);
+  assert.match(homePage, /Open Today/);
+  assert.doesNotMatch(homePage, /Unread conversations/);
+  assert.doesNotMatch(homePage, /Seller records incomplete/);
+  assert.doesNotMatch(homePage, /Tasks without due dates/);
+  assert.doesNotMatch(homePage, /for \(const lead of needsQualification\)/);
 });

@@ -30,6 +30,12 @@ export type WorkspaceProfile = {
   unread_notification_count: number;
 };
 
+export type InboxAttentionSummary = {
+  needs_reply_count: number;
+  overdue_reply_count: number;
+  unassigned_needs_reply_count: number;
+};
+
 export type IntegrationStatus = {
   key: string;
   name: string;
@@ -6555,6 +6561,26 @@ export async function getWorkspaceProfileResult(): Promise<{
 
 export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
   return (await getWorkspaceProfileResult()).profile;
+}
+
+const emptyInboxAttentionSummary: InboxAttentionSummary = {
+  needs_reply_count: 0,
+  overdue_reply_count: 0,
+  unassigned_needs_reply_count: 0,
+};
+
+export async function getInboxAttentionSummary(): Promise<InboxAttentionSummary> {
+  try {
+    const response = await fetchServerApiRead("/api/v1/inbox/attention-summary");
+    if ([401, 403].includes(response.status)) return emptyInboxAttentionSummary;
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as InboxAttentionSummary;
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("Dynamic server usage")) {
+      console.error("Stonegate inbox attention summary request failed.", error);
+    }
+    return emptyInboxAttentionSummary;
+  }
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
