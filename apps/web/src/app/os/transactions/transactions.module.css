@@ -73,6 +73,16 @@
 .form input, .form select, .form textarea { width: 100%; min-height: 38px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 12px; }
 .form textarea { resize: vertical; }
 .twoFields { display: grid; grid-template-columns: 1fr 1fr; }
+.amendmentForm { border-left: 3px solid var(--brand); }
+.amendmentSummary { margin: 12px 14px 2px; padding: 11px 12px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 6px 18px; border: 1px solid var(--line-soft); background: var(--brand-soft); }
+.amendmentSummary > div { display: grid; gap: 3px; }
+.amendmentSummary span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.amendmentSummary strong { color: var(--brand-strong); font-size: 18px; }
+.amendmentSummary p, .formHelp { margin: 0; color: var(--text-soft); font-size: 11px; line-height: 1.45; }
+.formHelp { padding: 9px 14px 0; }
+.form label.confirmation { padding-top: 12px; display: flex; grid-template-columns: none; flex-direction: row; align-items: center; gap: 8px; }
+.form label.confirmation input { width: 16px; min-height: 16px; margin: 0; }
+.form label.confirmation span { color: var(--text); font-size: 11px; text-transform: none; }
 .packageList, .documentList, .partyList { display: grid; }
 .packageList article { padding: 14px; border-bottom: 1px solid var(--line-soft); }
 .packageList article > div:first-child { display: flex; justify-content: space-between; gap: 10px; }
@@ -178,6 +188,7 @@
   .integrationStrip { grid-template-columns: 1fr; }
   .integrationStrip > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .integrationStrip > div:last-child { border-bottom: 0; }
+  .twoFields, .amendmentSummary { grid-template-columns: 1fr; }
   .transactionCopilot { margin: 12px 12px 0; }
   .transactionCopilot > header, .copilotCommand, .copilotDraftPicker { align-items: flex-start; flex-direction: column; }
   .copilotReadiness, .copilotRiskGrid, .emailDrafts { grid-template-columns: 1fr; }

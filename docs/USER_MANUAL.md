@@ -2213,6 +2213,20 @@ executed purchase-agreement workflow; reconcile that workflow first. The importe
 already executed Land agreement as historical evidence, but Stonegate-generated Land templates and
 e-sign remain unavailable until their dedicated legal workflow is released.
 
+If an executed purchase agreement is later renegotiated, open the selected Deal's **Contract** tab
+and use **Record a signed amendment**. Upload the exact fully signed amendment PDF, enter the new
+purchase price and execution details, explain how the signatures were verified, and confirm the
+attestation. Do not edit the original contract or import a replacement purchase agreement.
+
+Choose whether to keep the current investor asking price or set a new one. Keeping it is the normal
+choice when only the acquisition basis changed: for example, changing the seller contract from
+$15,500 to $7,000 while keeping a $15,500 investor ask recalculates the desired assignment spread
+to $8,500. Stonegate preserves both executed documents, updates the Deal and Transaction basis,
+keeps the record Under Contract, and retains the existing Disposition case and outreach history.
+Because the old packet economics are stale, the action returns the packet to Draft, supersedes its
+prior approved/draft versions, revokes active share links, and requires packet review before it is
+shared again. It does not automatically resend anything to investors.
+
 ### Closing
 
 1. Assign the Transaction Coordinator.

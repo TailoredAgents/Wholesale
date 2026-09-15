@@ -1,7 +1,19 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
@@ -19,6 +31,8 @@ from app.schemas.transactions import (
     EsignDraftRecoveryRequest,
     EsignEnvelopeRead,
     EsignSendRequest,
+    ExecutedContractAmendment,
+    ExecutedContractAmendmentRead,
     F4IntegrationStatusRead,
     ManualContractExecutionAttestation,
     ManualContractWithdrawalAttestation,
@@ -71,6 +85,7 @@ from app.services.transactions import (
     list_transactions,
     mark_contract_executed,
     mark_contract_sent,
+    record_executed_amendment,
     record_note,
     request_contract_approval,
     update_checklist_item,
@@ -84,6 +99,10 @@ router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 view_dependency = require_permission(PermissionKeys.VIEW_DEALS)
 edit_dependency = require_permission(PermissionKeys.EDIT_DEALS)
 contract_dependency = require_permission(PermissionKeys.MODIFY_CONTRACTS)
+record_executed_contract_dependency = require_any_permission(
+    PermissionKeys.RECORD_EXECUTED_CONTRACTS,
+    PermissionKeys.MODIFY_CONTRACTS,
+)
 send_dependency = require_permission(PermissionKeys.SEND_CONTRACTS)
 template_dependency = require_any_permission(
     PermissionKeys.MODIFY_CONTRACTS,
@@ -93,6 +112,66 @@ template_dependency = require_any_permission(
 
 def not_found() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found.")
+
+
+@router.post("/{transaction_id}/executed-amendments", status_code=201)
+async def create_executed_amendment(
+    transaction_id: UUID,
+    file: Annotated[UploadFile, File()],
+    expected_purchase_price_cents: Annotated[int, Form(ge=1)],
+    revised_purchase_price_cents: Annotated[int, Form(ge=1)],
+    executed_at: Annotated[str, Form()],
+    execution_source: Annotated[
+        Literal[
+            "docusign",
+            "signwell",
+            "pandadoc",
+            "adobe_sign",
+            "manual_upload",
+            "other",
+        ],
+        Form(),
+    ],
+    investor_price_action: Annotated[Literal["keep_current", "set_new"], Form()],
+    confirm_fully_executed: Annotated[bool, Form()],
+    attestation_reason: Annotated[str, Form(min_length=10, max_length=500)],
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(record_executed_contract_dependency)],
+    investor_asking_price_cents: Annotated[int | None, Form(ge=1)] = None,
+    external_reference: Annotated[str | None, Form(max_length=255)] = None,
+    notes: Annotated[str | None, Form(max_length=2000)] = None,
+) -> ExecutedContractAmendmentRead:
+    try:
+        payload = ExecutedContractAmendment.model_validate(
+            {
+                "file_name": file.filename or "",
+                "expected_purchase_price_cents": expected_purchase_price_cents,
+                "revised_purchase_price_cents": revised_purchase_price_cents,
+                "executed_at": executed_at,
+                "execution_source": execution_source,
+                "investor_price_action": investor_price_action,
+                "investor_asking_price_cents": investor_asking_price_cents,
+                "external_reference": external_reference,
+                "notes": notes,
+                "confirm_fully_executed": confirm_fully_executed,
+                "attestation_reason": attestation_reason,
+            }
+        )
+        result = record_executed_amendment(
+            db,
+            principal,
+            transaction_id,
+            payload,
+            content=await file.read((15 * 1024 * 1024) + 1),
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await file.close()
+    if result is None:
+        raise not_found()
+    return result
 
 
 @router.get("")

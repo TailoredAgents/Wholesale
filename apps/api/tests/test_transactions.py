@@ -24,6 +24,9 @@ from app.models.foundation import (
     AuditEvent,
     ContractPackage,
     Deal,
+    DispositionCase,
+    DispositionPackageShareLink,
+    DispositionPackageVersion,
     EsignEnvelope,
     EsignProviderEvent,
     EsignRecipient,
@@ -282,6 +285,39 @@ def post_external_execution_import(
     )
 
 
+def post_executed_amendment(
+    client: TestClient,
+    transaction_id: str,
+    *,
+    expected_price_cents: int,
+    revised_price_cents: int,
+    content: bytes = b"%PDF-1.7\nexecuted price amendment",
+    investor_price_action: str = "keep_current",
+    investor_asking_price_cents: int | None = None,
+) -> httpx.Response:
+    data = {
+        "expected_purchase_price_cents": str(expected_price_cents),
+        "revised_purchase_price_cents": str(revised_price_cents),
+        "executed_at": "2026-09-14T16:00:00Z",
+        "execution_source": "docusign",
+        "investor_price_action": investor_price_action,
+        "confirm_fully_executed": "true",
+        "attestation_reason": "Verified all signatures and revised price in DocuSign.",
+        "external_reference": "amendment-envelope-456",
+    }
+    if investor_asking_price_cents is not None:
+        data["investor_asking_price_cents"] = str(investor_asking_price_cents)
+    return cast(
+        httpx.Response,
+        client.post(
+            f"/api/v1/transactions/{transaction_id}/executed-amendments",
+            headers=HEADERS,
+            data=data,
+            files={"file": ("signed-amendment.pdf", content, "application/pdf")},
+        ),
+    )
+
+
 def test_owner_can_import_external_executed_contract_without_offer_authority(
     db_session: Session,
     api_db_override: None,
@@ -518,6 +554,161 @@ def test_external_execution_import_rejects_non_pdf_and_accepts_parcel_only_land(
     )
     assert invalid_land.status_code == 422
     assert "APN with county and state" in invalid_land.json()["detail"]
+
+
+def test_executed_land_amendment_updates_basis_and_retires_stale_packet(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client, asset_class="land")
+    imported = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\noriginal land purchase agreement",
+        params=external_execution_import_params(
+            purchase_price_cents=1_550_000,
+            assignment_fee_cents=0,
+        ),
+    )
+    assert imported.status_code == 201, imported.text
+    imported_payload = imported.json()
+    transaction_id = imported_payload["transaction_id"]
+    case = db_session.get(DispositionCase, UUID(imported_payload["disposition_case_id"]))
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert case is not None
+    assert owner is not None
+    case.package_status = "approved"
+    case.package_approved_by_user_id = owner.id
+    case.package_approved_at = datetime.now(UTC)
+    version = DispositionPackageVersion(
+        organization_id=case.organization_id,
+        disposition_case_id=case.id,
+        created_by_user_id=owner.id,
+        approved_by_user_id=owner.id,
+        version_number=1,
+        lock_version=1,
+        status="approved",
+        policy_version="test",
+        renderer_version="test",
+        public_snapshot={},
+        private_economics_snapshot={"contract_purchase_price_cents": 1_550_000},
+        evidence_manifest=[],
+        readiness_snapshot={},
+        source_fingerprint="a" * 64,
+        email_summary="Packet summary",
+        sms_summary="Packet summary",
+        approval_reason="Approved before the contract price changed.",
+        approved_at=datetime.now(UTC),
+        pdf_file_name="old-packet.pdf",
+        pdf_content_type="application/pdf",
+        pdf_size=10,
+        pdf_sha256="b" * 64,
+        pdf_data=b"old packet",
+    )
+    db_session.add(version)
+    db_session.flush()
+    share = DispositionPackageShareLink(
+        organization_id=case.organization_id,
+        disposition_case_id=case.id,
+        package_version_id=version.id,
+        created_by_user_id=owner.id,
+        revoked_by_user_id=None,
+        token_digest="c" * 64,
+        token_hint="packet-test",
+        artifact_sha256="b" * 64,
+        package_status_at_issue="approved",
+        was_current_at_issue=True,
+        lock_version=1,
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+        revoked_at=None,
+        revocation_reason=None,
+        access_count=0,
+        first_accessed_at=None,
+        last_accessed_at=None,
+    )
+    db_session.add(share)
+    db_session.commit()
+
+    amended = post_executed_amendment(
+        client,
+        transaction_id,
+        expected_price_cents=1_550_000,
+        revised_price_cents=700_000,
+    )
+    assert amended.status_code == 201, amended.text
+    payload = amended.json()
+    assert payload["previous_purchase_price_cents"] == 1_550_000
+    assert payload["revised_purchase_price_cents"] == 700_000
+    assert payload["investor_asking_price_cents"] == 1_550_000
+    assert payload["desired_assignment_fee_cents"] == 850_000
+    assert payload["disposition_package_status"] == "draft"
+    assert payload["revoked_share_links"] == 1
+
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    db_session.refresh(transaction)
+    deal = db_session.get(Deal, transaction.deal_id)
+    db_session.refresh(case)
+    db_session.refresh(version)
+    db_session.refresh(share)
+    assert deal is not None
+    assert transaction.purchase_price_cents == 700_000
+    assert deal.contract_price_cents == 700_000
+    assert transaction.assignment_fee_cents == 850_000
+    assert deal.assignment_fee_cents == 850_000
+    assert transaction.status == "executed"
+    assert case.asking_price_cents == 1_550_000
+    assert case.minimum_acceptable_cents == 1_550_000
+    assert case.desired_assignment_fee_cents == 850_000
+    assert case.package_approved_at is None
+    assert version.status == "superseded"
+    assert share.revoked_at is not None
+    packages = list(
+        db_session.scalars(
+            select(ContractPackage)
+            .where(ContractPackage.transaction_id == transaction.id)
+            .order_by(ContractPackage.version_number)
+        ).all()
+    )
+    assert [item.status for item in packages] == ["executed", "executed"]
+    assert packages[0].purchase_price_cents == 1_550_000
+    assert packages[1].purchase_price_cents == 700_000
+    assert packages[1].terms_snapshot["document_type"] == "addendum"
+    amendment_document = db_session.scalar(
+        select(TransactionDocument).where(
+            TransactionDocument.transaction_id == transaction.id,
+            TransactionDocument.document_type == "executed_addendum",
+        )
+    )
+    assert amendment_document is not None
+
+
+def test_executed_amendment_rejects_stale_price_without_mutating_transaction(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id = create_external_import_lead(db_session, client)
+    imported = post_external_execution_import(
+        client,
+        lead_id,
+        content=b"%PDF-1.7\noriginal agreement",
+    )
+    assert imported.status_code == 201, imported.text
+    transaction_id = imported.json()["transaction_id"]
+    rejected = post_executed_amendment(
+        client,
+        transaction_id,
+        expected_price_cents=1_550_000,
+        revised_price_cents=700_000,
+    )
+    assert rejected.status_code == 422
+    assert "changed after this form was opened" in rejected.json()["detail"]
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert transaction is not None
+    db_session.refresh(transaction)
+    assert transaction.purchase_price_cents == 17_500_000
 
 
 def test_external_execution_import_refuses_active_sent_contract_workflow(

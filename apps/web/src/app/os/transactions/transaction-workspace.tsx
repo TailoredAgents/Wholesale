@@ -48,6 +48,11 @@ function date(value: string | null) {
   return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not set";
 }
 
+function localDateTimeValue() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 const CHECKLIST_EVIDENCE_ITEM_KEYS = new Set([
   "open_title",
   "seller_documents",
@@ -76,6 +81,7 @@ export function TransactionWorkspace({
   const tab = initialTab;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [changeInvestorAsk, setChangeInvestorAsk] = useState(false);
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000", []);
   const devEmail = useMemo(() => process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com", []);
 
@@ -89,7 +95,8 @@ export function TransactionWorkspace({
   }
 
   async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${apiBase}${path}`, { ...options, headers: { ...(await headers(options.body instanceof Blob ? false : true)), ...(options.headers ?? {}) } });
+    const rawBody = options.body instanceof Blob || options.body instanceof FormData;
+    const response = await fetch(`${apiBase}${path}`, { ...options, headers: { ...(await headers(!rawBody)), ...(options.headers ?? {}) } });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({})) as { detail?: string };
       throw new Error(payload.detail ?? "Request failed.");
@@ -306,6 +313,47 @@ export function TransactionWorkspace({
     setSignaturePackageId(null);
   }
 
+  async function recordExecutedAmendment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!detail) return;
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const file = values.get("file") as File;
+    if (!file?.size) return;
+    const revisedPrice = Math.round(Number(values.get("revised_purchase_price")) * 100);
+    const newAsk = values.get("investor_asking_price");
+    const payload = new FormData();
+    payload.set("file", file);
+    payload.set("expected_purchase_price_cents", String(detail.purchase_price_cents));
+    payload.set("revised_purchase_price_cents", String(revisedPrice));
+    payload.set("executed_at", new Date(String(values.get("executed_at"))).toISOString());
+    payload.set("execution_source", String(values.get("execution_source")));
+    payload.set("investor_price_action", changeInvestorAsk ? "set_new" : "keep_current");
+    if (changeInvestorAsk && newAsk) {
+      payload.set("investor_asking_price_cents", String(Math.round(Number(newAsk) * 100)));
+    }
+    payload.set("external_reference", String(values.get("external_reference") ?? ""));
+    payload.set("notes", String(values.get("notes") ?? ""));
+    payload.set("confirm_fully_executed", String(values.get("confirm_fully_executed") === "on"));
+    payload.set("attestation_reason", String(values.get("attestation_reason") ?? ""));
+    setBusy(true);
+    setMessage(null);
+    try {
+      await request(`/api/v1/transactions/${detail.id}/executed-amendments`, {
+        method: "POST",
+        body: payload,
+      });
+      await reload();
+      form.reset();
+      setChangeInvestorAsk(false);
+      setMessage("Signed amendment recorded. Official contract pricing and Dispositions economics are updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to record the amendment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function recordManualExecution(
     packageId: string,
     documentId: string,
@@ -514,9 +562,22 @@ export function TransactionWorkspace({
                       envelope.contract_package_id === pkg.id
                       && !["completed", "declined", "expired", "cancelled", "error"].includes(envelope.status)
                     ));
-                  return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}><button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{["approved", "sent"].includes(pkg.status) && !activeEnvelope ? <button disabled={busy} onClick={() => void withdrawManualPackage(pkg.id, pkg.status)} type="button">{pkg.status === "approved" ? "Void approved package" : "Withdraw sent package"}</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void recordManualExecution(pkg.id, signedDocument.id, pkg.document_type, pkg.assignee_name, pkg.assignee_email)} type="button">Attest executed</button> : null}</div></article>;
+                  return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}>{signedDocument ? <button disabled={busy} onClick={() => void downloadDocument(signedDocument)} type="button"><Download size={14} />Open signed PDF</button> : <button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>}{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{["approved", "sent"].includes(pkg.status) && !activeEnvelope ? <button disabled={busy} onClick={() => void withdrawManualPackage(pkg.id, pkg.status)} type="button">{pkg.status === "approved" ? "Void approved package" : "Withdraw sent package"}</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void recordManualExecution(pkg.id, signedDocument.id, pkg.document_type, pkg.assignee_name, pkg.assignee_email)} type="button">Attest executed</button> : null}</div></article>;
                   })}</div>
                 </section>
+                {detail.status === "executed" || detail.status === "closing" ? <form className={`${styles.form} ${styles.amendmentForm}`} onSubmit={(event) => void recordExecutedAmendment(event)}>
+                  <div className={styles.sectionTitle}><div><span>Renegotiated contract</span><h4>Record a signed amendment</h4></div><FileCheck2 size={18} /></div>
+                  <div className={styles.amendmentSummary}><div><span>Current official price</span><strong>{money(detail.purchase_price_cents)}</strong></div><p>The original agreement stays preserved. This signed amendment becomes the newest binding version.</p></div>
+                  <div className={styles.twoFields}><label><span>Signed amendment PDF</span><input accept="application/pdf,.pdf" name="file" required type="file" /></label><label><span>Revised purchase price</span><input min="1" name="revised_purchase_price" placeholder="7000" required step="0.01" type="number" /></label></div>
+                  <div className={styles.twoFields}><label><span>Signed date and time</span><input defaultValue={localDateTimeValue()} name="executed_at" required type="datetime-local" /></label><label><span>How it was signed</span><select defaultValue="docusign" name="execution_source"><option value="docusign">DocuSign</option><option value="signwell">SignWell</option><option value="pandadoc">PandaDoc</option><option value="adobe_sign">Adobe Sign</option><option value="manual_upload">Signed PDF / paper</option><option value="other">Other</option></select></label></div>
+                  <label><span>Investor asking price</span><select onChange={(event) => setChangeInvestorAsk(event.target.value === "set_new")} value={changeInvestorAsk ? "set_new" : "keep_current"}><option value="keep_current">Keep the current investor asking price</option><option value="set_new">Set a new investor asking price</option></select></label>
+                  {changeInvestorAsk ? <label><span>New investor asking price</span><input min="1" name="investor_asking_price" required step="0.01" type="number" /></label> : <p className={styles.formHelp}>Stonegate will keep the marketed asking price and recalculate the expected assignment spread from the new contract basis.</p>}
+                  <div className={styles.twoFields}><label><span>External reference</span><input name="external_reference" placeholder="DocuSign envelope ID (optional)" /></label><label><span>Internal note</span><input name="notes" placeholder="Why the terms changed (optional)" /></label></div>
+                  <label><span>Verification note</span><textarea minLength={10} name="attestation_reason" placeholder="How you confirmed every required party signed this amendment" required rows={2} /></label>
+                  <label className={styles.confirmation}><input name="confirm_fully_executed" required type="checkbox" /><span>I confirm every required party signed this exact PDF.</span></label>
+                  <p className={styles.formHelp}>Any approved investor packet and active packet link will be retired so outdated economics cannot be shared. Outreach and the Under Contract stage stay intact.</p>
+                  <button disabled={busy} type="submit"><FileCheck2 size={16} />Record amendment and update pricing</button>
+                </form> : null}
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Provider evidence</span><h4>Signature requests</h4></div><PenLine size={18} /></div>
                   <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {labelize(envelope.delivery_mode)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small><div className={styles.inlineActions}>{envelope.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/resume-draft`, { method: "POST" }))} type="button"><PenLine size={14} />Resume saved draft</button> : null}{["creating_draft", "draft_creation_uncertain"].includes(envelope.status) ? <><button disabled={busy} onClick={() => void recoverSignWellDraft(envelope.id)} type="button">Attach verified draft</button><button disabled={busy} onClick={() => void abandonSignWellIntent(envelope.id)} type="button">Abandon empty intent</button></> : null}{!["draft", "completed", "declined", "expired", "cancelled", "error"].includes(envelope.status) && !envelope.provider_document_id.startsWith("intent-") ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</div></article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>

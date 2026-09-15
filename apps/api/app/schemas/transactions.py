@@ -133,6 +133,48 @@ class ExecutedContractImportRead(BaseModel):
     disposition_handoff_blockers: list[str]
 
 
+class ExecutedContractAmendment(BaseModel):
+    """Verified facts for an amendment signed outside Stonegate."""
+
+    file_name: str = Field(min_length=1, max_length=255)
+    expected_purchase_price_cents: int = Field(ge=1)
+    revised_purchase_price_cents: int = Field(ge=1)
+    executed_at: datetime
+    execution_source: Literal[
+        "docusign",
+        "signwell",
+        "pandadoc",
+        "adobe_sign",
+        "manual_upload",
+        "other",
+    ]
+    investor_price_action: Literal["keep_current", "set_new"] = "keep_current"
+    investor_asking_price_cents: int | None = Field(default=None, ge=1)
+    external_reference: str | None = Field(default=None, max_length=255)
+    notes: str | None = Field(default=None, max_length=2000)
+    confirm_fully_executed: bool
+    attestation_reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("file_name", "attestation_reason", mode="before")
+    @classmethod
+    def strip_amendment_required_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class ExecutedContractAmendmentRead(BaseModel):
+    transaction_id: UUID
+    contract_package_id: UUID
+    document_id: UUID
+    previous_purchase_price_cents: int
+    revised_purchase_price_cents: int
+    disposition_case_id: UUID | None
+    investor_asking_price_cents: int | None
+    minimum_acceptable_cents: int | None
+    desired_assignment_fee_cents: int | None
+    disposition_package_status: str | None
+    revoked_share_links: int
+
+
 class ManualContractWithdrawalAttestation(BaseModel):
     confirm_withdrawn_from_all_recipients: Literal[True]
     reason: str = Field(min_length=10, max_length=1000)

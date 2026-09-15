@@ -20,6 +20,9 @@ from app.models.foundation import (
     ContractPackage,
     ContractTemplate,
     Deal,
+    DispositionCase,
+    DispositionPackageShareLink,
+    DispositionPackageVersion,
     EsignEnvelope,
     Lead,
     OfferConcession,
@@ -42,6 +45,8 @@ from app.schemas.transactions import (
     ContractTemplateRead,
     DocumentDeleteRequest,
     DocumentDownloadLinkRead,
+    ExecutedContractAmendment,
+    ExecutedContractAmendmentRead,
     ExecutedContractImport,
     ExecutedContractImportRead,
     ManualContractExecutionAttestation,
@@ -1518,6 +1523,360 @@ def import_executed_contract(
         disposition_handoff_ready=disposition_case is not None,
         disposition_handoff_status=disposition_status,
         disposition_handoff_blockers=disposition_blockers,
+    )
+
+
+@cleanup_external_execution_storage_on_failure
+def record_executed_amendment(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    payload: ExecutedContractAmendment,
+    *,
+    content: bytes,
+    content_type: str,
+) -> ExecutedContractAmendmentRead | None:
+    """Record a signed price amendment without replacing the original agreement."""
+    normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+    file_name = re.sub(r"[^A-Za-z0-9._-]+", "-", payload.file_name.strip()).strip(".-")
+    if normalized_content_type != "application/pdf":
+        raise ValueError("The executed amendment must be uploaded as a PDF.")
+    if not file_name or not file_name.lower().endswith(".pdf"):
+        raise ValueError("The executed amendment file name must end in .pdf.")
+    if not content or len(content) > MAX_DOCUMENT_BYTES:
+        raise ValueError("The executed amendment must be between 1 byte and 15 MB.")
+    if not content.startswith(b"%PDF"):
+        raise ValueError("The uploaded file does not contain a valid PDF header.")
+    if not payload.confirm_fully_executed:
+        raise ValueError("Confirm that every required party signed the uploaded amendment.")
+    attestation_reason = payload.attestation_reason.strip()
+    if len(attestation_reason) < 10:
+        raise ValueError("Explain how the fully executed amendment was verified.")
+    executed_at = utc_datetime(payload.executed_at)
+    now = datetime.now(UTC)
+    if executed_at > now + timedelta(minutes=5):
+        raise ValueError("The amendment execution time cannot be in the future.")
+    if (
+        payload.investor_price_action == "set_new"
+        and payload.investor_asking_price_cents is None
+    ):
+        raise ValueError("Enter the new investor asking price.")
+
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Transaction)
+    )
+    if transaction is None:
+        return None
+    if transaction.status not in {"executed", "closing"}:
+        raise ValueError("Only an executed or closing transaction can be amended.")
+    if transaction.purchase_price_cents != payload.expected_purchase_price_cents:
+        raise ValueError(
+            "The contract price changed after this form was opened. Refresh and review it again."
+        )
+    if transaction.purchase_price_cents == payload.revised_purchase_price_cents:
+        raise ValueError("The revised purchase price must differ from the current contract price.")
+
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == transaction.lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Lead)
+    )
+    deal = db.scalar(
+        select(Deal)
+        .where(
+            Deal.id == transaction.deal_id,
+            Deal.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Deal)
+    )
+    if lead is None or deal is None:
+        raise ValueError("The transaction's lead or deal is no longer available.")
+    asset_class = normalize_asset_class(lead.asset_class)
+    original_package = db.scalar(
+        select(ContractPackage)
+        .where(
+            ContractPackage.organization_id == principal.organization_id,
+            ContractPackage.transaction_id == transaction.id,
+            ContractPackage.status == "executed",
+        )
+        .order_by(ContractPackage.version_number.asc())
+        .with_for_update(of=ContractPackage)
+    )
+    if original_package is None or package_document_type(original_package) != PURCHASE_AGREEMENT:
+        raise ValueError("Record the executed purchase agreement before adding an amendment.")
+    digest = sha256(content).hexdigest()
+    duplicate = db.scalar(
+        select(TransactionDocument.id).where(
+            TransactionDocument.organization_id == principal.organization_id,
+            TransactionDocument.transaction_id == transaction.id,
+            TransactionDocument.sha256 == digest,
+            TransactionDocument.deleted_at.is_(None),
+        )
+    )
+    if duplicate is not None:
+        raise ValueError("This PDF is already attached to the transaction.")
+
+    document_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"transactions/{transaction.id}",
+        record_id=document_id,
+        file_name=file_name,
+        content_type=normalized_content_type,
+        content=content,
+    )
+    db.info[EXTERNAL_EXECUTION_PENDING_STORAGE_KEY] = stored
+    if stored.malware_scan_status not in ACCEPTABLE_EXECUTION_SCAN_STATUSES:
+        raise ValueError("The executed amendment does not have an acceptable malware scan state.")
+
+    previous_price = transaction.purchase_price_cents
+    version = (
+        db.scalar(
+            select(func.max(ContractPackage.version_number)).where(
+                ContractPackage.transaction_id == transaction.id
+            )
+        )
+        or 0
+    ) + 1
+    package = ContractPackage(
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        template_id=None,
+        created_by_user_id=principal.user_id,
+        approval_request_id=None,
+        version_number=version,
+        status="executed",
+        seller_name=original_package.seller_name,
+        buyer_entity_name=original_package.buyer_entity_name,
+        purchase_price_cents=payload.revised_purchase_price_cents,
+        earnest_money_cents=transaction.earnest_money_cents,
+        closing_date=transaction.closing_date,
+        inspection_period_days=transaction.inspection_period_days,
+        terms_snapshot={
+            "document_type": "addendum",
+            "asset_class": asset_class,
+            "authority_basis": "external_fully_executed_amendment",
+            "executed_amendment": {
+                "schema_version": 1,
+                "previous_purchase_price_cents": previous_price,
+                "revised_purchase_price_cents": payload.revised_purchase_price_cents,
+                "source": payload.execution_source,
+                "external_reference": payload.external_reference.strip()
+                if payload.external_reference
+                else None,
+                "document_id": str(document_id),
+                "attested_by_user_id": str(principal.user_id),
+                "attestation_reason": attestation_reason,
+            },
+        },
+        notes=payload.notes.strip() if payload.notes else None,
+        approved_at=None,
+        sent_at=None,
+        executed_at=executed_at,
+        voided_at=None,
+    )
+    db.add(package)
+    db.flush()
+    document = TransactionDocument(
+        id=document_id,
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        contract_package_id=package.id,
+        uploaded_by_user_id=principal.user_id,
+        document_type="executed_addendum",
+        title="Executed purchase agreement amendment",
+        status="executed",
+        file_name=file_name,
+        content_type=normalized_content_type,
+        file_size=len(content),
+        sha256=digest,
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
+        occurred_at=executed_at,
+        notes=f"Imported from {payload.execution_source}; verified by authorized attestation.",
+    )
+    db.add(document)
+
+    transaction.purchase_price_cents = payload.revised_purchase_price_cents
+    deal.contract_price_cents = payload.revised_purchase_price_cents
+    history = list((transaction.transaction_metadata or {}).get("executed_amendments") or [])
+    history.append(
+        {
+            "package_id": str(package.id),
+            "document_id": str(document.id),
+            "previous_purchase_price_cents": previous_price,
+            "revised_purchase_price_cents": payload.revised_purchase_price_cents,
+            "executed_at": executed_at.isoformat(),
+            "recorded_at": now.isoformat(),
+            "recorded_by_user_id": str(principal.user_id),
+        }
+    )
+    transaction.transaction_metadata = {
+        **(transaction.transaction_metadata or {}),
+        "executed_amendments": history,
+    }
+
+    disposition_case = db.scalar(
+        select(DispositionCase)
+        .where(
+            DispositionCase.organization_id == principal.organization_id,
+            DispositionCase.transaction_id == transaction.id,
+        )
+        .with_for_update(of=DispositionCase)
+    )
+    revoked_share_links = 0
+    prior_disposition: dict[str, Any] | None = None
+    if disposition_case is not None:
+        prior_disposition = {
+            "asking_price_cents": disposition_case.asking_price_cents,
+            "minimum_acceptable_cents": disposition_case.minimum_acceptable_cents,
+            "desired_assignment_fee_cents": disposition_case.desired_assignment_fee_cents,
+            "package_status": disposition_case.package_status,
+        }
+        next_asking_price = (
+            cast(int, payload.investor_asking_price_cents)
+            if payload.investor_price_action == "set_new"
+            else disposition_case.asking_price_cents
+        )
+        if next_asking_price < payload.revised_purchase_price_cents:
+            raise ValueError(
+                "The investor asking price cannot be below the revised contract price."
+            )
+        disposition_case.asking_price_cents = next_asking_price
+        disposition_case.minimum_acceptable_cents = max(
+            payload.revised_purchase_price_cents,
+            min(disposition_case.minimum_acceptable_cents, next_asking_price),
+        )
+        disposition_case.desired_assignment_fee_cents = max(
+            disposition_case.asking_price_cents - payload.revised_purchase_price_cents,
+            0,
+        )
+        transaction.assignment_fee_cents = disposition_case.desired_assignment_fee_cents
+        deal.assignment_fee_cents = disposition_case.desired_assignment_fee_cents
+        disposition_case.package_status = "draft"
+        disposition_case.package_approved_by_user_id = None
+        disposition_case.package_approved_at = None
+        for package_version in db.scalars(
+            select(DispositionPackageVersion)
+            .where(
+                DispositionPackageVersion.organization_id == principal.organization_id,
+                DispositionPackageVersion.disposition_case_id == disposition_case.id,
+                DispositionPackageVersion.status.in_(("approved", "draft")),
+            )
+            .with_for_update(of=DispositionPackageVersion)
+        ).all():
+            package_version.status = "superseded"
+            package_version.lock_version += 1
+        for share_link in db.scalars(
+            select(DispositionPackageShareLink)
+            .where(
+                DispositionPackageShareLink.organization_id == principal.organization_id,
+                DispositionPackageShareLink.disposition_case_id == disposition_case.id,
+                DispositionPackageShareLink.revoked_at.is_(None),
+            )
+            .with_for_update(of=DispositionPackageShareLink)
+        ).all():
+            share_link.revoked_at = now
+            share_link.revoked_by_user_id = principal.user_id
+            share_link.revocation_reason = "Contract economics changed by executed amendment."
+            share_link.lock_version += 1
+            revoked_share_links += 1
+
+    add_event(
+        db,
+        principal,
+        transaction,
+        "contract.executed_amendment_recorded",
+        (
+            "Recorded executed amendment changing purchase price from "
+            f"${previous_price / 100:,.2f} to "
+            f"${payload.revised_purchase_price_cents / 100:,.2f}."
+        ),
+        {
+            "package_id": str(package.id),
+            "document_id": str(document.id),
+            "previous_purchase_price_cents": previous_price,
+            "revised_purchase_price_cents": payload.revised_purchase_price_cents,
+            "investor_price_action": payload.investor_price_action,
+            "revoked_share_links": revoked_share_links,
+        },
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="deal",
+            entity_id=deal.id,
+            event_type="deal.executed_amendment_recorded",
+            summary="Signed amendment recorded; official contract economics updated.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="contract.amendment.external_execution_recorded",
+            entity_type="transaction",
+            entity_id=transaction.id,
+            previous_value={
+                "purchase_price_cents": previous_price,
+                "disposition": prior_disposition,
+            },
+            new_value={
+                "purchase_price_cents": transaction.purchase_price_cents,
+                "contract_package_id": str(package.id),
+                "document_id": str(document.id),
+                "document_sha256": digest,
+                "disposition_case_id": str(disposition_case.id)
+                if disposition_case is not None
+                else None,
+                "investor_asking_price_cents": disposition_case.asking_price_cents
+                if disposition_case is not None
+                else None,
+                "projected_assignment_fee_cents": transaction.assignment_fee_cents,
+                "revoked_share_links": revoked_share_links,
+            },
+            reason=attestation_reason,
+        )
+    )
+    db.commit()
+    db.info.pop(EXTERNAL_EXECUTION_PENDING_STORAGE_KEY, None)
+    return ExecutedContractAmendmentRead(
+        transaction_id=transaction.id,
+        contract_package_id=package.id,
+        document_id=document.id,
+        previous_purchase_price_cents=previous_price,
+        revised_purchase_price_cents=transaction.purchase_price_cents,
+        disposition_case_id=disposition_case.id if disposition_case is not None else None,
+        investor_asking_price_cents=(
+            disposition_case.asking_price_cents if disposition_case is not None else None
+        ),
+        minimum_acceptable_cents=(
+            disposition_case.minimum_acceptable_cents if disposition_case is not None else None
+        ),
+        desired_assignment_fee_cents=(
+            disposition_case.desired_assignment_fee_cents if disposition_case is not None else None
+        ),
+        disposition_package_status=(
+            disposition_case.package_status if disposition_case is not None else None
+        ),
+        revoked_share_links=revoked_share_links,
     )
 
 

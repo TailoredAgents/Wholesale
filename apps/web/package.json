@@ -40,6 +40,7 @@
     "audit:disposition-layout": "node --test scripts/disposition-embedded-layout-contract.test.mjs",
     "audit:os-resilience": "node --test scripts/os-api-resilience-contract.test.mjs",
     "audit:transaction-checklist-evidence": "node --test scripts/transaction-checklist-evidence-contract.test.mjs",
+    "audit:transaction-amendment": "node --test scripts/transaction-amendment-contract.test.mjs",
     "audit:lead-pipeline": "node --test scripts/lead-pipeline-drag-contract.test.mjs",
     "audit:task-follow-up": "node --test scripts/task-follow-up-policy-contract.test.mjs",
     "audit:seller-today": "node --test scripts/seller-today-workspace-contract.test.mjs",
