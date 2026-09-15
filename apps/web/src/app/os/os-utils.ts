@@ -251,6 +251,26 @@ export function qualificationFieldCount(
   ].filter(Boolean).length;
 }
 
+export function needsLeadQualification(
+  lead: Pick<
+    LeadListItem,
+    | "stage_key"
+    | "motivation"
+    | "desired_timeline"
+    | "property_condition"
+    | "occupancy_status"
+    | "asking_price"
+    | "mortgage_balance"
+    | "appointment_status"
+  >,
+) {
+  return (
+    ["new", "contact_attempt_due", "attempting_contact", "contacted", "qualification_in_progress"].includes(
+      lead.stage_key,
+    ) && qualificationFieldCount(lead) < qualificationFieldTarget
+  );
+}
+
 export function getWorkspaceQueues(leads: LeadListItem[], openTasks: SpeedToLeadTask[]) {
   const operationalLeads = leads.filter((lead) => !isAddressOnlyLead(lead));
   return {
@@ -341,11 +361,7 @@ export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLea
   if (isManualReminderDue(lead)) {
     return "Reminder due";
   }
-  if (
-    ["new", "contact_attempt_due", "attempting_contact", "contacted", "qualification_in_progress"].includes(
-      lead.stage_key,
-    ) && qualificationFieldCount(lead) < qualificationFieldTarget
-  ) {
+  if (needsLeadQualification(lead)) {
     return "Needs qualification";
   }
   if (
@@ -412,10 +428,7 @@ function leadMatchesView(
     );
   }
   if (viewKey === "needs_qualification") {
-    return (
-      ["new", "contacted", "qualification_in_progress"].includes(lead.stage_key) &&
-      qualificationFieldCount(lead) < qualificationFieldTarget
-    );
+    return needsLeadQualification(lead);
   }
   if (viewKey === "no_follow_up") {
     return hasManualReminder(lead);

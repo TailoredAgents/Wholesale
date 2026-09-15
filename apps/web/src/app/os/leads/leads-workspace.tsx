@@ -48,8 +48,10 @@ import {
   getPipelineStage,
   getSavedLeadViewCounts,
   isAddressOnlyLead,
+  isManualReminderDue,
   leadSortOptions,
   labelize,
+  needsLeadQualification,
   pipelineStages,
   pipelineStageMoveBlockReason,
   qualificationFieldCount,
@@ -81,13 +83,27 @@ function QualifiedSellerReviewBadge() {
   return <span className={styles.qualifiedReviewBadge}>Qualified seller · Needs review</span>;
 }
 
-function operatingTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  if (status === "Reminder due") return "warning";
-  if (status === "Needs qualification") return "warning";
-  if (status === "Skip trace needed") return "info";
-  if (["Appointment work", "Offer prep", "Negotiation"].includes(status)) return "info";
-  if (status === "Under contract") return "success";
+function stageTone(stageKey: string): "danger" | "warning" | "info" | "success" | "neutral" {
+  const stage = getPipelineStage(stageKey)?.key;
+  if (stage === "under_contract") return "success";
+  if (["underwriting", "offer"].includes(stage ?? "")) return "info";
   return "neutral";
+}
+
+function stageLabel(lead: Pick<LeadListItem, "stage_key">) {
+  return getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key);
+}
+
+function qualificationSummary(lead: LeadListItem) {
+  return needsLeadQualification(lead)
+    ? `Qualification ${qualificationFieldCount(lead)}/${qualificationFieldTarget}`
+    : null;
+}
+
+function scheduledTaskLabel(lead: LeadListItem) {
+  return lead.primary_next_action?.due_at
+    ? formatDateTime(lead.primary_next_action.due_at)
+    : "No scheduled task";
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
@@ -144,8 +160,8 @@ function LeadBoardCard({
   onSelect: () => void;
   tasks: SpeedToLeadTask[];
 }) {
-  const operatingStatus = getLeadOperatingStatus(lead, tasks);
   const needsReview = needsQualifiedSellerReview(lead.id, tasks);
+  const qualification = qualificationSummary(lead);
   const temperature = lead.lead_temperature
     ? labelize(lead.lead_temperature)
     : null;
@@ -175,9 +191,10 @@ function LeadBoardCard({
           <em>{labelize(lead.asset_class)}{temperature ? ` · ${temperature}` : ""}</em>
         </span>
         <span className={styles.cardAddress}>{lead.property_address}</span>
-        <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+        {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
+        {qualification ? <span className={styles.cardContext}>{qualification}</span> : null}
         {needsReview ? <QualifiedSellerReviewBadge /> : null}
-        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
+        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{scheduledTaskLabel(lead)}</span></span>
       </button>
       {canMoveLead ? (
         <button
@@ -235,14 +252,13 @@ function LeadBoardColumn({
   );
 }
 
-function LeadDragOverlay({ lead, tasks }: { lead: LeadListItem; tasks: SpeedToLeadTask[] }) {
-  const operatingStatus = getLeadOperatingStatus(lead, tasks);
+function LeadDragOverlay({ lead }: { lead: LeadListItem }) {
   return (
     <div aria-hidden="true" className={`${styles.boardCard} ${styles.dragOverlay}`}>
       <div className={styles.cardSelect}>
         <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)}</em></span>
         <span className={styles.cardAddress}>{lead.property_address}</span>
-        <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+        <StatusBadge tone={stageTone(lead.stage_key)}>{stageLabel(lead)}</StatusBadge>
       </div>
     </div>
   );
@@ -490,7 +506,6 @@ export function LeadsWorkspace({
     visibleLeads.find((lead) => lead.id === selectedLeadId) ??
     (display === "table" ? visibleLeads[0] : null) ??
     null;
-  const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
   const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
   const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
   const contractImportLead =
@@ -896,12 +911,12 @@ export function LeadsWorkspace({
         <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
           {display === "table" ? <div className={styles.list}>
             <div className={styles.listHeader}>
-              <span>Seller</span><span>Received</span><span>Status</span><span>Owner</span><span>Next action</span>
+              <span>Seller</span><span>Received</span><span>Stage</span><span>Owner</span><span>Next action</span>
             </div>
             {visibleLeads.map((lead) => {
-              const status = getLeadOperatingStatus(lead, tasks);
               const action = nextAction(lead, tasks);
               const needsReview = needsQualifiedSellerReview(lead.id, tasks);
+              const qualification = qualificationSummary(lead);
               return (
                 <button
                   aria-current={selectedLead?.id === lead.id ? "true" : undefined}
@@ -912,16 +927,18 @@ export function LeadsWorkspace({
                 >
                   <span className={styles.identity}>
                     <strong>{lead.seller_name}</strong><small>{lead.property_address}</small>
-                    <em>{labelize(lead.asset_class)} · {labelize(lead.source)} · {labelize(lead.stage_key)}</em>
+                    <em>{labelize(lead.asset_class)} · {labelize(lead.source)}</em>
                   </span>
                   <time className={styles.received} dateTime={lead.created_at}>{formatDateTime(lead.created_at)}</time>
                   <span className={styles.status}>
-                    <StatusBadge tone={operatingTone(status)}>{status}</StatusBadge>
+                    <StatusBadge tone={stageTone(lead.stage_key)}>{stageLabel(lead)}</StatusBadge>
+                    {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
+                    {qualification ? <small className={styles.qualificationContext}>{qualification}</small> : null}
                     {needsReview ? <QualifiedSellerReviewBadge /> : null}
                   </span>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
                   <span className={styles.next}>
-                    <strong>{action.label}</strong><small>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</small>
+                    <strong>{action.label}</strong><small>{scheduledTaskLabel(lead)}</small>
                   </span>
                 </button>
               );
@@ -978,7 +995,7 @@ export function LeadsWorkspace({
                 })}
               </div>
               <DragOverlay>
-                {activeLead ? <LeadDragOverlay lead={activeLead} tasks={tasks} /> : null}
+                {activeLead ? <LeadDragOverlay lead={activeLead} /> : null}
               </DragOverlay>
             </DndContext>
           )}
@@ -988,15 +1005,15 @@ export function LeadsWorkspace({
               aria-label="Seller preview"
               className={`${styles.preview} ${previewOpen ? styles.previewOpen : ""}`}
             >
-            {selectedLead && selectedStatus && selectedAction ? (
+            {selectedLead && selectedAction ? (
               <>
                 <header>
                   <div><span>Seller preview</span><h2>{selectedLead.seller_name}</h2><p>{selectedLead.property_address}</p></div>
                   <button aria-label="Close seller preview" onClick={closePreview} type="button"><X size={17} /></button>
                 </header>
                 <div className={styles.previewStatus}>
-                  <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
-                  <span>{labelize(selectedLead.asset_class)} · {labelize(selectedLead.stage_key)}</span>
+                  <StatusBadge tone={stageTone(selectedLead.stage_key)}>{stageLabel(selectedLead)}</StatusBadge>
+                  <span>{qualificationSummary(selectedLead) ?? labelize(selectedLead.asset_class)}</span>
                 </div>
                 {needsQualifiedSellerReview(selectedLead.id, tasks) ? (
                   <div className={styles.qualifiedReviewPreview}>
@@ -1052,7 +1069,7 @@ export function LeadsWorkspace({
                   <div><dt>Created</dt><dd>{formatDateTime(selectedLead.created_at)}</dd></div>
                   <div><dt>Primary action</dt><dd>{selectedLead.primary_next_action?.title ?? "Not set"}</dd></div>
                   <div><dt>Action owner</dt><dd>{ownerLabel(selectedLead.primary_next_action?.responsible_user_email ?? null)}</dd></div>
-                  <div><dt>Due</dt><dd>{formatDateTime(selectedLead.primary_next_action?.due_at ?? selectedLead.next_follow_up_at)}</dd></div>
+                  <div><dt>Due</dt><dd>{scheduledTaskLabel(selectedLead)}</dd></div>
                   <div><dt>Qualification</dt><dd>{isAddressOnlyLead(selectedLead) ? "Contact pending" : `${qualificationFieldCount(selectedLead)}/${qualificationFieldTarget}`}</dd></div>
                   <div><dt>Appointment</dt><dd>{labelize(selectedLead.appointment_status)}</dd></div>
                 </dl>

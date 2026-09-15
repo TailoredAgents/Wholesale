@@ -11,7 +11,9 @@ import {
   formatDateTime,
   getLeadOperatingStatus,
   getPipelineStage,
+  isManualReminderDue,
   labelize,
+  needsLeadQualification,
   pipelineStages,
   qualificationFieldCount,
   qualificationFieldTarget,
@@ -23,12 +25,15 @@ function ownerLabel(email: string | null) {
   return email.split("@")[0]?.replace(/[._-]+/g, " ") || email;
 }
 
-function statusTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  if (status === "Reminder due") return "warning";
-  if (status === "Needs qualification") return "warning";
-  if (["Appointment work", "Offer prep", "Negotiation"].includes(status)) return "info";
-  if (status === "Under contract") return "success";
+function stageTone(stageKey: string): "danger" | "warning" | "info" | "success" | "neutral" {
+  const stage = getPipelineStage(stageKey)?.key;
+  if (stage === "under_contract") return "success";
+  if (["underwriting", "offer"].includes(stage ?? "")) return "info";
   return "neutral";
+}
+
+function stageLabel(lead: Pick<LeadListItem, "stage_key">) {
+  return getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key);
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
@@ -118,8 +123,10 @@ export function PipelineWorkspace({
                 <header><h2>{pipelineStage.label}</h2><strong>{stageLeads.length}</strong></header>
                 <div>
                   {stageLeads.map((lead) => {
-                    const operatingStatus = getLeadOperatingStatus(lead, tasks);
                     const action = nextAction(lead, tasks);
+                    const qualification = needsLeadQualification(lead)
+                      ? `Qualification ${qualificationFieldCount(lead)}/${qualificationFieldTarget}`
+                      : null;
                     return (
                       <button
                         aria-current={selectedLead?.id === lead.id ? "true" : undefined}
@@ -130,8 +137,9 @@ export function PipelineWorkspace({
                       >
                         <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.lead_temperature)}</em></span>
                         <span className={styles.address}>{lead.property_address}</span>
-                        <StatusBadge tone={statusTone(operatingStatus)}>{operatingStatus}</StatusBadge>
-                        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.next_follow_up_at)}</span></span>
+                        {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
+                        {qualification ? <span className={styles.cardContext}>{qualification}</span> : null}
+                        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{lead.primary_next_action?.due_at ? formatDateTime(lead.primary_next_action.due_at) : "No scheduled task"}</span></span>
                         <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
                       </button>
                     );
@@ -147,7 +155,7 @@ export function PipelineWorkspace({
           {selectedLead ? (
             <>
               <header><div><span>Pipeline context</span><h2>{selectedLead.seller_name}</h2><p>{selectedLead.property_address}</p></div><button aria-label="Close pipeline context" onClick={() => setMobileDetailOpen(false)} type="button"><X size={17} /></button></header>
-              <div className={styles.inspectorStatus}><StatusBadge tone={statusTone(getLeadOperatingStatus(selectedLead, tasks))}>{getLeadOperatingStatus(selectedLead, tasks)}</StatusBadge><span>{getPipelineStage(selectedLead.stage_key)?.label ?? labelize(selectedLead.stage_key)}</span></div>
+              <div className={styles.inspectorStatus}><StatusBadge tone={stageTone(selectedLead.stage_key)}>{stageLabel(selectedLead)}</StatusBadge><span>{needsLeadQualification(selectedLead) ? `Qualification ${qualificationFieldCount(selectedLead)}/${qualificationFieldTarget}` : labelize(selectedLead.asset_class)}</span></div>
               <dl>
                 <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                 <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>

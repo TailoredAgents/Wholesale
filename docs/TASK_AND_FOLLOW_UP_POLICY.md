@@ -21,6 +21,11 @@ time, rescheduled, or marked done directly from Leads. **Text the assigned user 
 optional per-reminder choice and stays off by default. When selected, Stonegate sends one internal
 SMS to that user's saved cellphone in addition to the normal in-app notification.
 
+The Leads status is the actual pipeline stage. Missing qualification fields are quiet record context
+and an optional saved view, not a second status, task, or overdue condition. **Reminder due** appears
+on a lead only when a team member deliberately scheduled that reminder and its due time has passed.
+When no task exists, the interface says **No scheduled task** instead of implying that work is late.
+
 Completing a primary next action requires an outcome so the history remains useful. Creating the
 next action is optional and must be selected deliberately. An active record may therefore have no
 open task when no follow-up is currently warranted.

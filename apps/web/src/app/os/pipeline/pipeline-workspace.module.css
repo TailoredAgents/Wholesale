@@ -19,6 +19,7 @@
 .cardTop strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .cardTop em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 800; text-transform: uppercase; }
 .address { min-height: 31px; color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.cardContext { color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1.3; }
 .cardMeta { color: var(--muted); font-size: 10px; }
 .cardMeta > span { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cardAction { padding-top: 7px; border-top: 1px solid var(--line-soft); color: var(--brand-strong); display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 850; }

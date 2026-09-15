@@ -64,3 +64,13 @@ test("seller reminders are explicit, easy to schedule, and easy to finish", () =
   assert.doesNotMatch(osUtils, /return "Needs follow-up"/);
   assert.doesNotMatch(osUtils, /return "Overdue follow-up"/);
 });
+
+test("lead status presents the pipeline stage without turning qualification gaps into urgency", () => {
+  assert.match(leadsWorkspace, /<span>Seller<\/span><span>Received<\/span><span>Stage<\/span>/);
+  assert.match(leadsWorkspace, /<StatusBadge tone=\{stageTone\(lead\.stage_key\)\}>\{stageLabel\(lead\)\}<\/StatusBadge>/);
+  assert.match(leadsWorkspace, /isManualReminderDue\(lead\)[\s\S]*Reminder due/);
+  assert.match(leadsWorkspace, /qualificationSummary\(lead\)/);
+  assert.match(leadsWorkspace, /No scheduled task/);
+  assert.doesNotMatch(leadsWorkspace, /<StatusBadge[^>]*>\{operatingStatus\}<\/StatusBadge>/);
+  assert.doesNotMatch(leadsWorkspace, /<span>Status<\/span>/);
+});

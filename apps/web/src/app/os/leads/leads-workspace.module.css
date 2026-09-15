@@ -41,6 +41,8 @@
 .received { color: var(--muted); font-size: 10px; font-style: normal; white-space: nowrap; }
 .status { min-width: 0; display: grid; justify-items: start; gap: 5px; }
 .qualifiedReviewBadge { width: fit-content; max-width: 100%; padding: 3px 6px; border: 1px solid #d8b35e; border-radius: 999px; background: #fff8df; color: #75540c; font-size: 9px; font-weight: 850; line-height: 1.25; text-transform: uppercase; white-space: normal; }
+.qualificationContext, .cardContext { color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1.3; }
+.qualificationContext { text-transform: none; }
 .owner { min-width: 0; color: var(--text-soft); display: flex; align-items: center; gap: 5px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .next strong { color: var(--brand-strong); font-size: 11px; }
 .board { width: 100%; min-width: 0; height: 100%; padding: 12px 12px 8px; border-right: 0; background: var(--surface-muted); display: grid; grid-auto-flow: column; grid-auto-columns: 272px; align-items: stretch; gap: 9px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
@@ -68,6 +70,7 @@
 .cardTop strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .cardTop em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 800; text-transform: uppercase; }
 .cardAddress { min-height: 31px; color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.cardContext { display: block; }
 .cardMeta { color: var(--muted); font-size: 10px; }
 .cardMeta > span { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview { min-width: 0; padding: 18px; background: #fbfaf7; }
