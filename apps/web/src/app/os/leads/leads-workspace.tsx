@@ -18,6 +18,8 @@ import {
 import {
   ArrowRight,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   GripVertical,
   Inbox,
@@ -70,6 +72,7 @@ function ownerLabel(email: string | null) {
 }
 
 const BATCHDIALER_QUALIFIED_SELLER_REVIEW_TASK = "batchdialer_qualified_seller_review";
+const TABLE_PAGE_SIZE = 25;
 
 function needsQualifiedSellerReview(leadId: string, tasks: SpeedToLeadTask[]) {
   return tasks.some(
@@ -484,9 +487,17 @@ export function LeadsWorkspace({
       return matchesQuery && matchesOwner && matchesStage && matchesAsset;
     });
   }, [asset, baseLeads, owner, query, stage]);
+  const [tablePage, setTablePage] = useState(() => {
+    const selectedIndex = visibleLeads.findIndex((lead) => lead.id === initialLeadId);
+    return selectedIndex >= 0 ? Math.floor(selectedIndex / TABLE_PAGE_SIZE) + 1 : 1;
+  });
+  const tablePageCount = Math.max(1, Math.ceil(visibleLeads.length / TABLE_PAGE_SIZE));
+  const currentTablePage = Math.min(tablePage, tablePageCount);
+  const tablePageStart = (currentTablePage - 1) * TABLE_PAGE_SIZE;
+  const tableLeads = visibleLeads.slice(tablePageStart, tablePageStart + TABLE_PAGE_SIZE);
   const selectedLead =
-    visibleLeads.find((lead) => lead.id === selectedLeadId) ??
-    (display === "table" ? visibleLeads[0] : null) ??
+    (display === "table" ? tableLeads : visibleLeads).find((lead) => lead.id === selectedLeadId) ??
+    (display === "table" ? tableLeads[0] : null) ??
     null;
   const selectedAction = selectedLead ? previewAction(selectedLead) : null;
   const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
@@ -549,6 +560,7 @@ export function LeadsWorkspace({
     const nextSort = defaultLeadSortKey(nextView);
     setView(nextView);
     setSort(nextSort);
+    setTablePage(1);
     replaceLocation({ sort: nextSort, view: nextView });
   }
 
@@ -556,6 +568,13 @@ export function LeadsWorkspace({
     setSelectedLeadId(leadId);
     setPreviewOpen(true);
     replaceLocation({ leadId });
+  }
+
+  function chooseTablePage(nextPage: number) {
+    const boundedPage = Math.min(Math.max(nextPage, 1), tablePageCount);
+    setTablePage(boundedPage);
+    const firstLead = visibleLeads[(boundedPage - 1) * TABLE_PAGE_SIZE];
+    if (firstLead) selectLead(firstLead.id);
   }
 
   function jumpToStage(stageKey: string) {
@@ -803,6 +822,7 @@ export function LeadsWorkspace({
               aria-label="Search active leads"
               onChange={(event) => {
                 setQuery(event.target.value);
+                setTablePage(1);
                 replaceLocation({ query: event.target.value });
               }}
               placeholder="Search seller, property, source, or owner"
@@ -815,6 +835,7 @@ export function LeadsWorkspace({
             <select onChange={(event) => {
               const nextAsset = event.target.value as "all" | "house" | "land";
               setAsset(nextAsset);
+              setTablePage(1);
               replaceLocation({ asset: nextAsset });
             }} value={asset}>
               <option value="all">House &amp; land</option>
@@ -826,6 +847,7 @@ export function LeadsWorkspace({
             <span>Owner</span>
             <select onChange={(event) => {
               setOwner(event.target.value);
+              setTablePage(1);
               replaceLocation({ owner: event.target.value });
             }} value={owner}>
               <option value="all">All owners</option>
@@ -840,6 +862,7 @@ export function LeadsWorkspace({
                 aria-label="Filter leads by stage"
                 onChange={(event) => {
                   setStage(event.target.value);
+                  setTablePage(1);
                   replaceLocation({ stage: event.target.value });
                 }}
                 value={stage}
@@ -854,6 +877,7 @@ export function LeadsWorkspace({
             <select onChange={(event) => {
               const nextSort = event.target.value as LeadSortKey;
               setSort(nextSort);
+              setTablePage(1);
               replaceLocation({ sort: nextSort });
             }} value={sort}>
               {leadSortOptions.map((option) => (
@@ -890,12 +914,13 @@ export function LeadsWorkspace({
           </p>
         ) : null}
 
-        <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
+        <div className={`${styles.content} ${display === "board" ? styles.boardContent : styles.tableContent}`}>
           {display === "table" ? <div className={styles.list}>
             <div className={styles.listHeader}>
               <span>Seller</span><span>Received</span><span>Stage</span><span>Owner</span><span>Reminder</span>
             </div>
-            {visibleLeads.map((lead) => {
+            <div className={styles.listRows}>
+            {tableLeads.map((lead) => {
               const needsReview = needsQualifiedSellerReview(lead.id, tasks);
               const qualification = qualificationSummary(lead);
               return (
@@ -928,6 +953,33 @@ export function LeadsWorkspace({
             {!visibleLeads.length ? (
               <div className={styles.empty}><strong>No leads match this view</strong><span>Change the view, owner, stage, or search.</span></div>
             ) : null}
+            </div>
+            <nav aria-label="Lead list pages" className={styles.pagination}>
+              <span>
+                {visibleLeads.length
+                  ? `${tablePageStart + 1}–${Math.min(tablePageStart + TABLE_PAGE_SIZE, visibleLeads.length)} of ${visibleLeads.length}`
+                  : "0 leads"}
+              </span>
+              <div>
+                <button
+                  aria-label="Previous lead page"
+                  disabled={currentTablePage <= 1}
+                  onClick={() => chooseTablePage(currentTablePage - 1)}
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden="true" size={15} /> Previous
+                </button>
+                <strong>Page {currentTablePage} of {tablePageCount}</strong>
+                <button
+                  aria-label="Next lead page"
+                  disabled={currentTablePage >= tablePageCount}
+                  onClick={() => chooseTablePage(currentTablePage + 1)}
+                  type="button"
+                >
+                  Next <ChevronRight aria-hidden="true" size={15} />
+                </button>
+              </div>
+            </nav>
           </div> : (
             <DndContext
               accessibility={{

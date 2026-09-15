@@ -65,6 +65,19 @@ test("the Pipeline preview stays lightweight and the board remains directly usab
   assert.doesNotMatch(styles, /\.boardContent > \.backdrop/);
 });
 
+test("All Leads stays bounded and paginates instead of growing with every record", () => {
+  assert.match(workspace, /const TABLE_PAGE_SIZE = 25/);
+  assert.match(workspace, /const tableLeads = visibleLeads\.slice/);
+  assert.match(workspace, /aria-label="Lead list pages"/);
+  assert.match(workspace, /aria-label="Previous lead page"/);
+  assert.match(workspace, /aria-label="Next lead page"/);
+  assert.match(workspace, /tableLeads\.map\(\(lead\) =>/);
+  assert.match(styles, /\.tableContent \{[^}]*height: clamp\([^}]*overflow: hidden;/s);
+  assert.match(styles, /\.list \{[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/s);
+  assert.match(styles, /\.listRows \{[^}]*overflow-y: auto;/s);
+  assert.match(styles, /\.preview \{[^}]*overflow-y: auto;/s);
+});
+
 test("mouse and delayed touch dragging expose every board destination", () => {
   assert.match(workspace, /useSensor\(MouseSensor, \{ activationConstraint: \{ distance: 6 \} \}\)/);
   assert.match(workspace, /useSensor\(TouchSensor, \{ activationConstraint: \{ delay: 250, tolerance: 8 \} \}\)/);

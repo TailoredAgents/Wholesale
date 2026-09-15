@@ -26,13 +26,20 @@
 .stageSuccess { background: #edf6f0; color: var(--brand-strong); }
 .stageError { background: #fff0ed; color: #9b3529; }
 .content { min-height: 560px; display: grid; grid-template-columns: minmax(620px, 1fr) minmax(290px, 0.38fr); }
+.tableContent { height: clamp(600px, calc(100dvh - 360px), 900px); min-height: 0; overflow: hidden; }
 .boardContent { position: relative; height: clamp(560px, calc(100dvh - 350px), 920px); min-height: 0; display: block; overflow: hidden; }
-.list { min-width: 0; border-right: 1px solid var(--line); }
-.listHeader, .list > button { min-width: 0; display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(112px, 0.55fr) minmax(120px, 0.6fr) minmax(105px, 0.5fr) minmax(135px, 0.7fr); align-items: center; gap: 12px; }
+.list { min-width: 0; min-height: 0; border-right: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.listRows { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.listHeader, .listRows > button { min-width: 0; display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(112px, 0.55fr) minmax(120px, 0.6fr) minmax(105px, 0.5fr) minmax(135px, 0.7fr); align-items: center; gap: 12px; }
 .listHeader { min-height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
-.list > button { width: 100%; min-height: 79px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.list > button:hover, .list .selectedRow { background: var(--surface-soft); }
+.listRows > button { width: 100%; min-height: 79px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.listRows > button:hover, .list .selectedRow { background: var(--surface-soft); }
 .list .selectedRow { box-shadow: inset 3px 0 0 var(--brand); }
+.pagination { min-height: 48px; padding: 7px 10px; border-top: 1px solid var(--line); background: var(--surface-soft); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pagination > span, .pagination strong { color: var(--muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.pagination > div { display: flex; align-items: center; gap: 7px; }
+.pagination button { min-height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--brand-strong); display: inline-flex; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
+.pagination button:disabled { color: var(--muted); cursor: default; opacity: 0.45; }
 .identity, .next { min-width: 0; display: grid; gap: 3px; }
 .identity strong, .identity small, .identity em, .next strong, .next small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity strong { font-size: 13px; }
@@ -73,7 +80,7 @@
 .cardContext { display: block; }
 .cardMeta { color: var(--muted); font-size: 10px; }
 .cardMeta > span { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview { min-width: 0; padding: 18px; background: #fbfaf7; }
+.preview { min-width: 0; min-height: 0; padding: 18px; background: #fbfaf7; overflow-y: auto; }
 .preview header { padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .preview header > div { min-width: 0; }
 .preview h2 { margin-top: 3px; font-size: 20px; }
@@ -166,13 +173,14 @@
   .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .pipelineToolbar { grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(118px, 0.45fr)); }
   .toolbar > strong { display: none; }
-  .listHeader, .list > button { grid-template-columns: minmax(170px, 1fr) 105px 110px minmax(110px, 0.7fr); }
+  .listHeader, .listRows > button { grid-template-columns: minmax(170px, 1fr) 105px 110px minmax(110px, 0.7fr); }
   .listHeader > span:nth-child(4), .owner { display: none; }
 }
 
 @media (max-width: 1260px) {
   .leadDesk { overflow: visible; }
   .content { min-height: 520px; grid-template-columns: minmax(0, 1fr); }
+  .tableContent { height: clamp(520px, calc(100dvh - 320px), 760px); min-height: 0; }
   .board { border-right: 0; }
   .list { border-right: 0; }
   .preview { position: fixed; z-index: 80; top: 72px; right: 0; bottom: 0; width: min(390px, 94vw); transform: translateX(105%); transition: transform 160ms ease; overflow-y: auto; box-shadow: var(--shadow-raised); }
@@ -194,12 +202,14 @@
   .boardContent { height: clamp(520px, calc(100dvh - 300px), 760px); }
   .board { grid-auto-columns: minmax(240px, 84vw); }
   .listHeader { display: none; }
-  .list > button { min-height: 102px; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+  .listRows > button { min-height: 102px; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
   .identity { grid-column: 1 / -1; }
   .received { grid-column: 1; }
   .status { grid-column: 2; justify-self: end; }
   .owner { display: none; }
   .next { grid-column: 1 / -1; text-align: right; }
+  .pagination { align-items: stretch; flex-direction: column; }
+  .pagination > div { justify-content: space-between; }
   .contractImportDialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
   .contractImportHeader { padding: 14px; }
   .contractImportHeader h2 { font-size: 18px; }
