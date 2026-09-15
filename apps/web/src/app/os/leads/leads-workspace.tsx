@@ -60,6 +60,7 @@ import {
 } from "../os-utils";
 import styles from "./leads-workspace.module.css";
 import { LeadLifecycleActions } from "./lead-lifecycle-actions";
+import { LeadReminderControl } from "./lead-reminder-control";
 
 function ownerLabel(email: string | null) {
   if (!email) return "Unassigned";
@@ -81,8 +82,8 @@ function QualifiedSellerReviewBadge() {
 }
 
 function operatingTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  if (status === "Overdue follow-up") return "danger";
-  if (["Needs qualification", "Needs follow-up"].includes(status)) return "warning";
+  if (status === "Reminder due") return "warning";
+  if (status === "Needs qualification") return "warning";
   if (status === "Skip trace needed") return "info";
   if (["Appointment work", "Offer prep", "Negotiation"].includes(status)) return "info";
   if (status === "Under contract") return "success";
@@ -100,9 +101,6 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
     };
   }
   const status = getLeadOperatingStatus(lead, tasks);
-  if (status === "Overdue follow-up") {
-    return { href: `/os/inbox?lead=${lead.id}`, label: "Continue conversation" };
-  }
   if (status === "Needs qualification") {
     return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Open qualification queue" };
   }
@@ -514,10 +512,8 @@ export function LeadsWorkspace({
     ].includes(lead.stage_key),
   ).length;
   const unassignedCount = contactReadyLeads.filter((lead) => !lead.assigned_user_email).length;
-  const withoutFollowUpCount = contactReadyLeads.filter(
-    (lead) =>
-      !lead.next_follow_up_at &&
-      !["dead", "disqualified", "under_contract"].includes(lead.stage_key),
+  const reminderCount = contactReadyLeads.filter(
+    (lead) => lead.primary_next_action?.action_type === "follow_up",
   ).length;
 
   function replaceLocation(overrides: {
@@ -784,7 +780,7 @@ export function LeadsWorkspace({
         <div><span>New</span><strong>{newLeadCount}</strong><small>First-contact records</small></div>
         <div><span>Qualified+</span><strong>{qualifiedCount}</strong><small>Appointment or offer work</small></div>
         <div><span>Unassigned</span><strong>{unassignedCount}</strong><small>Needs an owner</small></div>
-        <div><span>No follow-up</span><strong>{withoutFollowUpCount}</strong><small>No dated next action</small></div>
+        <div><span>Reminders</span><strong>{reminderCount}</strong><small>Manually scheduled</small></div>
         <div><span>Paid prospects</span><strong>{newPaidLeadCount}</strong><small>Includes address-only captures</small></div>
       </section>
 
@@ -1043,6 +1039,11 @@ export function LeadsWorkspace({
                     </small>
                   </label>
                 ) : null}
+                <LeadReminderControl
+                  canEdit={canEditLead}
+                  key={`${selectedLead.id}:${selectedLead.primary_next_action?.task_id ?? "none"}:${selectedLead.primary_next_action?.due_at ?? "none"}`}
+                  lead={selectedLead}
+                />
                 <dl>
                   <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                   <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>

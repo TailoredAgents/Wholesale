@@ -59,7 +59,6 @@ from app.services.public_intake import (
     get_default_organization,
 )
 from app.services.staff_lead_alerts import queue_staff_lead_alerts_for_lead
-from app.services.tasks import ensure_speed_to_lead_task
 
 PROVIDER = "batchdialer"
 CHECKPOINT_STREAM = "cdrs"
@@ -1900,7 +1899,6 @@ def _ensure_batchdialer_lead(
         sla_minutes=5,
         source_label="BatchDialer",
     )
-    ensure_speed_to_lead_task(db, lead, contact)
     db.add(
         ActivityEvent(
             organization_id=lead.organization_id,

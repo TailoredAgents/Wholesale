@@ -2336,7 +2336,11 @@ def process_next_acquisition_reminder(db: Session, _settings: Settings) -> UUID 
             organization_id=overdue_task.organization_id,
             recipient_user_id=overdue_task.responsible_user_id,
             notification_type="overdue_task",
-            title="Follow-up task overdue",
+            title=(
+                "Reminder due"
+                if overdue_task.task_type == "follow_up"
+                else "Task due"
+            ),
             body=overdue_task.title,
             entity_type="task",
             entity_id=overdue_task.id,

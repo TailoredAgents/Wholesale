@@ -13,6 +13,15 @@ const inboxWorkspace = readFileSync(
   resolve(appRoot, "os/inbox/inbox-workspace.tsx"),
   "utf8",
 );
+const leadsWorkspace = readFileSync(
+  resolve(appRoot, "os/leads/leads-workspace.tsx"),
+  "utf8",
+);
+const reminderControl = readFileSync(
+  resolve(appRoot, "os/leads/lead-reminder-control.tsx"),
+  "utf8",
+);
+const osUtils = readFileSync(resolve(appRoot, "os/os-utils.ts"), "utf8");
 
 test("AI operations stay out of human task and due-date views", () => {
   assert.match(tasksWorkspace, /if \(item\.item_type === "ai_work"\)/);
@@ -36,4 +45,19 @@ test("AI call notes do not preselect creation of a follow-up task", () => {
   assert.match(inboxWorkspace, /const \[createTask, setCreateTask\] = useState\(false\)/);
   assert.match(inboxWorkspace, /checked=\{createTask\}/);
   assert.match(inboxWorkspace, /Create follow-up task/);
+});
+
+test("seller reminders are explicit, easy to schedule, and easy to finish", () => {
+  assert.match(leadsWorkspace, /<LeadReminderControl/);
+  assert.match(leadsWorkspace, /canEdit=\{canEditLead\}/);
+  assert.match(leadsWorkspace, /lead=\{selectedLead\}/);
+  assert.match(reminderControl, /Set reminder/);
+  assert.match(reminderControl, />6 months</);
+  assert.match(reminderControl, /\/api\/v1\/leads\/\$\{lead\.id\}\/tasks/);
+  assert.match(reminderControl, /\/api\/v1\/tasks\/\$\{reminder\.task_id\}\/complete/);
+  assert.match(reminderControl, />Done/);
+  assert.match(osUtils, /label: "Reminders"/);
+  assert.match(osUtils, /return "Reminder due"/);
+  assert.doesNotMatch(osUtils, /return "Needs follow-up"/);
+  assert.doesNotMatch(osUtils, /return "Overdue follow-up"/);
 });

@@ -1434,7 +1434,6 @@ def test_direct_handoffs_are_tenant_scoped_and_reject_foreign_prior_leads(
         CallRecord,
         CommunicationRecord,
         AttributionTouch,
-        Task,
         PropertyResearchRun,
     )
     before_conflict = {
@@ -1459,6 +1458,7 @@ def test_direct_handoffs_are_tenant_scoped_and_reject_foreign_prior_leads(
         for model in tracked_models
     }
     assert all(counts[0] > 0 and counts[1] > 0 for counts in before_conflict.values())
+    assert db_session.scalar(select(func.count()).select_from(Task)) == 0
 
     conflict_cdr = sample_cdr("Qualified Seller – Follow Up")
     conflict_cdr["id"] = 42002

@@ -89,7 +89,6 @@ export function pipelineStageMoveBlockReason(
 }
 
 export const boardStages = pipelineStages.slice(0, 6);
-const terminalStages = new Set(["dead", "disqualified", "under_contract"]);
 const paidLeadSources = new Set([
   "google_ppc",
   "meta_ads",
@@ -115,7 +114,7 @@ export const savedLeadViews = [
   {
     key: "urgent",
     label: "Urgent",
-    description: "Hot, fast-timeline, or overdue leads.",
+    description: "Hot, fast-timeline, or due-reminder leads.",
   },
   {
     key: "needs_qualification",
@@ -124,8 +123,8 @@ export const savedLeadViews = [
   },
   {
     key: "no_follow_up",
-    label: "No Follow-Up",
-    description: "Active leads without the next dated task.",
+    label: "Reminders",
+    description: "Seller reminders deliberately scheduled by your team.",
   },
   {
     key: "appointments",
@@ -329,6 +328,7 @@ export function getFilteredLeads(
 }
 
 export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
+  void openTasks;
   if (isAddressOnlyLead(lead)) {
     return "Skip trace needed";
   }
@@ -338,9 +338,8 @@ export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLea
   if (["dead", "disqualified"].includes(lead.stage_key)) {
     return "Closed out";
   }
-  const leadTasks = openTasks.filter((task) => task.lead_id === lead.id);
-  if (leadTasks.some((task) => task.due_status === "overdue")) {
-    return "Overdue follow-up";
+  if (isManualReminderDue(lead)) {
+    return "Reminder due";
   }
   if (
     ["new", "contact_attempt_due", "attempting_contact", "contacted", "qualification_in_progress"].includes(
@@ -369,10 +368,15 @@ export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLea
   if (lead.stage_key === "long_term_follow_up") {
     return "Nurture";
   }
-  if (!lead.next_follow_up_at && !terminalStages.has(lead.stage_key)) {
-    return "Needs follow-up";
-  }
   return "On track";
+}
+
+export function hasManualReminder(lead: Pick<LeadListItem, "primary_next_action">) {
+  return lead.primary_next_action?.action_type === "follow_up";
+}
+
+export function isManualReminderDue(lead: Pick<LeadListItem, "primary_next_action">) {
+  return hasManualReminder(lead) && lead.primary_next_action?.due_status === "overdue";
 }
 
 export function getPipelineStage(stageKey: string) {
@@ -404,7 +408,7 @@ function leadMatchesView(
     return (
       lead.lead_temperature === "hot" ||
       hasUrgentTimeline(lead) ||
-      openTasks.some((task) => task.lead_id === lead.id && task.due_status === "overdue")
+      isManualReminderDue(lead)
     );
   }
   if (viewKey === "needs_qualification") {
@@ -414,7 +418,7 @@ function leadMatchesView(
     );
   }
   if (viewKey === "no_follow_up") {
-    return !lead.next_follow_up_at && !terminalStages.has(lead.stage_key);
+    return hasManualReminder(lead);
   }
   if (viewKey === "appointments") {
     return (
@@ -442,6 +446,7 @@ function sortLeads(
   openTasks: SpeedToLeadTask[],
   sortKey: LeadSortKey,
 ) {
+  void openTasks;
   return [...leads].sort((first, second) => {
     const firstCreatedAt = Date.parse(first.created_at);
     const secondCreatedAt = Date.parse(second.created_at);
@@ -463,6 +468,7 @@ function sortLeads(
 }
 
 function leadWorkRank(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
+  void openTasks;
   if (isAddressOnlyLead(lead)) {
     return 0;
   }
@@ -473,7 +479,7 @@ function leadWorkRank(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
   if (hasUrgentTimeline(lead)) {
     rank += 30;
   }
-  if (openTasks.some((task) => task.lead_id === lead.id && task.due_status === "overdue")) {
+  if (isManualReminderDue(lead)) {
     rank += 35;
   }
   if (qualificationFieldCount(lead) < qualificationFieldTarget) {

@@ -422,3 +422,31 @@ def test_worker_creates_reminders_for_each_upcoming_appointment(
         )
         == 2
     )
+
+
+def test_worker_labels_a_manually_scheduled_follow_up_as_a_due_reminder(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead = create_lead(client, headers, "402 Manual Reminder Ave")
+    response = client.post(
+        f"/api/v1/leads/{lead['id']}/tasks",
+        headers=headers,
+        json={
+            "title": "Call the seller about the updated timeline",
+            "due_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+            "priority": "normal",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    notification_id = process_next_acquisition_reminder(db_session, get_settings())
+
+    assert notification_id is not None
+    notification = db_session.get(Notification, notification_id)
+    assert notification is not None
+    assert notification.title == "Reminder due"
+    assert notification.body == "Call the seller about the updated timeline"

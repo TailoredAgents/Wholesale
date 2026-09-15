@@ -10,13 +10,14 @@ work merely because time passed.
 
 A human task is appropriate when there is a concrete obligation, including:
 
-- a new inbound lead that requires a speed-to-lead response;
-- a missed inbound call or other reply that requires attention;
+- a missed inbound call or other reply that a person deliberately turns into a task;
 - a callback, appointment, deadline, or follow-up a staff member explicitly schedules; or
 - a governed acquisition, contract, disposition, or closing step that has a real due date.
 
-Creating a seller lead manually does not create a task unless `next_follow_up_at` is supplied. If a
-date is supplied, Stonegate creates the lead's primary next action using that exact date.
+Creating or importing a seller lead does not create a reminder. New website and BatchDialer leads
+remain visible through their stage, qualification state, inbox activity, and new-lead alerts until
+a team member deliberately chooses **Set reminder**. A reminder can be set for any exact date and
+time, rescheduled, or marked done directly from Leads.
 
 Completing a primary next action requires an outcome so the history remains useful. Creating the
 next action is optional and must be selected deliberately. An active record may therefore have no
@@ -37,18 +38,18 @@ conversation produced a real next step.
 
 ## Existing Records
 
-Migration `0127_retire_legacy_automatic_tasks.py` retires the overdue generic primary actions that
-match the former five-minute automatic-creation fingerprint. It marks them cancelled with the
-`automation_retired` outcome, stores an audit event, and clears the matching artificial lead
-follow-up date. It does not delete task history.
+Migration `0127_retire_legacy_automatic_tasks.py` retired the overdue generic primary actions that
+matched the former five-minute automatic-creation fingerprint. Migration
+`0130_retire_automatic_lead_reminders.py` finishes the cutover by retiring every remaining open
+generated speed-to-lead or generic five-minute action, including future ones. Both migrations keep
+the history, record an audit event, and clear only the matching artificial follow-up date.
 
-The cleanup does not touch speed-to-lead work, explicitly titled tasks, future work, or generic
-tasks whose due date does not match the former automation fingerprint. Remaining human primary
+The cleanup does not touch reminders explicitly scheduled by people. Remaining human primary
 actions can be completed with an outcome and no successor.
 
 ## Protections That Remain
 
-Speed-to-lead tasks, inbound-response work, explicit callbacks, appointments, approvals,
-operational exceptions, and transaction deadlines retain their existing permissions and audit
-history. This policy changes task noise and successor defaults; it does not authorize AI to contact
-people or perform governed business actions.
+New-lead and inbound-message alerts, unread conversations, inbound-response work for reactivated
+closed leads, explicit callbacks, appointments, approvals, operational exceptions, and transaction
+deadlines retain their existing permissions and audit history. This policy changes task noise and
+successor defaults; it does not authorize AI to contact people or perform governed business actions.

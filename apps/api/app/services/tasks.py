@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -7,7 +7,6 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.core.config import get_settings
 from app.domain.assets import property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
@@ -51,52 +50,6 @@ TEAM_PERMISSION_KEYS = {
     PermissionKeys.MANAGE_USERS,
     PermissionKeys.EXPORT_BUYERS,
 }
-
-
-def ensure_speed_to_lead_task(db: Session, lead: Lead, contact: Contact) -> Task:
-    existing = db.scalar(
-        select(Task).where(
-            Task.organization_id == lead.organization_id,
-            Task.lead_id == lead.id,
-            Task.task_type == SPEED_TO_LEAD_TASK_TYPE,
-            Task.status.in_(OPEN_TASK_STATUSES),
-        )
-    )
-    if existing is not None:
-        supersede_open_primary_tasks(db, lead_id=lead.id, excluding_task_id=existing.id)
-        existing.work_kind = "primary_next_action"
-        existing.responsible_user_id = lead.assigned_user_id
-        return existing
-
-    supersede_open_primary_tasks(db, lead_id=lead.id)
-    due_at = datetime.now(UTC) + timedelta(minutes=get_settings().speed_to_lead_due_minutes)
-    task = Task(
-        organization_id=lead.organization_id,
-        lead_id=lead.id,
-        deal_id=None,
-        responsible_user_id=lead.assigned_user_id,
-        task_type=SPEED_TO_LEAD_TASK_TYPE,
-        work_kind="primary_next_action",
-        title=f"Contact {contact.legal_name}",
-        status="open",
-        priority="urgent",
-        due_at=due_at,
-        completed_at=None,
-    )
-    lead.next_follow_up_at = due_at
-    db.add(task)
-    db.flush()
-    db.add(
-        ActivityEvent(
-            organization_id=lead.organization_id,
-            actor_user_id=None,
-            entity_type="lead",
-            entity_id=lead.id,
-            event_type="task.speed_to_lead_created",
-            summary=f"Speed-to-lead task created for {contact.legal_name}.",
-        )
-    )
-    return task
 
 
 def create_initial_lead_next_action(

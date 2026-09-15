@@ -24,16 +24,21 @@ function ownerLabel(email: string | null) {
 }
 
 function statusTone(status: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  if (status === "Overdue follow-up") return "danger";
-  if (["Needs qualification", "Needs follow-up"].includes(status)) return "warning";
+  if (status === "Reminder due") return "warning";
+  if (status === "Needs qualification") return "warning";
   if (["Appointment work", "Offer prep", "Negotiation"].includes(status)) return "info";
   if (status === "Under contract") return "success";
   return "neutral";
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
+  if (lead.primary_next_action) {
+    return {
+      href: `/os/tasks?item=task:${lead.primary_next_action.task_id}`,
+      label: lead.primary_next_action.title,
+    };
+  }
   const status = getLeadOperatingStatus(lead, tasks);
-  if (status === "Overdue follow-up") return { href: `/os/inbox?lead=${lead.id}`, label: "Reply now" };
   if (status === "Needs qualification") return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Qualify" };
   if (status === "Appointment work") return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Schedule" };
   if (status === "Offer prep") {

@@ -68,7 +68,6 @@ from app.services.staff_lead_alerts import (
     queue_staff_lead_alerts_for_lead,
     queue_website_stage_lead_alerts,
 )
-from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
     "new",
@@ -793,8 +792,6 @@ def create_public_seller_lead(
         submitted_at=submitted_at,
         sla_minutes=get_settings().speed_to_lead_due_minutes,
     )
-    ensure_speed_to_lead_task(db, lead, contact)
-
     requested_contact_channels = (
         contact_consent_channels
         if contact_consent_channels is not None

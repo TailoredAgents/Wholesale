@@ -818,7 +818,7 @@ def test_completed_contact_step_promotes_same_address_capture_exactly_once(
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
-    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(PropertyResearchRun)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
@@ -1386,7 +1386,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert payload["enrichment_expires_at"]
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
-    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
@@ -1423,13 +1423,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert lead.mortgage_balance == "90000"
     assert property_record.property_type == "single_family"
     assert lead.assigned_user_id is not None
-    task = db_session.scalar(select(Task))
-    assert task is not None
-    assert task.task_type == "speed_to_lead"
-    assert task.status == "open"
-    assert task.priority == "urgent"
-    assert task.responsible_user_id == lead.assigned_user_id
-    assert str(task.lead_id) == payload["lead_id"]
+    assert lead.next_follow_up_at is None
     lead_manager_case = db_session.scalar(select(LeadManagementCase))
     assert lead_manager_case is not None
     assert lead_manager_case.status == "awaiting_acceptance"
@@ -2424,7 +2418,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
-    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
@@ -2467,7 +2461,7 @@ def test_duplicate_public_intake_fills_missing_context_without_overwriting_revie
     assert property_record.property_type == "single_family"
 
 
-def test_speed_to_lead_queue_and_completion(
+def test_public_intake_waits_for_a_person_to_schedule_and_complete_a_reminder(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -2476,17 +2470,36 @@ def test_speed_to_lead_queue_and_completion(
     intake_response = client.post("/api/v1/public/seller-leads", json=public_payload())
     assert intake_response.status_code == 201
 
-    queue_response = client.get(
+    automatic_queue_response = client.get(
         "/api/v1/tasks/speed-to-lead",
         headers={"X-Dev-User-Email": "owner@example.com"},
     )
+    assert automatic_queue_response.status_code == 200
+    assert automatic_queue_response.json()["items"] == []
 
+    lead_id = intake_response.json()["lead_id"]
+    create_response = client.post(
+        f"/api/v1/leads/{lead_id}/tasks",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+        json={
+            "title": "Call Sam in six months",
+            "due_at": "2027-01-17T14:00:00Z",
+            "priority": "normal",
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    assert create_response.json()["primary_next_action"]["action_type"] == "follow_up"
+
+    queue_response = client.get(
+        "/api/v1/tasks/open",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
     assert queue_response.status_code == 200
     queue = queue_response.json()["items"]
     assert len(queue) == 1
     assert queue[0]["seller_name"] == "Sam Seller"
     assert queue[0]["source"] == "google_ppc"
-    assert queue[0]["due_status"] in {"due", "overdue"}
+    assert queue[0]["task_type"] == "follow_up"
 
     complete_response = client.patch(
         f"/api/v1/tasks/{queue[0]['task_id']}/complete",
@@ -2494,18 +2507,12 @@ def test_speed_to_lead_queue_and_completion(
         json={
             "outcome": "seller_contacted",
             "completion_notes": "Seller contacted by phone.",
-            "successor": {
-                "title": "Complete seller qualification",
-                "task_type": "qualification",
-                "due_at": "2026-07-17T14:00:00Z",
-                "priority": "high",
-            },
         },
     )
 
     assert complete_response.status_code == 200
     assert complete_response.json()["status"] == "completed"
-    assert complete_response.json()["successor_task_id"] is not None
+    assert complete_response.json()["successor_task_id"] is None
     assert (
         int(
             db_session.scalar(
@@ -2530,7 +2537,7 @@ def test_speed_to_lead_queue_and_completion(
     )
 
     completed_queue_response = client.get(
-        "/api/v1/tasks/speed-to-lead",
+        "/api/v1/tasks/open",
         headers={"X-Dev-User-Email": "owner@example.com"},
     )
     assert completed_queue_response.status_code == 200
