@@ -21,6 +21,13 @@ MEDIA_URL = (
 )
 
 
+def test_default_inbound_mms_limits_accept_large_modern_phone_photos() -> None:
+    settings = Settings.model_construct()
+
+    assert settings.twilio_mms_max_media_bytes == 25_000_000
+    assert settings.twilio_mms_max_total_bytes == 100_000_000
+
+
 def test_twilio_media_download_uses_basic_auth_and_validates_the_image() -> None:
     api_key = "SK00000000000000000000000000000000"
     api_secret = "mms-test-secret"

@@ -572,8 +572,8 @@ Do not share another business's campaign or number.
   **Settings > Communications**)
 - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
 - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
-- `TWILIO_MMS_MAX_MEDIA_BYTES` (optional; defaults to `10000000` bytes per photo)
-- `TWILIO_MMS_MAX_TOTAL_BYTES` (optional; defaults to `25000000` bytes per message)
+- `TWILIO_MMS_MAX_MEDIA_BYTES` (optional; defaults to `25000000` bytes per photo)
+- `TWILIO_MMS_MAX_TOTAL_BYTES` (optional; defaults to `100000000` bytes per message)
 - `TWILIO_MMS_MAX_ATTEMPTS` (optional; defaults to `5` worker attempts)
 - SMS timezone and contact-hour variables
 

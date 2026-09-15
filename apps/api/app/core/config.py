@@ -793,13 +793,13 @@ class Settings(BaseSettings):
         validation_alias="TWILIO_VALIDATE_WEBHOOK_SIGNATURES",
     )
     twilio_mms_max_media_bytes: int = Field(
-        default=10_000_000,
+        default=25_000_000,
         ge=100_000,
         le=25_000_000,
         validation_alias="TWILIO_MMS_MAX_MEDIA_BYTES",
     )
     twilio_mms_max_total_bytes: int = Field(
-        default=25_000_000,
+        default=100_000_000,
         ge=100_000,
         le=100_000_000,
         validation_alias="TWILIO_MMS_MAX_TOTAL_BYTES",
