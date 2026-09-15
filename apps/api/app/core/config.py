@@ -841,6 +841,24 @@ class Settings(BaseSettings):
         le=86400,
         validation_alias="TWILIO_VOICE_TOKEN_TTL_SECONDS",
     )
+    twilio_voice_session_rate_limit_per_minute: int = Field(
+        default=30,
+        ge=5,
+        le=300,
+        validation_alias="TWILIO_VOICE_SESSION_RATE_LIMIT_PER_MINUTE",
+    )
+    twilio_voice_call_intent_rate_limit_per_minute: int = Field(
+        default=12,
+        ge=1,
+        le=120,
+        validation_alias="TWILIO_VOICE_CALL_INTENT_RATE_LIMIT_PER_MINUTE",
+    )
+    twilio_voice_call_intent_rate_limit_per_hour: int = Field(
+        default=120,
+        ge=1,
+        le=1000,
+        validation_alias="TWILIO_VOICE_CALL_INTENT_RATE_LIMIT_PER_HOUR",
+    )
     twilio_voice_ring_timeout_seconds: int = Field(
         default=25,
         ge=10,

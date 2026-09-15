@@ -428,6 +428,12 @@ services:
         sync: false
       - key: TWILIO_VOICE_TOKEN_TTL_SECONDS
         value: 3600
+      - key: TWILIO_VOICE_SESSION_RATE_LIMIT_PER_MINUTE
+        value: 30
+      - key: TWILIO_VOICE_CALL_INTENT_RATE_LIMIT_PER_MINUTE
+        value: 12
+      - key: TWILIO_VOICE_CALL_INTENT_RATE_LIMIT_PER_HOUR
+        value: 120
       - key: TWILIO_VOICE_RING_TIMEOUT_SECONDS
         value: 25
       - key: TWILIO_VOICE_TIMEZONE

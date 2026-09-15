@@ -6,7 +6,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -179,6 +179,60 @@ class VoiceConfigurationError(RuntimeError):
 
 class VoiceIntentConflictError(RuntimeError):
     pass
+
+
+class VoiceRateLimitError(RuntimeError):
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = max(1, retry_after_seconds)
+
+
+def enforce_voice_call_intent_rate_limit(
+    db: Session,
+    principal: Principal,
+    *,
+    settings: Settings,
+    now: datetime,
+) -> None:
+    """Bound human web-phone call creation without affecting BatchDialer."""
+
+    filters = (
+        VoiceCallIntent.organization_id == principal.organization_id,
+        VoiceCallIntent.actor_user_id == principal.user_id,
+        VoiceCallIntent.prospect_id.is_(None),
+    )
+    for window_seconds, limit in (
+        (60, settings.twilio_voice_call_intent_rate_limit_per_minute),
+        (3600, settings.twilio_voice_call_intent_rate_limit_per_hour),
+    ):
+        cutoff = now - timedelta(seconds=window_seconds)
+        recent_count = int(
+            db.scalar(
+                select(func.count())
+                .select_from(VoiceCallIntent)
+                .where(*filters, VoiceCallIntent.created_at >= cutoff)
+            )
+            or 0
+        )
+        if recent_count < limit:
+            continue
+        oldest = db.scalar(
+            select(VoiceCallIntent.created_at)
+            .where(*filters, VoiceCallIntent.created_at >= cutoff)
+            .order_by(VoiceCallIntent.created_at.asc())
+            .limit(1)
+        )
+        retry_after = 1
+        if oldest is not None:
+            retry_after = max(
+                1,
+                int((as_utc(oldest) + timedelta(seconds=window_seconds) - now).total_seconds())
+                + 1,
+            )
+        raise VoiceRateLimitError(
+            "Too many web-phone calls were started from this account. Wait briefly and try again.",
+            retry_after_seconds=retry_after,
+        )
 
 
 def list_voice_lines(db: Session, principal: Principal) -> list[VoiceLineRead]:
@@ -951,6 +1005,7 @@ def create_quick_dial_intent(
         VoiceComplianceError,
         VoiceConfigurationError,
         VoiceIntentConflictError,
+        VoiceRateLimitError,
     ):
         db.rollback()
         raise
@@ -1061,6 +1116,13 @@ def create_call_intent(
         if line is None:
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
         return call_intent_to_read(existing, line, get_settings())
+
+    enforce_voice_call_intent_rate_limit(
+        db,
+        principal,
+        settings=settings,
+        now=datetime.now(UTC),
+    )
 
     contact = db.get(Contact, conversation.contact_id)
     lead = active_lead
@@ -1439,7 +1501,16 @@ def process_outbound_voice_request(
     intent_id: UUID,
 ) -> str:
     settings = get_settings()
-    intent = db.get(VoiceCallIntent, intent_id)
+    intent = db.scalar(
+        select(VoiceCallIntent)
+        .where(
+            VoiceCallIntent.id == intent_id,
+            VoiceCallIntent.prospect_id.is_(None),
+        )
+        .with_for_update()
+    )
+    if intent is None:
+        intent = db.get(VoiceCallIntent, intent_id)
     if intent is None:
         raise ValueError("Unknown Stonegate call intent.")
     if intent.prospect_id is not None:

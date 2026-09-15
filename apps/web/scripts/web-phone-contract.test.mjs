@@ -32,6 +32,7 @@ const leadCall = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/lead-call-button.tsx"),
   "utf8",
 );
+const nextConfig = readFileSync(resolve(webRoot, "next.config.ts"), "utf8");
 
 test("the shared phone lazily initializes Twilio from an ephemeral session", () => {
   assert.match(runtime, /\(\) => import\("@twilio\/voice-sdk"\)/);
@@ -40,6 +41,15 @@ test("the shared phone lazily initializes Twilio from an ephemeral session", () 
   assert.match(provider, /safeSession\(voiceSession\)/);
   assert.doesNotMatch(provider, /localStorage|sessionStorage/);
   assert.doesNotMatch(provider, /console\./);
+});
+
+test("the operating system limits browser capabilities and injected content", () => {
+  assert.match(nextConfig, /source: "\/os\/:path\*"/);
+  assert.match(nextConfig, /Content-Security-Policy/);
+  assert.match(nextConfig, /object-src 'none'/);
+  assert.match(nextConfig, /frame-ancestors 'none'/);
+  assert.match(nextConfig, /microphone=\(self\)/);
+  assert.match(nextConfig, /wss:/);
 });
 
 test("incoming browser calls are explicitly enabled and remain a first-answer-wins option", () => {

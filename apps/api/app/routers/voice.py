@@ -56,10 +56,12 @@ from app.services.marin_call_review import (
 from app.services.meta_lead_ads import (
     requeue_staff_lead_alerts,
 )
+from app.services.request_rate_limit import voice_session_rate_limiter
 from app.services.voice import (
     VoiceComplianceError,
     VoiceConfigurationError,
     VoiceIntentConflictError,
+    VoiceRateLimitError,
     create_call_intent,
     create_lead_call_intent,
     create_quick_dial_intent,
@@ -96,6 +98,14 @@ marin_calls_dependency = require_any_permission(
 )
 
 
+def voice_rate_limit_http_exception(exc: VoiceRateLimitError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=str(exc),
+        headers={"Retry-After": str(exc.retry_after_seconds)},
+    )
+
+
 @router.post("/quick-dial", status_code=201)
 def create_quick_dial_call_intent(
     payload: VoiceQuickDialCreate,
@@ -120,13 +130,29 @@ def create_quick_dial_call_intent(
         ) from exc
     except VoiceIntentConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceRateLimitError as exc:
+        raise voice_rate_limit_http_exception(exc) from exc
 
 
 @router.get("/session")
 def read_voice_session(
+    response: Response,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(call_dependency)],
 ) -> VoiceSessionRead:
+    settings = get_settings()
+    retry_after = voice_session_rate_limiter.check(
+        f"{principal.organization_id}:{principal.user_id}",
+        limit=settings.twilio_voice_session_rate_limit_per_minute,
+        window_seconds=60,
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many web-phone session requests. Wait briefly and try again.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    response.headers["Cache-Control"] = "private, no-store"
     return create_voice_session(db, principal)
 
 
@@ -174,6 +200,8 @@ def create_conversation_call_intent(
         ) from exc
     except VoiceIntentConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceRateLimitError as exc:
+        raise voice_rate_limit_http_exception(exc) from exc
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return intent
@@ -210,6 +238,8 @@ def create_forwarded_conversation_call(
         ) from exc
     except VoiceIntentConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceRateLimitError as exc:
+        raise voice_rate_limit_http_exception(exc) from exc
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return intent
@@ -246,6 +276,8 @@ def create_forwarded_lead_call(
         ) from exc
     except VoiceIntentConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceRateLimitError as exc:
+        raise voice_rate_limit_http_exception(exc) from exc
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return intent
@@ -276,6 +308,8 @@ def create_lead_browser_call_intent(
         ) from exc
     except VoiceIntentConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except VoiceRateLimitError as exc:
+        raise voice_rate_limit_http_exception(exc) from exc
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return intent

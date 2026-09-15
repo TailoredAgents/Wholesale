@@ -1,6 +1,24 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+const isDevelopment = process.env.NODE_ENV === "development";
+const operatingSystemCsp = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""} https://*.clerk.accounts.dev https://*.clerk.com https://clerk.stonegatehb.com`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https: wss:" + (isDevelopment ? " ws:" : ""),
+  "media-src 'self' blob: https://*.twilio.com",
+  "worker-src 'self' blob:",
+  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.stonegatehb.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.stonegatehb.com",
+  "frame-ancestors 'none'",
+  ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
+].join("; ");
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
@@ -36,6 +54,7 @@ const nextConfig: NextConfig = {
         source: "/os/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Content-Security-Policy", value: operatingSystemCsp },
         ],
       },
       {

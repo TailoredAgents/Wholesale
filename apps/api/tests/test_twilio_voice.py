@@ -812,6 +812,7 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
 
     session_response = client.get("/api/v1/voice/session", headers=headers)
     assert session_response.status_code == 200
+    assert session_response.headers["cache-control"] == "private, no-store"
     session = session_response.json()
     assert session["can_initialize"] is True
     assert session["token"]
@@ -875,6 +876,48 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     call_intent = db_session.get(VoiceCallIntent, UUID(str(intent["id"])))
     assert call_intent is not None
     assert call_intent.status == "started"
+
+
+def test_web_phone_call_intents_are_rate_limited_per_user(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TWILIO_VOICE_CALL_INTENT_RATE_LIMIT_PER_MINUTE", "2")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    first_payload = {"idempotency_key": "voice-rate-limit-0001"}
+    first = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json=first_payload,
+    )
+    second = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json={"idempotency_key": "voice-rate-limit-0002"},
+    )
+    limited = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json={"idempotency_key": "voice-rate-limit-0003"},
+    )
+    replay = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers=headers,
+        json=first_payload,
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert limited.status_code == 429, limited.text
+    assert int(limited.headers["retry-after"]) >= 1
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == first.json()["id"]
 
 
 def test_quick_dial_creates_business_thread_and_reuses_it_idempotently(
