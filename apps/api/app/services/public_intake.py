@@ -495,6 +495,15 @@ def capture_public_seller_address(
     )
     db.add(lead)
     db.flush()
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Website address capture routed to the Acquisitions team.",
+        force=True,
+    )
     submission = LeadFormSubmission(
         organization_id=organization.id,
         lead_id=lead.id,
@@ -776,6 +785,15 @@ def create_public_seller_lead(
     ensure_contact_methods(db, organization, contact, payload)
     apply_public_intake_context(lead, property_record, payload)
     ensure_primary_conversation(db, lead)
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Website seller lead routed to the Acquisitions team.",
+        force=not matched_existing_lead or promoted_address_capture,
+    )
     event_namespace = "public" if intake_source == "seller_website" else intake_source
     if not matched_existing_lead:
         enqueue_lead_created_ai_work(db, lead, source=intake_source)
@@ -1840,6 +1858,15 @@ def create_lead(
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Website seller lead routed to the Acquisitions team.",
+        force=True,
+    )
     return lead
 
 

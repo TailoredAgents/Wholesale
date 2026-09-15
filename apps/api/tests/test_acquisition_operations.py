@@ -12,6 +12,7 @@ from app.models.foundation import (
     ApprovalRequest,
     CalendarEvent,
     ContactMethod,
+    Conversation,
     Lead,
     LeadMergeEvent,
     Notification,
@@ -79,6 +80,128 @@ def create_lead(
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, Any], response.json())
+
+
+def test_acquisitions_team_routes_inactive_and_qualified_leads(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    gracie = create_user(client, headers, "gracie@example.com", "acquisition_rep")
+    devon = create_user(client, headers, "devon@example.com", "acquisition_manager")
+    tina = create_user(client, headers, "tina@example.com", "acquisition_rep")
+
+    team_response = client.post(
+        "/api/v1/operations/teams",
+        headers=headers,
+        json={
+            "name": "Acquisitions",
+            "team_type": "acquisitions",
+            "manager_user_id": devon["id"],
+        },
+    )
+    assert team_response.status_code == 201, team_response.text
+    team_id = team_response.json()["id"]
+    member_response = client.post(
+        f"/api/v1/operations/teams/{team_id}/members",
+        headers=headers,
+        json={"user_id": gracie["id"], "membership_role": "member"},
+    )
+    assert member_response.status_code == 200, member_response.text
+
+    automatic_lead_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json=lead_payload("303 Automatic Route Way"),
+    )
+    assert automatic_lead_response.status_code == 201, automatic_lead_response.text
+    automatic_lead = db_session.get(Lead, UUID(automatic_lead_response.json()["id"]))
+    assert automatic_lead is not None
+    assert automatic_lead.assigned_user_id == UUID(gracie["id"])
+
+    payload = lead_payload("404 Routing Way")
+    payload["assigned_user_id"] = tina["id"]
+    lead_response = client.post("/api/v1/leads", headers=headers, json=payload)
+    assert lead_response.status_code == 201, lead_response.text
+    lead_id = lead_response.json()["id"]
+
+    deactivate_response = client.patch(
+        f"/api/v1/operations/users/{tina['id']}",
+        headers=headers,
+        json={
+            "is_active": False,
+            "reason": "Former employee no longer manages seller leads.",
+        },
+    )
+    assert deactivate_response.status_code == 200, deactivate_response.text
+
+    route_response = client.post(
+        f"/api/v1/operations/teams/{team_id}/apply-lead-routing",
+        headers=headers,
+    )
+    assert route_response.status_code == 200, route_response.text
+    assert route_response.json() == {
+        "initial_owner_name": "Gracie",
+        "qualified_owner_name": "Devon",
+        "reassigned_to_initial": 1,
+        "reassigned_to_qualified": 0,
+        "reassigned_total": 1,
+    }
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    assert lead.assigned_user_id == UUID(gracie["id"])
+
+    stage_response = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers=headers,
+        json={"stage_key": "qualified", "expected_stage_key": "new"},
+    )
+    assert stage_response.status_code == 200, stage_response.text
+    db_session.refresh(lead)
+    assert lead.assigned_user_id == UUID(devon["id"])
+
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.lead_id == lead.id)
+    )
+    assert conversation is not None
+    assert conversation.assigned_user_id == UUID(devon["id"])
+    assert conversation.assigned_team_id == UUID(team_id)
+
+
+def test_team_members_can_be_reviewed_updated_and_removed(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    rep = create_user(client, headers, "rep@example.com", "acquisition_rep")
+    team_response = client.post(
+        "/api/v1/operations/teams",
+        headers=headers,
+        json={"name": "Acquisitions", "team_type": "acquisitions"},
+    )
+    assert team_response.status_code == 201, team_response.text
+    team_id = team_response.json()["id"]
+
+    add_response = client.post(
+        f"/api/v1/operations/teams/{team_id}/members",
+        headers=headers,
+        json={"user_id": rep["id"], "membership_role": "manager"},
+    )
+    assert add_response.status_code == 200, add_response.text
+    assert add_response.json()["manager_user_id"] == rep["id"]
+    assert add_response.json()["members"][0]["display_name"] == "Rep"
+
+    remove_response = client.delete(
+        f"/api/v1/operations/teams/{team_id}/members/{rep['id']}",
+        headers=headers,
+    )
+    assert remove_response.status_code == 200, remove_response.text
+    assert remove_response.json()["manager_user_id"] is None
+    assert remove_response.json()["members"] == []
 
 
 def test_owner_can_create_another_full_access_owner(

@@ -84,7 +84,6 @@ export default async function LeadsPage({
           <>
             {canEditLead && profile ? (
               <NewLeadControl
-                currentUserId={profile.user_id}
                 initialOpen={first(params.new) === "lead"}
                 users={operations?.users ?? []}
               />

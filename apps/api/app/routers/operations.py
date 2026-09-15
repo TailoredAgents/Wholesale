@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.operations import (
     AcquisitionOperationsOverview,
+    AcquisitionRoutingApplyRead,
     CallingListCreate,
     CallingListEntryRead,
     CallingListEntryUpdate,
@@ -40,6 +41,7 @@ from app.schemas.operations import (
 from app.services.acquisition_operations import (
     add_calling_list_leads,
     add_team_member,
+    apply_team_lead_routing,
     create_calling_list,
     create_campaign,
     create_follow_up_plan,
@@ -53,6 +55,7 @@ from app.services.acquisition_operations import (
     enroll_follow_up_plan,
     get_operations_overview,
     mark_notification_read,
+    remove_team_member,
     resolve_duplicate_candidate,
     scan_duplicate_candidates,
     update_calling_list_entry,
@@ -197,6 +200,34 @@ def upsert_workspace_team_member(
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
     return team
+
+
+@router.delete("/teams/{team_id}/members/{user_id}")
+def delete_workspace_team_member(
+    team_id: UUID,
+    user_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> TeamRead:
+    try:
+        team = remove_team_member(db, principal, team_id, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if team is None:
+        raise HTTPException(status_code=404, detail="Team not found.")
+    return team
+
+
+@router.post("/teams/{team_id}/apply-lead-routing")
+def apply_workspace_team_lead_routing(
+    team_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> AcquisitionRoutingApplyRead:
+    try:
+        return apply_team_lead_routing(db, principal, team_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/calling-lists", status_code=201)

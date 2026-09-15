@@ -473,7 +473,15 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
             "Create the lead in an ordinary active stage, then use the signed-contract "
             "workflow to enter Under Contract."
         )
-    assigned_user_id = payload.assigned_user_id or principal.user_id
+    automatic_routing = payload.assigned_user_id is None
+    assigned_user_id = payload.assigned_user_id
+    if assigned_user_id is None:
+        from app.services.lead_routing import resolve_acquisition_routing, routed_owner_id
+
+        routing = resolve_acquisition_routing(db, principal.organization_id)
+        assigned_user_id = (
+            routed_owner_id(routing, payload.stage_key) if routing is not None else None
+        ) or principal.user_id
     assigned_user = db.scalar(
         select(User).where(
             User.organization_id == principal.organization_id,
@@ -597,6 +605,16 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
+    if automatic_routing:
+        from app.services.lead_routing import apply_acquisition_stage_routing
+
+        apply_acquisition_stage_routing(
+            db,
+            lead,
+            actor_user_id=principal.user_id,
+            reason="New seller lead routed to the Acquisitions team.",
+            force=True,
+        )
     create_initial_lead_next_action(
         db,
         lead,

@@ -14,11 +14,9 @@ function value(data: FormData, key: string) {
 }
 
 export function NewLeadControl({
-  currentUserId,
   initialOpen = false,
   users,
 }: {
-  currentUserId: string;
   initialOpen?: boolean;
   users: OperationsUser[];
 }) {
@@ -92,7 +90,7 @@ export function NewLeadControl({
           },
           phone: phone || null,
           email: email || null,
-          assigned_user_id: value(data, "assigned_user_id") || currentUserId,
+          assigned_user_id: value(data, "assigned_user_id") || null,
           source: value(data, "source"),
           asset_class: assetClass,
           stage_key: "new",
@@ -173,7 +171,7 @@ export function NewLeadControl({
               <fieldset>
                 <legend>Lead ownership and source</legend>
                 <label><span>Source</span><select defaultValue="inbound_phone" name="source" required><option value="inbound_phone">Inbound phone call</option><option value="referral">Referral</option><option value="website">Website</option><option value="networking">Networking</option><option value="google_ppc">Google paid search</option><option value="organic">Organic search</option><option value="direct_mail">Direct mail</option><option value="cold_call">Cold call</option><option value="other">Other</option></select></label>
-                <label><span>Assigned owner</span><select defaultValue={currentUserId} name="assigned_user_id" required>{!activeUsers.some((user) => user.id === currentUserId) ? <option value={currentUserId}>Current user</option> : null}{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+                <label><span>Assigned owner</span><select defaultValue="" name="assigned_user_id"><option value="">Acquisitions routing (recommended)</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
                 <label><span>Lead temperature</span><select defaultValue="warm" name="lead_temperature"><option value="">Unknown</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></label>
                 <label><span>Next follow-up</span><input name="next_follow_up_at" type="datetime-local" /></label>
               </fieldset>

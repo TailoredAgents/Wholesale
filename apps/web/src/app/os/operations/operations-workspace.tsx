@@ -58,6 +58,17 @@ function roleLabel(user: AcquisitionOperations["users"][number]) {
   return user.role_keys.map(labelize).join(", ") || "No role";
 }
 
+function acquisitionInitialOwner(
+  team: AcquisitionOperations["teams"][number],
+  users: AcquisitionOperations["users"],
+) {
+  return team.members.find((member) =>
+    users
+      .find((user) => user.id === member.user_id)
+      ?.role_keys.includes("acquisition_rep"),
+  );
+}
+
 export function OperationsWorkspace({
   initialTab = "today",
   operations,
@@ -238,6 +249,63 @@ export function OperationsWorkspace({
       user_id: formValue(data, "user_id"),
       membership_role: formValue(data, "membership_role"),
     });
+  }
+
+  async function updateTeamMember(
+    teamId: string,
+    userId: string,
+    membershipRole: "manager" | "member",
+  ) {
+    await mutate(`/api/v1/operations/teams/${teamId}/members`, "POST", {
+      user_id: userId,
+      membership_role: membershipRole,
+    });
+  }
+
+  async function removeTeamMember(teamId: string, userId: string, displayName: string) {
+    if (!window.confirm(`Remove ${displayName} from this team? Their login and history will remain.`)) {
+      return;
+    }
+    await mutate(`/api/v1/operations/teams/${teamId}/members/${userId}`, "DELETE");
+  }
+
+  async function applyLeadRouting(teamId: string) {
+    if (
+      !window.confirm(
+        "Route active leads that are unassigned or owned by inactive employees? Active manual assignments will remain unchanged.",
+      )
+    ) {
+      return;
+    }
+    setStatus("saving");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/operations/teams/${teamId}/apply-lead-routing`,
+        { method: "POST", headers: await headers() },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            detail?: unknown;
+            initial_owner_name?: string;
+            qualified_owner_name?: string;
+            reassigned_total?: number;
+          }
+        | null;
+      if (!response.ok) {
+        throw new Error(
+          apiErrorMessage(payload?.detail, "Lead ownership could not be routed."),
+        );
+      }
+      setMessage(
+        `${payload?.reassigned_total ?? 0} active leads reassigned. New/working leads route to ${payload?.initial_owner_name}; qualified-and-later leads route to ${payload?.qualified_owner_name}.`,
+      );
+      setStatus("saved");
+      router.refresh();
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Lead ownership could not be routed.");
+    }
   }
 
   async function setUserActive(user: AcquisitionOperations["users"][number]) {
@@ -424,7 +492,11 @@ export function OperationsWorkspace({
 
       {status !== "idle" ? (
         <div className={`${styles.feedback} ${styles[status]}`} role="status">
-          {status === "saving" ? "Saving changes..." : status === "saved" ? "Changes saved." : message}
+          {status === "saving"
+            ? "Saving changes..."
+            : status === "saved"
+              ? message || "Changes saved."
+              : message}
         </div>
       ) : null}
 
@@ -721,7 +793,93 @@ export function OperationsWorkspace({
           </div>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Structure</span><h3>Teams</h3></div><strong>{operations.teams.length}</strong></div>
-            <div className={styles.rows}>{operations.teams.map((team) => <div className={styles.teamRow} key={team.id}><div><strong>{team.name}</strong><span>{labelize(team.team_type)} · {team.manager_name ?? "No manager"}</span><small>{team.members.length} members</small></div><form onSubmit={(event) => submitTeamMember(event, team.id)}><select aria-label={`Add member to ${team.name}`} name="user_id" required><option value="">Add member</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select><select aria-label="Membership role" name="membership_role"><option value="member">Member</option><option value="manager">Manager</option></select><button type="submit">Add</button></form></div>)}</div>
+            <div className={styles.rows}>
+              {operations.teams.map((team) => {
+                const initialOwner = acquisitionInitialOwner(team, operations.users);
+                return (
+                  <div className={styles.teamRow} key={team.id}>
+                    <div className={styles.teamSummary}>
+                      <strong>{team.name}</strong>
+                      <span>
+                        {labelize(team.team_type)} · {team.manager_name ?? "No manager"}
+                      </span>
+                      <small>{team.members.length} members</small>
+                      {team.team_type === "acquisitions" ? (
+                        <p className={styles.routingSummary}>
+                          New and working leads → {initialOwner?.display_name ?? "Add an Acquisitions rep"}
+                          <br />
+                          Qualified and later → {team.manager_name ?? "Choose a manager"}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className={styles.teamControls}>
+                      <div className={styles.memberList}>
+                        {team.members.map((member) => (
+                          <div className={styles.memberRow} key={member.user_id}>
+                            <div>
+                              <strong>{member.display_name}</strong>
+                              <small>{member.email}</small>
+                            </div>
+                            <select
+                              aria-label={`${member.display_name} team role`}
+                              onChange={(event) =>
+                                void updateTeamMember(
+                                  team.id,
+                                  member.user_id,
+                                  event.target.value as "manager" | "member",
+                                )
+                              }
+                              value={member.membership_role}
+                            >
+                              <option value="member">Member</option>
+                              <option value="manager">Manager</option>
+                            </select>
+                            <button
+                              aria-label={`Remove ${member.display_name} from ${team.name}`}
+                              className={styles.iconButton}
+                              onClick={() =>
+                                void removeTeamMember(team.id, member.user_id, member.display_name)
+                              }
+                              title="Remove from team"
+                              type="button"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <form onSubmit={(event) => submitTeamMember(event, team.id)}>
+                        <select aria-label={`Add member to ${team.name}`} name="user_id" required>
+                          <option value="">Add member</option>
+                          {activeUsers
+                            .filter(
+                              (user) => !team.members.some((member) => member.user_id === user.id),
+                            )
+                            .map((user) => (
+                              <option key={user.id} value={user.id}>{user.display_name}</option>
+                            ))}
+                        </select>
+                        <select aria-label="Membership role" name="membership_role">
+                          <option value="member">Member</option>
+                          <option value="manager">Manager</option>
+                        </select>
+                        <button type="submit">Add</button>
+                      </form>
+                      {team.team_type === "acquisitions" ? (
+                        <button
+                          className={styles.routingButton}
+                          disabled={!initialOwner || !team.manager_user_id}
+                          onClick={() => void applyLeadRouting(team.id)}
+                          type="button"
+                        >
+                          Apply ownership routing
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             <form className={styles.stackForm} onSubmit={submitTeam}><h4>Create team</h4><label><span>Name</span><input name="name" required /></label><label><span>Function</span><select name="team_type"><option value="prospecting">Prospecting</option><option value="acquisitions">Acquisitions</option><option value="dispositions">Dispositions</option><option value="operations">Operations</option></select></label><label><span>Manager</span><select name="manager_user_id"><option value="">No manager</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label><button type="submit">Create team</button></form>
           </div>
         </div>

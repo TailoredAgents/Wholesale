@@ -1232,6 +1232,14 @@ def sync_conversation_to_lead_stage(
     actor_user_id: UUID | None,
     reason: str | None,
 ) -> None:
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=actor_user_id,
+        reason=reason or f"Lead stage changed to {lead.stage_key}.",
+    )
     queue_by_stage = {
         "qualified": "qualified",
         "appointment_scheduled": "appointment_set",

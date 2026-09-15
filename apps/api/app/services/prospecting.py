@@ -1158,6 +1158,15 @@ def decide_handoff(
         entry.status = "completed"
         entry.completed_at = now
         prospect.status = "handoff_rejected"
+    if payload.decision in {"accepted", "needs_correction"}:
+        from app.services.lead_routing import apply_acquisition_stage_routing
+
+        apply_acquisition_stage_routing(
+            db,
+            lead,
+            actor_user_id=principal.user_id,
+            reason=f"Prospecting handoff moved the seller to {lead.stage_key}.",
+        )
     sync_case_handoff_decision(
         db,
         handoff_id=handoff.id,
@@ -1491,7 +1500,16 @@ def convert_prospect_to_lead(
         )
     )
     conversation = ensure_primary_conversation(db, lead, queue_key="qualified")
-    conversation.assigned_user_id = assigned_user_id
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason="Prospecting handoff routed to the Acquisitions team.",
+        force=True,
+    )
+    conversation.assigned_user_id = lead.assigned_user_id
     conversation.queue_key = "qualified"
     conversation.conversation_metadata = {
         "source": "prospect_handoff",

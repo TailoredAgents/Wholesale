@@ -91,6 +91,15 @@ def _create_unknown_seller_sms_conversation(
     db.flush()
     conversation = ensure_primary_conversation(db, lead)
     conversation.assigned_team_id = line.assigned_team_id
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Inbound seller text routed to the Acquisitions team.",
+        force=True,
+    )
     conversation.conversation_metadata = {
         **(conversation.conversation_metadata or {}),
         "source": "inbound_sms",

@@ -578,6 +578,96 @@
   font-size: 11px;
 }
 
+.teamRow {
+  align-items: flex-start;
+}
+
+.teamSummary {
+  flex: 0 0 210px;
+}
+
+.routingSummary {
+  margin: 6px 0 0;
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.teamControls {
+  width: min(100%, 560px);
+  display: grid;
+  gap: 9px;
+}
+
+.memberList {
+  display: grid;
+  gap: 5px;
+}
+
+.memberRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 34px;
+  gap: 7px;
+  align-items: center;
+}
+
+.memberRow > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.memberRow strong,
+.memberRow small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberRow select {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.iconButton {
+  width: 34px;
+  min-width: 34px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.routingButton {
+  min-height: 34px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.routingButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .planRow form {
   display: flex;
   gap: 8px;
@@ -678,6 +768,16 @@
     width: 100%;
     display: grid !important;
     grid-template-columns: 1fr;
+  }
+
+  .teamSummary,
+  .teamControls {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .memberRow {
+    grid-template-columns: minmax(0, 1fr) 96px 34px;
   }
 
   .userRow > div:nth-child(2) {

@@ -68,6 +68,14 @@ class TeamMemberCreate(BaseModel):
     membership_role: Literal["manager", "member"] = "member"
 
 
+class AcquisitionRoutingApplyRead(BaseModel):
+    initial_owner_name: str
+    qualified_owner_name: str
+    reassigned_to_initial: int
+    reassigned_to_qualified: int
+    reassigned_total: int
+
+
 class CallingListEntryRead(BaseModel):
     id: UUID
     lead_id: UUID

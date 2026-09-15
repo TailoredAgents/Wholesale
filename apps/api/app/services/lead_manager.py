@@ -791,6 +791,14 @@ def apply_next_action(
         lead.stage_key = "long_term_follow_up"
     else:
         lead.stage_key = "qualified"
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=principal.user_id if principal else None,
+        reason=f"Lead Manager moved the seller to {lead.stage_key}.",
+    )
 
 
 def build_scorecards(

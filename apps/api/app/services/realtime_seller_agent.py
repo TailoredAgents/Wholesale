@@ -1543,6 +1543,14 @@ def _tool_schedule_human_callback(
         "appointment_scheduling",
     }:
         lead.stage_key = "appointment_scheduled"
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason=f"AI seller callback moved the seller to {lead.stage_key}.",
+    )
     callback.routing_metadata = {
         **(callback.routing_metadata or {}),
         "callback_at": due_at.isoformat(),
@@ -1874,6 +1882,15 @@ def _create_realtime_provisional_lead(
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="AI seller callback routed to the Acquisitions team.",
+        force=True,
+    )
     db.add(
         ConsentRecord(
             organization_id=callback.organization_id,
@@ -2017,6 +2034,15 @@ def _create_realtime_lead(
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="AI seller callback routed to the Acquisitions team.",
+        force=True,
+    )
     db.add(
         ConsentRecord(
             organization_id=callback.organization_id,

@@ -46,6 +46,7 @@ from app.schemas.inbox import ConversationHandoffRequest
 from app.schemas.leads import LeadAppointmentUpdate, LeadDetail
 from app.schemas.operations import (
     AcquisitionOperationsOverview,
+    AcquisitionRoutingApplyRead,
     AppointmentOperationsRead,
     CallingListCreate,
     CallingListEntryRead,
@@ -83,6 +84,7 @@ from app.services.lead_lifecycle import (
     lock_organization_lead,
     require_lead_open_for_work,
 )
+from app.services.lead_routing import rebalance_inactive_acquisition_leads
 from app.services.leads import get_lead_detail
 from app.services.property_validation import canonical_address_key
 from app.services.staff_lead_alerts import queue_staff_task_reminder_alert
@@ -1122,7 +1124,17 @@ def add_team_member(
     else:
         membership.membership_role = payload.membership_role
     if payload.membership_role == "manager":
+        for existing_manager in db.scalars(
+            select(TeamMembership).where(
+                TeamMembership.team_id == team.id,
+                TeamMembership.membership_role == "manager",
+                TeamMembership.user_id != user.id,
+            )
+        ):
+            existing_manager.membership_role = "member"
         team.manager_user_id = user.id
+    elif team.manager_user_id == user.id:
+        team.manager_user_id = None
     audit(
         db,
         principal,
@@ -1135,6 +1147,66 @@ def add_team_member(
     )
     db.commit()
     return next(item for item in list_teams(db, principal, manageable=True) if item.id == team.id)
+
+
+def remove_team_member(
+    db: Session,
+    principal: Principal,
+    team_id: UUID,
+    user_id: UUID,
+) -> TeamRead | None:
+    team = db.scalar(
+        select(Team).where(
+            Team.organization_id == principal.organization_id,
+            Team.id == team_id,
+        )
+    )
+    if team is None:
+        return None
+    membership = db.scalar(
+        select(TeamMembership).where(
+            TeamMembership.organization_id == principal.organization_id,
+            TeamMembership.team_id == team.id,
+            TeamMembership.user_id == user_id,
+        )
+    )
+    if membership is None:
+        raise ValueError("That employee is not a member of this team.")
+    if team.manager_user_id == user_id:
+        team.manager_user_id = None
+    db.delete(membership)
+    audit(
+        db,
+        principal,
+        "team.member_remove",
+        "team",
+        team.id,
+        {"user_id": str(user_id), "membership_role": membership.membership_role},
+        {"user_id": str(user_id), "removed": True},
+        "Team membership removed",
+    )
+    db.commit()
+    return next(item for item in list_teams(db, principal, manageable=True) if item.id == team.id)
+
+
+def apply_team_lead_routing(
+    db: Session,
+    principal: Principal,
+    team_id: UUID,
+) -> AcquisitionRoutingApplyRead:
+    result = rebalance_inactive_acquisition_leads(
+        db,
+        principal.organization_id,
+        actor_user_id=principal.user_id,
+        team_id=team_id,
+    )
+    return AcquisitionRoutingApplyRead(
+        initial_owner_name=result.initial_owner_name,
+        qualified_owner_name=result.qualified_owner_name,
+        reassigned_to_initial=result.reassigned_to_initial,
+        reassigned_to_qualified=result.reassigned_to_qualified,
+        reassigned_total=result.reassigned_total,
+    )
 
 
 def list_calling_lists(
@@ -2139,6 +2211,14 @@ def update_appointment(
                 completed_at=None,
             )
         )
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason=f"Appointment update moved the seller to {lead.stage_key}.",
+    )
     upsert_internal_calendar_event(db, appointment)
     db.add(
         ActivityEvent(

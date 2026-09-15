@@ -2755,6 +2755,15 @@ def create_inbound_call_lead(
         trigger_source="inbound_call",
     )
     conversation = ensure_primary_conversation(db, lead)
+    from app.services.lead_routing import apply_acquisition_stage_routing
+
+    apply_acquisition_stage_routing(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Inbound seller call routed to the Acquisitions team.",
+        force=True,
+    )
     db.add(
         ActivityEvent(
             organization_id=line.organization_id,
