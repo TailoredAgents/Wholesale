@@ -104,6 +104,49 @@ def test_primary_action_can_end_without_manufacturing_another_task(
     ).all() == []
 
 
+def test_open_task_queue_includes_real_work_without_a_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    organization = db_session.scalar(select(Organization))
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert organization is not None and owner is not None
+    task = Task(
+        organization_id=organization.id,
+        lead_id=None,
+        deal_id=None,
+        prospecting_inbound_callback_id=None,
+        prospect_id=None,
+        call_record_id=None,
+        responsible_user_id=owner.id,
+        task_type="missed_prospecting_callback",
+        work_kind="supporting",
+        title="Return prospect callback from +14705550199",
+        status="open",
+        priority="urgent",
+        due_at=datetime.now(UTC) + timedelta(minutes=5),
+        completed_at=None,
+        completed_by_user_id=None,
+        outcome=None,
+        completion_notes=None,
+        successor_task_id=None,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    response = TestClient(app).get(
+        "/api/v1/tasks/open",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200, response.text
+    item = next(entry for entry in response.json()["items"] if entry["task_id"] == str(task.id))
+    assert item["lead_id"] is None
+    assert item["seller_name"] is None
+    assert item["task_type"] == "missed_prospecting_callback"
+
+
 def test_primary_action_can_create_an_explicit_successor(
     db_session: Session,
     api_db_override: None,

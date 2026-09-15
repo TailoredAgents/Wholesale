@@ -173,7 +173,7 @@ def get_open_task_rows(
     filters = [
         Task.organization_id == principal.organization_id,
         Task.status.in_(OPEN_TASK_STATUSES),
-        Lead.archived_at.is_(None),
+        or_(Lead.id.is_(None), Lead.archived_at.is_(None)),
     ]
     if task_type is not None:
         filters.append(Task.task_type == task_type)
@@ -189,9 +189,9 @@ def get_open_task_rows(
         )
     rows = db.execute(
         select(Task, Lead, Contact, Property, User)
-        .join(Lead, Lead.id == Task.lead_id)
-        .join(Contact, Contact.id == Lead.contact_id)
-        .join(Property, Property.id == Lead.property_id)
+        .outerjoin(Lead, Lead.id == Task.lead_id)
+        .outerjoin(Contact, Contact.id == Lead.contact_id)
+        .outerjoin(Property, Property.id == Lead.property_id)
         .outerjoin(User, User.id == Task.responsible_user_id)
         .where(*filters)
         .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
@@ -204,15 +204,15 @@ def task_queue_item_read(row: Any, now: datetime) -> TaskQueueItemRead:
     task, lead, contact, property_record, user = row
     return TaskQueueItemRead(
         task_id=task.id,
-        lead_id=lead.id,
+        lead_id=lead.id if lead else None,
         deal_id=task.deal_id,
         task_type=task.task_type,
         work_kind=task.work_kind,
         title=task.title,
-        seller_name=contact.legal_name,
-        property_address=format_property_address(property_record),
-        source=lead.source,
-        stage_key=lead.stage_key,
+        seller_name=contact.legal_name if contact else None,
+        property_address=format_property_address(property_record) if property_record else None,
+        source=lead.source if lead else None,
+        stage_key=lead.stage_key if lead else None,
         priority=task.priority,
         status=task.status,
         due_at=task.due_at,

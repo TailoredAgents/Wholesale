@@ -172,7 +172,7 @@ export const targetRoleExperiences = [
   },
   {
     role: "acquisition_manager",
-    defaultRoute: "/os/leads?view=queue",
+    defaultRoute: "/os/leads?view=today",
     destinations: ["home", "inbox", "tasks", "calendar", "seller-leads", "prospecting", "dispositions"],
   },
   {
@@ -321,7 +321,7 @@ export const currentRouteInventory = [
     routePattern: "/os/lead-manager",
     source: "src/app/os/lead-manager/page.tsx",
     targetWorkspace: "seller-leads",
-    targetCanonical: "/os/leads?view=queue",
+    targetCanonical: "/os/leads?view=today",
     migration: "legacy-redirect",
     queryParameters: [{ name: "lead", status: "consumed" }],
     helpSections: ["Leads"],
@@ -706,8 +706,8 @@ export const legacyNavigation = [
   },
   {
     group: "Acquisitions",
-    label: "Lead Desk",
-    href: "/os/leads?view=queue",
+    label: "Today",
+    href: "/os/leads?view=today",
     targetWorkspace: "seller-leads",
   },
   {
@@ -852,7 +852,7 @@ export const vocabulary = [
   { current: "Inbox", target: "Conversations" },
   { current: "Work Queue", target: "Tasks" },
   { current: "Campaigns", target: "Prospecting > Campaigns" },
-  { current: "Lead Desk", target: "Leads > Needs Qualification" },
+  { current: "Today", target: "Leads > Focused workday" },
   { current: "All Leads", target: "Leads" },
   { current: "Seller Pipeline", target: "Leads > Board" },
   { current: "Underwriting", target: "Leads > Needs Underwriting" },
@@ -882,7 +882,7 @@ export const controlReferenceSections = [
   { heading: "Prospecting", owner: "prospecting" },
   { heading: "Prospecting Analytics", owner: "prospecting" },
   { heading: "Historical Prospecting Pilot Acceptance — Dormant", owner: "prospecting" },
-  { heading: "Leads: Lead Queue", owner: "seller-leads" },
+  { heading: "Leads: Today", owner: "seller-leads" },
   { heading: "Conversations", owner: "inbox" },
   { heading: "Appointment Workspace", owner: "calendar" },
   { heading: "Seller Record", owner: "seller-leads" },

@@ -2,6 +2,13 @@
 
 Last verified: September 15, 2026
 
+> Historical reference: the primary **Lead Queue** interface has been replaced by **Leads >
+> Today**. Today shows real inbound activity, missed callbacks, manually scheduled reminders,
+> appointments, and new or unassigned leads. It no longer requires handoff acceptance, labels
+> leads neglected, or forces a next action. Qualification is available from the **Needs
+> Qualification** filter and the seller record. The remaining sections below document retained
+> legacy records and workflows.
+
 Navigation note: the communication workspace formerly labeled **Inbox** is now **Conversations**.
 The `/os/inbox` route and all existing conversation history remain unchanged.
 

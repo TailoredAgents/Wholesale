@@ -1503,8 +1503,8 @@ The live `/os/prospecting` route now exposes one unambiguous operating model:
 
 `/os/leads` is the canonical seller workspace. Its local views are:
 
-- **Lead Queue** for SLA-aware warm handoffs, qualification, follow-up, performance, standards,
-  and Lead Manager Copilot work.
+- **Today** for real inbound activity, missed callbacks, deliberately scheduled reminders,
+  today's appointments, and contact-ready new or unassigned leads.
 - **All Leads** for saved views, search, ownership, stage filters, manual creation, archive access,
   and seller preview.
 - **Pipeline** for the same filtered seller set displayed as a board.
@@ -1529,7 +1529,8 @@ Quality**, where authorized managers configure and audit valuation quality.
 
 ### 23.4 Compatibility
 
-- `/os/lead-manager?lead=...` redirects to `/os/leads?view=queue&lead=...`.
+- `/os/lead-manager?lead=...` redirects directly to the full seller record; the route without a
+  lead redirects to `/os/leads?view=today`.
 - `/os/pipeline?stage=...` redirects to `/os/leads?display=board&stage=...`.
 - `/os/underwriting?lead=...` redirects to `/os/leads?view=underwriting&lead=...`.
 - Existing `/os/leads/[leadId]` links remain valid.

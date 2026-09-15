@@ -7,7 +7,6 @@ export default async function LeadManagerPage({
 }) {
   const params = await searchParams;
   const lead = Array.isArray(params.lead) ? params.lead[0] : params.lead;
-  const query = new URLSearchParams({ view: "queue" });
-  if (lead) query.set("lead", lead);
-  redirect(`/os/leads?${query.toString()}`);
+  if (lead) redirect(`/os/leads/${encodeURIComponent(lead)}`);
+  redirect("/os/leads?view=today");
 }

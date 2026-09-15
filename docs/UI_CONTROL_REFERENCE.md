@@ -89,7 +89,7 @@ is relevant and the required permission is present.
 | Settings | Owner, Administrator | At least one administration permission |
 
 Campaigns, Analytics, and My Calls are the active local Prospecting views. Analytics is hidden from
-caller-only accounts; Dialer Control and Pilot Acceptance are dormant. Lead Queue, Pipeline, and Underwriting are local
+caller-only accounts; Dialer Control and Pilot Acceptance are dormant. Today, Pipeline, and Underwriting are local
 Leads views. Approvals are in Tasks; transaction and disposition work is in Deals; administration
 is in Settings. My Setup remains available to every signed-in employee.
 
@@ -237,7 +237,7 @@ change staff-reviewed information.
 | **Calendar** | Opens the company field calendar | Navigation only |
 | Executive Copilot launcher | Opens evidence-backed management analysis | Visible when the Executive Copilot is installed |
 | Overdue metric | Opens overdue tasks | Count is scoped to the signed-in user's visibility |
-| Qualification metric | Opens Leads > Lead Queue | Shows seller records needing qualification |
+| Qualification metric | Opens Leads > Needs Qualification | Shows seller records with missing qualification facts |
 | Meetings today metric | Opens Calendar | Includes today's scheduled appointments |
 | Offer prep metric | Opens Leads > Underwriting | Includes underwriting and approval work |
 | Priority title or arrow | Opens the record or workspace for that item | Navigation only |
@@ -322,7 +322,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
 | **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
 | Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid prospects; address-only records are excluded from operational counts but remain included in paid-prospect acquisition totals | Read-only |
-| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Leads work without changing records | Underwriting requires underwriting access; address-only records do not enter operational queues |
+| Today / All Leads / Pipeline / Underwriting | Switches local Leads work without changing records | Underwriting requires underwriting access; address-only records do not enter focused work sections |
 | Saved lead views | Filters by predefined operating state and updates the URL | **Address Only** shows incomplete website records; other operational views exclude them |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
@@ -331,7 +331,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Table / Board | Changes display while preserving saved view, search, owner, and selected seller | Board mode clears a single-stage filter so the complete pipeline can accept moves |
 | Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
 | Seller row | Selects the local seller preview | Does not edit the lead |
-| Primary next-action link | Opens Lead Queue, Conversations, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
+| Primary next-action link | Opens Conversations, Calendar, Underwriting, Negotiation, or the full record based on status | Navigation only |
 | **Conversation** | Opens Conversations on this seller | Requires conversation access; absent for an address-only record until contact details are completed |
 | **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
@@ -339,7 +339,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | **Close out lead** | Opens the business close-out dialog | Active leads only; requires `leads:edit` |
 | Dead / Disqualified | Records why routine seller work should end | One disposition is required |
 | Close-out reason | Preserves the business reason in activity and audit history | At least 10 characters required |
-| Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes the Lead Queue case and conversation; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
+| Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes legacy lead-management and conversation records; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
 | Closed Leads link | Opens dead and disqualified seller opportunities | Requires lead visibility |
 | Archived Leads link | Opens confirmed duplicate and test records | Requires lifecycle visibility; Administrative archive is not a business disposition |
 
@@ -760,63 +760,24 @@ the same provider CDR.
 | **Approve** | Makes that draft the approved caller script | Manager only |
 | Caller script history | Shows version, status, and question count | Read-only |
 
-## Leads: Lead Queue
+## Leads: Today
 
-Lead Queue views are **Copilot**, **Today**, **Qualification**, **Performance**, and **Standards**.
-
-### Copilot
-
-| Control | Purpose and effect | Availability and common blocker |
-| --- | --- | --- |
-| Work item row | Selects a seller case | Requires visible acquisition work |
-| **Generate brief / Refresh brief** | Produces seller summary, gaps, questions, risks, reply, and next-step proposal | Disabled while saving |
-| Evidence and risks | Expands the support and warnings behind the draft | Requires a generated brief |
-| **Accept brief** | Records acceptance of the recommendation | Does not contact seller or update CRM |
-| **Correct / Save correction** | Corrects the primary guidance and records edited review | Requires a draft |
-| **Reject** | Records rejection | Requires a draft |
-
-### Today
+Today is the focused seller workday. It intentionally excludes legacy handoff acceptance timers,
+automatic neglected-lead classification, forced next actions, scorecards, and AI work.
 
 | Control or section | Purpose and effect | Availability |
 | --- | --- | --- |
-| Needs attention | Opens urgent acquisition cases | Read-only navigation |
-| **Accept** under Accept warm handoffs | Assigns and accepts the handoff into Lead Manager work | Requires an unaccepted handoff |
-| Seller follow-up | Shows due seller work | Read-only queue |
-| Today's appointments | Shows meetings scheduled today | Read-only queue |
-| Neglected leads | Shows active records lacking timely work | Read-only queue |
-| Open lead icon | Opens the full seller record | Requires lead access |
+| Messages & callbacks | Shows unread seller activity assigned to the user and real missed-callback tasks | Read-only navigation to Conversations or Tasks |
+| **Open live reply queue** | Opens Conversations filtered to contacts awaiting a reply | Requires conversation access |
+| Reminders due | Shows only follow-up reminders explicitly scheduled by a person | Read-only navigation to the seller record |
+| **View all reminders** | Opens the saved Reminders filter in All Leads | Requires lead access |
+| Appointments today | Shows scheduled or rescheduled seller appointments for the current Eastern calendar day | Read-only navigation to the appointment workspace |
+| New & unassigned | Shows contact-ready leads in the New pipeline group or without an owner | Address-only captures remain in their dedicated filter |
+| **View new / View unassigned** | Opens the corresponding All Leads filter | Requires lead access |
+| **View needs qualification** | Opens missing seller facts as an optional work filter | Qualification gaps do not become overdue tasks |
 
-### Qualification
-
-| Control or field | Purpose and effect | Availability and common blocker |
-| --- | --- | --- |
-| Seller queue row | Selects a case requiring qualification | Requires an approved qualification standard |
-| Ownership | Confirms owner and title context | Required by standard |
-| Decision makers | Confirms everyone required to sell | Required |
-| Reason for selling | Records motivation | Required |
-| Timeline | Records desired completion timing | Required |
-| Property condition | Records known repair context | Required |
-| Occupancy | Records who occupies the property | Required |
-| Price expectation | Records seller expectation | Optional |
-| Mortgage or liens | Records known debt/title context | Optional |
-| Property access | Records how and when Stonegate can inspect | Required |
-| Next action | Call, Text, Email, Seller appointment, Nurture, or Disqualify | Required |
-| Due date and time | Creates the dated next action | Required for every choice except Disqualify |
-| **Complete qualification** | Saves answers, updates qualification work, and creates the next action | Disabled while saving; blocked without approved standard |
-
-### Performance And Standards
-
-| Control or section | Purpose and effect | Availability and common blocker |
-| --- | --- | --- |
-| Acquisitions scorecard | Compares weighted speed-to-lead, follow-up, conversation, qualification, CRM, appointment, and mature-outcome evidence without ranking specialists | Manager only; read-only shadow coaching view |
-| 30 days / 90 days | Selects the evidence window and requests a fresh report | Manager only; the selected request includes a 12-second session-token and report timeout |
-| **Refresh** | Requests a new uncached snapshot and announces completion; the report shows its generation time | Disabled while loading; a timeout says whether a confirmed same-period snapshot remains visible |
-| Raw scoring evidence | Shows dimension-specific operands, sample counts, minimums, and evidence status | Manager only; Building dimensions expose raw inputs but withhold the numeric score and bar |
-| Methodology and weights | Explains the versioned policy, coverage, and coaching-only guardrails | Read-only |
-| Version name / Opening guidance | Defines a new qualification standard version | Manager only |
-| **Create draft** | Saves a standard containing the nine standardized questions | Does not activate it |
-| Qualification standards | Shows version history and current status | Read-only |
-| **Approve** | Activates a draft standard | Manager only |
+The old `/os/lead-manager` path redirects to Today, or directly to the seller record when a lead ID
+is present. Historical Lead Manager data remains retained for audit and compatibility.
 
 ## Conversations
 

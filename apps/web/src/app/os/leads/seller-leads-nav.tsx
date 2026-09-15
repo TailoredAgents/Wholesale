@@ -1,12 +1,12 @@
-import { ChartNoAxesCombined, ContactRound, List, Route } from "lucide-react";
+import { CalendarCheck2, ChartNoAxesCombined, List, Route } from "lucide-react";
 import Link from "next/link";
 
 import styles from "./seller-leads-nav.module.css";
 
-export type SellerLeadsView = "database" | "queue" | "underwriting";
+export type SellerLeadsView = "database" | "today" | "underwriting";
 
 const views = [
-  { href: "/os/leads?view=queue", key: "queue", label: "Lead Queue", icon: ContactRound },
+  { href: "/os/leads?view=today", key: "today", label: "Today", icon: CalendarCheck2 },
   { href: "/os/leads", key: "database", label: "All Leads", icon: List },
   { href: "/os/leads?display=board", key: "pipeline", label: "Pipeline", icon: Route },
   {

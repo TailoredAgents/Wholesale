@@ -476,7 +476,7 @@ export function LeadLifecycleActions({
               <li>Cancel open follow-ups, reminders, calling-list work, and appointments.</li>
               <li>Cancel every pending approval tied to this lead.</li>
               <li>Retire pending or approved offer plans and unused offer concessions.</li>
-              <li>Close the Lead Queue case and conversation.</li>
+              <li>Close any legacy lead-management case and the seller conversation.</li>
               <li>Move the record to Closed Leads with its full read-only history.</li>
             </ul>
             <p>

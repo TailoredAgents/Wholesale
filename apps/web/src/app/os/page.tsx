@@ -214,7 +214,7 @@ export default async function Home() {
           <strong>{overdueTasks.length}</strong>
           <small>Follow-up past due</small>
         </Link>
-        <Link className={styles.warningMetric} href="/os/leads?view=queue">
+        <Link className={styles.warningMetric} href="/os/leads?view=needs_qualification">
           <span><UserRoundCheck aria-hidden="true" size={16} />Qualification</span>
           <strong>{needsQualification.length}</strong>
           <small>Seller records incomplete</small>

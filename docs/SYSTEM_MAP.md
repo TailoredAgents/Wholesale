@@ -256,7 +256,7 @@ must use an individual Clerk login. Shared employee credentials are not part of 
 Role-specific default routes include:
 
 - VA Caller: `/os/prospecting?view=my-calls`
-- Lead Manager: `/os/leads?view=queue`
+- Seller Today workspace: `/os/leads?view=today`
 - Acquisitions Closer: `/os/calendar?view=day`
 - Dispositions: `/os/deals?view=disposition`
 - Transaction Coordinator: `/os/deals?view=closing-exceptions`
@@ -488,7 +488,7 @@ not presented as competing navigation.
 ### 7.2 Operations And Acquisition Tools
 
 The primary Operations destinations are Prospecting, Leads, Deals, and Buyers. Campaign
-management is a local Prospecting view. Lead Queue, Pipeline, and active Underwriting are local
+management is a local Prospecting view. Today, Pipeline, and active Underwriting are local
 Leads views. Schedule, Dispatch, Appointment, and Availability are local Calendar views.
 
 **Prospecting > Campaigns (`/os/prospecting?view=campaigns`)**
@@ -575,9 +575,12 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 
 **Leads (`/os/leads`)**
 
-- Canonical seller workspace with Lead Queue, All Leads, Pipeline, and Underwriting local views.
-- Lead Queue supports acceptance, guided qualification, dated next actions, appointments,
-  exceptions, scorecards, and Lead Manager Copilot drafts.
+- Canonical seller workspace with Today, All Leads, Pipeline, and Underwriting local views.
+- Today is a focused workday assembled from real inbound notifications, unanswered callbacks,
+  manually scheduled seller reminders, today's appointments, and contact-ready new or unassigned
+  leads. It does not classify leads as neglected or manufacture follow-up work.
+- Qualification gaps remain available through the **Needs Qualification** filter and on each full
+  seller record. They are context to complete when useful, not automatic overdue tasks.
 - Authorized staff can create an internal lead for a warm call, referral, networking source, or
   other genuine opportunity. One submission creates contact methods, property, ownership,
   source, qualification context, follow-up, conversation, and initial note.
@@ -602,7 +605,7 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Dead and disqualified opportunities are closed through one atomic workflow. Close-out records a
   disposition, reason, actor, and time; cancels active tasks, appointments, automated follow-up,
   calling and handoff work, and every pending approval tied to the lead; retires pending or
-  approved offer plans and unused offer concessions; closes Lead Queue and Inbox work; and removes
+  approved offer plans and unused offer concessions; closes legacy lead-management and Inbox work; and removes
   routine overdue warnings. Closed records live at `/os/leads/closed`, retain their complete saved
   contact, property, communication, appointment, valuation, transaction, and buyer-offer history
   as read-only, and require a reason plus a future next action to reopen. Genuine inbound seller
@@ -1840,7 +1843,7 @@ Employees generally interact with copilots, not a collection of separate chat ro
 | Copilot | Location | Current role |
 | --- | --- | --- |
 | Prospecting | Prospecting | Pre-call brief, script guidance, disposition quality, coaching |
-| Lead Manager | Leads > Lead Queue | Priority, seller brief, missing facts, reply and task proposals |
+| Seller workday | Leads > Today | Real inbound activity, callbacks, manual reminders, appointments, and new or unassigned leads |
 | Acquisitions | Calendar Appointment | Meeting preparation, evidence gaps, negotiation support |
 | Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
 | Disposition | Deal > Disposition / Finance | Cited package, buyer-match, outreach, reply, next-action, offer-risk, and Buyer-update drafts; DS9 pilot NOT MET |

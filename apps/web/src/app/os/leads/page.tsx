@@ -4,16 +4,15 @@ import Link from "next/link";
 import {
   getAcquisitionOperations,
   getDashboardData,
-  getLeadManagerOverview,
   getUnderwritingCalibration,
   getWorkspaceProfile,
 } from "../../lib/api";
-import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
+import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { normalizeLeadSortKey, normalizeLeadViewKey } from "../os-utils";
-import { LeadManagerWorkspace } from "../lead-manager/lead-manager-workspace";
 import { LeadsWorkspace } from "./leads-workspace";
 import { NewLeadControl } from "./new-lead-control";
 import { SellerLeadsNav, type SellerLeadsView } from "./seller-leads-nav";
+import { SellerTodayWorkspace } from "./seller-today-workspace";
 import { SellerUnderwritingWorkspace } from "./seller-underwriting-workspace";
 
 export const dynamic = "force-dynamic";
@@ -37,24 +36,20 @@ export default async function LeadsPage({
     ? first(params.asset)
     : "all";
   const operationalView: SellerLeadsView =
-    requestedView === "queue"
-      ? "queue"
+    ["today", "queue"].includes(requestedView)
+      ? "today"
       : requestedView === "underwriting"
         ? "underwriting"
         : "database";
 
-  const [dashboard, profile, { operations }, leadManagerResult, calibrationResult] =
-    await Promise.all([
-      getDashboardData(),
-      getWorkspaceProfile(),
-      getAcquisitionOperations(),
-      operationalView === "queue"
-        ? getLeadManagerOverview()
-        : Promise.resolve({ leadManager: null, apiConnected: true }),
-      operationalView === "underwriting"
-        ? getUnderwritingCalibration()
-        : Promise.resolve({ calibration: null, apiConnected: true }),
-    ]);
+  const [dashboard, profile, { operations }, calibrationResult] = await Promise.all([
+    getDashboardData(),
+    getWorkspaceProfile(),
+    getAcquisitionOperations(),
+    operationalView === "underwriting"
+      ? getUnderwritingCalibration()
+      : Promise.resolve({ calibration: null, apiConnected: true }),
+  ]);
 
   const canEditLead = Boolean(profile?.permissions.includes("leads:edit"));
   const canRecordOutsideOffer = Boolean(profile?.permissions.includes("leads:edit"));
@@ -70,14 +65,14 @@ export default async function LeadsPage({
     operationalView === "underwriting" && !canUnderwrite ? "database" : operationalView;
   const display = activeView === "database" ? requestedDisplay : "table";
   const title =
-    activeView === "queue"
-      ? "Lead Queue"
+    activeView === "today"
+      ? "Today"
       : activeView === "underwriting"
         ? "Underwriting Queue"
         : "Leads";
   const description =
-    activeView === "queue"
-      ? "Work warm handoffs, qualification, appointments, follow-up, and neglected-lead exceptions."
+    activeView === "today"
+      ? "Handle real seller activity, scheduled reminders, and today’s appointments without manufactured busywork."
       : activeView === "underwriting"
         ? "Prepare defensible values and offers for qualified seller opportunities."
         : "Search, filter, assign, and move every active seller opportunity from one database.";
@@ -111,20 +106,15 @@ export default async function LeadsPage({
       />
       <SellerLeadsNav active={activeView} display={display} />
 
-      {activeView === "queue" ? (
-        leadManagerResult.leadManager ? (
-          <LeadManagerWorkspace
-            data={leadManagerResult.leadManager}
-            initialLeadId={first(params.lead)}
-          />
-        ) : (
-          <SectionPanel
-            description="An acquisitions or management role is required."
-            title="Lead queue unavailable"
-          >
-            <div />
-          </SectionPanel>
-        )
+      {activeView === "today" ? (
+        <SellerTodayWorkspace
+          appointments={operations?.appointments ?? []}
+          initialLeadId={first(params.lead)}
+          leads={dashboard.leads}
+          notifications={operations?.notifications ?? []}
+          profile={profile}
+          tasks={dashboard.openTaskQueue}
+        />
       ) : null}
 
       {activeView === "underwriting" ? (
