@@ -976,6 +976,10 @@ def create_quick_dial_intent(
             # that a newly created business conversation does not have. Active phone
             # and all-channel suppressions remain enforced by voice eligibility.
             require_recorded_permission=False,
+            # The global phone is a manual company dialer, not active seller work.
+            # Preserve history on a matching closed lead without forcing the user to
+            # reopen it or allowing the call itself to reactivate the lead.
+            require_open_lead=False,
             requested_recipient=destination,
             commit=False,
         )
@@ -1061,6 +1065,7 @@ def create_call_intent(
     extra_intent_metadata: dict[str, object] | None = None,
     require_browser_voice: bool = False,
     require_recorded_permission: bool = True,
+    require_open_lead: bool = True,
     requested_recipient: str | None = None,
     commit: bool = True,
 ) -> VoiceCallIntentRead | None:
@@ -1097,7 +1102,8 @@ def create_call_intent(
         )
         if active_lead is None:
             return None
-        require_lead_open_for_work(active_lead)
+        if require_open_lead:
+            require_lead_open_for_work(active_lead)
     existing = db.scalar(
         select(VoiceCallIntent).where(
             VoiceCallIntent.organization_id == principal.organization_id,
@@ -1182,6 +1188,7 @@ def create_call_intent(
             "conversation_type": conversation.conversation_type,
             "department_key": line.department_key,
             "recorded_permission_required": recorded_permission_required,
+            "open_lead_required": require_open_lead,
             **(extra_intent_metadata or {}),
         },
     )
@@ -1244,7 +1251,10 @@ def start_forwarded_call(
     if intent is None:
         return None
     conversation_id, contact_id = require_warm_call_intent_context(intent)
-    if intent.lead_id is not None:
+    open_lead_required = bool(
+        (intent.intent_metadata or {}).get("open_lead_required", True)
+    )
+    if intent.lead_id is not None and open_lead_required:
         lead = lock_organization_lead(
             db,
             organization_id=intent.organization_id,
@@ -1526,7 +1536,10 @@ def process_outbound_voice_request(
         except ProspectingVoiceConfigurationError as exc:
             raise VoiceConfigurationError(str(exc)) from exc
     conversation_id, contact_id = require_warm_call_intent_context(intent)
-    if intent.lead_id is not None:
+    open_lead_required = bool(
+        (intent.intent_metadata or {}).get("open_lead_required", True)
+    )
+    if intent.lead_id is not None and open_lead_required:
         lead = lock_organization_lead(
             db,
             organization_id=intent.organization_id,

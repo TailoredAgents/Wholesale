@@ -1161,6 +1161,67 @@ def test_quick_dial_reuses_existing_outside_contact_without_hidden_permission_bl
     assert SELLER_NUMBER in outbound.text
 
 
+@pytest.mark.parametrize(
+    ("stage_key", "archive_lead"),
+    (("new", True), ("dead", False)),
+    ids=("archived", "dead"),
+)
+def test_quick_dial_can_call_a_number_on_an_inactive_lead_without_reopening_it(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    stage_key: str,
+    archive_lead: bool,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    assert conversation.lead_id is not None
+    lead = db_session.get(Lead, conversation.lead_id)
+    assert lead is not None
+    closed_at = datetime.now(ZoneInfo("UTC"))
+    lead.stage_key = stage_key
+    lead.archived_at = closed_at if archive_lead else None
+    conversation.status = "closed"
+    conversation.closed_at = closed_at
+    db_session.commit()
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    prepared = client.post(
+        "/api/v1/voice/quick-dial",
+        headers=headers,
+        json={
+            "phone_number": SELLER_NUMBER,
+            "purpose": "other",
+            "idempotency_key": f"quick-dial-inactive-{stage_key}-{archive_lead}",
+        },
+    )
+
+    assert prepared.status_code == 201, prepared.text
+    assert prepared.json()["conversation_id"] == str(conversation.id)
+    intent = db_session.get(VoiceCallIntent, UUID(prepared.json()["intent"]["id"]))
+    assert intent is not None
+    assert intent.intent_metadata is not None
+    assert intent.intent_metadata["open_lead_required"] is False
+    session = client.get("/api/v1/voice/session", headers=headers).json()
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        {
+            "From": f"client:{session['identity']}",
+            "CallSid": "CA00000000000000000000000000000093",
+            "CallIntentId": prepared.json()["intent"]["id"],
+        },
+    )
+
+    assert outbound.status_code == 200, outbound.text
+    assert SELLER_NUMBER in outbound.text
+    db_session.refresh(lead)
+    db_session.refresh(conversation)
+    assert lead.stage_key == stage_key
+    assert (lead.archived_at is not None) is archive_lead
+    assert conversation.status == "closed"
+
+
 def test_quick_dial_reuses_existing_business_contact_without_creating_a_lead(
     db_session: Session,
     api_db_override: None,
