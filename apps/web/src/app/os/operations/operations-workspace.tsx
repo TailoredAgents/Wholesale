@@ -262,8 +262,17 @@ export function OperationsWorkspace({
     });
   }
 
-  async function removeTeamMember(teamId: string, userId: string, displayName: string) {
-    if (!window.confirm(`Remove ${displayName} from this team? Their login and history will remain.`)) {
+  async function removeTeamMember(
+    teamId: string,
+    userId: string,
+    displayName: string,
+    teamName: string,
+  ) {
+    if (
+      !window.confirm(
+        `Remove ${displayName} from ${teamName}? This only changes team routing. Their login, role, and history remain, and owners keep company-wide access.`,
+      )
+    ) {
       return;
     }
     await mutate(`/api/v1/operations/teams/${teamId}/members/${userId}`, "DELETE");
@@ -696,7 +705,7 @@ export function OperationsWorkspace({
       ) : null}
 
       {activeTab === "team" ? (
-        <div className={styles.twoColumn}>
+        <div className={`${styles.twoColumn} ${styles.peopleGrid}`}>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Access</span><h3>Workspace users</h3></div><strong>{activeUsers.length}</strong></div>
             <div className={styles.rows}>
@@ -793,6 +802,9 @@ export function OperationsWorkspace({
           </div>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Structure</span><h3>Teams</h3></div><strong>{operations.teams.length}</strong></div>
+            <p className={styles.teamAccessNote}>
+              Team membership controls routing and team assignments. Owners keep company-wide visibility even when they are not a team member.
+            </p>
             <div className={styles.rows}>
               {operations.teams.map((team) => {
                 const initialOwner = acquisitionInitialOwner(team, operations.users);
@@ -836,14 +848,20 @@ export function OperationsWorkspace({
                             </select>
                             <button
                               aria-label={`Remove ${member.display_name} from ${team.name}`}
-                              className={styles.iconButton}
+                              className={styles.removeMemberButton}
                               onClick={() =>
-                                void removeTeamMember(team.id, member.user_id, member.display_name)
+                                void removeTeamMember(
+                                  team.id,
+                                  member.user_id,
+                                  member.display_name,
+                                  team.name,
+                                )
                               }
                               title="Remove from team"
                               type="button"
                             >
                               <Trash2 size={14} />
+                              <span>Remove</span>
                             </button>
                           </div>
                         ))}

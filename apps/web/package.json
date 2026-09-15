@@ -22,6 +22,7 @@
     "audit:prospecting-analytics": "node --test scripts/prospecting-analytics-contract.test.mjs",
     "audit:batchdialer-performance": "node --test scripts/batchdialer-va-performance-contract.test.mjs",
     "audit:campaign-classification": "node --test scripts/campaign-classification-contract.test.mjs",
+    "audit:team-management": "node --test scripts/team-management-contract.test.mjs",
     "audit:land-acquisition": "node --test scripts/land-acquisition-experience-contract.test.mjs",
     "audit:acquisitions-performance": "node --test scripts/acquisitions-performance-contract.test.mjs",
     "audit:buyer-network": "node --test scripts/buyer-network-contract.test.mjs",

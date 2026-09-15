@@ -203,6 +203,27 @@ def test_team_members_can_be_reviewed_updated_and_removed(
     assert remove_response.json()["manager_user_id"] is None
     assert remove_response.json()["members"] == []
 
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    add_owner_response = client.post(
+        f"/api/v1/operations/teams/{team_id}/members",
+        headers=headers,
+        json={"user_id": str(owner.id), "membership_role": "member"},
+    )
+    assert add_owner_response.status_code == 200, add_owner_response.text
+
+    remove_owner_response = client.delete(
+        f"/api/v1/operations/teams/{team_id}/members/{owner.id}",
+        headers=headers,
+    )
+    assert remove_owner_response.status_code == 200, remove_owner_response.text
+    assert remove_owner_response.json()["members"] == []
+
+    overview_response = client.get("/api/v1/operations", headers=headers)
+    assert overview_response.status_code == 200, overview_response.text
+    assert overview_response.json()["can_manage"] is True
+    assert [team["id"] for team in overview_response.json()["teams"]] == [team_id]
+
 
 def test_owner_can_create_another_full_access_owner(
     db_session: Session,
