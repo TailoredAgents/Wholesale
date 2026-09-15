@@ -39,6 +39,7 @@ import {
 } from "../../leads/[leadId]/offer-stage-action";
 import type { LeadCloseOutResponse, LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
+import { LeadStageBadge } from "../_components/lead-stage-badge";
 import {
   defaultLeadSortKey,
   apiErrorMessage,
@@ -81,17 +82,6 @@ function needsQualifiedSellerReview(leadId: string, tasks: SpeedToLeadTask[]) {
 
 function QualifiedSellerReviewBadge() {
   return <span className={styles.qualifiedReviewBadge}>Qualified seller · Needs review</span>;
-}
-
-function stageTone(stageKey: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  const stage = getPipelineStage(stageKey)?.key;
-  if (stage === "under_contract") return "success";
-  if (["underwriting", "offer"].includes(stage ?? "")) return "info";
-  return "neutral";
-}
-
-function stageLabel(lead: Pick<LeadListItem, "stage_key">) {
-  return getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key);
 }
 
 function qualificationSummary(lead: LeadListItem) {
@@ -258,7 +248,7 @@ function LeadDragOverlay({ lead }: { lead: LeadListItem }) {
       <div className={styles.cardSelect}>
         <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)}</em></span>
         <span className={styles.cardAddress}>{lead.property_address}</span>
-        <StatusBadge tone={stageTone(lead.stage_key)}>{stageLabel(lead)}</StatusBadge>
+        <LeadStageBadge stageKey={lead.stage_key} />
       </div>
     </div>
   );
@@ -931,7 +921,7 @@ export function LeadsWorkspace({
                   </span>
                   <time className={styles.received} dateTime={lead.created_at}>{formatDateTime(lead.created_at)}</time>
                   <span className={styles.status}>
-                    <StatusBadge tone={stageTone(lead.stage_key)}>{stageLabel(lead)}</StatusBadge>
+                    <LeadStageBadge stageKey={lead.stage_key} />
                     {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
                     {qualification ? <small className={styles.qualificationContext}>{qualification}</small> : null}
                     {needsReview ? <QualifiedSellerReviewBadge /> : null}
@@ -1012,7 +1002,7 @@ export function LeadsWorkspace({
                   <button aria-label="Close seller preview" onClick={closePreview} type="button"><X size={17} /></button>
                 </header>
                 <div className={styles.previewStatus}>
-                  <StatusBadge tone={stageTone(selectedLead.stage_key)}>{stageLabel(selectedLead)}</StatusBadge>
+                  <LeadStageBadge stageKey={selectedLead.stage_key} />
                   <span>{qualificationSummary(selectedLead) ?? labelize(selectedLead.asset_class)}</span>
                 </div>
                 {needsQualifiedSellerReview(selectedLead.id, tasks) ? (

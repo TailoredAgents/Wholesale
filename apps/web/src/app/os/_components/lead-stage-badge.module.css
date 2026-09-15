@@ -1,0 +1,82 @@
+.badge {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid var(--sg-color-border);
+  border-radius: 999px;
+  background: var(--sg-color-neutral-soft);
+  color: var(--sg-color-text-soft);
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-strong);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.badge[data-stage="new"],
+.badge[data-stage="other"] {
+  border-color: #d0d5d1;
+  background: #f2f4f2;
+  color: #4e5a53;
+}
+
+.badge[data-stage="contacting"] {
+  border-color: #b8cede;
+  background: #edf5fa;
+  color: #275d78;
+}
+
+.badge[data-stage="contacted"] {
+  border-color: #96bdcf;
+  background: #e5f1f6;
+  color: #174f69;
+}
+
+.badge[data-stage="qualifying"] {
+  border-color: #e2c783;
+  background: #fff5dc;
+  color: #72520b;
+}
+
+.badge[data-stage="qualified"] {
+  border-color: #91c7b3;
+  background: #e6f4ef;
+  color: #155f49;
+}
+
+.badge[data-stage="appointment"] {
+  border-color: #bbb0dc;
+  background: #f0edfa;
+  color: #4d3e84;
+}
+
+.badge[data-stage="underwriting"] {
+  border-color: #d5b45d;
+  background: #fbf0d4;
+  color: #6c4c08;
+}
+
+.badge[data-stage="offer"] {
+  border-color: #8bb197;
+  background: #e7f1e9;
+  color: #205d34;
+}
+
+.badge[data-stage="nurture"] {
+  border-color: #cdbca8;
+  background: #f3eee7;
+  color: #68513b;
+}
+
+.badge[data-stage="under_contract"] {
+  border-color: #17633a;
+  background: #17633a;
+  color: #fff;
+}
+
+.badge[data-stage="closed"] {
+  border-color: #d8aaa3;
+  background: #f8e9e6;
+  color: #893c32;
+}

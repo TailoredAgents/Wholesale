@@ -21,6 +21,14 @@ const reminderControl = readFileSync(
   resolve(appRoot, "os/leads/lead-reminder-control.tsx"),
   "utf8",
 );
+const leadStageBadge = readFileSync(
+  resolve(appRoot, "os/_components/lead-stage-badge.tsx"),
+  "utf8",
+);
+const leadStageBadgeStyles = readFileSync(
+  resolve(appRoot, "os/_components/lead-stage-badge.module.css"),
+  "utf8",
+);
 const osUtils = readFileSync(resolve(appRoot, "os/os-utils.ts"), "utf8");
 
 test("AI operations stay out of human task and due-date views", () => {
@@ -67,10 +75,31 @@ test("seller reminders are explicit, easy to schedule, and easy to finish", () =
 
 test("lead status presents the pipeline stage without turning qualification gaps into urgency", () => {
   assert.match(leadsWorkspace, /<span>Seller<\/span><span>Received<\/span><span>Stage<\/span>/);
-  assert.match(leadsWorkspace, /<StatusBadge tone=\{stageTone\(lead\.stage_key\)\}>\{stageLabel\(lead\)\}<\/StatusBadge>/);
+  assert.match(leadsWorkspace, /<LeadStageBadge stageKey=\{lead\.stage_key\} \/>/);
   assert.match(leadsWorkspace, /isManualReminderDue\(lead\)[\s\S]*Reminder due/);
   assert.match(leadsWorkspace, /qualificationSummary\(lead\)/);
   assert.match(leadsWorkspace, /No scheduled task/);
   assert.doesNotMatch(leadsWorkspace, /<StatusBadge[^>]*>\{operatingStatus\}<\/StatusBadge>/);
   assert.doesNotMatch(leadsWorkspace, /<span>Status<\/span>/);
+});
+
+test("lead stages use one consistent, distinct color system", () => {
+  assert.match(leadStageBadge, /getPipelineStage\(stageKey\)\?\.key/);
+  assert.match(leadStageBadge, /\["dead", "disqualified", "closed"\]/);
+  for (const stage of [
+    "new",
+    "contacting",
+    "contacted",
+    "qualifying",
+    "qualified",
+    "appointment",
+    "underwriting",
+    "offer",
+    "nurture",
+    "under_contract",
+    "closed",
+  ]) {
+    assert.match(leadStageBadgeStyles, new RegExp(`data-stage="${stage}"`));
+  }
+  assert.doesNotMatch(leadsWorkspace, /function stageTone/);
 });

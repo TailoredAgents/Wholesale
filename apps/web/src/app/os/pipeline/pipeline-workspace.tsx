@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 
 import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
+import { LeadStageBadge } from "../_components/lead-stage-badge";
 import {
   formatDateTime,
   getLeadOperatingStatus,
@@ -23,17 +24,6 @@ import styles from "./pipeline-workspace.module.css";
 function ownerLabel(email: string | null) {
   if (!email) return "Unassigned";
   return email.split("@")[0]?.replace(/[._-]+/g, " ") || email;
-}
-
-function stageTone(stageKey: string): "danger" | "warning" | "info" | "success" | "neutral" {
-  const stage = getPipelineStage(stageKey)?.key;
-  if (stage === "under_contract") return "success";
-  if (["underwriting", "offer"].includes(stage ?? "")) return "info";
-  return "neutral";
-}
-
-function stageLabel(lead: Pick<LeadListItem, "stage_key">) {
-  return getPipelineStage(lead.stage_key)?.label ?? labelize(lead.stage_key);
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
@@ -155,7 +145,7 @@ export function PipelineWorkspace({
           {selectedLead ? (
             <>
               <header><div><span>Pipeline context</span><h2>{selectedLead.seller_name}</h2><p>{selectedLead.property_address}</p></div><button aria-label="Close pipeline context" onClick={() => setMobileDetailOpen(false)} type="button"><X size={17} /></button></header>
-              <div className={styles.inspectorStatus}><StatusBadge tone={stageTone(selectedLead.stage_key)}>{stageLabel(selectedLead)}</StatusBadge><span>{needsLeadQualification(selectedLead) ? `Qualification ${qualificationFieldCount(selectedLead)}/${qualificationFieldTarget}` : labelize(selectedLead.asset_class)}</span></div>
+              <div className={styles.inspectorStatus}><LeadStageBadge stageKey={selectedLead.stage_key} /><span>{needsLeadQualification(selectedLead) ? `Qualification ${qualificationFieldCount(selectedLead)}/${qualificationFieldTarget}` : labelize(selectedLead.asset_class)}</span></div>
               <dl>
                 <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                 <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>

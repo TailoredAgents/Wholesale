@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import type { LeadListItem, UnderwritingCalibration } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
+import { LeadStageBadge } from "../_components/lead-stage-badge";
 import { labelize } from "../os-utils";
 import styles from "../_components/deal-workspaces.module.css";
 
@@ -58,9 +59,7 @@ export function SellerUnderwritingWorkspace({
           >
             <div>
               <strong>{lead.seller_name}</strong>
-              <StatusBadge tone={lead.stage_key === "offer_pending_approval" ? "warning" : "info"}>
-                {labelize(lead.stage_key)}
-              </StatusBadge>
+              <LeadStageBadge stageKey={lead.stage_key} />
             </div>
             <span>{lead.property_address}</span>
             <dl>
