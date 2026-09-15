@@ -1140,7 +1140,13 @@ def _record_provider_acceptance(
         delivery.sent_at = now
     delivery.processing_started_at = None
     delivery.processing_token = None
-    update_conversation_activity(conversation, direction="outbound", occurred_at=now, db=db)
+    update_conversation_activity(
+        conversation,
+        direction="outbound",
+        occurred_at=now,
+        db=db,
+        resolves_response=True,
+    )
     db.add(
         ActivityEvent(
             organization_id=delivery.organization_id,

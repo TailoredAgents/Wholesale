@@ -72,6 +72,8 @@ def add_inbound_email(
     conversation.last_activity_at = occurred_at
     conversation.last_inbound_at = occurred_at
     conversation.unread_count = 1
+    conversation.response_status = "needs_reply"
+    conversation.response_status_updated_at = occurred_at
     db.add(
         CommunicationRecord(
             organization_id=conversation.organization_id,
@@ -170,7 +172,7 @@ def test_mailbox_notification_deduplicates_assignee_watcher_and_alias_grant(
         db_session,
         conversation,
         contact,
-        occurred_at=datetime.now(UTC) - timedelta(minutes=5),
+        occurred_at=datetime.now(UTC) - timedelta(hours=5),
     )
     db_session.commit()
 
@@ -192,10 +194,10 @@ def test_mailbox_notification_deduplicates_assignee_watcher_and_alias_grant(
     )
     assert response.status_code == 200, response.text
     item = response.json()["items"][0]
-    assert item["response_state"] == "waiting"
-    assert item["response_kind"] == "first"
-    assert item["response_target_minutes"] == 30
-    assert item["response_age_minutes"] >= 5
+    assert item["response_state"] == "needs_reply"
+    assert item["response_kind"] == "reply"
+    assert item["response_target_minutes"] is None
+    assert item["response_age_minutes"] >= 300
     overview_response = client.get(
         "/api/v1/inbox/response-overview",
         headers={"X-Dev-User-Email": assignee.email},
@@ -226,8 +228,9 @@ def test_mailbox_notification_deduplicates_assignee_watcher_and_alias_grant(
     assert notifications[0].read_at is not None
 
 
-def test_overdue_team_reply_notifies_team_and_important_watcher_then_resolves(
+def test_manual_reminder_notifies_scheduler_then_resolves(
     db_session: Session,
+    api_db_override: None,
 ) -> None:
     bootstrap = bootstrap_foundation(
         db_session,
@@ -292,6 +295,19 @@ def test_overdue_team_reply_notifies_team_and_important_watcher_then_resolves(
     )
     db_session.commit()
 
+    client = TestClient(app)
+    reminder_at = datetime.now(UTC) + timedelta(minutes=5)
+    reminder_response = client.patch(
+        f"/api/v1/inbox/conversations/{conversation.id}/response",
+        headers={"X-Dev-User-Email": finance.email},
+        json={"action": "remind", "remind_at": reminder_at.isoformat()},
+    )
+    assert reminder_response.status_code == 200, reminder_response.text
+    assert reminder_response.json()["response_state"] == "reminder"
+
+    conversation.response_due_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
     settings = get_settings()
     processed_ids = []
     while True:
@@ -305,18 +321,22 @@ def test_overdue_team_reply_notifies_team_and_important_watcher_then_resolves(
             Notification.recipient_user_id,
         )
     ).all()
-    assert len(processed_ids) == 4
+    assert len(processed_ids) == 2
     assert {
         (notification.notification_type, notification.recipient_user_id)
         for notification in notifications
     } == {
         ("mailbox_inbound", finance.id),
         ("mailbox_response_due", finance.id),
-        ("mailbox_response_due", bootstrap.admin_user.id),
-        ("mailbox_owner_escalation", bootstrap.admin_user.id),
     }
 
-    conversation.last_outbound_at = datetime.now(UTC)
+    done_response = client.patch(
+        f"/api/v1/inbox/conversations/{conversation.id}/response",
+        headers={"X-Dev-User-Email": finance.email},
+        json={"action": "done"},
+    )
+    assert done_response.status_code == 200, done_response.text
+    assert done_response.json()["response_state"] == "none"
     for notification in notifications:
         notification.read_at = None
     db_session.commit()
@@ -326,5 +346,5 @@ def test_overdue_team_reply_notifies_team_and_important_watcher_then_resolves(
         if resolved_id is None:
             break
         resolved_ids.append(resolved_id)
-    assert len(resolved_ids) == 4
+    assert len(resolved_ids) == 2
     assert all(notification.read_at is not None for notification in notifications)

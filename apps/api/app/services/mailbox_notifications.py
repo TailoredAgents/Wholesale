@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -46,15 +46,8 @@ def mailbox_response_status(
     latest_inbound_channel: str | None = None,
     now: datetime | None = None,
 ) -> MailboxResponseStatus:
-    if (
-        conversation.status == "closed"
-        or latest_inbound_channel not in {None, "email", "sms"}
-        or conversation.last_inbound_at is None
-        or (
-            conversation.last_outbound_at is not None
-            and _as_utc(conversation.last_outbound_at) >= _as_utc(conversation.last_inbound_at)
-        )
-    ):
+    del settings, latest_inbound_channel
+    if conversation.status == "closed" or conversation.response_status == "none":
         return MailboxResponseStatus(
             state="none",
             kind=None,
@@ -62,29 +55,38 @@ def mailbox_response_status(
             target_minutes=None,
             due_at=None,
         )
+    if conversation.response_status == "waiting":
+        return MailboxResponseStatus(
+            state="waiting",
+            kind="waiting",
+            age_minutes=None,
+            target_minutes=None,
+            due_at=None,
+        )
     current_time = _as_utc(now or datetime.now(UTC))
-    inbound_at = _as_utc(conversation.last_inbound_at)
-    kind = "first" if conversation.last_outbound_at is None else "follow_up"
-    target_minutes = (
-        settings.mailbox_first_response_target_minutes
-        if kind == "first"
-        else settings.mailbox_next_response_target_minutes
+    due_at = (
+        _as_utc(conversation.response_due_at)
+        if conversation.response_due_at is not None
+        else None
     )
-    due_at = inbound_at + timedelta(minutes=target_minutes)
-    age_minutes = max(0, int((current_time - inbound_at).total_seconds() // 60))
-    remaining_minutes = int((due_at - current_time).total_seconds() // 60)
+    started_at = conversation.response_status_updated_at or conversation.last_inbound_at
+    age_minutes = (
+        max(0, int((current_time - _as_utc(started_at)).total_seconds() // 60))
+        if started_at is not None
+        else None
+    )
     state = (
         "overdue"
-        if current_time >= due_at
-        else "due_soon"
-        if remaining_minutes <= max(5, target_minutes // 4)
-        else "waiting"
+        if due_at is not None and current_time >= due_at
+        else "reminder"
+        if due_at is not None
+        else "needs_reply"
     )
     return MailboxResponseStatus(
         state=state,
-        kind=kind,
+        kind="reminder" if due_at is not None else "reply",
         age_minutes=age_minutes,
-        target_minutes=target_minutes,
+        target_minutes=None,
         due_at=due_at,
     )
 
@@ -104,8 +106,12 @@ def process_next_mailbox_notification(
             Conversation.status == "open",
             Conversation.last_inbound_at.is_not(None),
             or_(
-                Conversation.last_outbound_at.is_(None),
-                Conversation.last_inbound_at > Conversation.last_outbound_at,
+                Conversation.unread_count > 0,
+                and_(
+                    Conversation.response_status == "needs_reply",
+                    Conversation.response_due_at.is_not(None),
+                    Conversation.response_due_at <= now,
+                ),
             ),
         )
         .order_by(Conversation.last_inbound_at.asc())
@@ -132,8 +138,12 @@ def process_next_mailbox_notification(
                 Conversation.status == "open",
                 Conversation.last_inbound_at.is_not(None),
                 or_(
-                    Conversation.last_outbound_at.is_(None),
-                    Conversation.last_inbound_at > Conversation.last_outbound_at,
+                    Conversation.unread_count > 0,
+                    and_(
+                        Conversation.response_status == "needs_reply",
+                        Conversation.response_due_at.is_not(None),
+                        Conversation.response_due_at <= now,
+                    ),
                 ),
             )
             .execution_options(populate_existing=True)
@@ -150,7 +160,7 @@ def process_next_mailbox_notification(
             latest_inbound_channel=channel,
             now=now,
         )
-        if response.state == "none" or conversation.last_inbound_at is None:
+        if conversation.last_inbound_at is None:
             continue
         inbound_key = str(int(_as_utc(conversation.last_inbound_at).timestamp()))
         channel = channel or "message"
@@ -158,70 +168,42 @@ def process_next_mailbox_notification(
         contact_name = contact.legal_name if contact is not None else "A contact"
         action_url = f"/os/inbox?conversation={conversation.id}"
 
-        recipients = _notification_recipient_ids(db, conversation, important=False)
-        for recipient_id in recipients:
-            notification = _create_notification(
-                db,
-                conversation=conversation,
-                recipient_user_id=recipient_id,
-                notification_type="mailbox_inbound",
-                title=f"New {channel} needs a reply",
-                body=f"{contact_name} sent a {channel} in the Stonegate Inbox.",
-                action_url=action_url,
-                dedupe_key=f"mailbox-inbound:{conversation.id}:{inbound_key}",
-            )
-            if notification is not None:
-                db.commit()
-                return notification.id
-
-        if response.state == "overdue":
-            important_recipients = _notification_recipient_ids(
-                db,
-                conversation,
-                important=True,
-            )
-            for recipient_id in important_recipients:
+        if conversation.unread_count > 0 and channel in {"email", "sms"}:
+            recipients = _notification_recipient_ids(db, conversation, important=False)
+            for recipient_id in recipients:
                 notification = _create_notification(
                     db,
                     conversation=conversation,
                     recipient_user_id=recipient_id,
-                    notification_type="mailbox_response_due",
-                    title="Inbox response target missed",
-                    body=(
-                        f"{contact_name} has waited {response.age_minutes or 0} minutes "
-                        "for a reply."
-                    ),
+                    notification_type="mailbox_inbound",
+                    title=f"New {channel} received",
+                    body=f"{contact_name} sent a {channel} in the Stonegate Inbox.",
                     action_url=action_url,
-                    dedupe_key=f"mailbox-due:{conversation.id}:{inbound_key}",
+                    dedupe_key=f"mailbox-inbound:{conversation.id}:{inbound_key}",
                 )
                 if notification is not None:
                     db.commit()
                     return notification.id
 
-        owner_escalation_due = response.age_minutes is not None and response.age_minutes >= (
-            settings.mailbox_unassigned_escalation_minutes
-            if conversation.assigned_user_id is None and conversation.assigned_team_id is None
-            else settings.mailbox_owner_escalation_minutes
-        )
-        if owner_escalation_due:
-            for owner_id in _owner_user_ids(db, conversation.organization_id):
+        if response.state == "overdue":
+            reminder_recipients = (
+                {conversation.response_status_updated_by_user_id}
+                if conversation.response_status_updated_by_user_id is not None
+                else set(_notification_recipient_ids(db, conversation, important=False))
+            )
+            for recipient_id in reminder_recipients:
                 notification = _create_notification(
                     db,
                     conversation=conversation,
-                    recipient_user_id=owner_id,
-                    notification_type="mailbox_owner_escalation",
-                    title=(
-                        "Unassigned Inbox reply needs attention"
-                        if conversation.assigned_user_id is None
-                        and conversation.assigned_team_id is None
-                        else "Inbox reply escalation"
-                    ),
-                    body=(
-                        f"{contact_name} has waited {response.age_minutes or 0} minutes "
-                        "for a reply."
-                    ),
+                    recipient_user_id=recipient_id,
+                    notification_type="mailbox_response_due",
+                    title="Inbox reminder due",
+                    body=f"Your reminder for {contact_name} is due.",
                     action_url=action_url,
-                    dedupe_key=f"mailbox-owner:{conversation.id}:{inbound_key}",
+                    dedupe_key=(
+                        f"mailbox-reminder:{conversation.id}:"
+                        f"{int(_as_utc(response.due_at).timestamp()) if response.due_at else 0}"
+                    ),
                 )
                 if notification is not None:
                     db.commit()
@@ -388,9 +370,20 @@ def _resolve_answered_notification(db: Session) -> UUID | None:
             Notification.notification_type.in_(MAILBOX_NOTIFICATION_TYPES),
             Notification.read_at.is_(None),
             or_(
-                Conversation.status == "closed",
-                Conversation.last_inbound_at.is_(None),
-                Conversation.last_outbound_at >= Conversation.last_inbound_at,
+                and_(
+                    Notification.notification_type == "mailbox_inbound",
+                    or_(Conversation.status == "closed", Conversation.unread_count == 0),
+                ),
+                and_(
+                    Notification.notification_type.in_(
+                        ("mailbox_response_due", "mailbox_owner_escalation")
+                    ),
+                    or_(
+                        Conversation.status == "closed",
+                        Conversation.response_status != "needs_reply",
+                        Conversation.response_due_at.is_(None),
+                    ),
+                ),
             ),
         )
         .order_by(Notification.created_at.asc())

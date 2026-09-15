@@ -3135,6 +3135,10 @@ class Conversation(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "visibility_scope IN ('standard', 'restricted')",
             name="ck_conversations_visibility_scope",
         ),
+        CheckConstraint(
+            "response_status IN ('none', 'needs_reply', 'waiting')",
+            name="ck_conversations_response_status",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -3169,6 +3173,18 @@ class Conversation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_outbound_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    response_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="none", server_default="none", index=True
+    )
+    response_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    response_status_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    response_status_updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     conversation_metadata: Mapped[dict[str, Any] | None] = mapped_column(

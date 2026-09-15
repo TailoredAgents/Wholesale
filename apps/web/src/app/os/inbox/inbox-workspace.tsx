@@ -106,8 +106,8 @@ type Conversation = {
   last_activity_at: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
-  response_state: "none" | "waiting" | "due_soon" | "overdue";
-  response_kind: "first" | "follow_up" | null;
+  response_state: "none" | "needs_reply" | "waiting" | "reminder" | "overdue";
+  response_kind: "reply" | "waiting" | "reminder" | null;
   response_age_minutes: number | null;
   response_target_minutes: number | null;
   response_due_at: string | null;
@@ -402,14 +402,6 @@ function formatFileSize(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatResponseAge(minutes: number | null) {
-  if (minutes === null || minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
 async function fileToBase64(file: File) {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -422,10 +414,22 @@ async function fileToBase64(file: File) {
 }
 
 function hasNeedsReply(conversation: Conversation) {
-  if (conversation.response_state) return conversation.response_state !== "none";
-  if (!conversation.last_inbound_at) return false;
-  if (!conversation.last_outbound_at) return true;
-  return new Date(conversation.last_inbound_at) > new Date(conversation.last_outbound_at);
+  return ["needs_reply", "reminder", "overdue"].includes(conversation.response_state);
+}
+
+function responseLabel(conversation: Conversation) {
+  if (conversation.response_state === "overdue") return "Reminder overdue";
+  if (conversation.response_state === "reminder") return "Reminder set";
+  if (conversation.response_state === "needs_reply") return "Needs reply";
+  if (conversation.response_state === "waiting") return "Waiting on them";
+  return "Done";
+}
+
+function defaultReminderInputValue() {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  date.setMinutes(Math.ceil(date.getMinutes() / 15) * 15, 0, 0);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function isRestrictedAlias(alias: EmailSenderAlias) {
@@ -969,6 +973,9 @@ export function InboxWorkspace({
   const [recordingDeleteTarget, setRecordingDeleteTarget] = useState<string | null>(null);
   const [recordingDeleteReason, setRecordingDeleteReason] = useState("");
   const [recordingDeleteStatus, setRecordingDeleteStatus] = useState<"idle" | "deleting">("idle");
+  const [responseStatus, setResponseStatus] = useState<"idle" | "saving">("idle");
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [remindAt, setRemindAt] = useState(defaultReminderInputValue);
 
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -1660,6 +1667,46 @@ export function InboxWorkspace({
     await loadDetail(conversationId);
   }
 
+  async function updateResponseAction(
+    action: "done" | "needs_reply" | "waiting" | "remind",
+    reminderValue?: string,
+  ) {
+    if (!detail || responseStatus === "saving") return;
+    setError(null);
+    setResponseStatus("saving");
+    try {
+      const updated = await request<Conversation>(
+        `/api/v1/inbox/conversations/${detail.id}/response`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            action,
+            remind_at:
+              action === "remind" && reminderValue
+                ? new Date(reminderValue).toISOString()
+                : null,
+          }),
+        },
+      );
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === updated.id ? { ...conversation, ...updated } : conversation,
+        ),
+      );
+      setDetail((current) =>
+        current?.id === updated.id ? { ...current, ...updated } : current,
+      );
+      setReminderOpen(false);
+      if (action === "remind") setRemindAt(defaultReminderInputValue());
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : "Inbox status could not be updated.",
+      );
+    } finally {
+      setResponseStatus("idle");
+    }
+  }
+
   async function handleGlobalEmailSent(conversationId: string) {
     setMailboxAliasId(null);
     setFilter("team");
@@ -2064,13 +2111,12 @@ export function InboxWorkspace({
                         ?.display_name ?? labelize(item.queue_key)}
                     </span>
                     {item.priority === "urgent" ? <em className={styles.urgentLabel}>Urgent</em> : null}
-                    {hasNeedsReply(item) ? (
+                    {item.response_state !== "none" ? (
                       <em
                         className={styles.responseBadge}
                         data-state={item.response_state}
                       >
-                        {item.response_state === "overdue" ? "Overdue" : "Waiting"}{" "}
-                        {formatResponseAge(item.response_age_minutes)}
+                        {responseLabel(item)}
                       </em>
                     ) : null}
                   </span>
@@ -2124,16 +2170,15 @@ export function InboxWorkspace({
                         ? "Stonegate dispositions relationship"
                       : detail.property_address}
                   </p>
-                  {detail.response_state !== "none" ? (
-                    <span
-                      className={styles.threadResponseStatus}
-                      data-state={detail.response_state}
-                    >
-                      {detail.response_kind === "first" ? "First response" : "Follow-up"}{" "}
-                      {detail.response_state === "overdue" ? "overdue" : "due"} · waiting{" "}
-                      {formatResponseAge(detail.response_age_minutes)}
-                    </span>
-                  ) : null}
+                  <span
+                    className={styles.threadResponseStatus}
+                    data-state={detail.response_state}
+                  >
+                    {responseLabel(detail)}
+                    {detail.response_due_at
+                      ? ` · ${formatDateTime(detail.response_due_at)}`
+                      : ""}
+                  </span>
                 </div>
                 <div className={styles.contactActions}>
                   {primaryPhone ? (
@@ -2183,6 +2228,88 @@ export function InboxWorkspace({
                   </button>
                 </div>
               </header>
+
+              <section className={styles.responseBar} aria-label="Conversation work status">
+                <div className={styles.responseBarCopy}>
+                  <Reply size={15} aria-hidden="true" />
+                  <span>
+                    <strong>{responseLabel(detail)}</strong>
+                    <small>
+                      {detail.response_state === "overdue"
+                        ? `Scheduled for ${formatDateTime(detail.response_due_at)}`
+                        : detail.response_state === "reminder"
+                          ? `You will be reminded ${formatDateTime(detail.response_due_at)}`
+                          : detail.response_state === "needs_reply"
+                            ? "Keep this in the shared Needs reply list."
+                            : detail.response_state === "waiting"
+                              ? "Stonegate has responded; no deadline is running."
+                              : "No reply or follow-up is currently required."}
+                    </small>
+                  </span>
+                </div>
+                <div className={styles.responseActions}>
+                  <button
+                    aria-pressed={detail.response_state === "none"}
+                    disabled={responseStatus === "saving"}
+                    onClick={() => void updateResponseAction("done")}
+                    type="button"
+                  >
+                    <Check size={14} aria-hidden="true" />
+                    Done
+                  </button>
+                  <button
+                    aria-pressed={detail.response_state === "needs_reply" && !detail.response_due_at}
+                    disabled={responseStatus === "saving"}
+                    onClick={() => void updateResponseAction("needs_reply")}
+                    type="button"
+                  >
+                    <Reply size={14} aria-hidden="true" />
+                    Needs reply
+                  </button>
+                  <button
+                    aria-pressed={detail.response_state === "waiting"}
+                    disabled={responseStatus === "saving"}
+                    onClick={() => void updateResponseAction("waiting")}
+                    type="button"
+                  >
+                    <Clock3 size={14} aria-hidden="true" />
+                    Waiting
+                  </button>
+                  <button
+                    aria-expanded={reminderOpen}
+                    disabled={responseStatus === "saving"}
+                    onClick={() => setReminderOpen((current) => !current)}
+                    type="button"
+                  >
+                    <CalendarClock size={14} aria-hidden="true" />
+                    Remind me
+                  </button>
+                </div>
+                {reminderOpen ? (
+                  <form
+                    className={styles.reminderForm}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void updateResponseAction("remind", remindAt);
+                    }}
+                  >
+                    <label htmlFor="inbox-reminder-at">Date and time</label>
+                    <input
+                      id="inbox-reminder-at"
+                      onChange={(event) => setRemindAt(event.target.value)}
+                      required
+                      type="datetime-local"
+                      value={remindAt}
+                    />
+                    <button disabled={responseStatus === "saving"} type="submit">
+                      {responseStatus === "saving" ? "Saving..." : "Set reminder"}
+                    </button>
+                    <button onClick={() => setReminderOpen(false)} type="button">
+                      Cancel
+                    </button>
+                  </form>
+                ) : null}
+              </section>
 
               <div className={styles.timeline}>
                 {detail.timeline.length === 0 ? (

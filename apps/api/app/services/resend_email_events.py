@@ -461,6 +461,7 @@ def process_received_email(
         occurred_at=occurred_at,
         db=db,
         reactivate_closed_lead=email_category == "correspondence",
+        requires_response=email_category == "correspondence",
     )
     db.add(
         ActivityEvent(

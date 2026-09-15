@@ -372,6 +372,7 @@ def send_conversation_sms(
         direction="outbound",
         occurred_at=occurred_at,
         db=db,
+        resolves_response=True,
     )
     entity_type, entity_id = conversation_activity_entity(db, conversation)
     db.add(
@@ -562,7 +563,10 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
         occurred_at=occurred_at,
         db=db,
         reactivate_closed_lead=opt_out_type not in {"STOP", "START"},
+        requires_response=opt_out_type not in {"STOP", "START", "HELP"},
     )
+    if opt_out_type in {"STOP", "START", "HELP"}:
+        conversation.unread_count = 0
     if opt_out_type in {"STOP", "START"}:
         apply_sms_preference(
             db,

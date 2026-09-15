@@ -1264,6 +1264,7 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     updated_conversation = db_session.get(Conversation, conversation.id)
     assert updated_conversation is not None
     assert updated_conversation.unread_count == 1
+    assert updated_conversation.response_status == "needs_reply"
 
     stop_payload = {
         **base_payload,
@@ -1273,6 +1274,11 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     }
     stop_response = post_signed_twilio(client, inbound_path, stop_payload)
     assert stop_response.status_code == 200
+    db_session.expire_all()
+    updated_conversation = db_session.get(Conversation, conversation.id)
+    assert updated_conversation is not None
+    assert updated_conversation.unread_count == 0
+    assert updated_conversation.response_status == "none"
     suppression = db_session.scalar(select(SuppressionRecord))
     assert suppression is not None
     assert suppression.status == "active"
@@ -1291,6 +1297,10 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     start_response = post_signed_twilio(client, inbound_path, start_payload)
     assert start_response.status_code == 200
     db_session.expire_all()
+    updated_conversation = db_session.get(Conversation, conversation.id)
+    assert updated_conversation is not None
+    assert updated_conversation.unread_count == 0
+    assert updated_conversation.response_status == "none"
     suppression = db_session.scalar(select(SuppressionRecord))
     assert suppression is not None
     assert suppression.status == "lifted"

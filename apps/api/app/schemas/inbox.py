@@ -134,6 +134,20 @@ class ConversationRead(BaseModel):
     updated_at: datetime
 
 
+class ConversationResponseUpdate(BaseModel):
+    action: Literal["done", "needs_reply", "waiting", "remind"]
+    remind_at: datetime | None = None
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_reminder(self) -> "ConversationResponseUpdate":
+        if self.action == "remind" and self.remind_at is None:
+            raise ValueError("Remind me requires a date and time.")
+        if self.action != "remind" and self.remind_at is not None:
+            raise ValueError("A reminder date is only valid with the Remind me action.")
+        return self
+
+
 class ConversationDetailRead(ConversationRead):
     preferred_name: str | None
     contact_methods: list[ConversationContactMethodRead]

@@ -135,10 +135,12 @@ export default async function Home() {
         inboxAttention.needs_reply_count === 1 ? "conversation needs" : "conversations need"
       } a reply`,
       detail: inboxAttention.overdue_reply_count > 0
-        ? `${inboxAttention.overdue_reply_count} beyond the response target`
-        : "Waiting for a team response",
+        ? `${inboxAttention.overdue_reply_count} scheduled reminder${
+            inboxAttention.overdue_reply_count === 1 ? " is" : "s are"
+          } overdue`
+        : "Marked by the team for a reply",
       href: "/os/inbox?view=needs_reply",
-      status: inboxAttention.overdue_reply_count > 0 ? "Overdue" : "Waiting",
+      status: inboxAttention.overdue_reply_count > 0 ? "Reminder overdue" : "Needs reply",
       tone: inboxAttention.overdue_reply_count > 0 ? "danger" : "warning",
     });
   }
@@ -210,7 +212,7 @@ export default async function Home() {
         <Link className={styles.dangerMetric} href="/os/inbox?view=needs_reply">
           <span><MessageSquareReply aria-hidden="true" size={16} />Needs reply</span>
           <strong>{inboxAttention.needs_reply_count}</strong>
-          <small>{inboxAttention.overdue_reply_count} beyond response target</small>
+          <small>{inboxAttention.overdue_reply_count} scheduled reminders overdue</small>
         </Link>
         <Link className={styles.warningMetric} href="/os/leads?view=today">
           <span><Clock3 aria-hidden="true" size={16} />Reminders due</span>

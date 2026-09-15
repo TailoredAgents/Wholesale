@@ -121,3 +121,15 @@ test("Home shows real reply work and manual reminders instead of synthetic urgen
   assert.doesNotMatch(homePage, /Tasks without due dates/);
   assert.doesNotMatch(homePage, /for \(const lead of needsQualification\)/);
 });
+
+test("Inbox uses explicit reply states and only deliberate reminders become overdue", () => {
+  assert.match(inboxWorkspace, /Needs reply/);
+  assert.match(inboxWorkspace, /Waiting on them/);
+  assert.match(inboxWorkspace, /Remind me/);
+  assert.match(inboxWorkspace, /Done/);
+  assert.match(inboxWorkspace, /\/response/);
+  assert.match(inboxWorkspace, /action === "remind"/);
+  assert.match(inboxWorkspace, /Reminder overdue/);
+  assert.match(homePage, /scheduled reminders overdue/);
+  assert.doesNotMatch(homePage, /beyond response target/);
+});

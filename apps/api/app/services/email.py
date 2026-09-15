@@ -911,7 +911,11 @@ def send_conversation_email(
     completed_dispatch.provider_message_id = provider_message_id
     completed_dispatch.completed_at = occurred_at
     update_conversation_activity(
-        conversation, direction="outbound", occurred_at=occurred_at, db=db
+        conversation,
+        direction="outbound",
+        occurred_at=occurred_at,
+        db=db,
+        resolves_response=True,
     )
     db.add(
         ActivityEvent(
@@ -1440,6 +1444,8 @@ def import_gmail_message(
         occurred_at=occurred_at,
         db=db,
         reactivate_closed_lead=(direction != "inbound" or email_category == "correspondence"),
+        requires_response=(email_category == "correspondence") if direction == "inbound" else None,
+        resolves_response=direction == "outbound",
     )
     db.add(
         CommunicationProviderEvent(

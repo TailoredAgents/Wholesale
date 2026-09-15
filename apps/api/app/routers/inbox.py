@@ -15,6 +15,7 @@ from app.schemas.inbox import (
     ConversationListResponse,
     ConversationRead,
     ConversationResolutionRead,
+    ConversationResponseUpdate,
     ConversationWatcherCreate,
     GeneralConversationClassification,
     GeneralConversationLeadCreate,
@@ -39,6 +40,7 @@ from app.services.inbox import (
     list_eligible_assignees,
     mark_conversation_read,
     remove_conversation_watcher,
+    update_conversation_response,
 )
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.messaging import (
@@ -126,6 +128,25 @@ def mark_inbox_conversation_read(
     principal: Annotated[Principal, Depends(view_inbox_dependency)],
 ) -> ConversationRead:
     conversation = mark_conversation_read(db, principal, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return conversation
+
+
+@router.patch("/conversations/{conversation_id}/response")
+def update_inbox_conversation_response(
+    conversation_id: UUID,
+    payload: ConversationResponseUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_inbox_dependency)],
+) -> ConversationRead:
+    try:
+        conversation = update_conversation_response(db, principal, conversation_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return conversation

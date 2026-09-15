@@ -56,6 +56,7 @@ from app.schemas.inbox import (
     ConversationHandoffRequest,
     ConversationRead,
     ConversationResolutionRead,
+    ConversationResponseUpdate,
     ConversationTaskRead,
     ConversationTimelineItemRead,
     ConversationWatcherCreate,
@@ -973,6 +974,10 @@ def classify_general_conversation(
     conversation.closed_at = now if payload.close else None
     if payload.close:
         conversation.unread_count = 0
+        conversation.response_status = "none"
+        conversation.response_due_at = None
+        conversation.response_status_updated_at = now
+        conversation.response_status_updated_by_user_id = principal.user_id
     conversation.conversation_metadata = {
         **(conversation.conversation_metadata or {}),
         "mail_category": payload.category,
@@ -1034,6 +1039,8 @@ def update_conversation_activity(
     occurred_at: datetime,
     db: Session | None = None,
     reactivate_closed_lead: bool = True,
+    requires_response: bool | None = None,
+    resolves_response: bool = False,
 ) -> None:
     if direction == "inbound" and reactivate_closed_lead and db is not None:
         reactivate_closed_lead_for_inbound(db, conversation, occurred_at=occurred_at)
@@ -1061,11 +1068,21 @@ def update_conversation_activity(
         )
         if reactivate_closed_lead or conversation.status != "closed":
             conversation.unread_count += 1
+        if requires_response is not None:
+            conversation.response_status = "needs_reply" if requires_response else "none"
+            conversation.response_due_at = None
+            conversation.response_status_updated_at = occurred_at
+            conversation.response_status_updated_by_user_id = None
     elif direction == "outbound":
         conversation.last_outbound_at = _latest_datetime(
             conversation.last_outbound_at,
             occurred_at,
         )
+        if resolves_response:
+            conversation.response_status = "waiting"
+            conversation.response_due_at = None
+            conversation.response_status_updated_at = occurred_at
+            conversation.response_status_updated_by_user_id = None
 
 
 def reactivate_closed_lead_for_inbound(
@@ -1346,7 +1363,10 @@ def get_mailbox_response_overview(
     }
     return MailboxResponseOverviewRead(
         conversation_count=len(conversations),
-        needs_reply_count=sum(item.response_state != "none" for item in conversations),
+        needs_reply_count=sum(
+            item.response_state in {"needs_reply", "reminder", "overdue"}
+            for item in conversations
+        ),
         overdue_count=sum(item.response_state == "overdue" for item in conversations),
         oldest_wait_minutes=_oldest_wait_minutes(conversations),
         by_alias=_response_buckets(
@@ -1374,39 +1394,17 @@ def get_inbox_attention_summary(
     db: Session,
     principal: Principal,
 ) -> InboxAttentionSummaryRead:
-    """Return reply-work counts without hydrating the full inbox workspace."""
-    latest_channel = (
-        select(CommunicationRecord.channel)
-        .where(
-            CommunicationRecord.organization_id == Conversation.organization_id,
-            CommunicationRecord.conversation_id == Conversation.id,
-            CommunicationRecord.direction == "inbound",
-        )
-        .order_by(
-            CommunicationRecord.occurred_at.desc(),
-            CommunicationRecord.created_at.desc(),
-        )
-        .limit(1)
-        .correlate(Conversation)
-        .scalar_subquery()
-    )
+    """Return deliberate reply-work counts without hydrating the full inbox workspace."""
     filters = [
         Conversation.organization_id == principal.organization_id,
         Conversation.status == "open",
-        Conversation.last_inbound_at.is_not(None),
-        or_(
-            Conversation.last_outbound_at.is_(None),
-            Conversation.last_inbound_at > Conversation.last_outbound_at,
-        ),
-        or_(latest_channel.is_(None), latest_channel.in_(("email", "sms"))),
+        Conversation.response_status == "needs_reply",
     ]
     if not principal_has_owner_mailbox_access(db, principal):
         filters.append(conversation_access_filter(db, principal))
 
-    rows = db.execute(
-        select(Conversation, latest_channel.label("latest_inbound_channel"))
-        .where(*filters)
-        .order_by(Conversation.last_inbound_at.asc())
+    conversations = db.scalars(
+        select(Conversation).where(*filters).order_by(Conversation.response_due_at.asc())
     ).all()
     settings = get_settings()
     response_rows = [
@@ -1415,10 +1413,9 @@ def get_inbox_attention_summary(
             mailbox_response_status(
                 conversation,
                 settings,
-                latest_inbound_channel=channel,
             ),
         )
-        for conversation, channel in rows
+        for conversation in conversations
     ]
     return InboxAttentionSummaryRead(
         needs_reply_count=len(response_rows),
@@ -1446,7 +1443,10 @@ def _response_buckets(
             scope_id=scope_id,
             scope_label=labels.get(scope_id, empty_label) if scope_id is not None else empty_label,
             conversation_count=len(items),
-            needs_reply_count=sum(item.response_state != "none" for item in items),
+            needs_reply_count=sum(
+                item.response_state in {"needs_reply", "reminder", "overdue"}
+                for item in items
+            ),
             overdue_count=sum(item.response_state == "overdue" for item in items),
             oldest_wait_minutes=_oldest_wait_minutes(items),
         )
@@ -1916,6 +1916,77 @@ def mark_conversation_read(
     if had_unread or notifications:
         db.commit()
         db.refresh(conversation)
+    return conversation_to_read(db, conversation)
+
+
+def update_conversation_response(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+    payload: ConversationResponseUpdate,
+) -> ConversationRead | None:
+    conversation = get_scoped_conversation(db, principal, conversation_id)
+    if conversation is None:
+        return None
+    if conversation.status == "closed":
+        raise ValueError("Restore this conversation before scheduling inbox work.")
+
+    now = datetime.now(UTC)
+    remind_at = _as_utc_datetime(payload.remind_at) if payload.remind_at is not None else None
+    if remind_at is not None and remind_at <= now:
+        raise ValueError("Choose a reminder time in the future.")
+
+    previous_value = {
+        "response_status": conversation.response_status,
+        "response_due_at": (
+            conversation.response_due_at.isoformat() if conversation.response_due_at else None
+        ),
+    }
+    status_by_action = {
+        "done": "none",
+        "needs_reply": "needs_reply",
+        "waiting": "waiting",
+        "remind": "needs_reply",
+    }
+    conversation.response_status = status_by_action[payload.action]
+    conversation.response_due_at = remind_at
+    conversation.response_status_updated_at = now
+    conversation.response_status_updated_by_user_id = principal.user_id
+    if payload.action in {"done", "waiting"}:
+        conversation.unread_count = 0
+
+    if payload.action in {"done", "waiting", "needs_reply"}:
+        notifications = db.scalars(
+            select(Notification).where(
+                Notification.organization_id == principal.organization_id,
+                Notification.entity_type == "conversation",
+                Notification.entity_id == conversation.id,
+                Notification.notification_type.in_(MAILBOX_NOTIFICATION_TYPES),
+                Notification.read_at.is_(None),
+            )
+        ).all()
+        for notification in notifications:
+            notification.read_at = now
+
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="inbox.response_status_update",
+            entity_type="conversation",
+            entity_id=conversation.id,
+            previous_value=previous_value,
+            new_value={
+                "action": payload.action,
+                "response_status": conversation.response_status,
+                "response_due_at": remind_at.isoformat() if remind_at else None,
+            },
+            reason=payload.reason or "Inbox work status updated",
+        )
+    )
+    db.commit()
+    db.refresh(conversation)
     return conversation_to_read(db, conversation)
 
 

@@ -547,6 +547,12 @@
   color: var(--amber);
 }
 
+.listMeta .responseBadge[data-state="needs_reply"],
+.listMeta .responseBadge[data-state="reminder"] {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 .listMeta .responseBadge[data-state="overdue"] {
   background: var(--danger-soft);
   color: var(--danger);
@@ -577,7 +583,7 @@
 .threadPane {
   background: var(--surface);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .threadHeader {
@@ -608,6 +614,12 @@
 }
 
 .threadResponseStatus[data-state="due_soon"] {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.threadResponseStatus[data-state="needs_reply"],
+.threadResponseStatus[data-state="reminder"] {
   background: var(--amber-soft);
   color: var(--amber);
 }
@@ -694,6 +706,121 @@
 .contactActions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.responseBar {
+  min-width: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfbf8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+}
+
+.responseBarCopy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-soft);
+}
+
+.responseBarCopy > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--brand-strong);
+}
+
+.responseBarCopy span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.responseBarCopy strong {
+  font-size: 11px;
+}
+
+.responseBarCopy small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.responseActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.responseActions button,
+.reminderForm button,
+.reminderForm input {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.responseActions button,
+.reminderForm button {
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.responseActions button[aria-pressed="true"] {
+  border-color: #a9c6b3;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.responseActions button:disabled,
+.reminderForm button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.reminderForm {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 10px 24px rgb(17 47 35 / 12%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 12px;
+  z-index: 8;
+}
+
+.reminderForm label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reminderForm input {
+  padding: 0 8px;
+}
+
+.reminderForm button[type="submit"] {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
 }
 
 .timeline {
@@ -3007,6 +3134,46 @@
 
   .stageBadge {
     display: none;
+  }
+
+  .threadResponseStatus {
+    display: none;
+  }
+
+  .responseBar {
+    padding: 7px 8px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .responseBarCopy small {
+    display: none;
+  }
+
+  .responseActions {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .responseActions button {
+    min-width: max-content;
+    min-height: 36px;
+    flex: 1 0 auto;
+  }
+
+  .reminderForm {
+    align-items: stretch;
+    flex-direction: column;
+    top: calc(100% + 3px);
+    right: 8px;
+    left: 8px;
+  }
+
+  .reminderForm input,
+  .reminderForm button {
+    min-height: 40px;
   }
 
   .timeline {

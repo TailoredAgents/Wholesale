@@ -1931,6 +1931,12 @@ def add_lead_communication(
         direction=payload.direction,
         occurred_at=occurred_at,
         db=db,
+        requires_response=(
+            payload.channel in {"email", "sms"} if payload.direction == "inbound" else None
+        ),
+        resolves_response=(
+            payload.direction == "outbound" and payload.channel in {"email", "sms"}
+        ),
     )
     db.flush()
 
