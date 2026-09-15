@@ -24,7 +24,9 @@ SMS to that user's saved cellphone in addition to the normal in-app notification
 The Leads status is the actual pipeline stage. Missing qualification fields are quiet record context
 and an optional saved view, not a second status, task, or overdue condition. **Reminder due** appears
 on a lead only when a team member deliberately scheduled that reminder and its due time has passed.
-When no task exists, the interface says **No scheduled task** instead of implying that work is late.
+The Leads **Reminder** column shows only an actual manually scheduled action. Qualification gaps and
+stage-based workflow suggestions never populate it. When no task exists, the interface says
+**No reminder set** instead of implying that work is required or late.
 
 Completing a primary next action requires an outcome so the history remains useful. Creating the
 next action is optional and must be selected deliberately. An active record may therefore have no

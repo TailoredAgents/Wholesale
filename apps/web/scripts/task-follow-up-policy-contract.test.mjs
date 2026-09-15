@@ -74,11 +74,13 @@ test("seller reminders are explicit, easy to schedule, and easy to finish", () =
 });
 
 test("lead status presents the pipeline stage without turning qualification gaps into urgency", () => {
-  assert.match(leadsWorkspace, /<span>Seller<\/span><span>Received<\/span><span>Stage<\/span>/);
+  assert.match(leadsWorkspace, /<span>Seller<\/span><span>Received<\/span><span>Stage<\/span><span>Owner<\/span><span>Reminder<\/span>/);
   assert.match(leadsWorkspace, /<LeadStageBadge stageKey=\{lead\.stage_key\} \/>/);
   assert.match(leadsWorkspace, /isManualReminderDue\(lead\)[\s\S]*Reminder due/);
   assert.match(leadsWorkspace, /qualificationSummary\(lead\)/);
-  assert.match(leadsWorkspace, /No scheduled task/);
+  assert.match(leadsWorkspace, /lead\.primary_next_action\?\.title \?\? "No reminder set"/);
+  assert.doesNotMatch(leadsWorkspace, /Open qualification queue/);
+  assert.doesNotMatch(leadsWorkspace, /getLeadOperatingStatus/);
   assert.doesNotMatch(leadsWorkspace, /<StatusBadge[^>]*>\{operatingStatus\}<\/StatusBadge>/);
   assert.doesNotMatch(leadsWorkspace, /<span>Status<\/span>/);
 });

@@ -45,7 +45,6 @@ import {
   apiErrorMessage,
   formatDateTime,
   getFilteredLeads,
-  getLeadOperatingStatus,
   getPipelineStage,
   getSavedLeadViewCounts,
   isAddressOnlyLead,
@@ -93,40 +92,33 @@ function qualificationSummary(lead: LeadListItem) {
 function scheduledTaskLabel(lead: LeadListItem) {
   return lead.primary_next_action?.due_at
     ? formatDateTime(lead.primary_next_action.due_at)
-    : "No scheduled task";
+    : "No reminder set";
 }
 
-function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
-  if (isAddressOnlyLead(lead)) {
-    return { href: `/os/leads/${lead.id}`, label: "Review address-only lead" };
-  }
+function previewAction(lead: LeadListItem) {
   if (lead.primary_next_action) {
     return {
       href: `/os/tasks?item=task:${lead.primary_next_action.task_id}`,
       label: lead.primary_next_action.title,
     };
   }
-  const status = getLeadOperatingStatus(lead, tasks);
-  if (status === "Needs qualification") {
-    return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Open qualification queue" };
+  if (isAddressOnlyLead(lead)) {
+    return { href: `/os/leads/${lead.id}`, label: "Review address-only lead" };
   }
-  if (status === "Appointment work") {
-    return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Open dispatch" };
+  if (["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key)) {
+    return {
+      href: `/os/leads/${lead.id}?tab=valuation`,
+      label: lead.asset_class === "land" ? "Prepare Land offer" : "Prepare offer",
+    };
   }
-  if (status === "Offer prep") {
-    if (lead.asset_class === "land") {
-      return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare Land offer" };
-    }
-    return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
-  }
-  if (status === "Negotiation") {
-    if (lead.asset_class === "land") {
-      return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Continue Land offer" };
-    }
-    return { href: `/os/leads/${lead.id}?tab=valuation#negotiation-governance`, label: "Continue negotiation" };
-  }
-  if (status === "Nurture") {
-    return { href: `/os/inbox?lead=${lead.id}`, label: "Open follow-up" };
+  if (["offer_presented", "negotiating"].includes(lead.stage_key)) {
+    return {
+      href:
+        lead.asset_class === "land"
+          ? `/os/leads/${lead.id}?tab=valuation`
+          : `/os/leads/${lead.id}?tab=valuation#negotiation-governance`,
+      label: lead.asset_class === "land" ? "Continue Land offer" : "Continue negotiation",
+    };
   }
   return { href: `/os/leads/${lead.id}`, label: "Open seller record" };
 }
@@ -496,7 +488,7 @@ export function LeadsWorkspace({
     visibleLeads.find((lead) => lead.id === selectedLeadId) ??
     (display === "table" ? visibleLeads[0] : null) ??
     null;
-  const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
+  const selectedAction = selectedLead ? previewAction(selectedLead) : null;
   const activeLead = workingLeads.find((lead) => lead.id === activeLeadId) ?? null;
   const contractImportLead =
     workingLeads.find((lead) => lead.id === contractImportLeadId) ?? null;
@@ -901,10 +893,9 @@ export function LeadsWorkspace({
         <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
           {display === "table" ? <div className={styles.list}>
             <div className={styles.listHeader}>
-              <span>Seller</span><span>Received</span><span>Stage</span><span>Owner</span><span>Next action</span>
+              <span>Seller</span><span>Received</span><span>Stage</span><span>Owner</span><span>Reminder</span>
             </div>
             {visibleLeads.map((lead) => {
-              const action = nextAction(lead, tasks);
               const needsReview = needsQualifiedSellerReview(lead.id, tasks);
               const qualification = qualificationSummary(lead);
               return (
@@ -928,7 +919,8 @@ export function LeadsWorkspace({
                   </span>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
                   <span className={styles.next}>
-                    <strong>{action.label}</strong><small>{scheduledTaskLabel(lead)}</small>
+                    <strong>{lead.primary_next_action?.title ?? "No reminder set"}</strong>
+                    {lead.primary_next_action?.due_at ? <small>{scheduledTaskLabel(lead)}</small> : null}
                   </span>
                 </button>
               );

@@ -5,12 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
+import type { LeadListItem } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import { LeadStageBadge } from "../_components/lead-stage-badge";
 import {
   formatDateTime,
-  getLeadOperatingStatus,
   getPipelineStage,
   isManualReminderDue,
   labelize,
@@ -26,38 +25,37 @@ function ownerLabel(email: string | null) {
   return email.split("@")[0]?.replace(/[._-]+/g, " ") || email;
 }
 
-function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
+function leadAction(lead: LeadListItem) {
   if (lead.primary_next_action) {
     return {
       href: `/os/tasks?item=task:${lead.primary_next_action.task_id}`,
       label: lead.primary_next_action.title,
     };
   }
-  const status = getLeadOperatingStatus(lead, tasks);
-  if (status === "Needs qualification") return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Qualify" };
-  if (status === "Appointment work") return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Schedule" };
-  if (status === "Offer prep") {
-    return lead.asset_class === "land"
-      ? { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare Land offer" }
-      : { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
+  if (["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key)) {
+    return {
+      href: `/os/leads/${lead.id}?tab=valuation`,
+      label: lead.asset_class === "land" ? "Prepare Land offer" : "Prepare offer",
+    };
   }
-  if (status === "Negotiation") {
-    return lead.asset_class === "land"
-      ? { href: `/os/leads/${lead.id}?tab=valuation`, label: "Continue Land offer" }
-      : { href: `/os/leads/${lead.id}?tab=valuation#negotiation-governance`, label: "Negotiate" };
+  if (["offer_presented", "negotiating"].includes(lead.stage_key)) {
+    return {
+      href:
+        lead.asset_class === "land"
+          ? `/os/leads/${lead.id}?tab=valuation`
+          : `/os/leads/${lead.id}?tab=valuation#negotiation-governance`,
+      label: lead.asset_class === "land" ? "Continue Land offer" : "Continue negotiation",
+    };
   }
-  if (status === "Nurture") return { href: `/os/inbox?lead=${lead.id}`, label: "Follow up" };
-  return { href: `/os/leads/${lead.id}`, label: "Open record" };
+  return { href: `/os/leads/${lead.id}`, label: "Open seller record" };
 }
 
 export function PipelineWorkspace({
   initialStage,
   leads,
-  tasks,
 }: {
   initialStage: string;
   leads: LeadListItem[];
-  tasks: SpeedToLeadTask[];
 }) {
   const router = useRouter();
   const [stage, setStage] = useState(initialStage);
@@ -113,7 +111,7 @@ export function PipelineWorkspace({
                 <header><h2>{pipelineStage.label}</h2><strong>{stageLeads.length}</strong></header>
                 <div>
                   {stageLeads.map((lead) => {
-                    const action = nextAction(lead, tasks);
+                    const action = leadAction(lead);
                     const qualification = needsLeadQualification(lead)
                       ? `Qualification ${qualificationFieldCount(lead)}/${qualificationFieldTarget}`
                       : null;
@@ -129,7 +127,7 @@ export function PipelineWorkspace({
                         <span className={styles.address}>{lead.property_address}</span>
                         {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
                         {qualification ? <span className={styles.cardContext}>{qualification}</span> : null}
-                        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{lead.primary_next_action?.due_at ? formatDateTime(lead.primary_next_action.due_at) : "No scheduled task"}</span></span>
+                        <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{lead.primary_next_action?.due_at ? formatDateTime(lead.primary_next_action.due_at) : "No reminder set"}</span></span>
                         <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
                       </button>
                     );
@@ -150,11 +148,11 @@ export function PipelineWorkspace({
                 <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                 <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>
                 <div><dt>Qualification</dt><dd>{qualificationFieldCount(selectedLead)}/{qualificationFieldTarget}</dd></div>
-                <div><dt>Next action</dt><dd>{formatDateTime(selectedLead.next_follow_up_at)}</dd></div>
+                <div><dt>Reminder</dt><dd>{selectedLead.primary_next_action?.title ?? "No reminder set"}{selectedLead.primary_next_action?.due_at ? ` · ${formatDateTime(selectedLead.primary_next_action.due_at)}` : ""}</dd></div>
               </dl>
               <section><p><strong>Motivation</strong>{selectedLead.motivation ?? "Not confirmed"}</p><p><strong>Timeline</strong>{selectedLead.desired_timeline ?? "Not confirmed"}</p><p><strong>Condition</strong>{selectedLead.property_condition ?? "Not confirmed"}</p></section>
               <div className={styles.actions}>
-                <Link className={styles.primary} href={nextAction(selectedLead, tasks).href}>{nextAction(selectedLead, tasks).label}<ArrowRight size={15} /></Link>
+                <Link className={styles.primary} href={leadAction(selectedLead).href}>{leadAction(selectedLead).label}<ArrowRight size={15} /></Link>
                 <Link href={`/os/inbox?lead=${selectedLead.id}`}><Inbox size={15} />Conversation</Link>
                 <Link href={`/os/leads/${selectedLead.id}`}><ExternalLink size={15} />Full record</Link>
               </div>
