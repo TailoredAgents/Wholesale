@@ -1586,6 +1586,8 @@ export type BatchDialerCampaignMapping = {
   provider_campaign_name: string;
   provider_status: string;
   is_active: boolean;
+  workflow_purpose: "seller_acquisition" | "investor_disposition" | null;
+  disposition_case_id: string | null;
   asset_class: "house" | "land" | null;
   asset_class_mapped_at: string | null;
   asset_class_mapped_by_user_id: string | null;
@@ -1595,8 +1597,16 @@ export type BatchDialerCampaignMapping = {
   historical_asset_mismatch_sample_lead_ids: string[];
 };
 
+export type BatchDialerDispositionTarget = {
+  id: string;
+  deal_id: string;
+  label: string;
+  status: string;
+};
+
 export type BatchDialerCampaignMappings = {
   items: BatchDialerCampaignMapping[];
+  disposition_targets: BatchDialerDispositionTarget[];
 };
 
 export type BatchDialerCampaignMappingUpdateResponse = {

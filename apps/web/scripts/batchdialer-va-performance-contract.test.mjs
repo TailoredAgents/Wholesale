@@ -105,7 +105,7 @@ test("mapping controls make attribution explicit and persist only on Save", () =
   assert.match(component, /Mapping saved/);
 });
 
-test("manager campaign mappings make House and Land routing explicit", () => {
+test("manager campaign mappings separate seller acquisition from investor disposition", () => {
   assert.match(page, /getBatchDialerCampaignMappings\(\)/);
   assert.match(page, /initialCampaignMappings=\{campaignMappingsResult\.campaignMappings\}/);
   assert.match(api, /BatchDialerCampaignMapping/);
@@ -115,21 +115,29 @@ test("manager campaign mappings make House and Land routing explicit", () => {
   assert.match(component, /BatchDialerCampaignMappingsPanel/);
   assert.match(
     campaignMappingsComponent,
-    /Map every BatchDialer campaign to House or Land/,
+    /Tell Stonegate what each BatchDialer campaign is for/,
   );
-  assert.match(campaignMappingsComponent, /Needs classification/);
-  assert.match(campaignMappingsComponent, /<option value="house">House<\/option>/);
-  assert.match(campaignMappingsComponent, /<option value="land">Land<\/option>/);
-  assert.match(campaignMappingsComponent, /method: "PATCH"/);
+  assert.match(campaignMappingsComponent, /Needs routing/);
   assert.match(
     campaignMappingsComponent,
-    /body: JSON\.stringify\(\{ asset_class: selectedAssetClass \|\| null \}\)/,
+    /<option value="seller_acquisition">Seller acquisition<\/option>/,
   );
+  assert.match(
+    campaignMappingsComponent,
+    /<option value="investor_disposition">Investor disposition<\/option>/,
+  );
+  assert.match(campaignMappingsComponent, /<option value="house">House<\/option>/);
+  assert.match(campaignMappingsComponent, /<option value="land">Land<\/option>/);
+  assert.match(campaignMappingsComponent, /Deal being marketed/);
+  assert.match(campaignMappingsComponent, /data\.disposition_targets/);
+  assert.match(campaignMappingsComponent, /method: "PATCH"/);
+  assert.match(campaignMappingsComponent, /workflow_purpose: selected\.purpose \|\| null/);
+  assert.match(campaignMappingsComponent, /disposition_case_id:/);
 });
 
-test("unclassified BatchDialer campaigns disclose the qualified-lead hold", () => {
-  assert.match(campaignMappingsComponent, /Qualified leads are held until mapped/);
-  assert.match(campaignMappingsComponent, /events held for a missing campaign mapping/);
+test("unrouted BatchDialer campaigns disclose the result hold and safety boundary", () => {
+  assert.match(campaignMappingsComponent, /Results are held until a campaign is routed/);
+  assert.match(campaignMappingsComponent, /they never create seller leads/);
   assert.match(campaignMappingsComponent, /requeued_event_count/);
   assert.match(campaignMappingsComponent, /historical asset mismatch/);
   assert.match(campaignMappingsComponent, /historical_asset_mismatch_sample_lead_ids/);

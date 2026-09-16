@@ -17,8 +17,14 @@ type MappingStatus = Record<
   { kind: "error" | "success"; text: string }
 >;
 
+type CampaignSelection = {
+  purpose: "" | "seller_acquisition" | "investor_disposition";
+  assetClass: "" | "house" | "land";
+  dispositionCaseId: string;
+};
+
 function formatTimestamp(value: string | null, timeZone: string) {
-  if (!value) return "Not classified";
+  if (!value) return "Not routed";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "Unavailable";
   return new Intl.DateTimeFormat("en-US", {
@@ -44,7 +50,17 @@ function errorDetail(payload: unknown, fallback: string) {
 }
 
 function selectionValue(mapping: BatchDialerCampaignMapping) {
-  return mapping.asset_class ?? "";
+  return {
+    purpose: mapping.workflow_purpose ?? "",
+    assetClass: mapping.asset_class ?? "",
+    dispositionCaseId: mapping.disposition_case_id ?? "",
+  } satisfies CampaignSelection;
+}
+
+function sameSelection(left: CampaignSelection, right: CampaignSelection) {
+  return left.purpose === right.purpose
+    && left.assetClass === right.assetClass
+    && left.dispositionCaseId === right.dispositionCaseId;
 }
 
 export function BatchDialerCampaignMappingsPanel({
@@ -58,7 +74,7 @@ export function BatchDialerCampaignMappingsPanel({
 }) {
   const { getToken } = useAuth();
   const [data, setData] = useState(initialData);
-  const [selections, setSelections] = useState<Record<string, string>>(() =>
+  const [selections, setSelections] = useState<Record<string, CampaignSelection>>(() =>
     Object.fromEntries(
       (initialData?.items ?? []).map((mapping) => [mapping.id, selectionValue(mapping)]),
     ),
@@ -66,7 +82,7 @@ export function BatchDialerCampaignMappingsPanel({
   const [busyId, setBusyId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(
-    initialAvailable ? "" : "BatchDialer campaign classifications are temporarily unavailable.",
+    initialAvailable ? "" : "BatchDialer campaign routes are temporarily unavailable.",
   );
   const [status, setStatus] = useState<MappingStatus>({});
   const mountedRef = useRef(true);
@@ -100,7 +116,10 @@ export function BatchDialerCampaignMappingsPanel({
     return {
       house: items.filter((mapping) => mapping.asset_class === "house").length,
       land: items.filter((mapping) => mapping.asset_class === "land").length,
-      needsClassification: items.filter((mapping) => mapping.asset_class === null).length,
+      investor: items.filter(
+        (mapping) => mapping.workflow_purpose === "investor_disposition",
+      ).length,
+      needsClassification: items.filter((mapping) => mapping.workflow_purpose === null).length,
     };
   }, [data]);
 
@@ -130,13 +149,13 @@ export function BatchDialerCampaignMappingsPanel({
         if (mountedRef.current && requestSequence === requestSequenceRef.current) {
           setData(null);
           setSelections({});
-          setError("Your BatchDialer campaign-classification access expired or was removed.");
+          setError("Your BatchDialer campaign-routing access expired or was removed.");
         }
         return;
       }
       if (!response.ok || !payload || !("items" in payload)) {
         throw new Error(
-          errorDetail(payload, "BatchDialer campaign classifications could not be refreshed."),
+          errorDetail(payload, "BatchDialer campaign routes could not be refreshed."),
         );
       }
       if (mountedRef.current && requestSequence === requestSequenceRef.current) {
@@ -151,10 +170,10 @@ export function BatchDialerCampaignMappingsPanel({
       if (mountedRef.current && requestSequence === requestSequenceRef.current) {
         setError(
           requestError instanceof DOMException && requestError.name === "AbortError"
-            ? "BatchDialer campaign classifications timed out. The prior confirmed mappings remain visible."
+            ? "BatchDialer campaign routes timed out. The prior confirmed mappings remain visible."
             : requestError instanceof Error
               ? requestError.message
-              : "BatchDialer campaign classifications could not be refreshed.",
+              : "BatchDialer campaign routes could not be refreshed.",
         );
       }
     } finally {
@@ -169,12 +188,12 @@ export function BatchDialerCampaignMappingsPanel({
   }, [apiBaseUrl, getHeaders]);
 
   const saveMapping = useCallback(async (mapping: BatchDialerCampaignMapping) => {
-    const selectedAssetClass = selections[mapping.id] ?? "";
+    const selected = selections[mapping.id] ?? selectionValue(mapping);
     if (
-      mapping.asset_class !== null &&
-      !selectedAssetClass &&
+      mapping.workflow_purpose !== null &&
+      !selected.purpose &&
       !window.confirm(
-        "Clear this campaign classification? Qualified leads will be held until the campaign is mapped again.",
+        "Clear this campaign route? New BatchDialer results will be held until it is mapped again.",
       )
     ) {
       return;
@@ -192,7 +211,15 @@ export function BatchDialerCampaignMappingsPanel({
           method: "PATCH",
           cache: "no-store",
           headers: await getHeaders(),
-          body: JSON.stringify({ asset_class: selectedAssetClass || null }),
+          body: JSON.stringify({
+            workflow_purpose: selected.purpose || null,
+            asset_class: selected.purpose === "seller_acquisition"
+              ? selected.assetClass || null
+              : null,
+            disposition_case_id: selected.purpose === "investor_disposition"
+              ? selected.dispositionCaseId || null
+              : null,
+          }),
         },
       );
       const payload = (await response.json().catch(() => null)) as
@@ -201,7 +228,7 @@ export function BatchDialerCampaignMappingsPanel({
         | null;
       if (!response.ok || !payload || !("item" in payload)) {
         throw new Error(
-          errorDetail(payload, "The campaign classification could not be saved."),
+          errorDetail(payload, "The campaign route could not be saved."),
         );
       }
       if (!mountedRef.current) return;
@@ -210,16 +237,18 @@ export function BatchDialerCampaignMappingsPanel({
             ...current,
             items: current.items.map((item) => item.id === mapping.id ? payload.item : item),
           }
-        : { items: [payload.item] });
+        : { items: [payload.item], disposition_targets: [] });
       setSelections((current) => ({
         ...current,
         [mapping.id]: selectionValue(payload.item),
       }));
-      const classification = payload.item.asset_class === "house"
-        ? "House"
-        : payload.item.asset_class === "land"
-          ? "Land"
-          : "Needs classification";
+      const classification = payload.item.workflow_purpose === "investor_disposition"
+        ? "Investor dispositions"
+        : payload.item.asset_class === "house"
+          ? "Seller acquisition · House"
+          : payload.item.asset_class === "land"
+            ? "Seller acquisition · Land"
+            : "Needs routing";
       const requeueMessage = payload.requeued_event_count
         ? ` ${payload.requeued_event_count.toLocaleString()} held qualified lead event(s) requeued.`
         : "";
@@ -238,7 +267,7 @@ export function BatchDialerCampaignMappingsPanel({
           kind: "error",
           text: requestError instanceof Error
             ? requestError.message
-            : "The campaign classification could not be saved.",
+            : "The campaign route could not be saved.",
         },
       }));
     } finally {
@@ -249,13 +278,13 @@ export function BatchDialerCampaignMappingsPanel({
   return (
     <section
       aria-busy={loading}
-      aria-label="BatchDialer campaign classifications"
+      aria-label="BatchDialer campaign routes"
       className={`${styles.panel} ${styles.classificationPanel}`}
     >
       <div className={styles.panelHeader}>
         <div>
-          <span>Campaign classification</span>
-          <h3>Map every BatchDialer campaign to House or Land</h3>
+          <span>Campaign routing</span>
+          <h3>Tell Stonegate what each BatchDialer campaign is for</h3>
         </div>
         <button
           className={styles.refreshButton}
@@ -264,20 +293,21 @@ export function BatchDialerCampaignMappingsPanel({
           type="button"
         >
           <RefreshCw aria-hidden="true" className={loading ? styles.spinning : undefined} size={16} />
-          {loading ? "Refreshing" : "Refresh classifications"}
+          {loading ? "Refreshing" : "Refresh campaigns"}
         </button>
       </div>
 
       <div className={styles.classificationHoldNotice} role="note">
         <AlertTriangle aria-hidden="true" size={18} />
-        <p><strong>Qualified leads are held until mapped.</strong> Select House or Land before expecting a qualified BatchDialer lead to enter the matching Stonegate workflow. Saving a classification requeues only events held for a missing campaign mapping.</p>
+        <p><strong>Results are held until a campaign is routed.</strong> Seller campaigns create seller leads in House or Land. Investor campaigns add interested buyers to the selected contracted deal in Dispositions; they never create seller leads.</p>
       </div>
 
       {data ? (
-        <div aria-label="Campaign classification summary" className={styles.classificationSummary}>
-          <div data-state={counts.needsClassification ? "needs" : "ready"}><span>Needs classification</span><strong>{counts.needsClassification}</strong></div>
+        <div aria-label="Campaign routing summary" className={styles.classificationSummary}>
+          <div data-state={counts.needsClassification ? "needs" : "ready"}><span>Needs routing</span><strong>{counts.needsClassification}</strong></div>
           <div data-state="house"><span>House</span><strong>{counts.house}</strong></div>
           <div data-state="land"><span>Land</span><strong>{counts.land}</strong></div>
+          <div data-state="investor"><span>Investor outreach</span><strong>{counts.investor}</strong></div>
         </div>
       ) : null}
 
@@ -286,13 +316,18 @@ export function BatchDialerCampaignMappingsPanel({
         <div className={styles.mappingList}>
           {data.items.map((mapping) => {
             const mappingStatus = status[mapping.id];
-            const selectedAssetClass = selections[mapping.id] ?? "";
-            const unchanged = selectedAssetClass === selectionValue(mapping);
-            const classification = mapping.asset_class === "house"
-              ? "House"
-              : mapping.asset_class === "land"
-                ? "Land"
-                : "Needs classification";
+            const selected = selections[mapping.id] ?? selectionValue(mapping);
+            const unchanged = sameSelection(selected, selectionValue(mapping));
+            const selectionComplete = !selected.purpose
+              || (selected.purpose === "seller_acquisition" && Boolean(selected.assetClass))
+              || (selected.purpose === "investor_disposition" && Boolean(selected.dispositionCaseId));
+            const classification = mapping.workflow_purpose === "investor_disposition"
+              ? "Investor dispositions"
+              : mapping.asset_class === "house"
+                ? "Seller · House"
+                : mapping.asset_class === "land"
+                  ? "Seller · Land"
+                  : "Needs routing";
             return (
               <div className={`${styles.mappingRow} ${styles.campaignMappingRow}`} key={mapping.id}>
                 <div className={styles.mappingIdentity}>
@@ -300,35 +335,86 @@ export function BatchDialerCampaignMappingsPanel({
                   <div>
                     <div className={styles.campaignMappingName}>
                       <strong>{mapping.provider_campaign_name}</strong>
-                      <span data-state={mapping.asset_class ?? "needs"}>{classification}</span>
+                      <span data-state={mapping.workflow_purpose ?? "needs"}>{classification}</span>
                     </div>
                     <small>BatchDialer ID {mapping.provider_campaign_id} - {mapping.is_active ? "Active" : "Inactive"} ({mapping.provider_status})</small>
                     <small>{mapping.historical_lead_count.toLocaleString()} historical lead(s) - Last seen {formatTimestamp(mapping.last_seen_at, timeZone)}</small>
-                    <small>Classification updated {formatTimestamp(mapping.asset_class_mapped_at, timeZone)}</small>
+                    <small>Route updated {formatTimestamp(mapping.asset_class_mapped_at, timeZone)}</small>
                   </div>
                 </div>
                 <label>
-                  <span>Stonegate workflow</span>
+                  <span>Campaign purpose</span>
                   <select
-                    aria-label={`Stonegate workflow for ${mapping.provider_campaign_name}`}
+                    aria-label={`Campaign purpose for ${mapping.provider_campaign_name}`}
                     disabled={busyId === mapping.id}
                     onChange={(event) => setSelections((current) => ({
                       ...current,
-                      [mapping.id]: event.target.value,
+                      [mapping.id]: {
+                        purpose: event.target.value as CampaignSelection["purpose"],
+                        assetClass: "",
+                        dispositionCaseId: "",
+                      },
                     }))}
-                    value={selectedAssetClass}
+                    value={selected.purpose}
                   >
-                    <option value="">Needs classification</option>
-                    <option value="house">House</option>
-                    <option value="land">Land</option>
+                    <option value="">Needs routing</option>
+                    <option value="seller_acquisition">Seller acquisition</option>
+                    <option value="investor_disposition">Investor disposition</option>
                   </select>
                 </label>
+                {selected.purpose === "seller_acquisition" ? (
+                  <label>
+                    <span>Seller asset lane</span>
+                    <select
+                      aria-label={`Seller asset lane for ${mapping.provider_campaign_name}`}
+                      disabled={busyId === mapping.id}
+                      onChange={(event) => setSelections((current) => ({
+                        ...current,
+                        [mapping.id]: {
+                          ...selected,
+                          assetClass: event.target.value as CampaignSelection["assetClass"],
+                        },
+                      }))}
+                      value={selected.assetClass}
+                    >
+                      <option value="">Choose House or Land</option>
+                      <option value="house">House</option>
+                      <option value="land">Land</option>
+                    </select>
+                  </label>
+                ) : null}
+                {selected.purpose === "investor_disposition" ? (
+                  <label>
+                    <span>Deal being marketed</span>
+                    <select
+                      aria-label={`Disposition deal for ${mapping.provider_campaign_name}`}
+                      disabled={busyId === mapping.id}
+                      onChange={(event) => setSelections((current) => ({
+                        ...current,
+                        [mapping.id]: { ...selected, dispositionCaseId: event.target.value },
+                      }))}
+                      value={selected.dispositionCaseId}
+                    >
+                      <option value="">Choose a contracted deal</option>
+                      {(data.disposition_targets ?? []).map((target) => (
+                        <option key={target.id} value={target.id}>
+                          {target.label} · {target.status.replaceAll("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      Recognized results: Qualified Buyer - Follow Up, Investor Interested,
+                      Interested, Send Packet, Showing Requested or Appointment Set, Offer
+                      Expected, Callback, Not Interested, Wrong Number, and Do Not Call.
+                    </small>
+                  </label>
+                ) : null}
                 <button
-                  disabled={busyId === mapping.id || unchanged}
+                  disabled={busyId === mapping.id || unchanged || !selectionComplete}
                   onClick={() => void saveMapping(mapping)}
                   type="button"
                 >
-                  {busyId === mapping.id ? "Saving..." : "Save classification"}
+                  {busyId === mapping.id ? "Saving..." : "Save route"}
                 </button>
                 <div className={styles.campaignMappingFeedback}>
                   {mapping.historical_asset_mismatch_count ? (

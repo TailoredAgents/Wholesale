@@ -1952,6 +1952,11 @@ class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "asset_class IS NULL OR asset_class IN ('house', 'land')",
             name="ck_batchdialer_campaigns_asset_class",
         ),
+        CheckConstraint(
+            "workflow_purpose IS NULL OR workflow_purpose IN "
+            "('seller_acquisition', 'investor_disposition')",
+            name="ck_batchdialer_campaigns_workflow_purpose",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -2001,6 +2006,21 @@ class BatchDialerCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
     )
     asset_class_mapped_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    workflow_purpose: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    disposition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("disposition_cases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    workflow_mapped_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    workflow_mapped_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     provider_created_at: Mapped[datetime | None] = mapped_column(

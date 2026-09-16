@@ -455,12 +455,21 @@ def patch_batchdialer_campaign_mapping(
     principal: Annotated[Principal, Depends(manage_dependency)],
 ) -> BatchDialerCampaignMappingUpdateRead:
     _mark_sensitive_response_no_store(response)
-    result = update_batchdialer_campaign_mapping(
-        db,
-        principal,
-        mapping_id=mapping_id,
-        asset_class=payload.asset_class,
-    )
+    try:
+        result = update_batchdialer_campaign_mapping(
+            db,
+            principal,
+            mapping_id=mapping_id,
+            workflow_purpose=payload.workflow_purpose,
+            asset_class=payload.asset_class,
+            disposition_case_id=payload.disposition_case_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+            headers={"Cache-Control": "private, no-store"},
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

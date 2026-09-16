@@ -33,10 +33,14 @@ from app.models.foundation import (
     AttributionTouch,
     BatchDialerCampaign,
     BatchDialerSyncCheckpoint,
+    Buyer,
+    BuyerEngagement,
     CallRecord,
     CallRecording,
     CallTranscript,
     CommunicationRecord,
+    DispositionBuyerPoolCandidate,
+    DispositionCase,
     Lead,
     Organization,
     ProspectingProviderEvent,
@@ -46,7 +50,11 @@ from app.schemas.public_intake import SellerIntakeAttribution, SellerIntakeCreat
 from app.services.ai_operations import default_ai_work_owner, enqueue_lead_created_ai_work
 from app.services.batchdialer_call_facts import upsert_batchdialer_call_fact
 from app.services.communication_compliance import format_e164
-from app.services.inbox import ensure_primary_conversation, update_conversation_activity
+from app.services.inbox import (
+    ensure_buyer_conversation,
+    ensure_primary_conversation,
+    update_conversation_activity,
+)
 from app.services.lead_manager import ensure_inbound_case
 from app.services.property_intelligence import enqueue_property_research
 from app.services.public_intake import (
@@ -79,6 +87,27 @@ KNOWN_NON_LEAD_DISPOSITIONS = frozenset(
         "voicemail",
         "wrong number",
     }
+)
+INVESTOR_DISPOSITION_RESULTS = {
+    "qualified buyer - follow up": "interested",
+    "investor interested": "interested",
+    "interested": "interested",
+    "send packet": "packet_requested",
+    "packet requested": "packet_requested",
+    "appointment set": "showing_requested",
+    "showing requested": "showing_requested",
+    "offer expected": "offer_expected",
+    "call back": "callback",
+    "callback": "callback",
+    "not interested": "not_interested",
+    "wrong number": "wrong_number",
+    "do not call": "do_not_contact",
+}
+INVESTOR_EVIDENCE_ONLY_RESULTS = frozenset(
+    {"answering machine", "no answer", "successful sale", "voicemail"}
+)
+INVESTOR_ACTIONABLE_RESULTS = frozenset(
+    {"interested", "packet_requested", "showing_requested", "offer_expected", "callback"}
 )
 OPEN_EVENT_STATUSES = frozenset({"pending", "retry", "processing"})
 MAX_TRANSCRIPT_ATTEMPTS = 12
@@ -622,7 +651,47 @@ def _process_batchdialer_event(
     raw_cdr = (event.payload or {}).get("cdr")
     if not isinstance(raw_cdr, dict):
         raise BatchDialerNeedsReview("BatchDialer CDR evidence is missing.")
-    outcome = classify_disposition(raw_cdr.get("disposition"))
+    campaign = _campaign_for_cdr(db, event.organization_id, raw_cdr)
+    workflow_purpose = (
+        campaign.workflow_purpose
+        if campaign is not None
+        else None
+    ) or (
+        "seller_acquisition"
+        if campaign is not None and campaign.asset_class is not None
+        else None
+    )
+    raw_disposition = normalize_disposition(raw_cdr.get("disposition"))
+    provisional_outcome = classify_disposition(raw_cdr.get("disposition"))
+    if workflow_purpose is None and (
+        provisional_outcome in {"interested", "appointment_set"}
+        or INVESTOR_DISPOSITION_RESULTS.get(raw_disposition) in INVESTOR_ACTIONABLE_RESULTS
+    ):
+        return _route_claimed_qualification_review(
+            db,
+            event_id=event.id,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+            normalized=_basic_review_context(raw_cdr),
+            reason_code="campaign_workflow_unmapped",
+            reason=(
+                "This BatchDialer campaign has no Stonegate route. Choose Seller Acquisition "
+                "or Investor Disposition before conversion results can enter the CRM."
+            ),
+            prior_result={},
+        )
+    if workflow_purpose == "investor_disposition":
+        assert campaign is not None
+        return _process_investor_disposition_event(
+            db,
+            event=event,
+            campaign=campaign,
+            raw_cdr=raw_cdr,
+            settings=settings,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+        )
+    outcome = provisional_outcome
     prior_result = (event.payload or {}).get("_stonegate")
     prior_result = prior_result if isinstance(prior_result, dict) else {}
     override = _current_qualification_override(event, prior_result)
@@ -963,6 +1032,396 @@ def _process_batchdialer_event(
         "qualification": qualification,
         "qualification_review_task_id": str(review_task.id) if review_task is not None else None,
     }
+
+
+def _campaign_for_cdr(
+    db: Session,
+    organization_id: UUID,
+    raw_cdr: dict[str, Any],
+) -> BatchDialerCampaign | None:
+    raw_campaign = raw_cdr.get("campaign")
+    raw_campaign = raw_campaign if isinstance(raw_campaign, dict) else {}
+    provider_campaign_id = _string(raw_campaign.get("id"))
+    if not provider_campaign_id:
+        return None
+    return db.scalar(
+        select(BatchDialerCampaign).where(
+            BatchDialerCampaign.organization_id == organization_id,
+            BatchDialerCampaign.provider_campaign_id == provider_campaign_id,
+        )
+    )
+
+
+def _process_investor_disposition_event(
+    db: Session,
+    *,
+    event: ProspectingProviderEvent,
+    campaign: BatchDialerCampaign,
+    raw_cdr: dict[str, Any],
+    settings: Settings,
+    claim_token: str,
+    claimed_payload_sha256: str | None,
+) -> dict[str, Any]:
+    normalized_disposition = normalize_disposition(raw_cdr.get("disposition"))
+    result = INVESTOR_DISPOSITION_RESULTS.get(normalized_disposition)
+    if result is None:
+        return {
+            "outcome": "investor_evidence_only",
+            "workflow_purpose": "investor_disposition",
+            "raw_disposition": _string(raw_cdr.get("disposition")),
+            "reason": (
+                "Non-conversion call evidence was retained without creating a seller lead."
+                if normalized_disposition in INVESTOR_EVIDENCE_ONLY_RESULTS
+                else "The investor disposition was not configured for CRM conversion."
+            ),
+        }
+    if campaign.disposition_case_id is None:
+        return _route_claimed_qualification_review(
+            db,
+            event_id=event.id,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+            normalized=_basic_review_context(raw_cdr),
+            reason_code="campaign_disposition_target_unavailable",
+            reason="The investor campaign is not connected to a deal in Dispositions.",
+            prior_result={},
+        )
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.organization_id == event.organization_id,
+            DispositionCase.id == campaign.disposition_case_id,
+            DispositionCase.status != "reconciled",
+        )
+    )
+    if case is None:
+        return _route_claimed_qualification_review(
+            db,
+            event_id=event.id,
+            claim_token=claim_token,
+            claimed_payload_sha256=claimed_payload_sha256,
+            normalized=_basic_review_context(raw_cdr),
+            reason_code="campaign_disposition_target_unavailable",
+            reason=(
+                "The deal connected to this investor campaign is closed or unavailable. "
+                "Choose another deal before processing more results."
+            ),
+            prior_result={},
+        )
+
+    client = BatchDialerClient(settings)
+    provider_contact_id = _contact_id(raw_cdr)
+    contact_payload: dict[str, Any] = {}
+    if provider_contact_id:
+        contact_payload = sanitize_contact(client.get_contact(provider_contact_id))
+    investor = _normalize_investor_handoff(raw_cdr, contact_payload)
+    event = _lock_claimed_event(
+        db,
+        event_id=event.id,
+        claim_token=claim_token,
+        claimed_payload_sha256=claimed_payload_sha256,
+    )
+    actor_user_id = case.owner_user_id or default_ai_work_owner(db, event.organization_id)
+    if actor_user_id is None:
+        raise BatchDialerNeedsReview(
+            "The investor campaign deal has no owner available for relationship history."
+        )
+    buyer, created_buyer = _ensure_batchdialer_buyer(
+        db,
+        event=event,
+        case=case,
+        investor=investor,
+    )
+    candidate = _ensure_batchdialer_case_candidate(
+        db,
+        event=event,
+        case=case,
+        buyer=buyer,
+        investor=investor,
+    )
+    _apply_investor_result_to_candidate(
+        candidate,
+        buyer=buyer,
+        result=result,
+        actor_user_id=actor_user_id,
+    )
+    engagement = _ensure_batchdialer_buyer_engagement(
+        db,
+        event=event,
+        case=case,
+        buyer=buyer,
+        candidate=candidate,
+        actor_user_id=actor_user_id,
+        result=result,
+        investor=investor,
+    )
+    ensure_buyer_conversation(db, buyer, actor_user_id=actor_user_id)
+    db.add(
+        ActivityEvent(
+            organization_id=event.organization_id,
+            actor_user_id=actor_user_id,
+            entity_type="deal",
+            entity_id=case.deal_id,
+            event_type="deal.batchdialer_investor_result_received",
+            summary=(
+                f"BatchDialer investor result '{result.replace('_', ' ')}' received "
+                f"for {buyer.name}."
+            ),
+        )
+    )
+    db.flush()
+    return {
+        "outcome": result,
+        "workflow_purpose": "investor_disposition",
+        "disposition_case_id": str(case.id),
+        "deal_id": str(case.deal_id),
+        "buyer_id": str(buyer.id),
+        "buyer_candidate_id": str(candidate.id),
+        "buyer_engagement_id": str(engagement.id),
+        "created_buyer": created_buyer,
+        "created_lead": False,
+        "raw_disposition": _string(raw_cdr.get("disposition")),
+    }
+
+
+def _normalize_investor_handoff(
+    raw_cdr: dict[str, Any],
+    contact: dict[str, Any],
+) -> dict[str, Any]:
+    raw_contact = raw_cdr.get("contact")
+    raw_contact = raw_contact if isinstance(raw_contact, dict) else {}
+    raw_campaign = raw_cdr.get("campaign")
+    raw_campaign = raw_campaign if isinstance(raw_campaign, dict) else {}
+    raw_agent = raw_cdr.get("agent")
+    raw_agent = raw_agent if isinstance(raw_agent, dict) else {}
+    provider_contact_id = _string(contact.get("id")) or _contact_id(raw_cdr)
+    first_name = _string(contact.get("firstname")) or _string(raw_contact.get("firstname"))
+    last_name = _string(contact.get("lastname")) or _string(raw_contact.get("lastname"))
+    name = " ".join(value for value in (first_name, last_name) if value).strip()
+    phone = _contact_phone(contact) or format_e164(_string(raw_cdr.get("customerNumber")))
+    if phone is None:
+        raise BatchDialerNeedsReview("Investor BatchDialer result has no valid phone number.")
+    raw_email = _string(contact.get("email")) or _string(raw_contact.get("email"))
+    email: str | None = raw_email.casefold() if _looks_like_email(raw_email) else None
+    company_name = (
+        _string(contact.get("company"))
+        or _string(contact.get("companyname"))
+        or _string(raw_contact.get("company"))
+    )
+    return {
+        "provider_contact_id": provider_contact_id,
+        "name": (name or company_name or f"BatchDialer investor {phone}")[:255],
+        "company_name": company_name[:255] or None,
+        "phone": phone,
+        "email": email,
+        "notes": _collect_provider_notes(raw_cdr, contact),
+        "provider_cdr_id": _required_numeric_id(raw_cdr.get("id"), "CDR"),
+        "provider_call_id": _string(raw_cdr.get("callid")),
+        "campaign_id": _string(raw_campaign.get("id")),
+        "campaign_name": _string(raw_campaign.get("name")),
+        "agent_name": " ".join(
+            value
+            for value in (
+                _string(raw_agent.get("firstname")),
+                _string(raw_agent.get("lastname")),
+            )
+            if value
+        ).strip(),
+    }
+
+
+def _ensure_batchdialer_buyer(
+    db: Session,
+    *,
+    event: ProspectingProviderEvent,
+    case: DispositionCase,
+    investor: dict[str, Any],
+) -> tuple[Buyer, bool]:
+    phone = investor["phone"]
+    email = investor.get("email")
+    source_external_key = (
+        f"contact:{investor['provider_contact_id']}"
+        if investor.get("provider_contact_id")
+        else f"phone:{phone}"
+    )
+    identity_conditions = [Buyer.normalized_phone == phone]
+    if email:
+        identity_conditions.append(Buyer.normalized_email == email)
+    buyer = db.scalar(
+        select(Buyer).where(
+            Buyer.organization_id == event.organization_id,
+            Buyer.archived_at.is_(None),
+            or_(
+                *identity_conditions,
+                (
+                    (Buyer.source_key == PROVIDER)
+                    & (Buyer.source_external_key == source_external_key)
+                ),
+            ),
+        )
+    )
+    if buyer is not None:
+        if not buyer.phone:
+            buyer.phone = phone
+            buyer.normalized_phone = phone
+        if email and not buyer.email:
+            buyer.email = email
+            buyer.normalized_email = email
+        if case.owner_user_id is not None and buyer.relationship_owner_user_id is None:
+            buyer.relationship_owner_user_id = case.owner_user_id
+        return buyer, False
+    buyer = Buyer(
+        organization_id=event.organization_id,
+        name=investor["name"],
+        company_name=investor.get("company_name"),
+        email=email,
+        phone=phone,
+        normalized_email=email,
+        normalized_phone=phone,
+        normalized_company_name=(investor.get("company_name") or "").strip().casefold() or None,
+        buyer_type="cash_buyer",
+        status="active",
+        source_key=PROVIDER,
+        source_detail=investor.get("campaign_name") or "BatchDialer investor disposition",
+        source_external_key=source_external_key,
+        relationship_owner_user_id=case.owner_user_id,
+        proof_of_funds_status="unknown",
+        reliability_score_basis_points=5000,
+        completed_deals=0,
+        failed_deals=0,
+        notes="Created from a BatchDialer investor-disposition result.",
+    )
+    db.add(buyer)
+    db.flush()
+    return buyer, True
+
+
+def _ensure_batchdialer_case_candidate(
+    db: Session,
+    *,
+    event: ProspectingProviderEvent,
+    case: DispositionCase,
+    buyer: Buyer,
+    investor: dict[str, Any],
+) -> DispositionBuyerPoolCandidate:
+    candidate = db.scalar(
+        select(DispositionBuyerPoolCandidate).where(
+            DispositionBuyerPoolCandidate.organization_id == event.organization_id,
+            DispositionBuyerPoolCandidate.disposition_case_id == case.id,
+            DispositionBuyerPoolCandidate.buyer_id == buyer.id,
+        )
+    )
+    if candidate is not None:
+        return candidate
+    candidate = DispositionBuyerPoolCandidate(
+        organization_id=event.organization_id,
+        disposition_case_id=case.id,
+        identity_key=f"buyer:{buyer.id}",
+        source_type="internal",
+        buyer_id=buyer.id,
+        provider=PROVIDER,
+        external_key=investor.get("provider_contact_id"),
+        display_name=buyer.name,
+        company_name=buyer.company_name,
+        email=buyer.email,
+        phone=buyer.phone,
+        provenance_snapshot={
+            "source": "batchdialer_investor_campaign",
+            "campaign_id": investor.get("campaign_id"),
+            "campaign_name": investor.get("campaign_name"),
+            "provider_cdr_id": investor.get("provider_cdr_id"),
+        },
+        overlap_status="none",
+        overlap_evidence={"merged_external_candidate_ids": []},
+        decision_status="undecided",
+        lifecycle_stage="discovered",
+        lock_version=1,
+    )
+    db.add(candidate)
+    db.flush()
+    return candidate
+
+
+def _apply_investor_result_to_candidate(
+    candidate: DispositionBuyerPoolCandidate,
+    *,
+    buyer: Buyer,
+    result: str,
+    actor_user_id: UUID,
+) -> None:
+    now = datetime.now(UTC)
+    stage_by_result = {
+        "interested": "interested",
+        "packet_requested": "interested",
+        "showing_requested": "showing",
+        "offer_expected": "offer",
+        "callback": "contacted",
+        "not_interested": "pass",
+        "wrong_number": "pass",
+        "do_not_contact": "pass",
+    }
+    candidate.lifecycle_stage = stage_by_result[result]
+    candidate.decision_status = (
+        "passed"
+        if result in {"not_interested", "wrong_number", "do_not_contact"}
+        else "shortlisted"
+    )
+    candidate.decision_reason = f"BatchDialer result: {result.replace('_', ' ')}"
+    candidate.decision_updated_by_user_id = actor_user_id
+    candidate.decision_updated_at = now
+    candidate.lock_version += 1
+    buyer.relationship_status = {
+        "do_not_contact": "do_not_contact",
+        "wrong_number": "inactive",
+        "not_interested": "nurture",
+    }.get(result, "active")
+    if result == "do_not_contact" and "do_not_contact" not in buyer.tags:
+        buyer.tags = [*buyer.tags, "do_not_contact"]
+
+
+def _ensure_batchdialer_buyer_engagement(
+    db: Session,
+    *,
+    event: ProspectingProviderEvent,
+    case: DispositionCase,
+    buyer: Buyer,
+    candidate: DispositionBuyerPoolCandidate,
+    actor_user_id: UUID,
+    result: str,
+    investor: dict[str, Any],
+) -> BuyerEngagement:
+    idempotency_key = f"batchdialer:{event.id}"
+    engagement = db.scalar(
+        select(BuyerEngagement).where(
+            BuyerEngagement.organization_id == event.organization_id,
+            BuyerEngagement.disposition_case_id == case.id,
+            BuyerEngagement.idempotency_key == idempotency_key,
+        )
+    )
+    if engagement is not None:
+        return engagement
+    engagement = BuyerEngagement(
+        organization_id=event.organization_id,
+        disposition_case_id=case.id,
+        buyer_id=buyer.id,
+        actor_user_id=actor_user_id,
+        engagement_type="call",
+        status=result,
+        occurred_at=event.occurred_at or event.received_at,
+        notes=investor.get("notes") or f"BatchDialer result: {result.replace('_', ' ')}",
+        idempotency_key=idempotency_key,
+        engagement_metadata={
+            "source": "batchdialer_investor_campaign",
+            "candidate_id": str(candidate.id),
+            "campaign_id": investor.get("campaign_id"),
+            "campaign_name": investor.get("campaign_name"),
+            "provider_cdr_id": investor.get("provider_cdr_id"),
+            "provider_call_id": investor.get("provider_call_id"),
+            "agent_name": investor.get("agent_name"),
+        },
+    )
+    db.add(engagement)
+    db.flush()
+    return engagement
 
 
 def _fetch_qualification_transcript(

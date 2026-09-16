@@ -1101,6 +1101,8 @@ class BatchDialerCampaignMappingRead(BaseModel):
     provider_campaign_name: str
     provider_status: str
     is_active: bool
+    workflow_purpose: Literal["seller_acquisition", "investor_disposition"] | None
+    disposition_case_id: UUID | None
     asset_class: AssetClass | None
     asset_class_mapped_at: datetime | None
     asset_class_mapped_by_user_id: UUID | None
@@ -1110,12 +1112,37 @@ class BatchDialerCampaignMappingRead(BaseModel):
     historical_asset_mismatch_sample_lead_ids: list[UUID]
 
 
+class BatchDialerDispositionTargetRead(BaseModel):
+    id: UUID
+    deal_id: UUID
+    label: str
+    status: str
+
+
 class BatchDialerCampaignMappingListRead(BaseModel):
     items: list[BatchDialerCampaignMappingRead]
+    disposition_targets: list[BatchDialerDispositionTargetRead]
 
 
 class BatchDialerCampaignMappingUpdate(BaseModel):
+    workflow_purpose: Literal["seller_acquisition", "investor_disposition"] | None = None
     asset_class: AssetClass | None
+    disposition_case_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_route(self) -> "BatchDialerCampaignMappingUpdate":
+        # Preserve the original API contract for callers that only supplied an asset lane.
+        if self.workflow_purpose is None and self.asset_class is not None:
+            self.workflow_purpose = "seller_acquisition"
+        if self.workflow_purpose == "seller_acquisition":
+            if self.asset_class is None or self.disposition_case_id is not None:
+                raise ValueError("Seller acquisition campaigns require House or Land only.")
+        elif self.workflow_purpose == "investor_disposition":
+            if self.disposition_case_id is None or self.asset_class is not None:
+                raise ValueError("Investor disposition campaigns require one deal to market.")
+        elif self.asset_class is not None or self.disposition_case_id is not None:
+            raise ValueError("Choose a campaign purpose before configuring its route.")
+        return self
 
 
 class BatchDialerCampaignMappingUpdateRead(BaseModel):

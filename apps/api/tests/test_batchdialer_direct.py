@@ -17,17 +17,24 @@ from app.models.foundation import (
     BatchDialerCallFact,
     BatchDialerCampaign,
     BatchDialerSyncCheckpoint,
+    Buyer,
+    BuyerEngagement,
     CallRecord,
     CallRecording,
     CallTranscript,
     CommunicationRecord,
     ConsentRecord,
     Contact,
+    Deal,
+    DispositionBuyerPoolCandidate,
+    DispositionCase,
     Lead,
     Property,
     PropertyResearchRun,
     ProspectingProviderEvent,
     Task,
+    Transaction,
+    User,
 )
 from app.services.batchdialer_direct import (
     BatchDialerClaimLost,
@@ -1327,7 +1334,7 @@ def test_unmapped_campaign_quarantines_then_mapping_requeues_and_reports_history
 
     assert event is not None and event.processing_status == "quarantined"
     assert event.payload["_stonegate"]["qualification"]["reason_code"] == (
-        "campaign_asset_unmapped"
+        "campaign_workflow_unmapped"
     )
     assert approval is not None
     assert approval.approval_metadata["can_approve"] is False
@@ -1376,6 +1383,148 @@ def test_unmapped_campaign_quarantines_then_mapping_requeues_and_reports_history
     assert mismatch["item"]["historical_asset_mismatch_sample_lead_ids"] == [str(lead.id)]
     db_session.refresh(lead)
     assert lead.asset_class == "house"
+
+
+def test_investor_campaign_routes_result_to_buyer_and_disposition_without_seller_lead(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: Any,
+) -> None:
+    foundation = bootstrap_foundation(
+        db_session,
+        admin_email="owner@example.com",
+        admin_name="Owner",
+        organization_name="Stonegate Home Buyers",
+    )
+    organization = foundation.organization
+    owner = db_session.scalar(
+        select(User).where(
+            User.organization_id == organization.id,
+            User.email == "owner@example.com",
+        )
+    )
+    assert owner is not None
+    seller = Contact(
+        organization_id=organization.id,
+        legal_name="Contract Seller",
+        contact_type="seller",
+    )
+    property_record = Property(
+        organization_id=organization.id,
+        street_address="700 Investor Lane",
+        city="Ringgold",
+        state="GA",
+        postal_code="30736",
+        property_type="vacant_land",
+    )
+    db_session.add_all([seller, property_record])
+    db_session.flush()
+    seller_lead = Lead(
+        organization_id=organization.id,
+        contact_id=seller.id,
+        property_id=property_record.id,
+        assigned_user_id=owner.id,
+        source="test",
+        asset_class="land",
+        stage_key="under_contract",
+    )
+    db_session.add(seller_lead)
+    db_session.flush()
+    deal = Deal(
+        organization_id=organization.id,
+        lead_id=seller_lead.id,
+        property_id=property_record.id,
+        stage_key="under_contract",
+        contract_price_cents=700000,
+    )
+    db_session.add(deal)
+    db_session.flush()
+    transaction = Transaction(
+        organization_id=organization.id,
+        deal_id=deal.id,
+        lead_id=seller_lead.id,
+        property_id=property_record.id,
+        contact_id=seller.id,
+        owner_user_id=owner.id,
+        status="executed",
+        contract_type="assignment",
+        purchase_price_cents=700000,
+    )
+    db_session.add(transaction)
+    db_session.flush()
+    disposition_case = DispositionCase(
+        organization_id=organization.id,
+        transaction_id=transaction.id,
+        deal_id=deal.id,
+        lead_id=seller_lead.id,
+        property_id=property_record.id,
+        owner_user_id=owner.id,
+        status="package_prep",
+        strategy="assignment",
+        asking_price_cents=1550000,
+        minimum_acceptable_cents=1000000,
+        package_status="draft",
+        package_snapshot={},
+    )
+    db_session.add(disposition_case)
+    db_session.flush()
+    campaign = map_sample_campaign(db_session, organization.id, asset_class=None)
+    db_session.commit()
+    client = TestClient(app)
+    mapping_response = client.patch(
+        f"/api/v1/prospecting/batchdialer/campaign-mappings/{campaign.id}",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+        json={
+            "workflow_purpose": "investor_disposition",
+            "asset_class": None,
+            "disposition_case_id": str(disposition_case.id),
+        },
+    )
+    assert mapping_response.status_code == 200, mapping_response.text
+    assert mapping_response.json()["item"]["workflow_purpose"] == "investor_disposition"
+    list_response = client.get(
+        "/api/v1/prospecting/batchdialer/campaign-mappings",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert list_response.json()["disposition_targets"] == [
+        {
+            "id": str(disposition_case.id),
+            "deal_id": str(deal.id),
+            "label": "700 Investor Lane, Ringgold, GA",
+            "status": "package_prep",
+        }
+    ]
+    cdr = sample_cdr("Investor Interested")
+    cdr["campaign"]["name"] = "Ringgold Investor Outreach"
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=cdr,
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        "app.services.batchdialer_direct.BatchDialerClient",
+        FakeBatchDialerClient,
+    )
+
+    event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    event = db_session.get(ProspectingProviderEvent, event_id)
+    buyer = db_session.scalar(select(Buyer))
+    candidate = db_session.scalar(select(DispositionBuyerPoolCandidate))
+    engagement = db_session.scalar(select(BuyerEngagement))
+
+    assert event is not None and event.processing_status == "processed"
+    assert event.payload["_stonegate"]["workflow_purpose"] == "investor_disposition"
+    assert event.payload["_stonegate"]["created_lead"] is False
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
+    assert buyer is not None and buyer.normalized_phone == "+16785550199"
+    assert candidate is not None
+    assert candidate.disposition_case_id == disposition_case.id
+    assert candidate.buyer_id == buyer.id
+    assert candidate.lifecycle_stage == "interested"
+    assert engagement is not None and engagement.status == "interested"
 
 
 def test_direct_handoffs_are_tenant_scoped_and_reject_foreign_prior_leads(

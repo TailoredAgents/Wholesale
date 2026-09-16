@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -16,19 +16,27 @@ from app.models.foundation import (
     ApprovalRequest,
     AuditEvent,
     BatchDialerCampaign,
+    DispositionCase,
     Lead,
+    Property,
     ProspectingProviderEvent,
 )
 from app.schemas.prospecting import (
     BatchDialerCampaignMappingListRead,
     BatchDialerCampaignMappingRead,
     BatchDialerCampaignMappingUpdateRead,
+    BatchDialerDispositionTargetRead,
 )
 
 PROVIDER = "batchdialer"
 QUALIFICATION_REVIEW_REQUEST_TYPE = "batchdialer_lead_qualification"
 MAPPING_REVIEW_REASON_CODES = frozenset(
-    {"campaign_asset_unmapped", "campaign_asset_invalid"}
+    {
+        "campaign_asset_unmapped",
+        "campaign_asset_invalid",
+        "campaign_workflow_unmapped",
+        "campaign_disposition_target_unavailable",
+    }
 )
 MISMATCH_SAMPLE_LIMIT = 25
 
@@ -57,11 +65,29 @@ def list_batchdialer_campaign_mappings(
         ).all()
     )
     historical = _historical_campaign_facts(db, principal.organization_id, campaigns)
+    target_rows = db.execute(
+        select(DispositionCase, Property)
+        .join(Property, Property.id == DispositionCase.property_id)
+        .where(
+            DispositionCase.organization_id == principal.organization_id,
+            DispositionCase.status != "reconciled",
+        )
+        .order_by(DispositionCase.created_at.desc())
+    ).all()
     return BatchDialerCampaignMappingListRead(
         items=[
             _mapping_read(campaign, historical.get(campaign.provider_campaign_id))
             for campaign in campaigns
-        ]
+        ],
+        disposition_targets=[
+            BatchDialerDispositionTargetRead(
+                id=case.id,
+                deal_id=case.deal_id,
+                label=_property_label(property_record),
+                status=case.status,
+            )
+            for case, property_record in target_rows
+        ],
     )
 
 
@@ -70,7 +96,9 @@ def update_batchdialer_campaign_mapping(
     principal: Principal,
     *,
     mapping_id: UUID,
+    workflow_purpose: str | None,
     asset_class: AssetClass | None,
+    disposition_case_id: UUID | None,
 ) -> BatchDialerCampaignMappingUpdateRead | None:
     _require_manager(principal)
     campaign = db.scalar(
@@ -84,11 +112,35 @@ def update_batchdialer_campaign_mapping(
     if campaign is None:
         return None
 
-    previous_asset_class = campaign.asset_class
-    mapping_changed = previous_asset_class != asset_class
+    if workflow_purpose == "investor_disposition":
+        target = db.scalar(
+            select(DispositionCase).where(
+                DispositionCase.organization_id == principal.organization_id,
+                DispositionCase.id == disposition_case_id,
+                DispositionCase.status != "reconciled",
+            )
+        )
+        if target is None:
+            raise ValueError("Choose an active deal from the Dispositions workspace.")
+    previous = {
+        "workflow_purpose": campaign.workflow_purpose,
+        "asset_class": campaign.asset_class,
+        "disposition_case_id": (
+            str(campaign.disposition_case_id) if campaign.disposition_case_id else None
+        ),
+    }
+    mapping_changed = previous != {
+        "workflow_purpose": workflow_purpose,
+        "asset_class": asset_class,
+        "disposition_case_id": str(disposition_case_id) if disposition_case_id else None,
+    }
     now = datetime.now(UTC)
-    if mapping_changed or (asset_class is not None and campaign.asset_class_mapped_at is None):
+    if mapping_changed or (workflow_purpose is not None and campaign.workflow_mapped_at is None):
+        campaign.workflow_purpose = workflow_purpose
         campaign.asset_class = asset_class
+        campaign.disposition_case_id = disposition_case_id
+        campaign.workflow_mapped_by_user_id = principal.user_id
+        campaign.workflow_mapped_at = now
         campaign.asset_class_mapped_by_user_id = principal.user_id
         campaign.asset_class_mapped_at = now
 
@@ -99,18 +151,18 @@ def update_batchdialer_campaign_mapping(
             provider_campaign_id=campaign.provider_campaign_id,
             now=now,
         )
-        if asset_class is not None
+        if workflow_purpose is not None
         else []
     )
     if mapping_changed or requeued_event_ids:
-        if previous_asset_class is None and asset_class is not None:
-            action = "prospecting.batchdialer_campaign_asset_mapping_set"
-        elif asset_class is None:
-            action = "prospecting.batchdialer_campaign_asset_mapping_cleared"
+        if previous["workflow_purpose"] is None and workflow_purpose is not None:
+            action = "prospecting.batchdialer_campaign_workflow_mapping_set"
+        elif workflow_purpose is None:
+            action = "prospecting.batchdialer_campaign_workflow_mapping_cleared"
         elif mapping_changed:
-            action = "prospecting.batchdialer_campaign_asset_mapping_changed"
+            action = "prospecting.batchdialer_campaign_workflow_mapping_changed"
         else:
-            action = "prospecting.batchdialer_campaign_asset_mapping_reapplied"
+            action = "prospecting.batchdialer_campaign_workflow_mapping_reapplied"
         db.add(
             AuditEvent(
                 organization_id=principal.organization_id,
@@ -119,16 +171,17 @@ def update_batchdialer_campaign_mapping(
                 action=action,
                 entity_type="batchdialer_campaign",
                 entity_id=campaign.id,
-                previous_value={
-                    "provider_campaign_id": campaign.provider_campaign_id,
-                    "asset_class": previous_asset_class,
-                },
+                previous_value={"provider_campaign_id": campaign.provider_campaign_id, **previous},
                 new_value={
                     "provider_campaign_id": campaign.provider_campaign_id,
+                    "workflow_purpose": workflow_purpose,
                     "asset_class": asset_class,
+                    "disposition_case_id": (
+                        str(disposition_case_id) if disposition_case_id else None
+                    ),
                     "requeued_event_count": len(requeued_event_ids),
                 },
-                reason="BatchDialer campaign asset mapping updated",
+                reason="BatchDialer campaign workflow mapping updated",
             )
         )
 
@@ -309,6 +362,12 @@ def _mapping_read(
         provider_campaign_name=campaign.name,
         provider_status=campaign.status,
         is_active=campaign.is_active,
+        workflow_purpose=cast(
+            Literal["seller_acquisition", "investor_disposition"] | None,
+            campaign.workflow_purpose
+            or ("seller_acquisition" if campaign.asset_class is not None else None),
+        ),
+        disposition_case_id=campaign.disposition_case_id,
         asset_class=cast(AssetClass | None, campaign.asset_class),
         asset_class_mapped_at=campaign.asset_class_mapped_at,
         asset_class_mapped_by_user_id=campaign.asset_class_mapped_by_user_id,
@@ -316,6 +375,17 @@ def _mapping_read(
         historical_lead_count=historical.lead_count,
         historical_asset_mismatch_count=historical.mismatch_count,
         historical_asset_mismatch_sample_lead_ids=historical.mismatch_sample_lead_ids,
+    )
+
+
+def _property_label(property_record: Property) -> str:
+    locality = ", ".join(
+        value for value in (property_record.city, property_record.state) if value
+    )
+    return (
+        f"{property_record.street_address}, {locality}"
+        if locality
+        else property_record.street_address
     )
 
 
