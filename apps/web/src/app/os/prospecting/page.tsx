@@ -21,8 +21,8 @@ function BatchDialerBoundary({ canManage }: { canManage: boolean }) {
           <h2 id="batchdialer-boundary-title">Cold calling happens in BatchDialer</h2>
           <p>
             BatchDialer owns campaigns, dialing, number rotation, calling cadence, and cold-call
-            results. Stonegate receives the supported results and becomes the CRM once a seller
-            qualifies.
+            results. Stonegate receives the supported results and routes them into seller
+            acquisition or the contracted deal being marketed to investors.
           </p>
         </div>
         <strong>
@@ -51,8 +51,8 @@ function BatchDialerBoundary({ canManage }: { canManage: boolean }) {
           <ArrowRight aria-hidden="true" size={18} />
           <div>
             <span>3. Continue</span>
-            <strong>Work qualified sellers in Stonegate</strong>
-            <p>Accepted handoffs enter Leads; appointment claims create visible review work.</p>
+            <strong>Work the routed relationship in Stonegate</strong>
+            <p>Qualified sellers enter Leads; investor results enter the selected Dispositions deal.</p>
           </div>
         </li>
       </ol>
@@ -96,8 +96,8 @@ export default async function ProspectingPage() {
   return (
     <WorkspacePage>
       <PageHeader
-        description="Run seller cold outreach in BatchDialer, then monitor synchronized results and qualified handoffs in Stonegate."
-        eyebrow="Seller prospecting"
+        description="Run seller and investor cold outreach in BatchDialer, then continue every qualified relationship in the correct Stonegate workflow."
+        eyebrow="Cold outreach"
         meta={canManage ? (connected ? "BatchDialer data connected" : "BatchDialer sync needs attention") : "BatchDialer calling workflow"}
         title="Prospecting"
       />
@@ -120,8 +120,8 @@ export default async function ProspectingPage() {
           <div className={styles.batchDialerStaffInstruction}>
             <strong>Finish the call and select its result in BatchDialer.</strong>
             <p>
-              Qualified sellers and supported appointment claims synchronize into Stonegate for
-              the appropriate CRM owner. You do not need to recreate the call here.
+              Qualified sellers and supported investor results synchronize into the correct
+              Stonegate workflow. You do not need to recreate the call here.
             </p>
           </div>
         </SectionPanel>
