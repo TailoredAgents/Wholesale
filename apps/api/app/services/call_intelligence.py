@@ -74,6 +74,7 @@ from app.services.lead_lifecycle import (
 )
 
 CALL_INTELLIGENCE_AGENT_KEY = "call_intelligence"
+CALL_NOTES_MAX_OUTPUT_TOKENS = 5000
 CALL_INTELLIGENCE_PROMPT = """You prepare factual real-estate acquisition call notes.
 Use only facts explicitly present in the diarized transcript. Never infer a price, timeline,
 condition, occupancy, debt, title issue, commitment, or appointment. Put a stated mortgage,
@@ -699,6 +700,7 @@ def process_call_transcript(
     run: AiRunLog | None = None
     run_id: UUID | None = None
     operation_event_id: UUID | None = None
+    failure_stage = "preflight"
     try:
         if not settings.call_transcription_enabled:
             raise CallIntelligenceError("Call transcription is disabled.")
@@ -784,6 +786,7 @@ def process_call_transcript(
         audio_cost: AiCostEstimate | None = None
         transcription_performed = not bool((transcript.transcript_text or "").strip())
         if transcription_performed:
+            failure_stage = "transcription"
             if call.prospect_id is not None:
                 eligibility = prospecting_transcript_eligibility(db, recording)
                 if not eligibility.eligible:
@@ -838,6 +841,7 @@ def process_call_transcript(
             db.commit()
             metadata = dict(transcript.transcript_metadata or {})
 
+        failure_stage = "structured_notes"
         notes_payload, note_usage = client.create_structured_response(
             model=settings.openai_default_model,
             system_prompt=call_notes_system_prompt(prompt.prompt_text, asset_class),
@@ -854,6 +858,7 @@ def process_call_transcript(
             ),
             json_schema=notes_model.model_json_schema(),
             reasoning_effort=settings.openai_reasoning_effort,
+            max_output_tokens=CALL_NOTES_MAX_OUTPUT_TOKENS,
         )
         notes = notes_model.model_validate(notes_payload)
         reject_unexpected_cjk_call_notes(notes)
@@ -991,6 +996,7 @@ def process_call_transcript(
         transcript.error_message = None
         transcript.transcript_metadata = {
             **metadata,
+            "failure_stage": None,
             "processing_completed_at": processing_completed_at.isoformat(),
             "structured_notes": notes.model_dump(mode="json"),
             "quick_read_summary": build_quick_read_summary(notes),
@@ -1137,6 +1143,7 @@ def process_call_transcript(
         transcript.transcript_metadata = {
             **(transcript.transcript_metadata or {}),
             "attempts": attempts,
+            "failure_stage": failure_stage,
             "last_failed_at": failed_at.isoformat(),
             "next_retry_at": (
                 None
@@ -1836,7 +1843,9 @@ def build_call_notes_prompt(
         "property": property_payload,
         "call_direction": call.direction,
         "segments": segments,
-        "full_transcript": transcript.transcript_text,
+        # Diarized segments already contain the complete spoken text. Sending the flat
+        # transcript as well roughly doubles long-call prompts and adds no evidence.
+        "full_transcript": None if segments else transcript.transcript_text,
     }
     if resolved_asset_class == LAND_ASSET_CLASS:
         payload["asset_class"] = LAND_ASSET_CLASS

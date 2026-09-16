@@ -710,6 +710,8 @@ def test_call_notes_prompt_uses_cold_prospect_house_or_land_context(
     assert payload["buyer"] is None
     assert payload["property"]["address"] == evidence.cold_call.prospect.street_address
     assert payload["property"]["postal_code"] == evidence.cold_call.prospect.postal_code
+    assert payload["segments"] == transcript.speaker_segments
+    assert payload["full_transcript"] is None
     if asset_class == "land":
         assert payload["asset_class"] == "land"
         assert payload["property"]["parcel_id"] == expected_parcel_id

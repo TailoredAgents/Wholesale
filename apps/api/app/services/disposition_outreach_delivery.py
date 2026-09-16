@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 from twilio.base.exceptions import TwilioRestException  # type: ignore[import-untyped]
 
 from app.core.auth import Principal
@@ -1350,7 +1351,11 @@ def _can_advance_delivery(current: str, candidate: str) -> bool:
 
 
 def _next_unlinked_buyer_reply(db: Session) -> CommunicationRecord | None:
-    return db.scalar(
+    return db.scalar(_unlinked_buyer_reply_statement())
+
+
+def _unlinked_buyer_reply_statement() -> Select[tuple[CommunicationRecord]]:
+    return (
         select(CommunicationRecord)
         .join(Conversation, Conversation.id == CommunicationRecord.conversation_id)
         .outerjoin(
@@ -1376,7 +1381,10 @@ def _next_unlinked_buyer_reply(db: Session) -> CommunicationRecord | None:
             ),
         )
         .order_by(CommunicationRecord.occurred_at.asc())
-        .with_for_update(skip_locked=True)
+        # The reply-link table is intentionally outer joined so unlinked replies survive.
+        # PostgreSQL cannot lock the nullable side of that join, so scope the row lock to
+        # the communication record we are actually claiming for this worker.
+        .with_for_update(of=CommunicationRecord, skip_locked=True)
     )
 
 

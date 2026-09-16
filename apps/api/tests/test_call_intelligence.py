@@ -582,6 +582,7 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
                 },
             )
         structured_note_response_calls += 1
+        assert _kwargs["max_output_tokens"] == 5000
         if structured_note_response_calls == 1:
             malformed_payload = {
                 **notes_payload,

@@ -152,7 +152,10 @@ class OpenAIResponsesClient:
         if prompt_cache_key:
             request_payload["prompt_cache_key"] = prompt_cache_key
         payload = self._post_json("/responses", request_payload)
+        raise_for_incomplete_response(payload, operation="structured call notes")
         raw_text = extract_response_text(payload)
+        if not raw_text:
+            raise OpenAIClientError("OpenAI returned empty structured call notes.")
         try:
             parsed = json.loads(raw_text)
         except json.JSONDecodeError as exc:
@@ -247,7 +250,10 @@ class OpenAIResponsesClient:
                     "chunking_strategy": "auto",
                 },
                 files={"file": (filename, audio, media_type)},
-                timeout=max(self.timeout_seconds, 120),
+                # Longer recorded calls can legitimately take more than two minutes to
+                # diarize. This timeout is specific to paid audio transcription and does
+                # not loosen the timeout for ordinary text-generation requests.
+                timeout=max(self.timeout_seconds, 300),
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -428,6 +434,20 @@ def extract_response_text(payload: dict[str, Any]) -> str:
             if isinstance(text, str) and text.strip():
                 text_parts.append(text.strip())
     return "\n\n".join(text_parts)
+
+
+def raise_for_incomplete_response(payload: dict[str, Any], *, operation: str) -> None:
+    """Turn Responses API truncation into an actionable stored failure reason."""
+
+    if payload.get("status") != "incomplete":
+        return
+    details = payload.get("incomplete_details")
+    reason = details.get("reason") if isinstance(details, dict) else None
+    if reason == "max_output_tokens":
+        raise OpenAIClientError(
+            f"OpenAI {operation} reached its output limit before completion."
+        )
+    raise OpenAIClientError(f"OpenAI {operation} did not complete.")
 
 
 def validate_strict_json_schema(schema: dict[str, Any]) -> None:

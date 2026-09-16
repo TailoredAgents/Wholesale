@@ -109,6 +109,37 @@ def test_structured_response_wraps_malformed_success_payload(
         )
 
 
+def test_structured_response_explains_output_limit_exhaustion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, **_kwargs: object) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "output": [],
+            },
+        )
+
+    monkeypatch.setattr("app.integrations.openai_client.httpx.post", fake_post)
+    client = OpenAIResponsesClient(
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+        timeout_seconds=30,
+    )
+
+    with pytest.raises(OpenAIClientError, match="reached its output limit"):
+        client.create_structured_response(
+            model="gpt-5.6-sol",
+            system_prompt="test",
+            user_prompt="{}",
+            schema_name="stonegate_test",
+            json_schema=STRICT_SCHEMA,
+        )
+
+
 def test_grounded_structured_response_configures_bounded_web_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

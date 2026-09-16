@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app import worker
@@ -53,6 +54,13 @@ class ApprovedOutreach:
     campaign: DispositionCampaign
     revision_id: UUID
     delivery_id: UUID
+
+
+def test_unlinked_buyer_reply_claim_locks_only_the_nonnullable_record() -> None:
+    statement = disposition_outreach_delivery._unlinked_buyer_reply_statement()
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE OF communication_records SKIP LOCKED" in compiled
 
 
 @pytest.fixture(autouse=True)

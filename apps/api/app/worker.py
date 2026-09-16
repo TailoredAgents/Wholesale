@@ -246,9 +246,14 @@ def run_worker(stop_event: threading.Event) -> None:
             except Exception as exc:
                 had_error = True
                 sentry_sdk.capture_exception(exc)
-                logger.exception(
+                # Sentry retains the traceback without local variables. Render only needs
+                # the bounded error summary; rich local-variable tracebacks can expose the
+                # Settings object and provider credentials in service logs.
+                logger.error(
                     "communications_worker_operation_failed",
                     operation=operation_name,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc)[:1000],
                 )
                 failure = None
                 try:
@@ -261,28 +266,34 @@ def run_worker(stop_event: threading.Event) -> None:
                             retry_base_seconds=settings.worker_retry_base_seconds,
                             retry_max_seconds=settings.worker_retry_max_seconds,
                         )
-                except Exception:
-                    logger.exception(
+                except Exception as failure_exc:
+                    logger.error(
                         "communications_worker_failure_record_failed",
                         operation=operation_name,
+                        error_type=type(failure_exc).__name__,
+                        error_message=str(failure_exc)[:1000],
                     )
                 if failure is not None:
                     try:
                         send_operational_failure_alert(settings, failure)
-                    except Exception:
-                        logger.exception(
+                    except Exception as alert_exc:
+                        logger.error(
                             "communications_worker_alert_failed",
                             operation=operation_name,
+                            error_type=type(alert_exc).__name__,
+                            error_message=str(alert_exc)[:1000],
                         )
                 continue
             finally:
                 try:
                     with SessionLocal() as operations_db:
                         mark_worker_operation_finished(operations_db, operation_name)
-                except Exception:
-                    logger.exception(
+                except Exception as progress_exc:
+                    logger.error(
                         "communications_worker_progress_record_failed",
                         operation=operation_name,
+                        error_type=type(progress_exc).__name__,
+                        error_message=str(progress_exc)[:1000],
                     )
             if result is not None:
                 processed_any = True
@@ -294,8 +305,12 @@ def run_worker(stop_event: threading.Event) -> None:
         try:
             with SessionLocal() as db:
                 record_worker_heartbeat(db, had_error=had_error)
-        except Exception:
-            logger.exception("communications_worker_heartbeat_failed")
+        except Exception as heartbeat_exc:
+            logger.error(
+                "communications_worker_heartbeat_failed",
+                error_type=type(heartbeat_exc).__name__,
+                error_message=str(heartbeat_exc)[:1000],
+            )
         if processed_any:
             continue
         stop_event.wait(
