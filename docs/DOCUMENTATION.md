@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: September 8, 2026
+Last verified against the repository: September 15, 2026
 
 ## Purpose
 
@@ -12,7 +12,7 @@ The documentation is intended to support three audiences:
 
 1. Stonegate employees who need to perform their jobs.
 2. Owners, administrators, and developers who configure or maintain the platform.
-3. A future internal help assistant that answers questions from approved Stonegate documentation.
+3. Ask Stonegate, the internal employee assistant that answers from approved Stonegate documentation.
 
 ## Source Priority
 
@@ -71,6 +71,7 @@ current code or canonical documentation.
 | `LAND_VALUATION_METHOD.md` | Current deterministic Land comparable-sale method, evidence rules, and unresolved launch requirements | Acquisitions, underwriting, owner, and developers |
 | `SETUP_REFERENCE.md` | Local setup, production services, environment variables, and provider activation | Owner and developers |
 | `SETUP_MANUAL.md` | Nontechnical provider, account, staff, launch, and maintenance procedures | Owner and trusted administrators |
+| `STONEGATE_EMPLOYEE_GUIDE.md` | Concise current navigation, role, and operating guidance preferred by Ask Stonegate | All staff |
 | `USER_MANUAL.md` | Full current operating instructions | All staff |
 | `UI_CONTROL_REFERENCE.md` | Page-by-page buttons, fields, effects, prerequisites, disabled states, and expected results | All staff and help-assistant maintainers |
 | `LEAD_MANAGER_USER_MANUAL.md` | Plain-language Lead Manager daily workflow | Lead Managers |
@@ -195,9 +196,9 @@ Do not create a new phase Markdown file for routine implementation. Use Git comm
 requests for build history. Create a new durable document only when it has a distinct long-term
 owner and subject.
 
-## Stonegate Help
+## Ask Stonegate
 
-The authenticated **Help** workspace retrieves only approved canonical files. Each answer should:
+The authenticated **Ask Stonegate** panel retrieves only approved canonical files. Each answer should:
 
 - State whether it concerns current behavior, setup, policy, or future work.
 - Cite the document heading used.
@@ -218,13 +219,14 @@ Recommended ingestion metadata:
 - `last_verified`
 - `source_priority`
 
-The assistant should answer “what does this button or field do?” from
-`UI_CONTROL_REFERENCE.md`, “how do I complete this workflow?” from the manuals, “how does this
+The assistant should begin with `STONEGATE_EMPLOYEE_GUIDE.md` for current navigation and ordinary
+employee workflows, answer “what does this button or field do?” from `UI_CONTROL_REFERENCE.md`,
+“how do I complete this workflow?” from the manuals, “how does this
 work?” from `SYSTEM_MAP.md`, “what are the rules?” from domain references, and “what remains?”
 from roadmaps.
 
 The current implementation chunks Markdown by heading, filters documents and sensitive topic
 areas by the signed-in user's role, retrieves the strongest matching sections, and returns the
 document title, heading path, and excerpt. OpenAI may summarize those sources when configured.
-A deterministic source excerpt remains available when OpenAI is unavailable. Help has no tools
+A deterministic source excerpt remains available when OpenAI is unavailable. Ask Stonegate has no tools
 for reading or changing live Stonegate records.

@@ -896,7 +896,7 @@ export const controlReferenceSections = [
   { heading: "Marketing", owner: "marketing" },
   { heading: "Company & Policy", owner: "settings" },
   { heading: "My Setup", owner: "settings" },
-  { heading: "Help", owner: "global" },
+  { heading: "Stonegate Tools And Ask Stonegate", owner: "global" },
   { heading: "AI Control", owner: "settings" },
   { heading: "Shared Copilot Controls", owner: "global" },
   { heading: "Design System Reference", owner: "internal" },

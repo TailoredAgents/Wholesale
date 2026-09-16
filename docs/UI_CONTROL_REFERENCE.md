@@ -1977,13 +1977,16 @@ route redirects to Finance Policy.
 | **Submit for review** | Sends the role acknowledgement to management | Blocked until required setup items are addressed |
 | Acceptance status | Shows assigned, in progress, submitted, approved, returned, or revoked | Read-only |
 
-## Help
+## Stonegate Tools And Ask Stonegate
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Blue chat bubble | Opens Stonegate Help over the current OS page | Bottom-right of every signed-in OS workspace |
+| Stonegate tools dock | Groups Phone and Ask Stonegate in one compact bottom-right surface | Signed-in OS workspaces; only permitted controls appear |
+| Green Phone control | Opens the browser phone | Requires call permission; disabled while another call action is connecting |
+| Ask Stonegate sparkle | Opens the employee assistant over the current OS page and supplies that page as orientation context | Available to signed-in workspace users; disabled while phone audio is active |
 | Close | Closes the panel without changing the current OS page | Open panel |
-| Suggested question | Places a role-relevant example in the composer | Available before or after a conversation |
+| Current workspace badge | Shows the navigation area and page supplied as orientation context | Does not grant access or expose page record data |
+| Suggested question | Places a role- and page-relevant example in the composer | Available before or after a conversation |
 | Question | Accepts a software, setup, role, or workflow question | Three to 500 characters |
 | Ask arrow / Enter | Sends the question to authenticated documentation retrieval | Disabled while loading, answering, or when too short |
 | Shift+Enter | Adds a line without submitting | Composer only |
@@ -1997,7 +2000,7 @@ route redirects to Finance Policy.
 | Follow-up question | Uses up to six recent turns to understand references such as “that,” “it,” or “the previous step” | Role boundaries are reapplied to the recent topic; conversation text is context, not an approved source |
 | **New conversation** | Clears local question, answer, and follow-up context | Does not delete or change business records |
 
-Help filters documents and sensitive topics by the signed-in role. It cannot read live operating
+Ask Stonegate filters documents and sensitive topics by the signed-in role. It cannot read live operating
 records or perform actions. Conversation context remains in the open browser session and is not
 stored as a business record.
 

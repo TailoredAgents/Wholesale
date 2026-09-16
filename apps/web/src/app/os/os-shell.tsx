@@ -715,24 +715,29 @@ function OsShellContent({
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {helpProfile ? (
-          <HelpBubble
-            devUserEmail={helpProfile.email}
-            disabled={phoneOccupied || quickDialSubmitting}
-            onOpenChange={(nextOpen) => {
-              if (nextOpen && (phoneOccupied || quickDialSubmitting)) return;
-              setHelpOpen(nextOpen);
-              if (nextOpen && quickDialOpen) closeQuickDial();
-            }}
-            open={helpOpen}
-          />
-        ) : null}
-        {canQuickDial ? (
-          <QuickDialLauncher
-            buttonRef={quickDialLauncherRef}
-            expanded={quickDialOpen}
-            onOpen={openQuickDial}
-          />
+        {helpProfile || canQuickDial ? (
+          <div aria-label="Stonegate tools" className={styles.utilityDock} role="group">
+            {canQuickDial ? (
+              <QuickDialLauncher
+                buttonRef={quickDialLauncherRef}
+                expanded={quickDialOpen}
+                onOpen={openQuickDial}
+              />
+            ) : null}
+            {helpProfile ? (
+              <HelpBubble
+                devUserEmail={helpProfile.email}
+                disabled={phoneOccupied || quickDialSubmitting}
+                onOpenChange={(nextOpen) => {
+                  if (nextOpen && (phoneOccupied || quickDialSubmitting)) return;
+                  setHelpOpen(nextOpen);
+                  if (nextOpen && quickDialOpen) closeQuickDial();
+                }}
+                open={helpOpen}
+                pageContext={context}
+              />
+            ) : null}
+          </div>
         ) : null}
         {canQuickDial && quickDialOpen && !phoneOccupied ? (
           <QuickDialDialog

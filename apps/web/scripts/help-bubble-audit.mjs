@@ -18,7 +18,7 @@ try {
   for (const viewport of viewports) {
     const page = await browser.newPage({ viewport });
     const helpRequests = [];
-    await page.route("**/api/v1/help**", async (route) => {
+    await page.route("**/*", async (route) => {
       const request = route.request();
       const pathname = new URL(request.url()).pathname;
       if (request.method() === "GET" && pathname.endsWith("/api/v1/help")) {
@@ -26,8 +26,8 @@ try {
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
-            title: "Stonegate Help",
-            description: "Approved guidance",
+            title: "Ask Stonegate",
+            description: "Current company guidance",
             suggested_questions: ["How do I perform a comp?"],
             available_documents: ["USER_MANUAL.md", "UNDERWRITING_COMP_METHOD.md"],
             role_keys: ["owner"],
@@ -88,16 +88,16 @@ try {
         clerkDevelopmentOverlay.style.display = "none";
       }
     });
-    const bubble = page.getByRole("button", { name: "Open Stonegate Help" });
+    const bubble = page.getByRole("button", { name: "Open Ask Stonegate" });
     await bubble.waitFor({ state: "visible" });
     const bubbleBox = await bubble.boundingBox();
     await bubble.click({ force: true });
-    const panel = page.getByRole("dialog", { name: "Stonegate Help" });
+    const panel = page.getByRole("dialog", { name: "Ask Stonegate" });
     await panel.waitFor({ state: "visible" });
     const panelBox = await panel.boundingBox();
     const composer = panel.getByLabel("Question");
     await composer.fill("How do I perform a comp?");
-    await panel.getByRole("button", { name: "Ask Stonegate Help" }).click();
+    await panel.getByRole("button", { name: "Ask Stonegate", exact: true }).click();
     await panel.getByText("Underwriting", { exact: true }).waitFor();
     const formattedAnswer = Boolean(
       (await panel.locator("ol li").count()) === 3 &&
@@ -108,7 +108,7 @@ try {
     await panel.getByRole("button", { name: "Open approved source 1" }).click();
     await panel.getByRole("button", { name: "Back to conversation" }).click();
     await composer.fill("What if the address does not match?");
-    await panel.getByRole("button", { name: "Ask Stonegate Help" }).click();
+    await panel.getByRole("button", { name: "Ask Stonegate", exact: true }).click();
     await panel
       .getByText("stop and correct the property record before continuing", { exact: false })
       .waitFor();
@@ -116,6 +116,8 @@ try {
     const conversationalContext = Boolean(
       helpRequests.length === 2 &&
       followUpRequest?.history?.length === 1 &&
+      followUpRequest?.page_context?.group === "Work" &&
+      followUpRequest?.page_context?.label === "Home" &&
       followUpRequest.history[0]?.question === "How do I perform a comp?" &&
       followUpRequest.history[0]?.answer?.includes("Run complete analysis")
     );

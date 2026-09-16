@@ -108,6 +108,10 @@ services:
         value: ""
       - key: OPENAI_REASONING_EFFORT
         value: medium
+      - key: OPENAI_HELP_MODEL
+        value: gpt-6-astra
+      - key: OPENAI_HELP_REASONING_EFFORT
+        value: low
       - key: OPENAI_WEB_SEARCH_ENABLED
         value: true
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS

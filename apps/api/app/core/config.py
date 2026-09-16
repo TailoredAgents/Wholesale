@@ -155,6 +155,14 @@ class Settings(BaseSettings):
         default="medium",
         validation_alias="OPENAI_REASONING_EFFORT",
     )
+    openai_help_model: str = Field(
+        default="gpt-6-astra",
+        validation_alias="OPENAI_HELP_MODEL",
+    )
+    openai_help_reasoning_effort: str = Field(
+        default="low",
+        validation_alias="OPENAI_HELP_REASONING_EFFORT",
+    )
     openai_web_search_enabled: bool = Field(
         default=False,
         validation_alias="OPENAI_WEB_SEARCH_ENABLED",

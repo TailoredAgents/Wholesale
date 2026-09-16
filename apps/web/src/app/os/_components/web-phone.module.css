@@ -1,11 +1,11 @@
 .panel {
   position: fixed;
   z-index: 100;
-  right: 88px;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  width: min(560px, calc(100vw - 112px));
+  right: 20px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  width: min(560px, calc(100vw - 40px));
   min-height: 76px;
-  max-height: calc(100dvh - 40px - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 104px - env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px 14px 28px;
@@ -36,7 +36,7 @@
 }
 
 .panelKeypadOpen {
-  width: min(420px, calc(100vw - 112px));
+  width: min(420px, calc(100vw - 40px));
 }
 
 .statusIcon {

@@ -7,10 +7,10 @@ import {
   ChevronLeft,
   CircleAlert,
   LoaderCircle,
-  MessageCircle,
   MessageSquareText,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   X,
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -64,11 +64,13 @@ export function HelpBubble({
   disabled,
   onOpenChange,
   open,
+  pageContext,
 }: {
   devUserEmail: string | null;
   disabled: boolean;
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  pageContext: { group: string; label: string };
 }) {
   const { getToken } = useAuth();
   const apiBase = useMemo(
@@ -88,12 +90,24 @@ export function HelpBubble({
   const messagesRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const previousOpenRef = useRef(open);
+  const suggestions = useMemo(() => {
+    const contextual = `What can I do in ${pageContext.label}?`;
+    return [contextual, ...(overview?.suggested_questions ?? [])]
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .slice(0, 4);
+  }, [overview?.suggested_questions, pageContext.label]);
 
   const headers = useCallback(async (includeJson = false) => {
     const result: Record<string, string> = {};
-    const token = await getToken().catch(() => null);
-    if (token) result.Authorization = `Bearer ${token}`;
-    else if (devUserEmail) result["X-Dev-User-Email"] = devUserEmail;
+    const localDevelopment =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    if (localDevelopment && devUserEmail) {
+      result["X-Dev-User-Email"] = devUserEmail;
+    } else {
+      const token = await getToken().catch(() => null);
+      if (token) result.Authorization = `Bearer ${token}`;
+    }
     if (includeJson) result["Content-Type"] = "application/json";
     return result;
   }, [devUserEmail, getToken]);
@@ -163,6 +177,7 @@ export function HelpBubble({
             question: item.question,
             answer: item.answer,
           })),
+          page_context: pageContext,
         }),
       });
       if (!response.ok) throw new Error(await errorMessage(response));
@@ -209,18 +224,18 @@ export function HelpBubble({
     <>
       <button
         aria-hidden={open}
-        aria-label="Open Stonegate Help"
+        aria-label="Open Ask Stonegate"
         className={`${styles.bubble} ${open ? styles.bubbleHidden : ""}`}
         disabled={disabled || open}
         onClick={() => onOpenChange(true)}
         ref={bubbleRef}
         type="button"
       >
-        <MessageCircle aria-hidden="true" size={25} />
+        <Sparkles aria-hidden="true" size={22} />
       </button>
       {open ? (
         <section
-          aria-label="Stonegate Help"
+          aria-label="Ask Stonegate"
           aria-modal="false"
           className={styles.panel}
           ref={panelRef}
@@ -229,10 +244,10 @@ export function HelpBubble({
         >
           <header className={styles.panelHeader}>
             <div>
-              <span className={styles.panelMark}><MessageCircle aria-hidden="true" size={18} /></span>
+              <span className={styles.panelMark}><Sparkles aria-hidden="true" size={17} /></span>
               <div>
-                <strong>{showSources ? "Answer sources" : "Stonegate Help"}</strong>
-                <small>{showSources ? "Approved documentation" : "Approved guidance"}</small>
+                <strong>{showSources ? "Answer sources" : "Ask Stonegate"}</strong>
+                <small>{showSources ? "Current company sources" : "Your Stonegate guide"}</small>
               </div>
             </div>
             <div>
@@ -241,7 +256,7 @@ export function HelpBubble({
                   <ChevronLeft aria-hidden="true" size={19} />
                 </button>
               ) : null}
-              <button aria-label="Close Stonegate Help" onClick={() => onOpenChange(false)} type="button">
+              <button aria-label="Close Ask Stonegate" onClick={() => onOpenChange(false)} type="button">
                 <X aria-hidden="true" size={19} />
               </button>
             </div>
@@ -256,7 +271,7 @@ export function HelpBubble({
             <MessageSquareText aria-hidden="true" size={18} />
             <div>
               <strong>Ask Stonegate</strong>
-              <span>Approved manuals</span>
+              <span>Current CRM and company guidance</span>
             </div>
           </div>
           {conversation.length ? (
@@ -270,7 +285,7 @@ export function HelpBubble({
           {loading ? (
             <div className={styles.loading}>
               <LoaderCircle aria-hidden="true" size={20} />
-              <span>Loading approved manuals…</span>
+              <span>Loading Stonegate knowledge...</span>
             </div>
           ) : conversation.length ? (
             conversation.map((item) => (
@@ -284,7 +299,7 @@ export function HelpBubble({
                   <p>{item.question}</p>
                 </div>
                 <div className={styles.response}>
-                  <span>Stonegate Help</span>
+                  <span>Ask Stonegate</span>
                   <FormattedHelpAnswer
                     answer={item.answer}
                     citationCount={item.citations.length}
@@ -306,7 +321,7 @@ export function HelpBubble({
                   >
                     <BookOpen aria-hidden="true" size={13} />
                     {item.citations.length} approved source{item.citations.length === 1 ? "" : "s"}
-                    {item.usedAi ? " · AI summarized" : " · Manual fallback"}
+                    {item.usedAi ? " · AI summarized" : " · Document fallback"}
                   </button>
                 </div>
               </article>
@@ -314,9 +329,11 @@ export function HelpBubble({
           ) : (
             <div className={styles.welcome}>
               <ShieldCheck aria-hidden="true" size={24} />
-              <h2>How can I help?</h2>
+              <h2>What do you need?</h2>
+              <p>Ask about the CRM, your role, or how Stonegate handles a situation.</p>
+              <span className={styles.contextBadge}>{pageContext.group} / {pageContext.label}</span>
               <div className={styles.suggestions}>
-                {overview?.suggested_questions.map((suggestion) => (
+                {suggestions.map((suggestion) => (
                   <button key={suggestion} onClick={() => selectSuggestion(suggestion)} type="button">
                     {suggestion}
                   </button>
@@ -327,7 +344,7 @@ export function HelpBubble({
           {busy ? (
             <div className={styles.thinking} role="status">
               <LoaderCircle aria-hidden="true" size={15} />
-              <span>Checking the approved manuals…</span>
+              <span>Checking Stonegate knowledge...</span>
             </div>
           ) : null}
         </div>
@@ -349,12 +366,12 @@ export function HelpBubble({
               maxLength={500}
               onChange={(event) => setQuestion(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask how to use or set up Stonegate…"
+              placeholder="Ask Stonegate anything about your work..."
               rows={3}
               value={question}
             />
             <button
-              aria-label="Ask Stonegate Help"
+              aria-label="Ask Stonegate"
               disabled={question.trim().length < 3 || busy || loading}
               type="submit"
             >

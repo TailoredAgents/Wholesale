@@ -323,7 +323,8 @@ Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, a
 inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
-menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
+menu button to open the navigation drawer. Phone and Ask Stonegate share the floating Stonegate tools
+dock at the bottom-right.
 
 Quick Dial is a deliberate manual-call workflow. If the outside number already belongs to a saved
 seller, buyer, or business contact, Stonegate reuses that conversation relationship without requiring a
@@ -716,15 +717,17 @@ Possible states are:
 My Setup does not grant access by itself. The Owner controls the actual user role and permissions
 from **Team & Access > Team** and assigns role manuals from **Company & Policy > Company setup**.
 
-## Stonegate Help
+## Ask Stonegate
 
-Select the blue chat bubble at the bottom-right of any OS page when you need instructions.
+Select the Ask Stonegate sparkle in the shared bottom-right utility dock when you need instructions or
+cannot reach a manager. The neighboring green Phone control opens the browser phone without appearing
+as a second unrelated floating product.
 
-1. Enter a question about a page, button, setup step, role, or workflow.
+1. Enter a question about the current page, a button, setup step, role, or company workflow.
 2. Select the arrow button or press Enter.
 3. Read the formatted plain-language answer. Bold text identifies exact Stonegate controls;
    numbered steps show the order; bullets identify real choices.
-4. Ask a short follow-up such as “What if the address does not match?” Help uses the six most
+4. Ask a short follow-up such as “What if the address does not match?” Ask Stonegate uses the six most
    recent turns in the open panel to understand what “that” or “it” refers to.
 5. Select a numbered source inside an answer to open that exact approved source, or select the
    source-count button under the answer.
@@ -734,16 +737,17 @@ Select the blue chat bubble at the bottom-right of any OS page when you need ins
    used as context.
 9. Close the panel to continue working on the same page.
 
-Suggested questions change with your role. Help also filters restricted setup, finance,
+Suggested questions change with your role and the current workspace. Ask Stonegate also filters restricted setup, finance,
 underwriting, contract, disposition, and administrative topics by your current Stonegate role.
 It will direct you to the responsible person instead of explaining a restricted action.
 
-Help summarizes approved manuals when OpenAI is available. If OpenAI is unavailable, it returns
+Ask Stonegate prefers the current Stonegate Employee Guide and summarizes approved documentation when
+OpenAI is available. If OpenAI is unavailable, it returns
 the strongest matching source excerpt. Recent conversation context exists only inside the open
 browser panel and is not saved as a CRM or audit record. Earlier messages help interpret a
 follow-up but are not treated as documentation. Help cannot read a seller's live record, send
 communications, change a stage, approve an offer, post accounting, or perform any other operating
-action.
+action. It is an all-purpose, read-only employee guide, not a record-changing automation agent.
 
 ## End-To-End Operating Workflow
 

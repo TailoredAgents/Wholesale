@@ -32,4 +32,5 @@ def create_help_answer(
         get_settings(),
         question=payload.question,
         history=payload.history,
+        page_context=payload.page_context,
     )

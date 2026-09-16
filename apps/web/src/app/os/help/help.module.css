@@ -1,19 +1,14 @@
 .bubble {
-  position: fixed;
-  right: 24px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  z-index: 95;
   display: grid;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: #246fa8;
-  color: #ffffff;
-  box-shadow: 0 12px 28px rgba(27, 72, 105, 0.28);
+  border: 1px solid #cbd8d0;
+  border-radius: 12px;
+  background: #f5f8f6;
+  color: #17633d;
   cursor: pointer;
-  transition: transform var(--sg-motion-fast), background var(--sg-motion-fast);
+  transition: transform var(--sg-motion-fast), border-color var(--sg-motion-fast), background var(--sg-motion-fast);
 }
 
 .bubble:disabled {
@@ -23,8 +18,9 @@
 }
 
 .bubble:hover:not(:disabled) {
-  transform: translateY(-2px);
-  background: #1d5f92;
+  border-color: #82a994;
+  transform: translateY(-1px);
+  background: #e9f3ed;
 }
 
 .bubble:focus-visible,
@@ -34,25 +30,23 @@
 }
 
 .bubbleHidden {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 
 .panel {
   position: fixed;
-  right: 24px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  z-index: 95;
+  right: 20px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 98;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(430px, calc(100vw - 32px));
   height: min(690px, calc(100dvh - 48px - env(safe-area-inset-bottom)));
   overflow: hidden;
-  border: 1px solid #b9cddd;
+  border: 1px solid #bdcec4;
   border-radius: var(--sg-radius-lg);
   background: var(--sg-color-surface);
-  box-shadow: 0 20px 54px rgba(20, 45, 62, 0.24);
+  box-shadow: 0 22px 58px rgba(18, 49, 36, 0.24);
 }
 
 .panelHeader {
@@ -61,7 +55,7 @@
   justify-content: space-between;
   min-height: 66px;
   padding: var(--sg-space-3) var(--sg-space-4);
-  background: #246fa8;
+  background: #143d2d;
   color: #ffffff;
 }
 
@@ -216,6 +210,19 @@
   max-width: 560px;
   margin: 0;
   line-height: var(--sg-line-height-body);
+}
+
+.contextBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid #c8d9ce;
+  border-radius: 999px;
+  background: #edf5f0;
+  color: #285f45;
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-strong);
 }
 
 .suggestions {
@@ -576,16 +583,11 @@
 }
 
 @media (max-width: 560px) {
-  .bubble {
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-  }
-
   .panel {
     right: 8px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
+    bottom: calc(76px + env(safe-area-inset-bottom));
     width: calc(100vw - 16px);
-    height: min(720px, calc(100dvh - 16px - env(safe-area-inset-bottom)));
+    height: min(720px, calc(100dvh - 88px - env(safe-area-inset-bottom)));
   }
 
   .conversationHeader {

@@ -1,16 +1,12 @@
 .launcher {
-  position: fixed;
-  z-index: 94;
-  right: 88px;
-  bottom: calc(24px + env(safe-area-inset-bottom));
+  position: relative;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border: 1px solid #155a39;
-  border-radius: 50%;
+  border-radius: 12px;
   background: #17633d;
-  box-shadow: 0 12px 28px rgba(18, 61, 43, 0.28);
   color: #fff;
   cursor: pointer;
   transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
@@ -18,15 +14,11 @@
 
 .launcher:hover {
   background: #125231;
-  box-shadow: 0 15px 32px rgba(18, 61, 43, 0.34);
   transform: translateY(-1px);
 }
 
 .launcherHidden {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(0.92);
+  display: none;
 }
 
 .launcherReady::after {
@@ -65,10 +57,10 @@
 .dockLayer {
   position: fixed;
   z-index: 94;
-  right: 88px;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  width: min(400px, calc(100vw - 112px));
-  max-height: calc(100dvh - 40px - env(safe-area-inset-bottom));
+  right: 20px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  width: min(400px, calc(100vw - 40px));
+  max-height: calc(100dvh - 104px - env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -370,8 +362,8 @@
 
 @media (max-width: 720px) {
   .launcher {
-    right: 84px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: 48px;
+    height: 48px;
   }
 
   .dockLayer {

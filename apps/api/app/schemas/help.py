@@ -13,9 +13,15 @@ class HelpConversationTurn(BaseModel):
     answer: str = Field(min_length=1, max_length=4000)
 
 
+class HelpPageContext(BaseModel):
+    group: str = Field(min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=120)
+
+
 class HelpAskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     history: list[HelpConversationTurn] = Field(default_factory=list, max_length=6)
+    page_context: HelpPageContext | None = None
 
 
 class HelpAnswer(BaseModel):
