@@ -17,6 +17,7 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useS
 import { createPortal } from "react-dom";
 
 import { Button } from "../_components/design-system";
+import theme from "../os-theme.module.css";
 import { FormattedHelpAnswer } from "./formatted-help-answer";
 import styles from "./help.module.css";
 
@@ -239,7 +240,7 @@ export function HelpBubble({
         <section
           aria-label="Ask Stonegate"
           aria-modal="false"
-          className={styles.panel}
+          className={`${theme.theme} ${styles.panel}`}
           ref={panelRef}
           role="dialog"
           tabIndex={-1}

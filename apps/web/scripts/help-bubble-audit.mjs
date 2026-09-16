@@ -95,6 +95,16 @@ try {
     const panel = page.getByRole("dialog", { name: "Ask Stonegate" });
     await panel.waitFor({ state: "visible" });
     const panelBox = await panel.boundingBox();
+    const panelAppearance = await panel.evaluate((element) => {
+      const computed = window.getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        color: computed.color,
+      };
+    });
+    const opaquePanel = !["transparent", "rgba(0, 0, 0, 0)"].includes(
+      panelAppearance.backgroundColor,
+    );
     const composer = panel.getByLabel("Question");
     await composer.fill("How do I perform a comp?");
     await panel.getByRole("button", { name: "Ask Stonegate", exact: true }).click();
@@ -144,8 +154,10 @@ try {
       viewport,
       bubbleBox,
       panelBox,
+      panelAppearance,
       pageMetrics,
       fitsViewport,
+      opaquePanel,
       formattedAnswer,
       conversationalContext,
     });
@@ -159,7 +171,10 @@ console.log(JSON.stringify(results, null, 2));
 if (
   results.some(
     (result) =>
-      !result.fitsViewport || !result.formattedAnswer || !result.conversationalContext,
+      !result.fitsViewport ||
+      !result.opaquePanel ||
+      !result.formattedAnswer ||
+      !result.conversationalContext,
   )
 ) {
   process.exitCode = 1;
