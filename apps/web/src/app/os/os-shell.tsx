@@ -659,6 +659,20 @@ function OsShellContent({
               ) : null}
             </div>
 
+            {helpProfile ? (
+              <HelpBubble
+                devUserEmail={helpProfile.email}
+                disabled={phoneOccupied || quickDialSubmitting}
+                onOpenChange={(nextOpen) => {
+                  if (nextOpen && (phoneOccupied || quickDialSubmitting)) return;
+                  setHelpOpen(nextOpen);
+                  if (nextOpen && quickDialOpen) closeQuickDial();
+                }}
+                open={helpOpen}
+                pageContext={context}
+              />
+            ) : null}
+
             {canOpenApprovals ? (
               <Link
                 aria-label={`${pendingApprovalCount} pending approvals`}
@@ -715,29 +729,12 @@ function OsShellContent({
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {helpProfile || canQuickDial ? (
-          <div aria-label="Stonegate tools" className={styles.utilityDock} role="group">
-            {canQuickDial ? (
-              <QuickDialLauncher
-                buttonRef={quickDialLauncherRef}
-                expanded={quickDialOpen}
-                onOpen={openQuickDial}
-              />
-            ) : null}
-            {helpProfile ? (
-              <HelpBubble
-                devUserEmail={helpProfile.email}
-                disabled={phoneOccupied || quickDialSubmitting}
-                onOpenChange={(nextOpen) => {
-                  if (nextOpen && (phoneOccupied || quickDialSubmitting)) return;
-                  setHelpOpen(nextOpen);
-                  if (nextOpen && quickDialOpen) closeQuickDial();
-                }}
-                open={helpOpen}
-                pageContext={context}
-              />
-            ) : null}
-          </div>
+        {canQuickDial ? (
+          <QuickDialLauncher
+            buttonRef={quickDialLauncherRef}
+            expanded={quickDialOpen}
+            onOpen={openQuickDial}
+          />
         ) : null}
         {canQuickDial && quickDialOpen && !phoneOccupied ? (
           <QuickDialDialog

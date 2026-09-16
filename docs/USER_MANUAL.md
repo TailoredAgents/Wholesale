@@ -323,8 +323,8 @@ Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, a
 inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
-menu button to open the navigation drawer. Phone and Ask Stonegate share the floating Stonegate tools
-dock at the bottom-right.
+menu button to open the navigation drawer. The green Phone bubble stays at the bottom-right. Ask
+Stonegate is the sparkle control in the top workspace header.
 
 Quick Dial is a deliberate manual-call workflow. If the outside number already belongs to a saved
 seller, buyer, or business contact, Stonegate reuses that conversation relationship without requiring a
@@ -719,9 +719,8 @@ from **Team & Access > Team** and assigns role manuals from **Company & Policy >
 
 ## Ask Stonegate
 
-Select the Ask Stonegate sparkle in the shared bottom-right utility dock when you need instructions or
-cannot reach a manager. The neighboring green Phone control opens the browser phone without appearing
-as a second unrelated floating product.
+Select the Ask Stonegate sparkle in the top workspace header when you need instructions or cannot
+reach a manager. The separate green Phone bubble at the bottom-right opens the browser phone.
 
 1. Enter a question about the current page, a button, setup step, role, or company workflow.
 2. Select the arrow button or press Enter.

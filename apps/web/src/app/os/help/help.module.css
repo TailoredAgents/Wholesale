@@ -1,12 +1,13 @@
 .bubble {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border: 1px solid #cbd8d0;
-  border-radius: 12px;
-  background: #f5f8f6;
-  color: #17633d;
+  flex: 0 0 auto;
+  border: 1px solid var(--sg-color-border);
+  border-radius: 8px;
+  background: var(--sg-color-surface);
+  color: var(--sg-color-text-soft);
   cursor: pointer;
   transition: transform var(--sg-motion-fast), border-color var(--sg-motion-fast), background var(--sg-motion-fast);
 }
@@ -18,9 +19,8 @@
 }
 
 .bubble:hover:not(:disabled) {
-  border-color: #82a994;
-  transform: translateY(-1px);
-  background: #e9f3ed;
+  border-color: #bdb5a8;
+  background: var(--sg-color-surface-soft);
 }
 
 .bubble:focus-visible,
@@ -30,18 +30,20 @@
 }
 
 .bubbleHidden {
-  display: none;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .panel {
   position: fixed;
   right: 20px;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  top: 72px;
   z-index: 98;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(430px, calc(100vw - 32px));
-  height: min(690px, calc(100dvh - 48px - env(safe-area-inset-bottom)));
+  height: min(690px, calc(100dvh - 92px - env(safe-area-inset-bottom)));
   overflow: hidden;
   border: 1px solid #bdcec4;
   border-radius: var(--sg-radius-lg);
@@ -585,9 +587,9 @@
 @media (max-width: 560px) {
   .panel {
     right: 8px;
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    top: 66px;
     width: calc(100vw - 16px);
-    height: min(720px, calc(100dvh - 88px - env(safe-area-inset-bottom)));
+    height: min(720px, calc(100dvh - 74px - env(safe-area-inset-bottom)));
   }
 
   .conversationHeader {

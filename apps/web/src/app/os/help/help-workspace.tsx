@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "../_components/design-system";
 import { FormattedHelpAnswer } from "./formatted-help-answer";
@@ -229,11 +230,12 @@ export function HelpBubble({
         disabled={disabled || open}
         onClick={() => onOpenChange(true)}
         ref={bubbleRef}
+        title="Ask Stonegate"
         type="button"
       >
         <Sparkles aria-hidden="true" size={22} />
       </button>
-      {open ? (
+      {open && typeof document !== "undefined" ? createPortal(
         <section
           aria-label="Ask Stonegate"
           aria-modal="false"
@@ -423,7 +425,8 @@ export function HelpBubble({
         </footer>
       </aside>
           </div>
-        </section>
+        </section>,
+        document.body,
       ) : null}
     </>
   );

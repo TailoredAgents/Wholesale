@@ -19,10 +19,9 @@ Most employees should begin at **Home** or **Conversations**, not hunt through e
 
 The left navigation only shows work the signed-in employee can access. Owners can see company-wide work without being a member of every team. Finance, Marketing, and Settings remain permission-controlled. Do not work around a missing menu with another employee's login; ask an owner to review the role or team membership.
 
-The bottom-right **Stonegate tools** dock contains:
-
-- **Phone** for business calls from the browser.
-- **Ask Stonegate** for questions about the CRM, a role, or a company process.
+Use the green **Phone** bubble at the bottom-right for business calls from the browser. Use the
+**Ask Stonegate** sparkle in the top workspace header for questions about the CRM, a role, or a
+company process.
 
 Ask Stonegate is read-only. It explains and points to the right place; it does not silently edit records or grant access.
 
@@ -90,7 +89,7 @@ Buyers stores the long-term investor relationship, not just a name on one deal. 
 
 ## Browser phone
 
-Use the green Phone control in the Stonegate tools dock to call a valid business number, including a number that is not attached to an active lead. Add a name, company, and reason when useful so the resulting conversation is understandable. Archived or closed CRM status alone should not block a legitimate business call.
+Use the green Phone bubble at the bottom-right to call a valid business number, including a number that is not attached to an active lead. Add a name, company, and reason when useful so the resulting conversation is understandable. Archived or closed CRM status alone should not block a legitimate business call.
 
 If browser audio fails, check microphone permission and the phone status shown in the panel before redialing. Do not repeatedly click Call while a request is already connecting.
 

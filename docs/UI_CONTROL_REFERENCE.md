@@ -1977,13 +1977,12 @@ route redirects to Finance Policy.
 | **Submit for review** | Sends the role acknowledgement to management | Blocked until required setup items are addressed |
 | Acceptance status | Shows assigned, in progress, submitted, approved, returned, or revoked | Read-only |
 
-## Stonegate Tools And Ask Stonegate
+## Browser Phone And Ask Stonegate
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Stonegate tools dock | Groups Phone and Ask Stonegate in one compact bottom-right surface | Signed-in OS workspaces; only permitted controls appear |
-| Green Phone control | Opens the browser phone | Requires call permission; disabled while another call action is connecting |
-| Ask Stonegate sparkle | Opens the employee assistant over the current OS page and supplies that page as orientation context | Available to signed-in workspace users; disabled while phone audio is active |
+| Green Phone bubble | Opens the browser phone from the bottom-right of the workspace | Requires call permission; disabled while another call action is connecting |
+| Ask Stonegate sparkle | Opens the employee assistant from the top workspace header and supplies the current page as orientation context | Available to signed-in workspace users; disabled while phone audio is active |
 | Close | Closes the panel without changing the current OS page | Open panel |
 | Current workspace badge | Shows the navigation area and page supplied as orientation context | Does not grant access or expose page record data |
 | Suggested question | Places a role- and page-relevant example in the composer | Available before or after a conversation |
