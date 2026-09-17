@@ -583,7 +583,8 @@
 .threadPane {
   background: var(--surface);
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(160px, 1fr) auto;
+  overflow: hidden;
 }
 
 .threadHeader {
@@ -1804,11 +1805,15 @@
 }
 
 .composer {
+  max-height: min(300px, 38dvh);
   min-width: 0;
   border-top: 1px solid var(--line);
   background: var(--surface);
   box-shadow: 0 -5px 16px rgba(22, 26, 29, 0.045);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   position: relative;
+  scrollbar-width: thin;
   z-index: 2;
 }
 
@@ -3197,8 +3202,7 @@
   }
 
   .composer {
-    max-height: min(46dvh, 410px);
-    overflow-y: auto;
+    max-height: min(34dvh, 280px);
     overscroll-behavior-y: contain;
   }
 
