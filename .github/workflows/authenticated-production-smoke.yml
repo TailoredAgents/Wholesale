@@ -1,56 +1,65 @@
-name: Production Readiness
+name: Authenticated Production Smoke
+
+on:
+  schedule:
+    - cron: "17 * * * *"
 
 permissions:
   contents: read
   issues: write
 
-on:
-  schedule:
-    - cron: "7,22,37,52 * * * *"
-  workflow_dispatch:
-    inputs:
-      simulate_failure:
-        description: "Simulate a monitor failure to verify the durable GitHub issue alert"
-        required: false
-        type: boolean
-        default: false
-
 concurrency:
-  group: production-readiness
+  group: authenticated-production-smoke
   cancel-in-progress: true
 
 jobs:
-  smoke:
-    name: Stonegate production smoke test
+  authenticated-smoke:
+    name: Critical authenticated CRM routes
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    # This post-deploy monitor must never become a failed commit check that can
-    # strand the next repair behind Render's checksPass deployment gate.
+    timeout-minutes: 10
+    # Store this workflow's credentials in a GitHub Environment restricted to
+    # main. Scheduled workflows always execute the default branch, so repository
+    # code from a manually selected ref can never receive the Clerk master key.
+    environment: production-smoke
+    # Production monitoring must not become a failed check on the commit that
+    # Render needs to deploy in order to repair production.
     continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check API, worker readiness, and public pages
-        id: production_smoke
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Authenticated smoke is disabled
+        if: ${{ vars.AUTHENTICATED_SMOKE_ENABLED != 'true' }}
+        run: echo "Set AUTHENTICATED_SMOKE_ENABLED=true in the production-smoke environment to enable this monitor."
+
+      - name: Check authenticated API and CRM routes
+        id: authenticated_smoke
+        if: ${{ vars.AUTHENTICATED_SMOKE_ENABLED == 'true' }}
         continue-on-error: true
         env:
           API_BASE_URL: https://api.stonegatehb.com
           WEB_BASE_URL: https://www.stonegatehb.com
-        run: bash scripts/smoke-test.sh
+          CLERK_SECRET_KEY: ${{ secrets.PRODUCTION_SMOKE_CLERK_SECRET_KEY }}
+          SMOKE_CLERK_USER_ID: ${{ secrets.PRODUCTION_SMOKE_CLERK_USER_ID }}
+        run: node scripts/authenticated-smoke.mjs
 
-      - name: Record monitor result without blocking deploys
+      - name: Record authenticated monitor result without blocking deploys
         if: ${{ always() }}
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          SMOKE_OUTCOME: ${{ steps.production_smoke.outcome }}
-          SIMULATE_FAILURE: ${{ inputs.simulate_failure || 'false' }}
+          SMOKE_ENABLED: ${{ vars.AUTHENTICATED_SMOKE_ENABLED || 'false' }}
+          SMOKE_OUTCOME: ${{ steps.authenticated_smoke.outcome }}
         with:
           script: |
-            const marker = "<!-- stonegate-production-readiness-monitor -->";
-            const simulated = process.env.SIMULATE_FAILURE === "true";
-            const failed = process.env.SMOKE_OUTCOME !== "success" || simulated;
+            const marker = "<!-- stonegate-authenticated-production-smoke -->";
+            const enabled = process.env.SMOKE_ENABLED === "true";
+            const failed = enabled && process.env.SMOKE_OUTCOME !== "success";
             const { owner, repo } = context.repo;
             const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {
@@ -64,15 +73,11 @@ jobs:
             );
 
             if (failed) {
-              const reason = simulated
-                ? "The controlled alert-path test was requested."
-                : "The production smoke command did not pass.";
               const body = [
                 marker,
-                "The Stonegate production readiness monitor needs attention.",
+                "The Stonegate authenticated production smoke monitor needs attention.",
                 "",
                 `- Last failure: ${new Date().toISOString()}`,
-                `- Reason: ${reason}`,
                 `- Workflow run: ${runUrl}`,
                 "",
                 "This monitor records an issue instead of failing the commit check so a repair deploy cannot be blocked by the broken production version it is replacing.",
@@ -88,20 +93,23 @@ jobs:
                 await github.rest.issues.create({
                   owner,
                   repo,
-                  title: "Production readiness monitor is failing",
+                  title: "Authenticated production smoke monitor is failing",
                   body,
                 });
               }
-              core.warning(reason);
+              core.warning("The authenticated production smoke command did not pass.");
               return;
             }
 
             if (existing) {
+              const reason = enabled
+                ? "The authenticated production smoke monitor recovered."
+                : "The authenticated production smoke monitor was disabled.";
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: existing.number,
-                body: `Recovered at ${new Date().toISOString()}. Successful run: ${runUrl}`,
+                body: `${reason} ${new Date().toISOString()}. Run: ${runUrl}`,
               });
               await github.rest.issues.update({
                 owner,

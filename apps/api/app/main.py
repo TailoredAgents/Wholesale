@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.core.observability import initialize_error_monitoring
+from app.core.database import engine
+from app.core.observability import RequestObservabilityMiddleware, initialize_error_monitoring
 from app.domain.assets import AssetWorkflowUnavailableError
 from app.routers import (
     ai,
@@ -45,7 +46,6 @@ from app.routers import (
 def create_app() -> FastAPI:
     settings = get_settings()
     settings.require_production_auth_configuration()
-    settings.require_production_zapier_facebook_leads_configuration()
     initialize_error_monitoring(settings, service_name="api")
     app = FastAPI(
         title="Real Estate Wholesaling Operating System API",
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestObservabilityMiddleware, database_engine=engine)
 
     @app.exception_handler(AssetWorkflowUnavailableError)
     async def asset_workflow_unavailable(

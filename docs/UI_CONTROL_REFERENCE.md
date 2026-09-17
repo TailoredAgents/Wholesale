@@ -762,6 +762,19 @@ the same provider CDR.
 
 ## Leads: Today
 
+### Manager Performance Scorecard
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| **Performance** | Opens the acquisition-team evidence scorecard | Manager only; read-only shadow coaching view; requires **Manage acquisition operations** |
+| 30 days / 90 days | Changes the trailing evidence window without changing CRM records | Available inside Performance |
+| Refresh | Requests a new snapshot and displays its generation timestamp | A previously confirmed snapshot stays visible if refresh fails |
+| Raw scoring evidence | Shows the stored inputs, sample size, minimum sample, policy weight, and evidence status behind each dimension | Read-only; use this before drawing a coaching conclusion |
+| Building dimension | Identifies a dimension that has not reached its minimum evidence sample | Building dimensions expose raw inputs but withhold the numeric score and bar |
+
+The shadow scorecard does not change lead assignment, compensation, employment decisions, or
+automation. It is coaching evidence, not an employee ranking.
+
 Today is the focused seller workday. It intentionally excludes legacy handoff acceptance timers,
 automatic neglected-lead classification, forced next actions, scorecards, and AI work.
 

@@ -239,11 +239,12 @@ Official references:
 - worker retry and failure-alert variables
 
 The worker's background heartbeat records process liveness independently from main-loop progress
-and the current operation. `/ready` treats a missing or stale heartbeat as a liveness failure, but
-does not call an active loop `stalled` until main-loop progress exceeds
+and the current operation. `/health/operations` treats a required missing or stale heartbeat as an
+operational failure, but does not call an active loop `stalled` until main-loop progress exceeds
 `WORKER_OPERATION_STALL_SECONDS`. Keep the production value at 600 seconds unless a measured
 provider-operation envelope justifies a reviewed change; this catches a live-but-hung worker
-without false alarms during normal multi-provider calls.
+without falsely removing the independently healthy API from service. `/ready` checks the API's
+required database dependency only.
 
 ### Clerk
 
@@ -1550,8 +1551,6 @@ intake.
 Processing variables needed on both **oakwell-api** and **oakwell-worker**:
 
 - `ZAPIER_FACEBOOK_LEADS_ENABLED`
-- `ZAPIER_FACEBOOK_PAGE_ID`
-- `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
 - `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
 - `FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS`
@@ -1560,7 +1559,9 @@ Processing variables needed on both **oakwell-api** and **oakwell-worker**:
 
 Ingress safety variables needed on **oakwell-api**:
 
+- `ZAPIER_FACEBOOK_PAGE_ID`
 - `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS`, as a comma-separated list of production form IDs
+- `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `ZAPIER_FACEBOOK_LEADS_BURST_LIMIT`
 - `ZAPIER_FACEBOOK_LEADS_BURST_WINDOW_SECONDS`
 - `ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT`
@@ -1655,8 +1656,8 @@ RentCast's AVM value range in comp or offer math.
 
 ### Activation And Acceptance
 
-1. Store the numeric Page ID on both Render services. On the API, store the exact production form
-   IDs in `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS`. Leave
+1. Store the numeric Page ID and exact production form IDs on the API in
+   `ZAPIER_FACEBOOK_PAGE_ID` and `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS`. Leave
    `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
 2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
    Zapier action test.
@@ -1673,8 +1674,10 @@ RentCast's AVM value range in comp or offer math.
 8. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
-Production startup and `/ready` fail closed when Zapier intake is enabled without at least one
-configured form ID. Populate `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS` before the enabling deploy.
+Incomplete Zapier form configuration does not take the core CRM API offline. It is reported as a
+degraded optional provider by `/health/operations`, and Zapier intake remains unusable until at
+least one allowed form is configured. Populate `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS` before enabling
+or testing intake.
 
 The endpoint is intentionally secretless, publicly reachable, and does not authenticate requests.
 It rejects the wrong Page or an unapproved configured form, limits request size and bursts, stops at

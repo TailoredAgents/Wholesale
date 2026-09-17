@@ -318,7 +318,7 @@ Evidence:
 Status: **Remediated in code.**
 
 - Each operation now gets one turn per cycle instead of the first busy queue restarting the cycle.
-- A dedicated heartbeat keeps readiness fresh while a long provider operation is running.
+- A dedicated heartbeat keeps operational worker health fresh while a long provider operation is running.
 - Main-loop progress and the current operation are tracked separately, so a fresh liveness
   heartbeat cannot hide a permanently hung queue.
 - The 600-second production stall threshold is separate from the 120-second heartbeat window, so
@@ -446,7 +446,7 @@ capability, not current Render configuration.
   uniqueness guard intentionally refuses to hide that conflict.
 - Render must build without the prior web out-of-memory failure.
 - API and worker must start from the same release and compatible environment.
-- `/health`, `/ready`, worker liveness plus main-loop progress/current-operation, public pages,
+- `/health`, `/ready`, `/health/operations` worker progress/current-operation, public pages,
   Clerk sign-in, `/api/v1/me`, and the changed workflows must pass after deployment. Readiness must
   stay healthy during a normal long provider call and report `stalled` only after the configured
   600-second production progress threshold.
@@ -538,7 +538,7 @@ Stonegate may conduct controlled acceptance only within all of these limits:
 3. Name a primary and backup lead manager for every active ad window.
 4. Reconcile Meta/Zapier leads to Stonegate at least daily and immediately while testing.
 5. Keep CRM/Inbox checks as the backup notification path; SMS is an alert, not the record of truth.
-6. Monitor `/ready`, worker failures, Resend dead letters, transcript exhaustion, provider errors,
+6. Monitor `/ready`, `/health/operations`, Resend dead letters, transcript exhaustion, provider errors,
    and paid-data usage each operating day.
 7. Review every AI note, property match, comp, repair estimate, offer plan, and seller agreement.
 8. Do not allow AI autonomy promotion during acceptance. Recommendations remain drafts.
@@ -559,7 +559,7 @@ result, screenshots/log links, and cleanup action when each test is performed.
 
 | ID | Provider or boundary | Code status | Controlled acceptance evidence | Full-live requirement | Audit result |
 | --- | --- | --- | --- | --- | --- |
-| PA-01 | Render web/API/worker | Implemented | Same commit deployed; build/start logs; one migration run; `/health` and `/ready`; fresh worker heartbeat | Stable deploy plus rollback rehearsal | Not run |
+| PA-01 | Render web/API/worker | Implemented | Same commit deployed; build/start logs; one migration run; `/health`, `/ready`, and `/health/operations` | Stable deploy plus rollback rehearsal | Not run |
 | PA-02 | PostgreSQL/Redis | Implemented | DB connectivity, migration head, queue coordination, isolated restore counts | Real restore drill and monitored capacity | Not run |
 | PA-03 | Clerk | Implemented; fail-closed hardening in tree | Sign-in, sign-out, expired session, unauthorized party, inactive local user, role denial | Disposable-user revocation test retained | Not run |
 | PA-04 | Meta Pixel / Conversions API | Implemented/configurable boundary | One consented controlled browser/server event with shared event ID and expected match/deduplication | Diagnostics clean enough for the approved campaign | Not run |
@@ -590,7 +590,7 @@ Create one evidence folder or ticket for the run. Record UTC timestamps and IDs 
 
 - [ ] Record the deployed commit SHA and Render deploy IDs for web, API, and worker.
 - [ ] Confirm Alembic has exactly one current head: `0094_esign_send_intents`.
-- [ ] Confirm `/health` is `ok`, `/ready` is `ready`, and the worker heartbeat is fresh.
+- [ ] Confirm `/health` is `ok`, `/ready` is `ready`, and `/health/operations` reports a healthy worker.
 - [ ] Confirm the named Lead Manager and backup are signed in and each has an individual account.
 - [ ] Confirm `ZAPIER_FACEBOOK_PAGE_ID` and the exact Form ID allowlist are correct.
 - [ ] Set a low controlled daily intake cap and document who may disable intake.
@@ -899,7 +899,7 @@ npm run ops:smoke
 ```
 
 7. Confirm Clerk sign-in and one protected `/api/v1/me` request using an authorized account.
-8. Confirm worker logs show a fresh heartbeat and `/ready` remains ready during a longer safe job.
+8. Confirm `/health/operations` shows fresh worker progress and `/ready` remains ready during a longer safe job.
 9. Exercise only the changed non-consequential paths first. Run provider acceptance one row at a
    time, not in parallel.
 10. Record the deployment, smoke result, and go/rollback decision.
@@ -917,8 +917,8 @@ npm run ops:smoke
 - A contract price/package differs from the approved offer authority or seller agreement.
 - A SignWell event completes the wrong package or a disposition action is represented as sent when
   it was only simulated.
-- A backup cannot be restored, a departing user retains access, `/ready` is degraded, or the worker
-  is not processing critical queues.
+- A backup cannot be restored, a departing user retains access, `/ready` is not ready, or
+  `/health/operations` shows the worker is not processing critical queues.
 
 ### First 15 Minutes
 

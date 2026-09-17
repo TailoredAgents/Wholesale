@@ -39,8 +39,18 @@ jobs:
       - name: Check operational scripts
         run: bash -n ../../scripts/db-backup.sh ../../scripts/db-restore-verify.sh ../../scripts/operations-alert-test.sh ../../scripts/smoke-test.sh
 
-      - name: Typecheck
-        run: uv run mypy app tests
+      - name: Test deployment gate scripts
+        run: uv run python -m unittest discover -s ../../scripts/tests -p "test_*.py"
+
+      - name: Validate Render Blueprint structure
+        run: uv run --with pyyaml python ../../scripts/validate-render-blueprint.py ../../render.yaml
+
+      - name: Compare Render Blueprint with official schema
+        continue-on-error: true
+        run: uv run --with pyyaml --with jsonschema python ../../scripts/validate-render-blueprint.py ../../render.yaml --official
+
+      - name: Typecheck regression gate
+        run: uv run python ../../scripts/check-mypy-baseline.py --baseline mypy-baseline.json
 
       - name: Test
         run: uv run pytest
@@ -74,11 +84,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Check OS information architecture contract
-        run: npm run audit:ia
+      - name: Test authenticated smoke harness
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/authenticated-smoke.test.mjs
 
-      - name: Check underwriting workspace contract
-        run: npm run audit:underwriting
+      - name: Check all web contracts
+        run: npm run audit:contracts
 
       - name: Build
         run: npm run build

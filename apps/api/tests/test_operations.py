@@ -8,15 +8,19 @@ from app.core.config import Settings
 from app.models.foundation import OperationalFailure, WorkerHeartbeat
 from app.services.operations import (
     COMMUNICATIONS_WORKER,
+    get_worker_operational_health,
     get_worker_readiness,
+    mark_worker_operation_finished,
     mark_worker_operation_started,
     operation_retry_due,
     record_operation_failure,
     record_worker_heartbeat,
     register_worker,
     resolve_operation_failures,
+    resolve_retired_operation_failures,
     safe_meta_runtime_metadata,
     touch_worker_heartbeat,
+    touch_worker_operation_progress,
 )
 
 
@@ -72,10 +76,12 @@ def test_worker_heartbeat_persists_safe_meta_runtime_readiness(
     heartbeat = db_session.query(WorkerHeartbeat).one()
 
     assert heartbeat.worker_metadata is not None
+    assert heartbeat.worker_metadata["runtime_metadata_schema_version"] == 1
     assert heartbeat.worker_metadata["marketing_conversion_mode"] == "live"
     assert heartbeat.worker_metadata["meta_configured"] is True
     assert heartbeat.worker_metadata["meta_access_token_present"] is True
     assert heartbeat.worker_metadata["meta_test_mode_enabled"] is True
+    assert heartbeat.worker_metadata["zapier_facebook_leads_enabled"] is False
     assert len(str(heartbeat.worker_metadata["meta_pixel_id_fingerprint"])) == 10
     serialized = str(heartbeat.worker_metadata)
     assert "2118209559079623" not in serialized
@@ -126,6 +132,53 @@ def test_operation_failures_are_grouped_and_resolved(db_session: Session) -> Non
     assert second.resolved_at is not None
 
 
+def test_retired_operation_failures_are_closed_without_hiding_active_failures(
+    db_session: Session,
+) -> None:
+    register_worker(db_session)
+    retired = record_operation_failure(
+        db_session,
+        service_name=COMMUNICATIONS_WORKER,
+        operation_name="batchdialer_zapier",
+        error=RuntimeError("retired provider path failed"),
+    )
+    active = record_operation_failure(
+        db_session,
+        service_name=COMMUNICATIONS_WORKER,
+        operation_name="email_sync",
+        error=RuntimeError("active provider path failed"),
+    )
+
+    resolved = resolve_retired_operation_failures(db_session, {"email_sync"})
+
+    db_session.refresh(retired)
+    db_session.refresh(active)
+    assert resolved == 1
+    assert retired.status == "resolved"
+    assert retired.resolved_at is not None
+    assert retired.failure_metadata == {"resolution_reason": "operation_retired"}
+    assert active.status == "open"
+
+
+def test_long_operation_can_refresh_main_loop_progress(db_session: Session) -> None:
+    register_worker(db_session)
+    mark_worker_operation_started(db_session, "batchdialer_direct_poll")
+    heartbeat = db_session.query(WorkerHeartbeat).one()
+    heartbeat.worker_metadata = {
+        **(heartbeat.worker_metadata or {}),
+        "main_loop_progress_at": (datetime.now(UTC) - timedelta(minutes=20)).isoformat(),
+    }
+    db_session.commit()
+
+    touch_worker_operation_progress(db_session, "batchdialer_direct_poll")
+
+    db_session.refresh(heartbeat)
+    progress_at = datetime.fromisoformat(
+        str((heartbeat.worker_metadata or {})["main_loop_progress_at"])
+    )
+    assert progress_at > datetime.now(UTC) - timedelta(seconds=5)
+
+
 def test_liveness_touch_preserves_degraded_worker_state(db_session: Session) -> None:
     register_worker(db_session)
     failure = record_operation_failure(
@@ -144,6 +197,186 @@ def test_liveness_touch_preserves_degraded_worker_state(db_session: Session) -> 
     assert heartbeat.status == "degraded"
     assert heartbeat.consecutive_failures == 1
     assert failure.status == "open"
+
+
+def test_operation_metrics_are_bounded_and_low_cardinality(db_session: Session) -> None:
+    register_worker(db_session)
+    mark_worker_operation_started(db_session, "email_sync")
+
+    mark_worker_operation_finished(
+        db_session,
+        "email_sync",
+        outcome="processed",
+        duration_ms=125,
+    )
+
+    heartbeat = db_session.query(WorkerHeartbeat).one()
+    metrics = (heartbeat.worker_metadata or {})["operation_metrics"]
+    assert metrics == {
+        "email_sync": {
+            "last_outcome": "processed",
+            "last_duration_ms": 125,
+            "last_finished_at": metrics["email_sync"]["last_finished_at"],
+        }
+    }
+    health = get_worker_operational_health(db_session, settings())
+    operation = next(item for item in health.operations if item.operation_name == "email_sync")
+    assert operation.last_outcome == "processed"
+    assert operation.last_duration_ms == 125
+    assert operation.last_finished_at is not None
+    assert operation.open_failure_depth == 0
+
+
+def test_configuration_only_provider_health_is_reported_as_configured(
+    db_session: Session,
+) -> None:
+    runtime_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": False,
+            "BATCHDIALER_API_KEY": "configured-api-key-value",
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "123456789",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "form-123",
+        }
+    )
+
+    health = get_worker_operational_health(db_session, runtime_settings)
+    providers = {provider.provider_name: provider for provider in health.providers}
+
+    assert providers["batchdialer"].status == "configured"
+    assert providers["zapier_facebook_leads"].status == "configured"
+
+
+def test_provider_health_uses_worker_runtime_configuration(
+    db_session: Session,
+) -> None:
+    api_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "BATCHDIALER_API_KEY": "configured-api-key-value",
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "123456789",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "form-123",
+        }
+    )
+    worker_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": False,
+        }
+    )
+    register_worker(
+        db_session,
+        runtime_metadata=safe_meta_runtime_metadata(worker_settings),
+    )
+    record_worker_heartbeat(db_session)
+
+    health = get_worker_operational_health(db_session, api_settings)
+    providers = {provider.provider_name: provider for provider in health.providers}
+
+    assert health.status == "degraded"
+    assert providers["batchdialer"].status == "not_configured"
+    assert providers["batchdialer"].configuration_blockers == ("BATCHDIALER_API_KEY",)
+    assert providers["zapier_facebook_leads"].status == "degraded"
+    assert providers["zapier_facebook_leads"].configuration_blockers == (
+        "worker:ZAPIER_FACEBOOK_LEADS_ENABLED=true",
+    )
+
+
+def test_required_worker_with_legacy_runtime_metadata_degrades_provider_truth(
+    db_session: Session,
+) -> None:
+    api_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "BATCHDIALER_API_KEY": "configured-api-key-value",
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "123456789",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "form-123",
+        }
+    )
+    register_worker(db_session, runtime_metadata={})
+    record_worker_heartbeat(db_session)
+
+    health = get_worker_operational_health(db_session, api_settings)
+    providers = {provider.provider_name: provider for provider in health.providers}
+
+    assert health.status == "degraded"
+    for provider_name in ("batchdialer", "zapier_facebook_leads"):
+        assert providers[provider_name].status == "degraded"
+        assert "worker:runtime_metadata_schema_version=1" in (
+            providers[provider_name].configuration_blockers
+        )
+
+
+def test_provider_health_detects_worker_enabled_while_api_ingress_is_disabled(
+    db_session: Session,
+) -> None:
+    api_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": False,
+        }
+    )
+    worker_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+        }
+    )
+    register_worker(
+        db_session,
+        runtime_metadata=safe_meta_runtime_metadata(worker_settings),
+    )
+    record_worker_heartbeat(db_session)
+
+    health = get_worker_operational_health(db_session, api_settings)
+    providers = {provider.provider_name: provider for provider in health.providers}
+
+    assert health.status == "degraded"
+    assert providers["zapier_facebook_leads"].status == "degraded"
+    assert providers["zapier_facebook_leads"].configuration_blockers == (
+        "api:ZAPIER_FACEBOOK_LEADS_ENABLED=true",
+    )
+
+
+def test_zapier_provider_reports_open_meta_lead_worker_failures(
+    db_session: Session,
+) -> None:
+    runtime_settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "WORKER_READINESS_REQUIRED": True,
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "123456789",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "form-123",
+        }
+    )
+    register_worker(
+        db_session,
+        runtime_metadata=safe_meta_runtime_metadata(runtime_settings),
+    )
+    record_worker_heartbeat(db_session)
+    record_operation_failure(
+        db_session,
+        service_name=COMMUNICATIONS_WORKER,
+        operation_name="meta_lead_ads",
+        error=RuntimeError("lead processor unavailable"),
+    )
+
+    health = get_worker_operational_health(db_session, runtime_settings)
+    providers = {provider.provider_name: provider for provider in health.providers}
+
+    assert health.status == "degraded"
+    assert providers["zapier_facebook_leads"].status == "degraded"
+    assert providers["zapier_facebook_leads"].open_failure_depth == 1
+    assert providers["zapier_facebook_leads"].oldest_open_failure_age_seconds is not None
 
 
 def test_liveness_touch_does_not_hide_a_stalled_main_loop(db_session: Session) -> None:
@@ -232,7 +465,6 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
         "UNDERWRITING_REALESTATEAPI_COMPS_MODE",
         "WORKER_OPERATION_STALL_SECONDS",
         "ZAPIER_FACEBOOK_LEADS_ENABLED",
-        "ZAPIER_FACEBOOK_PAGE_ID",
     }
 
     assert shared_runtime_keys <= api_keys
@@ -260,9 +492,8 @@ def render_service_environment_values(blueprint: str, service_name: str) -> dict
     marker = f"    name: {service_name}"
     assert marker in blueprint
     service_block = blueprint.split(marker, 1)[1].split("\n  - type:", 1)[0]
-    return dict(
-        re.findall(
-            r"(?m)^\s+- key: ([A-Z0-9_]+)\s*\r?\n\s+value: ([^\r\n]+?)\s*$",
-            service_block,
-        )
+    values = re.findall(
+        r"(?m)^\s+- key: ([A-Z0-9_]+)\s*\r?\n\s+value: ([^\r\n]+?)\s*$",
+        service_block,
     )
+    return {key: value.strip("\"'") for key, value in values}

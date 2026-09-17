@@ -5,13 +5,14 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 122 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API through migration 0134.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker, plus lead intake, property research, AI preparation, alerts, and
   provider retries. Fair sweeps give every queue a turn. An independent liveness heartbeat remains
   fresh during long provider work, while a separate main-loop progress/current-operation marker
-  lets `/ready` report a genuinely hung operation only after the production 600-second stall
-  threshold without treating a normal multi-provider call as stalled.
+  lets `/health/operations` report a genuinely hung operation only after the production 600-second
+  stall threshold without treating a normal multi-provider call as stalled. `/ready` remains the
+  API-and-database traffic-admission check.
 - `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
   the Render worker service.
 - `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
@@ -60,6 +61,8 @@ Start with:
 - `docs/LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for Stonegate Lead Managers.
 - `docs/SETUP_REFERENCE.md`: consolidated local, Render, domain, credential, webhook, and provider
   setup reference without secret values.
+- `docs/OPERATIONAL_TRUTH_PHASE_1.md`: runtime measurements, health contracts, deployment gates,
+  and the acceptance checklist for the project-wide architecture/performance audit.
 - `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
 - `docs/DISPOSITION_SIDEKICK_ROADMAP.md`: Buyer Network, House disposition, Offer Room, DS8
   manual InvestorLift handoff, DS9 draft-only Copilot, and remaining disposition phases.
@@ -144,6 +147,8 @@ Open:
 - Lead detail pages: `http://localhost:3000/os/leads/{lead_id}`
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
+- Worker and provider operations: http://localhost:8000/health/operations
+- Database instrumentation: http://localhost:8000/health/database-observability
 - Protected local API example: http://localhost:8000/api/v1/me
 - Lead list API: http://localhost:8000/api/v1/leads
 - Lead detail API: `http://localhost:8000/api/v1/leads/{lead_id}`
@@ -192,8 +197,7 @@ npm run typecheck:api
 npm run test:api
 npm run lint:web
 npm run typecheck:web
-npm run audit:ia
-npm run audit:underwriting
+npm run audit:contracts
 
 (cd apps/api && uv run pip-audit --strict --desc=off --progress-spinner=off)
 (cd apps/web && npm audit --workspaces=false --audit-level=high)
@@ -212,11 +216,12 @@ WEB_BASE_URL='https://oakwell-web.onrender.com' npm run ops:smoke
 
 See `docs/SETUP_REFERENCE.md` before running a restore drill or configuring failure alerts.
 
-GitHub Actions runs API lint, dependency audit, typecheck, and tests plus web dependency audit,
-lint, explicit TypeScript checking, information-architecture and underwriting contract checks, and
-the production build. The Next.js build still skips its embedded TypeScript validation because that
-dependency graph can stall in this environment; the separate `tsc --noEmit` CI step is the hard
-type gate.
+GitHub Actions runs API lint, dependency audit, full-suite tests, and the committed mypy regression
+gate, plus web dependency audit, lint, explicit TypeScript checking, every contract test, and the
+production build. The API gate rejects any error beyond the documented legacy baseline; it does not
+claim the existing type debt is clean. The Next.js build still skips its embedded TypeScript
+validation because that dependency graph can stall in this environment; the separate
+`tsc --noEmit` CI step is the hard web type gate.
 
 ## GitHub
 
@@ -227,6 +232,8 @@ https://github.com/TailoredAgents/Wholesale.git
 ```
 
 CI is defined in `.github/workflows/ci.yml`.
+Deployment gating and the optional production Clerk-authenticated smoke check are documented in
+`docs/DEPLOYMENT_GATES_AND_AUTHENTICATED_SMOKE.md`.
 
 ## Deployment
 

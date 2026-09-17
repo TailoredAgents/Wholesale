@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: September 15, 2026
+Last verified against the repository: September 17, 2026
 
 ## Purpose
 
@@ -71,6 +71,8 @@ current code or canonical documentation.
 | `LAND_VALUATION_METHOD.md` | Current deterministic Land comparable-sale method, evidence rules, and unresolved launch requirements | Acquisitions, underwriting, owner, and developers |
 | `SETUP_REFERENCE.md` | Local setup, production services, environment variables, and provider activation | Owner and developers |
 | `SETUP_MANUAL.md` | Nontechnical provider, account, staff, launch, and maintenance procedures | Owner and trusted administrators |
+| `OPERATIONAL_TRUTH_PHASE_1.md` | Health contracts, request/SQL measurements, worker evidence, deployment gates, and Phase 1 acceptance | Owner and developers |
+| `DEPLOYMENT_GATES_AND_AUTHENTICATED_SMOKE.md` | CI gating, mypy debt policy, Render sync, and production Clerk smoke setup | Owner and developers |
 | `STONEGATE_EMPLOYEE_GUIDE.md` | Concise current navigation, role, and operating guidance preferred by Ask Stonegate | All staff |
 | `USER_MANUAL.md` | Full current operating instructions | All staff |
 | `UI_CONTROL_REFERENCE.md` | Page-by-page buttons, fields, effects, prerequisites, disabled states, and expected results | All staff and help-assistant maintainers |

@@ -1,0 +1,1411 @@
+{
+  "schema_version": 1,
+  "command": "mypy app tests",
+  "policy": "Existing errors are debt; any error beyond these fingerprint counts fails CI.",
+  "known_errors": [
+    {
+      "path": "app/routers/prospecting.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"list\" has incompatible type \"tuple[str, ...]\"; expected \"Iterable[Literal['evidence_changed', 'generation_contract_changed']]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/batchdialer_call_facts.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"BatchDialerSyncCheckpoint | None\", variable has type \"BatchDialerSyncCheckpoint\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/batchdialer_va_performance.py",
+      "code": "arg-type",
+      "message": "Argument \"archive_history_status\" to \"BatchDialerVaPerformanceRead\" has incompatible type \"str\"; expected \"Literal['no_archived_calls', 'selected_range_may_be_incomplete', 'archived_calls_available']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/batchdialer_va_performance.py",
+      "code": "arg-type",
+      "message": "Argument \"provider_sync_freshness\" to \"BatchDialerVaPerformanceRead\" has incompatible type \"str\"; expected \"Literal['current', 'stale', 'incomplete']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/batchdialer_va_performance.py",
+      "code": "arg-type",
+      "message": "Argument \"provider_sync_status\" to \"BatchDialerVaPerformanceRead\" has incompatible type \"str\"; expected \"Literal['missing', 'idle', 'polling', 'healthy', 'failed', 'unknown']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyer_discovery.py",
+      "code": "redundant-cast",
+      "message": "Redundant cast to \"Literal['best_fit', 'expanded', 'regional']\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"asset_class\" to \"BuyerBuyBoxSummaryRead\" has incompatible type \"str\"; expected \"Literal['house', 'land']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"asset_class\" to \"BuyerBuyBoxVersionRead\" has incompatible type \"str\"; expected \"Literal['house', 'land']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"asset_focus\" to \"BuyerRead\" has incompatible type \"str | None\"; expected \"Literal['house', 'land', 'both'] | None\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"engagement_type\" to \"BuyerRelationshipActivityRead\" has incompatible type \"str\"; expected \"Literal['note', 'follow_up']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"relationship_status\" to \"BuyerRead\" has incompatible type \"str\"; expected \"Literal['new', 'active', 'nurture', 'paused', 'do_not_contact', 'inactive']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"temperature\" to \"BuyerRead\" has incompatible type \"str\"; expected \"Literal['unknown', 'cold', 'warm', 'hot']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"tier\" to \"BuyerRead\" has incompatible type \"str\"; expected \"Literal['unclassified', 'a', 'b', 'c']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"verification_status\" to \"BuyerBuyBoxSummaryRead\" has incompatible type \"str\"; expected \"Literal['unverified', 'needs_review', 'verified', 'rejected']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"verification_status\" to \"BuyerBuyBoxVersionRead\" has incompatible type \"str\"; expected \"Literal['unverified', 'needs_review', 'verified', 'rejected']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument \"verification_status\" to \"BuyerRead\" has incompatible type \"str\"; expected \"Literal['unverified', 'needs_review', 'verified', 'rejected']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"buy_box_version_read\" has incompatible type \"BuyerBuyBox | None\"; expected \"BuyerBuyBox\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/buyers.py",
+      "code": "var-annotated",
+      "message": "Need type annotation for \"BUY_BOX_CRITERIA_ADAPTER\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/call_intelligence.py",
+      "code": "call-overload",
+      "message": "No overload variant of \"int\" matches argument type \"object\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "arg-type",
+      "message": "Argument \"purchase_evidence\" to \"BuyerPoolEntryRead\" has incompatible type \"list[dict[str, object]]\"; expected \"list[BuyerPurchaseEvidenceRead]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"float\" has incompatible type \"float | None\"; expected \"str | Buffer | SupportsFloat | SupportsIndex\"",
+      "count": 4
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"float\" has incompatible type \"object\"; expected \"str | Buffer | SupportsFloat | SupportsIndex\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"get\" of \"dict\" has incompatible type \"UUID | None\"; expected \"UUID\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"Any | dict[Any, Any] | None\" has no attribute \"get\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/disposition_buyer_pool.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"dict[str, Any] | None\" has no attribute \"get\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_copilot.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"Buyer | None\", variable has type \"Buyer\")",
+      "count": 4
+    },
+    {
+      "path": "app/services/disposition_desk.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"ColumnElement[bool]\", variable has type \"BinaryExpression[bool]\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument \"queue_mode\" to \"DispositionExecutionSessionRead\" has incompatible type \"str\"; expected \"Literal['automatic', 'explicit']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"actor_user_id\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"approved_at\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"approved_by_user_id\"",
+      "count": 3
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"buyer_id\"",
+      "count": 3
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"created_by_user_id\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"deposit_received_at\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"engagement_type\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"event_type\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"occurred_at\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"outcome_type\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"received_at\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"recorded_by_user_id\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"review_status\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"sent_at\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "call-overload",
+      "message": "No overload variant of \"int\" matches argument type \"object\"",
+      "count": 6
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "no-untyped-call",
+      "message": "Call to untyped function \"all_for\" in typed context",
+      "count": 21
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a type annotation",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "operator",
+      "message": "Unsupported left operand type for > (\"None\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "operator",
+      "message": "Unsupported operand types for < (\"datetime\" and \"None\")",
+      "count": 2
+    },
+    {
+      "path": "app/services/disposition_intelligence.py",
+      "code": "operator",
+      "message": "Unsupported operand types for > (\"datetime\" and \"None\")",
+      "count": 2
+    },
+    {
+      "path": "app/services/disposition_offer_room.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"get\" of \"dict\" has incompatible type \"UUID | None\"; expected \"UUID\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_offer_room.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"BuyerOffer | None\", variable has type \"BuyerOffer\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_offer_room.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"Transaction | None\", variable has type \"BuyerOffer | None\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/disposition_offer_room.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"TransactionChecklistItem | None\", variable has type \"BuyerOffer | None\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/elevenlabs_seller_agent.py",
+      "code": "arg-type",
+      "message": "Argument \"called_number\" to \"register_elevenlabs_call\" has incompatible type \"str | None\"; expected \"str\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/land_acquisition_profile.py",
+      "code": "arg-type",
+      "message": "Argument \"source_type\" to \"LandAcquisitionEvidenceRead\" has incompatible type \"str\"; expected \"Literal['seller_reported', 'provider_sourced', 'crm_record']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/land_acquisition_profile.py",
+      "code": "arg-type",
+      "message": "Argument \"status\" to \"LandAcquisitionFactRead\" has incompatible type \"str\"; expected \"Literal['known', 'unknown', 'conflict']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/land_acquisition_profile.py",
+      "code": "arg-type",
+      "message": "Argument \"status\" to \"LandAcquisitionReadinessRead\" has incompatible type \"str\"; expected \"Literal['ready_for_valuation_review', 'needs_seller_information', 'needs_due_diligence_review']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/land_acquisition_profile.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"object | None\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/lead_manager_copilot.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"get\" of \"dict\" has incompatible type \"str | None\"; expected \"str\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/messaging.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"twilio_status_payload_with_tenant_resolution\" has incompatible type \"dict[str, str]\"; expected \"dict[str, object]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/messaging.py",
+      "code": "arg-type",
+      "message": "Argument 2 to \"resolve_twilio_status_tenant\" has incompatible type \"dict[str, str]\"; expected \"dict[str, object]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"attempt_reviews\" to \"_pilot_gates\" has incompatible type \"Sequence[ProspectingDialerPilotAttemptReview]\"; expected \"list[ProspectingDialerPilotAttemptReview]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"captured_at\" to \"_seller_child_evidence\" has incompatible type \"datetime | None\"; expected \"datetime\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"context\" to \"_audit_mutation\" has incompatible type \"dict[str, str]\"; expected \"dict[str, object] | None\"",
+      "count": 3
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"context\" to \"_idempotent_pilot_replay\" has incompatible type \"dict[str, str]\"; expected \"dict[str, object] | None\"",
+      "count": 6
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"review_status\" to \"ProspectingDialerPilotAttemptQueueRead\" has incompatible type \"str\"; expected \"Literal['pending', 'passed', 'failed']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"shift_reviews\" to \"_pilot_gates\" has incompatible type \"Sequence[ProspectingDialerPilotShiftReview]\"; expected \"list[ProspectingDialerPilotShiftReview]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"status\" to \"ProspectingDialerPilotAttemptReviewRead\" has incompatible type \"str\"; expected \"Literal['pending', 'passed', 'failed']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"status\" to \"ProspectingDialerPilotRead\" has incompatible type \"str\"; expected \"Literal['draft', 'smoke_testing', 'running', 'ready_for_owner_review', 'accepted', 'rejected', 'rolled_back', 'revoked', 'cancelled']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"status\" to \"ProspectingDialerPilotShiftReviewRead\" has incompatible type \"str\"; expected \"Literal['pending', 'passed', 'failed']\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_as_utc\" has incompatible type \"datetime | None\"; expected \"datetime\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_ordered_switch_pair\" has incompatible type \"Sequence[AuditEvent]\"; expected \"list[AuditEvent]\"",
+      "count": 3
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"dict\" has incompatible type \"Sequence[Row[tuple[UUID, str]]]\"; expected \"Iterable[tuple[Never, Never]]\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"_attempt_review_queue\" has incompatible type \"Sequence[ProspectingDialerPilotAttemptReview]\"; expected \"list[ProspectingDialerPilotAttemptReview]\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"_persist_reconciled_provider_costs\" has incompatible type \"Sequence[ProspectingDialLeg]\"; expected \"list[ProspectingDialLeg]\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"_persisted_provider_cost_graph\" has incompatible type \"Sequence[ProspectingDialLeg]\"; expected \"list[ProspectingDialLeg]\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"_provider_identity_graph\" has incompatible type \"Sequence[ProspectingDialLeg]\"; expected \"list[ProspectingDialLeg]\"",
+      "count": 4
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"abandon_untouched_browser_call\" has incompatible type \"ProspectingVoiceGraph | None\"; expected \"ProspectingVoiceGraph\"",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"object\", variable has type \"ProspectingVoiceGraph | None\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a return type annotation",
+      "count": 3
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "return-value",
+      "message": "Incompatible return value type (got \"tuple[None, None, Sequence[ProspectingDialLeg]]\", expected \"tuple[ProspectingAttempt | None, ProspectingDialSession | None, list[ProspectingDialLeg]]\")",
+      "count": 3
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "return-value",
+      "message": "Incompatible return value type (got \"tuple[ProspectingAttempt, ProspectingDialSession, Sequence[ProspectingDialLeg]]\", expected \"tuple[ProspectingAttempt | None, ProspectingDialSession | None, list[ProspectingDialLeg]]\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "return-value",
+      "message": "Incompatible return value type (got \"tuple[Sequence[ProspectingDialSession], list[ProspectingDialSession], bool]\", expected \"tuple[list[ProspectingDialSession], list[ProspectingDialSession], bool]\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"Any | None\" has no attribute \"get\"",
+      "count": 2
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "var-annotated",
+      "message": "Need type annotation for \"stored_attempts\" (hint: \"stored_attempts: dict[<type>, <type>] = ...\")",
+      "count": 1
+    },
+    {
+      "path": "app/services/prospecting_dialer_acceptance.py",
+      "code": "var-annotated",
+      "message": "Need type annotation for \"stored_shifts\" (hint: \"stored_shifts: dict[<type>, <type>] = ...\")",
+      "count": 1
+    },
+    {
+      "path": "scripts/capture_batchdialer_bd1.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, str]\"; expected \"float\"",
+      "count": 1
+    },
+    {
+      "path": "scripts/capture_batchdialer_bd1.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, str]\"; expected \"int\"",
+      "count": 1
+    },
+    {
+      "path": "scripts/capture_batchdialer_bd1.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"bool\", variable has type \"Match[str] | None\")",
+      "count": 1
+    },
+    {
+      "path": "scripts/capture_batchdialer_bd1.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, Any] | list[Any] | str | int | float | bool | None\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_address_only_lead_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"constraints\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_batchdialer_bd1_capture.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, object]\"; expected \"bool\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_bd1_capture.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, object]\"; expected \"float\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_bd1_capture.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, object]\"; expected \"int\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_bd1_capture.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, object]\"; expected \"str | None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_bd1_capture.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"CaptureConfig\" has incompatible type \"**dict[str, object]\"; expected \"str\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_call_facts.py",
+      "code": "attr-defined",
+      "message": "Module \"app.services.batchdialer_direct\" does not explicitly export attribute \"upsert_batchdialer_call_fact\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_direct.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"isoformat\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_direct.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 11
+    },
+    {
+      "path": "tests/test_batchdialer_direct.py",
+      "code": "override",
+      "message": "Return type \"datetime\" of \"now\" incompatible with return type \"ControlledDateTime\" in supertype \"datetime.datetime\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_va_performance.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 4
+    },
+    {
+      "path": "tests/test_batchdialer_va_performance.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"BatchDialerAgentIdentity | None\" has no attribute \"mapped_at\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_batchdialer_va_performance.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"email\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_batchdialer_va_performance.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"id\"",
+      "count": 18
+    },
+    {
+      "path": "tests/test_buyer_discovery_governance.py",
+      "code": "override",
+      "message": "Signature of \"get_usage\" incompatible with supertype \"TieredDealMachineClient\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_buyer_network_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"indexes\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_buyer_profiles.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, object]\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_buyers.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_advisory_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"name\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_advisory_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"nullable\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_advisory_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"type\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_advisory_migration.py",
+      "code": "index",
+      "message": "Value of type \"object\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_hardening.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, Any]\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_hardening.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"str\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_hardening.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a return type annotation",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_hardening.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"datetime | None\" has no attribute \"isoformat\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_migration.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_model_index_signature\" has incompatible type \"FromClause\"; expected \"Table\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_buyer_pool_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"foreign_key_constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_copilot_migration.py",
+      "code": "attr-defined",
+      "message": "\"FetchedValue\" has no attribute \"arg\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_desk.py",
+      "code": "attr-defined",
+      "message": "Module \"app.services.disposition_desk\" does not explicitly export attribute \"deals\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_desk.py",
+      "code": "attr-defined",
+      "message": "Module \"app.services.disposition_desk\" does not explicitly export attribute \"disposition_readiness\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_desk.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"DealOverviewRead\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 1 has incompatible type \"*tuple[object, ...]\"; expected \"Buyer\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 1 has incompatible type \"*tuple[object, ...]\"; expected \"DispositionCase\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 1 has incompatible type \"*tuple[object, ...]\"; expected \"Principal\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 1 has incompatible type \"*tuple[object, ...]\"; expected \"Session\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 2 has incompatible type \"**dict[str, object]\"; expected \"Buyer\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 2 has incompatible type \"**dict[str, object]\"; expected \"DispositionCase\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 2 has incompatible type \"**dict[str, object]\"; expected \"Principal\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 2 has incompatible type \"**dict[str, object]\"; expected \"Session\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "arg-type",
+      "message": "Argument 2 has incompatible type \"**dict[str, object]\"; expected \"bool\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_execution.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a return type annotation",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_handoff.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 10
+    },
+    {
+      "path": "tests/test_disposition_handoff.py",
+      "code": "operator",
+      "message": "Unsupported right operand type for in (\"str | None\")",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"Buyer | None\", variable has type \"Buyer\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "dict-item",
+      "message": "Unpacked dict entry 1 has incompatible type \"object\"; expected \"SupportsKeysAndGetItem[Any, Any]\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, Any]\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"str\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "operator",
+      "message": "Unsupported operand types for + (\"None\" and \"timedelta\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"email\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"id\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"datetime | None\" has no attribute \"date\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"datetime | None\" has no attribute \"isoformat\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"str | None\" has no attribute \"lower\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_offer_room.py",
+      "code": "union-attr",
+      "message": "Item \"timedelta\" of \"datetime | timedelta\" has no attribute \"isoformat\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room_migration.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_model_indexes\" has incompatible type \"FromClause\"; expected \"Table\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_offer_room_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"foreign_key_constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, object]\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a type annotation for one or more parameters",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['database', 's3']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'clamav']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'dealmachine']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'draft']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'shadow', 'candidate']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'simulate', 'google', 'resend']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'simulate', 'live']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['disabled', 'simulate', 'signwell']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['local', 'test', 'production']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['openai_realtime', 'elevenlabs']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"Literal['v2.2', 'v3']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"bool\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"float\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"int\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"str | None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"Settings\" has incompatible type \"**dict[str, object]\"; expected \"str\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 4 has incompatible type \"**dict[str, object]\"; expected \"UUID | None\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "arg-type",
+      "message": "Argument 4 has incompatible type \"**dict[str, object]\"; expected \"set[str]\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"APP_ENV\" for \"Settings\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"COMMUNICATION_PROVIDER_MODE\" for \"Settings\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"DISPOSITION_OUTREACH_PHYSICAL_POSTAL_ADDRESS\" for \"Settings\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_outreach_delivery.py",
+      "code": "no-untyped-call",
+      "message": "Call to untyped function (unknown) in typed context",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_migration.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"model_index_signature\" has incompatible type \"FromClause\"; expected \"Table\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_outreach_migration.py",
+      "code": "attr-defined",
+      "message": "\"FromClause\" has no attribute \"foreign_key_constraints\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_disposition_packet_links.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"bytes\" has incompatible type \"bytes | None\"; expected \"Iterable[SupportsIndex] | SupportsIndex | SupportsBytes | Buffer\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_disposition_readiness.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"email\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 3
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"dict[str, Any]\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "no-any-return",
+      "message": "Returning Any from function declared to return \"str\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a return type annotation",
+      "count": 2
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "override",
+      "message": "Return type \"datetime\" of \"now\" incompatible with return type \"FrozenDateTime\" in supertype \"datetime.datetime\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"BuyerOffer | None\" has no attribute \"updated_at\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"BuyerProofDocument | None\" has no attribute \"updated_at\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "union-attr",
+      "message": "Item \"None\" of \"User | None\" has no attribute \"email\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_dispositions.py",
+      "code": "var-annotated",
+      "message": "Need type annotation for \"scenarios\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_leads.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 4
+    },
+    {
+      "path": "tests/test_prospecting_call_evidence.py",
+      "code": "index",
+      "message": "Value of type \"object\" is not indexable",
+      "count": 2
+    },
+    {
+      "path": "tests/test_prospecting_call_evidence.py",
+      "code": "operator",
+      "message": "Unsupported operand types for < (\"int\" and \"None\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_callbacks_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"name\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument \"key\" to \"sorted\" has incompatible type \"Callable[[dict[str, object]], object]\"; expected \"Callable[[dict[str, object]], SupportsDunderLT[Any] | SupportsDunderGT[Any]]\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_contact_disposition_evidence\" has incompatible type \"SimpleNamespace\"; expected \"ProspectingAttempt\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 2 to \"_contact_disposition_evidence\" has incompatible type \"SimpleNamespace\"; expected \"ProspectingDialLeg\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "arg-type",
+      "message": "Argument 4 to \"_start_pilot\" has incompatible type \"str | None\"; expected \"str\"",
+      "count": 6
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "list-item",
+      "message": "List item 0 has incompatible type \"str | None\"; expected \"str\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "misc",
+      "message": "The return type of a generator function should be \"Generator\" or one of its supertypes",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "no-untyped-def",
+      "message": "Function is missing a return type annotation",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance.py",
+      "code": "return-value",
+      "message": "Incompatible return value type (got \"object\", expected \"SupportsDunderLT[Any] | SupportsDunderGT[Any]\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "arg-type",
+      "message": "Argument \"decision\" to \"ProspectingDialerPilotDecision\" has incompatible type \"str\"; expected \"Literal['accept', 'reject']\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"_allowed_actions\" has incompatible type \"None\"; expected \"Session\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "arg-type",
+      "message": "Argument 2 to \"_allowed_actions\" has incompatible type \"SimpleNamespace\"; expected \"Principal\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "arg-type",
+      "message": "Argument 3 to \"_allowed_actions\" has incompatible type \"SimpleNamespace\"; expected \"ProspectingDialerPilot\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "attr-defined",
+      "message": "\"Constraint\" has no attribute \"sqltext\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"name\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"nullable\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "attr-defined",
+      "message": "\"object\" has no attribute \"server_default\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_acceptance_migration.py",
+      "code": "attr-defined",
+      "message": "Module \"app.services.prospecting_dialer_acceptance\" does not explicitly export attribute \"ProspectingDialerPilotDecision\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument \"appointment_location_type\" to \"ProspectingAttemptComplete\" has incompatible type \"str\"; expected \"Literal['phone', 'video', 'seller_property', 'office'] | None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument \"mutation_id\" to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"str\"; expected \"UUID\"",
+      "count": 2
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"**dict[str, object]\"; expected \"Literal['not_covered', 'answered', 'needs_follow_up', 'conflict']\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"**dict[str, object]\"; expected \"UUID\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"**dict[str, object]\"; expected \"int\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"**dict[str, object]\"; expected \"str | None\"",
+      "count": 3
+    },
+    {
+      "path": "tests/test_prospecting_dialer_coordinator.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_voice.py",
+      "code": "arg-type",
+      "message": "Argument 1 to \"assert_private_no_store\" has incompatible type \"httpx2._models.Response\"; expected \"httpx._models.Response\"",
+      "count": 8
+    },
+    {
+      "path": "tests/test_prospecting_voice.py",
+      "code": "assignment",
+      "message": "Incompatible types in assignment (expression has type \"CallRecord | None\", variable has type \"CallRecord\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_voice.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_voice.py",
+      "code": "operator",
+      "message": "Unsupported operand types for + (\"None\" and \"int\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_prospecting_workbench.py",
+      "code": "arg-type",
+      "message": "Argument \"mutation_id\" to \"ProspectingQualificationAutosaveRequest\" has incompatible type \"str\"; expected \"UUID\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_public_intake.py",
+      "code": "index",
+      "message": "Unsupported target for indexed assignment (\"object\")",
+      "count": 2
+    },
+    {
+      "path": "tests/test_twilio_voice.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 2
+    },
+    {
+      "path": "tests/test_va_performance_coach.py",
+      "code": "dict-item",
+      "message": "Dict entry 0 has incompatible type \"str\": \"int\"; expected \"str\": \"None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_va_performance_coach.py",
+      "code": "dict-item",
+      "message": "Dict entry 1 has incompatible type \"str\": \"int\"; expected \"str\": \"None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_va_performance_coach.py",
+      "code": "dict-item",
+      "message": "Dict entry 2 has incompatible type \"str\": \"int\"; expected \"str\": \"None\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_va_performance_coach.py",
+      "code": "index",
+      "message": "Value of type \"dict[str, Any] | None\" is not indexable",
+      "count": 3
+    },
+    {
+      "path": "tests/test_va_performance_coach.py",
+      "code": "return-value",
+      "message": "Incompatible return value type (got \"tuple[dict[str, Any], dict[str, None]]\", expected \"tuple[dict[str, Any], dict[str, int | None]]\")",
+      "count": 1
+    },
+    {
+      "path": "tests/test_voice_call_provider.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"APP_ENV\" for \"Settings\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_voice_call_provider.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"TWILIO_ACCOUNT_SID\" for \"Settings\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_voice_call_provider.py",
+      "code": "call-arg",
+      "message": "Unexpected keyword argument \"TWILIO_AUTH_TOKEN\" for \"Settings\"",
+      "count": 1
+    },
+    {
+      "path": "tests/test_voice_call_provider.py",
+      "code": "unused-ignore",
+      "message": "Unused \"type: ignore\" comment",
+      "count": 1
+    },
+    {
+      "path": "tests/test_worker.py",
+      "code": "attr-defined",
+      "message": "Module \"app.worker\" does not explicitly export attribute \"operation_retry_due\"",
+      "count": 1
+    }
+  ]
+}

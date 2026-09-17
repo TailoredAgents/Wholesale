@@ -186,13 +186,11 @@ def process_next_meta_lead_event(
     if not settings.zapier_facebook_leads_enabled:
         return None
     now = datetime.now(UTC)
-    configured = settings.zapier_facebook_leads_configured
     event = db.scalar(
         select(MetaLeadEvent)
         .where(
             or_(
-                MetaLeadEvent.status.in_({"pending", "retry"}),
-                MetaLeadEvent.status == "blocked" if configured else false(),
+                MetaLeadEvent.status.in_({"pending", "retry", "blocked"}),
                 and_(
                     MetaLeadEvent.status == "processing",
                     MetaLeadEvent.last_attempt_at <= now - timedelta(minutes=5),
@@ -208,14 +206,6 @@ def process_next_meta_lead_event(
     event.attempt_count += 1
     event.last_attempt_at = now
     event.next_attempt_at = None
-    if not configured:
-        event.status = "blocked"
-        event.last_error = "Missing configuration: " + ", ".join(
-            settings.zapier_facebook_leads_configuration_blockers
-        )
-        db.commit()
-        return event.id
-
     event.status = "processing"
     db.commit()
     try:

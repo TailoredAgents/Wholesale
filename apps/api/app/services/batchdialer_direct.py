@@ -56,6 +56,7 @@ from app.services.inbox import (
     update_conversation_activity,
 )
 from app.services.lead_manager import ensure_inbound_case
+from app.services.operations import touch_worker_operation_progress
 from app.services.property_intelligence import enqueue_property_research
 from app.services.public_intake import (
     apply_public_intake_context,
@@ -311,6 +312,7 @@ def poll_batchdialer_direct(db: Session, settings: Settings) -> UUID | None:
                     seconds=settings.batchdialer_checkpoint_lease_seconds
                 )
                 db.commit()
+                touch_worker_operation_progress(db, "batchdialer_direct_poll")
                 if not page.next_page:
                     break
                 if page.next_page == cursor or page.next_page in seen_cursors:

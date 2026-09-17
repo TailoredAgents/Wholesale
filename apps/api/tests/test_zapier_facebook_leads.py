@@ -397,6 +397,31 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     assert alert.last_error is None
 
 
+def test_worker_processes_an_ingress_validated_event_without_ingress_secrets(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session)
+    response = post_lead(TestClient(app), webhook_payload("987654321012399"))
+    assert response.status_code == 200
+    worker_settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "",
+        }
+    )
+
+    event_id = process_next_meta_lead_event(db_session, worker_settings)
+
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None
+    assert event.status == "processed"
+    assert event.lead_id is not None
+
+
 def test_processed_lead_without_eligible_sms_recipient_records_durable_evidence(
     db_session: Session,
     api_db_override: None,

@@ -1937,10 +1937,11 @@ The deployed API worker handles recurring operational jobs such as:
 Each sweep gives every operation one opportunity to process work before the next sweep, so a busy
 high-priority queue cannot indefinitely starve call, email, or other later queues. A separate
 heartbeat thread refreshes liveness during long provider calls without clearing an already
-degraded state. Main-loop progress and the current operation are recorded independently. `/ready`
-therefore catches a live-but-hung loop after `WORKER_OPERATION_STALL_SECONDS` (600 seconds in
-production) without classifying a normal multi-provider operation as stalled merely because it
-lasts longer than the heartbeat freshness window.
+degraded state. Main-loop progress and the current operation are recorded independently.
+`/health/operations` therefore catches a live-but-hung loop after
+`WORKER_OPERATION_STALL_SECONDS` (600 seconds in production) without classifying a normal
+multi-provider operation as stalled merely because it lasts longer than the heartbeat freshness
+window. `/ready` is intentionally limited to the API and its required database dependency.
 
 Resend provider events use a UUID-fenced processing lease, bounded exponential retry, stale-claim
 recovery, and a terminal dead-letter state. A reclaimed event cannot be overwritten by its stale

@@ -1,10 +1,13 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
 services:
   - type: web
     name: oakwell-web
     runtime: node
     rootDir: apps/web
+    autoDeployTrigger: checksPass
     buildCommand: npm ci --workspaces=false && npm run build
     startCommand: npm run start
+    healthCheckPath: /health
     envVars:
       - key: API_BASE_URL
         value: https://api.stonegatehb.com
@@ -43,14 +46,15 @@ services:
     name: oakwell-api
     runtime: python
     rootDir: apps/api
+    autoDeployTrigger: checksPass
     buildCommand: pip install uv && uv sync --frozen
     startCommand: uv run alembic upgrade head && uv run python -m app.cli.bootstrap_from_env && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: APP_ENV
         value: production
       - key: DEV_AUTH_ENABLED
-        value: false
+        value: "false"
       - key: DATABASE_URL
         fromDatabase:
           name: oakwell-postgres
@@ -83,7 +87,7 @@ services:
       - key: COMMUNICATION_PROVIDER_MODE
         value: live
       - key: WORKER_READINESS_REQUIRED
-        value: true
+        value: "true"
       - key: WORKER_STALE_AFTER_SECONDS
         value: 120
       - key: WORKER_OPERATION_STALL_SECONDS
@@ -95,7 +99,7 @@ services:
       - key: SENTRY_TRACES_SAMPLE_RATE
         value: 0.05
       - key: AI_ENABLED
-        value: true
+        value: "true"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_BASE_URL
@@ -113,7 +117,7 @@ services:
       - key: OPENAI_HELP_REASONING_EFFORT
         value: low
       - key: OPENAI_WEB_SEARCH_ENABLED
-        value: true
+        value: "true"
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 75
       - key: OPENAI_PRICING_OVERRIDES_JSON
@@ -127,9 +131,9 @@ services:
       - key: OPENAI_REALTIME_VOICE
         value: marin
       - key: OPENAI_REALTIME_LINE_NUMBER
-        value: +14708887952
+        value: "+14708887952"
       - key: OPENAI_REALTIME_TRANSFER_NUMBER
-        value: +16785417725
+        value: "+16785417725"
       - key: OPENAI_REALTIME_MAX_CALL_SECONDS
         value: 900
       - key: OPENAI_PROJECT_ID
@@ -147,13 +151,13 @@ services:
       - key: ELEVENLABS_TOOL_SECRET
         sync: false
       - key: ELEVENLABS_LINE_NUMBER
-        value: +14708887952
+        value: "+14708887952"
       - key: ELEVENLABS_TRANSFER_NUMBER
-        value: +16785417725
+        value: "+16785417725"
       - key: ELEVENLABS_WEBHOOK_MAX_BYTES
         value: 2000000
       - key: CALL_TRANSCRIPTION_ENABLED
-        value: true
+        value: "true"
       - key: CALL_TRANSCRIPTION_POLL_SECONDS
         value: 10
       - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
@@ -161,7 +165,7 @@ services:
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
       - key: PROSPECTING_NATIVE_DIALER_ENABLED
-        value: false
+        value: "false"
       - key: PROSPECTING_NATIVE_DIALER_MAX_LINES
         value: 1
       - key: PROSPECTING_NATIVE_DIALER_LEASE_SECONDS
@@ -173,11 +177,11 @@ services:
       - key: PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS
         value: 5
       - key: EMAIL_ENABLED
-        value: true
+        value: "true"
       - key: EMAIL_PROVIDER
         value: resend
       - key: EMAIL_SYNC_ENABLED
-        value: true
+        value: "true"
       - key: EMAIL_SYNC_POLL_SECONDS
         value: 30
       - key: EMAIL_MAX_ATTACHMENT_BYTES
@@ -233,7 +237,7 @@ services:
       - key: DOCUMENT_MALWARE_SCANNER
         value: disabled
       - key: DOCUMENT_MALWARE_SCAN_REQUIRED
-        value: false
+        value: "false"
       - key: CLAMAV_HOST
         sync: false
       - key: CLAMAV_PORT
@@ -251,15 +255,15 @@ services:
       - key: ESIGN_WEBHOOK_CALLBACK_URL
         value: https://api.stonegatehb.com/api/v1/webhooks/esign/signwell
       - key: ESIGN_TEST_MODE
-        value: true
+        value: "true"
       - key: ESIGN_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
-        value: true
+        value: "true"
       - key: LAND_WORKFLOW_ENABLED
-        value: false
+        value: "false"
       - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
         value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
@@ -333,7 +337,7 @@ services:
       - key: META_TEST_EVENT_CODE
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
-        value: true
+        value: "true"
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_ALLOWED_FORM_IDS
@@ -373,9 +377,9 @@ services:
       - key: BATCHDIALER_CHECKPOINT_LEASE_SECONDS
         value: 90
       - key: BATCHDIALER_TRANSCRIPT_SYNC_ENABLED
-        value: true
+        value: "true"
       - key: PUBLIC_INTAKE_RATE_LIMIT_ENABLED
-        value: true
+        value: "true"
       - key: PUBLIC_INTAKE_RATE_LIMIT_REQUESTS
         value: 5
       - key: PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS
@@ -403,7 +407,7 @@ services:
       - key: BRIDGE_API_KEY
         sync: false
       - key: TWILIO_SMS_ENABLED
-        value: true
+        value: "true"
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
@@ -419,7 +423,7 @@ services:
       - key: TWILIO_WEBHOOK_BASE_URL
         value: https://api.stonegatehb.com
       - key: TWILIO_VALIDATE_WEBHOOK_SIGNATURES
-        value: true
+        value: "true"
       - key: TWILIO_SMS_TIMEZONE
         value: America/New_York
       - key: TWILIO_SMS_ALLOWED_START_HOUR
@@ -453,7 +457,7 @@ services:
       - key: UNDERWRITING_ACTIVE_METHODOLOGY_VERSION
         value: v3
       - key: UNDERWRITING_V3_SHADOW_ENABLED
-        value: false
+        value: "false"
       - key: UNDERWRITING_OFFER_LOW_PERCENTAGE
         value: 0.65
       - key: UNDERWRITING_OFFER_HIGH_PERCENTAGE
@@ -487,13 +491,14 @@ services:
     name: oakwell-worker
     runtime: python
     rootDir: apps/api
+    autoDeployTrigger: checksPass
     buildCommand: pip install uv && uv sync --frozen
     startCommand: uv run python -m app.worker
     envVars:
       - key: APP_ENV
         value: production
       - key: DEV_AUTH_ENABLED
-        value: false
+        value: "false"
       - key: DATABASE_URL
         fromDatabase:
           name: oakwell-postgres
@@ -534,7 +539,7 @@ services:
       - key: SENTRY_TRACES_SAMPLE_RATE
         value: 0.05
       - key: AI_ENABLED
-        value: true
+        value: "true"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_BASE_URL
@@ -554,7 +559,7 @@ services:
       - key: OPENAI_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe-diarize
       - key: CALL_TRANSCRIPTION_ENABLED
-        value: true
+        value: "true"
       - key: CALL_TRANSCRIPTION_POLL_SECONDS
         value: 10
       - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
@@ -562,7 +567,7 @@ services:
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
       - key: PROSPECTING_NATIVE_DIALER_ENABLED
-        value: false
+        value: "false"
       - key: PROSPECTING_NATIVE_DIALER_MAX_LINES
         value: 1
       - key: PROSPECTING_NATIVE_DIALER_LEASE_SECONDS
@@ -574,11 +579,11 @@ services:
       - key: PROSPECTING_NATIVE_DIALER_RESERVED_COST_CENTS
         value: 5
       - key: EMAIL_ENABLED
-        value: true
+        value: "true"
       - key: EMAIL_PROVIDER
         value: resend
       - key: EMAIL_SYNC_ENABLED
-        value: true
+        value: "true"
       - key: EMAIL_SYNC_POLL_SECONDS
         value: 30
       - key: EMAIL_MAX_ATTACHMENT_BYTES
@@ -646,11 +651,7 @@ services:
       - key: META_TEST_EVENT_CODE
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
-        value: true
-      - key: ZAPIER_FACEBOOK_PAGE_ID
-        sync: false
-      - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
-        value: 65536
+        value: "true"
       - key: BATCHDIALER_API_BASE_URL
         value: https://app.batchdialer.com/api
       - key: BATCHDIALER_API_KEY
@@ -678,7 +679,7 @@ services:
       - key: BATCHDIALER_CHECKPOINT_LEASE_SECONDS
         value: 90
       - key: BATCHDIALER_TRANSCRIPT_SYNC_ENABLED
-        value: true
+        value: "true"
       - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
@@ -696,9 +697,9 @@ services:
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
-        value: true
+        value: "true"
       - key: LAND_WORKFLOW_ENABLED
-        value: false
+        value: "false"
       - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
         value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
@@ -736,7 +737,7 @@ services:
       - key: UNDERWRITING_AI_COMP_ANALYST_MODE
         value: draft
       - key: TWILIO_SMS_ENABLED
-        value: true
+        value: "true"
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

@@ -763,7 +763,8 @@ administrator should run restoration because a wrong database URL can be destruc
 Use:
 
 - `/health` to confirm the API process responds.
-- `/ready` to confirm dependencies and required worker readiness.
+- `/ready` to confirm API/database readiness, and `/health/operations` to confirm required worker
+  and provider health.
 - Render deployment and service logs for errors.
 - Stonegate provider status and operational-failure records for workflow failures.
 

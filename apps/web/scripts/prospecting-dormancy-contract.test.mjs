@@ -73,7 +73,7 @@ test("manual attempt authority remains assignment-bound and unknown mode cannot 
 
 test("both deployed services declare the native prospecting dialer dormant", () => {
   const matches = render.match(
-    /key: PROSPECTING_NATIVE_DIALER_ENABLED\s+value: false/g,
+    /key: PROSPECTING_NATIVE_DIALER_ENABLED\s+value: ["']?false["']?/g,
   );
   assert.equal(matches?.length, 2);
 });

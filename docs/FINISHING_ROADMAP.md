@@ -135,9 +135,10 @@ Some phases overlap. Their exit criteria remain independent.
 3. Use a disposable staff account to test deactivation and immediate access loss.
 4. Reassign that account's open work and verify history remains attributable.
 5. Run the production smoke test against the branded website and API.
-6. Confirm `/ready` reports fresh worker liveness, exposes the current operation, remains ready
-   during a normal long provider call, and reports `stalled` only after the configured 600-second
-   production progress threshold.
+6. Confirm `/ready` admits traffic when the API database is available, while
+   `/health/operations` reports fresh worker liveness, exposes the current operation, remains
+   healthy during a normal long provider call, and reports `stalled` only after the configured
+   600-second production progress threshold.
 7. Confirm Cloudflare owns the production client-IP header path and add distributed edge/WAF rate
    limiting before broad traffic or multiple API instances.
 8. Complete controlled Resend mailbox/dead-letter acceptance and decide the attachment malware-

@@ -1,5 +1,6 @@
 import signal
 import threading
+import time
 from collections.abc import Callable
 from uuid import UUID
 
@@ -54,6 +55,7 @@ from app.services.operations import (
     record_worker_heartbeat,
     register_worker,
     resolve_operation_failures,
+    resolve_retired_operation_failures,
     safe_meta_runtime_metadata,
     touch_worker_heartbeat,
 )
@@ -141,6 +143,15 @@ def run_worker(stop_event: threading.Event) -> None:
     meta_runtime_metadata = safe_meta_runtime_metadata(settings)
     with SessionLocal() as db:
         register_worker(db, runtime_metadata=meta_runtime_metadata)
+        retired_failure_count = resolve_retired_operation_failures(
+            db,
+            {operation_name for operation_name, _operation in WORKER_OPERATIONS},
+        )
+        if retired_failure_count:
+            logger.info(
+                "communications_worker_retired_failures_resolved",
+                count=retired_failure_count,
+            )
         _recipients, staff_alert_recipients = eligible_staff_alert_recipients(db)
         (
             _inbound_recipients,
@@ -225,6 +236,8 @@ def run_worker(stop_event: threading.Event) -> None:
             if stop_event.is_set():
                 break
             result: UUID | None = None
+            outcome = "idle"
+            operation_started_at = time.perf_counter()
             try:
                 with SessionLocal() as operations_db:
                     mark_worker_operation_started(operations_db, operation_name)
@@ -234,9 +247,10 @@ def run_worker(stop_event: threading.Event) -> None:
                         service_name=COMMUNICATIONS_WORKER,
                         operation_name=operation_name,
                     ):
-                        had_error = True
+                        outcome = "backing_off"
                         continue
                     result = operation(db, settings)
+                    outcome = "processed" if result is not None else "idle"
                 with SessionLocal() as operations_db:
                     resolve_operation_failures(
                         operations_db,
@@ -245,6 +259,7 @@ def run_worker(stop_event: threading.Event) -> None:
                     )
             except Exception as exc:
                 had_error = True
+                outcome = "failed"
                 sentry_sdk.capture_exception(exc)
                 # Sentry retains the traceback without local variables. Render only needs
                 # the bounded error summary; rich local-variable tracebacks can expose the
@@ -287,7 +302,12 @@ def run_worker(stop_event: threading.Event) -> None:
             finally:
                 try:
                     with SessionLocal() as operations_db:
-                        mark_worker_operation_finished(operations_db, operation_name)
+                        mark_worker_operation_finished(
+                            operations_db,
+                            operation_name,
+                            outcome=outcome,
+                            duration_ms=round((time.perf_counter() - operation_started_at) * 1000),
+                        )
                 except Exception as progress_exc:
                     logger.error(
                         "communications_worker_progress_record_failed",

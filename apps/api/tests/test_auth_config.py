@@ -137,7 +137,7 @@ def test_production_api_rejects_local_only_authorized_parties(
         get_settings.cache_clear()
 
 
-def test_production_api_startup_rejects_enabled_zapier_without_form_allowlist(
+def test_production_api_startup_keeps_optional_zapier_failure_out_of_api_readiness(
     monkeypatch: MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_ENV", "production")
@@ -150,7 +150,12 @@ def test_production_api_startup_rejects_enabled_zapier_without_form_allowlist(
     get_settings.cache_clear()
 
     try:
-        with pytest.raises(ValueError, match="ZAPIER_FACEBOOK_ALLOWED_FORM_IDS"):
-            create_app()
+        production_app = create_app()
+        settings = get_settings()
     finally:
         get_settings.cache_clear()
+
+    assert production_app.docs_url is None
+    assert settings.production_zapier_facebook_leads_configuration_blockers == (
+        "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS",
+    )
