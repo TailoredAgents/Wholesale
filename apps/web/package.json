@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "audit:contracts": "node --test \"scripts/*.test.mjs\"",
+    "audit:contracts": "node --test scripts/*.test.mjs",
     "audit:ia": "node --test scripts/os-ia-contract.test.mjs scripts/inbox-layout-contract.test.mjs",
     "audit:performance": "node --test scripts/public-performance-contract.test.mjs",
     "audit:meta": "node --test scripts/meta-tracking.test.mjs",
