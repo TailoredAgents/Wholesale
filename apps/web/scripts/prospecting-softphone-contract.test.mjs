@@ -152,8 +152,11 @@ test("concurrent initialization and connection are single-flight", async () => {
 test("a pre-call reservation blocks another runtime and can be released safely", async () => {
   const { ProspectingSoftphone } = await importSoftphoneForBehavior();
   const callbacks = { onStatus: () => {}, onTokenWillExpire: () => {} };
-  const first = new ProspectingSoftphone(callbacks);
-  const second = new ProspectingSoftphone(callbacks);
+  const dependencies = {
+    requestMicrophone: async () => ({ getTracks: () => [{ stop() {} }] }),
+  };
+  const first = new ProspectingSoftphone(callbacks, dependencies);
+  const second = new ProspectingSoftphone(callbacks, dependencies);
 
   assert.equal(first.reserveCallOwnership(), null);
   assert.throws(() => second.reserveCallOwnership(), /Only one browser call/);
