@@ -663,7 +663,7 @@ test("Inbox preserves usable mobile list, thread, composer, and details panes", 
   assert.match(inboxStyles, /\.threadPane\[data-mobile-active="true"\][\s\S]*height: 100%/);
   assert.match(inboxStyles, /\.filterRail[\s\S]*overflow-x: auto/);
   assert.match(inboxStyles, /\.mailboxRail[\s\S]*overflow-x: auto/);
-  assert.match(inboxStyles, /\.composer[\s\S]*max-height: min\(46dvh, 410px\)/);
+  assert.match(inboxStyles, /\.composer[\s\S]*max-height: min\(26dvh, 210px\)/);
   assert.match(inboxStyles, /\.mobileBackButton[\s\S]*min-width: 40px/);
 });
 

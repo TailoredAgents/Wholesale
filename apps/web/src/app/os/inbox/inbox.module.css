@@ -3202,7 +3202,7 @@
   }
 
   .composer {
-    max-height: min(34dvh, 280px);
+    max-height: min(26dvh, 210px);
     overscroll-behavior-y: contain;
   }
 

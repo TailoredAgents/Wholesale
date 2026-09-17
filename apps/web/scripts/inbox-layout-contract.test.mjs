@@ -26,5 +26,5 @@ test("the composer yields space to the timeline and scrolls its advanced control
   assert.match(composer, /max-height:\s*min\(300px, 38dvh\)/);
   assert.match(composer, /overflow-y:\s*auto/);
   assert.match(composer, /overscroll-behavior-y:\s*contain/);
-  assert.match(inboxStyles, /max-height:\s*min\(34dvh, 280px\)/);
+  assert.match(inboxStyles, /max-height:\s*min\(26dvh, 210px\)/);
 });
