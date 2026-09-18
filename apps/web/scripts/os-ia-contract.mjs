@@ -505,6 +505,7 @@ export const currentRouteInventory = [
       { name: "page", status: "consumed" },
       { name: "q", status: "consumed" },
       { name: "returnTo", status: "consumed" },
+      { name: "segment", status: "consumed" },
       { name: "source", status: "consumed" },
       { name: "status", status: "consumed" },
       { name: "tab", status: "consumed" },

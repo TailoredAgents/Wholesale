@@ -109,8 +109,8 @@ test("activity and offer controls hydrate the full Buyer Network independently o
   assert.match(networkFlow, /limit: "200"/);
   assert.match(networkFlow, /offset: String\(offset\)/);
   assert.match(networkFlow, /while \(offset < total\)/);
-  assert.doesNotMatch(networkFlow, /status: "/);
-  assert.match(networkFlow, /buyer\.archived_at === null && buyer\.status !== "archived"/);
+  assert.match(networkFlow, /segment: "network"/);
+  assert.doesNotMatch(networkFlow, /buyer\.status !== "archived"/);
   assert.match(workspace, /request<DispositionBuyerPoolPage>/);
   assert.match(workspace, /page_size: "100"/);
   assert.match(workspace, /source: "all"/);

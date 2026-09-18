@@ -343,14 +343,13 @@ export function DispositionWorkspace({
         const query = new URLSearchParams({
           limit: "200",
           offset: String(offset),
+          segment: "network",
         });
         const result = await request<BuyerListResponse>(
           `/api/v1/buyers?${query.toString()}`,
           { cache: "no-store" },
         );
-        buyers.push(...result.items.filter(
-          (buyer) => buyer.archived_at === null && buyer.status !== "archived",
-        ));
+        buyers.push(...result.items);
         total = result.total;
         if (!result.items.length) break;
         offset = result.offset + result.items.length;

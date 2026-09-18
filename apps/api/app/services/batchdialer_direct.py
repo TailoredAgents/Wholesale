@@ -1077,6 +1077,19 @@ def _process_investor_disposition_event(
                 else "The investor disposition was not configured for CRM conversion."
             ),
         }
+    if result not in INVESTOR_ACTIONABLE_RESULTS:
+        return {
+            "outcome": "investor_evidence_only",
+            "workflow_purpose": "investor_disposition",
+            "raw_disposition": _string(raw_cdr.get("disposition")),
+            "result": result,
+            "created_buyer": False,
+            "created_lead": False,
+            "reason": (
+                "The investor response was retained as campaign evidence without "
+                "creating an active buyer lead."
+            ),
+        }
     if campaign.disposition_case_id is None:
         return _route_claimed_qualification_review(
             db,
@@ -1281,7 +1294,7 @@ def _ensure_batchdialer_buyer(
         normalized_phone=phone,
         normalized_company_name=(investor.get("company_name") or "").strip().casefold() or None,
         buyer_type="cash_buyer",
-        status="active",
+        status="needs_review",
         source_key=PROVIDER,
         source_detail=investor.get("campaign_name") or "BatchDialer investor disposition",
         source_external_key=source_external_key,

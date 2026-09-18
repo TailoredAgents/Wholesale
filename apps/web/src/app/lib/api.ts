@@ -2838,6 +2838,16 @@ export type BuyerListItem = {
   temperature: string;
   tags: string[];
   asset_focus: BuyerAssetFocus | null;
+  deal_interests: Array<{
+    disposition_case_id: string;
+    deal_id: string;
+    property_id: string;
+    property_label: string;
+    lifecycle_stage: string;
+    decision_status: string;
+    campaign_name: string | null;
+    updated_at: string;
+  }>;
   last_contact_at: string | null;
   next_follow_up_at: string | null;
   verification_status: string;
@@ -2933,6 +2943,7 @@ export type BuyerQuery = {
   status?: string;
   ownerUserId?: string;
   sourceKey?: string;
+  segment?: "leads" | "network" | "past";
 };
 
 export type BuyerPage = {
@@ -7220,6 +7231,7 @@ export async function getBuyers(query: BuyerQuery = {}): Promise<BuyerPage> {
     params.set("owner_id", query.ownerUserId.trim());
   }
   if (query.sourceKey?.trim()) params.set("source_key", query.sourceKey.trim());
+  if (query.segment) params.set("segment", query.segment);
 
   try {
     const headers = await getServerApiHeaders();

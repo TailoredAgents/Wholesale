@@ -431,6 +431,17 @@ class BuyerDuplicatePreflightRead(BaseModel):
     matches: list[BuyerDuplicateMatchRead]
 
 
+class BuyerDealInterestRead(BaseModel):
+    disposition_case_id: UUID
+    deal_id: UUID
+    property_id: UUID
+    property_label: str
+    lifecycle_stage: str
+    decision_status: str
+    campaign_name: str | None = None
+    updated_at: datetime
+
+
 class BuyerRead(BaseModel):
     id: UUID
     name: str
@@ -460,6 +471,7 @@ class BuyerRead(BaseModel):
     verified_at: datetime | None
     last_contact_at: datetime | None
     asset_focus: Literal["house", "land", "both"] | None
+    deal_interests: list[BuyerDealInterestRead]
     buy_boxes: list[BuyerBuyBoxSummaryRead]
     archived_at: datetime | None
     archived_by_user_id: UUID | None

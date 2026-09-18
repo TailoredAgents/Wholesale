@@ -1520,11 +1520,56 @@ def test_investor_campaign_routes_result_to_buyer_and_disposition_without_seller
     assert event.payload["_stonegate"]["created_lead"] is False
     assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
     assert buyer is not None and buyer.normalized_phone == "+16785550199"
+    assert buyer.status == "needs_review"
     assert candidate is not None
     assert candidate.disposition_case_id == disposition_case.id
     assert candidate.buyer_id == buyer.id
     assert candidate.lifecycle_stage == "interested"
     assert engagement is not None and engagement.status == "interested"
+
+    buyer_leads_response = client.get(
+        "/api/v1/buyers?segment=leads",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert buyer_leads_response.status_code == 200, buyer_leads_response.text
+    buyer_lead = buyer_leads_response.json()["items"][0]
+    assert buyer_lead["id"] == str(buyer.id)
+    assert buyer_lead["deal_interests"] == [
+        {
+            "disposition_case_id": str(disposition_case.id),
+            "deal_id": str(deal.id),
+            "property_id": str(property_record.id),
+            "property_label": "700 Investor Lane, Ringgold, GA",
+            "lifecycle_stage": "interested",
+            "decision_status": "shortlisted",
+            "campaign_name": "Ringgold Investor Outreach",
+            "updated_at": buyer_lead["deal_interests"][0]["updated_at"],
+        }
+    ]
+    buyer_network_response = client.get(
+        "/api/v1/buyers?segment=network",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert buyer_network_response.status_code == 200, buyer_network_response.text
+    assert buyer_network_response.json()["total"] == 0
+
+    negative_cdr = sample_cdr("Not Interested")
+    negative_cdr["id"] = int(negative_cdr["id"]) + 1
+    negative_cdr["callid"] = "investor-negative-result"
+    archive_batchdialer_cdr(
+        db_session,
+        organization_id=organization.id,
+        cdr=negative_cdr,
+        now=datetime.now(UTC),
+    )
+    db_session.commit()
+    negative_event_id = process_next_batchdialer_direct_event(db_session, direct_settings())
+    negative_event = db_session.get(ProspectingProviderEvent, negative_event_id)
+    assert negative_event is not None
+    assert negative_event.payload["_stonegate"]["outcome"] == "investor_evidence_only"
+    assert negative_event.payload["_stonegate"]["created_buyer"] is False
+    assert db_session.scalar(select(func.count()).select_from(Buyer)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Lead)) == 1
 
 
 def test_direct_handoffs_are_tenant_scoped_and_reject_foreign_prior_leads(

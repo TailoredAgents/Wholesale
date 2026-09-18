@@ -28,6 +28,9 @@ from app.models.foundation import (
     ConsentRecord,
     Conversation,
     ConversationContextLink,
+    DispositionBuyerPoolCandidate,
+    DispositionCase,
+    Property,
     SuppressionRecord,
     User,
 )
@@ -40,6 +43,7 @@ from app.schemas.buyers import (
     BuyerCriteriaCreate,
     BuyerCriteriaRead,
     BuyerCriteriaUpdate,
+    BuyerDealInterestRead,
     BuyerDuplicateMatchRead,
     BuyerDuplicatePreflightRead,
     BuyerDuplicatePreflightRequest,
@@ -177,10 +181,13 @@ def list_buyers(
     owner_id: UUID | None = None,
     source_key: str | None = None,
     asset_class: str | None = None,
+    segment: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> BuyerListResponse:
     filters: list[Any] = [Buyer.organization_id == principal.organization_id]
+    if segment not in {None, "leads", "network", "past"}:
+        raise ValueError(f"Unsupported buyer segment: {segment}")
     if buyer_status:
         normalized_status = normalize_read_status(buyer_status)
         if normalized_status not in BUYER_READ_STATUSES:
@@ -193,6 +200,12 @@ def list_buyers(
             filters.extend((Buyer.archived_at.is_(None), Buyer.status == normalized_status))
     else:
         filters.append(Buyer.archived_at.is_(None))
+    if segment == "leads":
+        filters.append(Buyer.status == "needs_review")
+    elif segment == "network":
+        filters.append(Buyer.status.in_(("active", "paused")))
+    elif segment == "past":
+        filters.append(Buyer.completed_deals > 0)
     if owner_id is not None:
         filters.append(Buyer.relationship_owner_user_id == owner_id)
     if source_key:
@@ -1318,6 +1331,66 @@ def buyers_to_read(db: Session, principal: Principal, buyers: list[Buyer]) -> li
     criteria_by_buyer = get_criteria_by_buyer_id(db, principal, buyer_ids)
     buy_boxes_by_buyer = get_current_buy_boxes_by_buyer_id(db, principal, buyer_ids)
     proof_summary_by_buyer = _proof_summary_by_buyer_id(db, principal, buyer_ids)
+    deal_interests_by_buyer: dict[UUID, list[BuyerDealInterestRead]] = {}
+    deal_interest_rows = db.execute(
+        select(
+            DispositionBuyerPoolCandidate.buyer_id,
+            DispositionBuyerPoolCandidate.disposition_case_id,
+            DispositionCase.deal_id,
+            DispositionCase.property_id,
+            Property.street_address,
+            Property.city,
+            Property.state,
+            DispositionBuyerPoolCandidate.lifecycle_stage,
+            DispositionBuyerPoolCandidate.decision_status,
+            DispositionBuyerPoolCandidate.provenance_snapshot,
+            DispositionBuyerPoolCandidate.updated_at,
+        )
+        .join(
+            DispositionCase,
+            DispositionCase.id == DispositionBuyerPoolCandidate.disposition_case_id,
+        )
+        .join(Property, Property.id == DispositionCase.property_id)
+        .where(
+            DispositionBuyerPoolCandidate.organization_id == principal.organization_id,
+            DispositionBuyerPoolCandidate.buyer_id.in_(buyer_ids),
+        )
+        .order_by(DispositionBuyerPoolCandidate.updated_at.desc())
+    ).all()
+    for (
+        buyer_id,
+        disposition_case_id,
+        deal_id,
+        property_id,
+        street_address,
+        city,
+        state,
+        lifecycle_stage,
+        decision_status,
+        provenance_snapshot,
+        updated_at,
+    ) in deal_interest_rows:
+        if buyer_id is None:
+            continue
+        provenance = provenance_snapshot if isinstance(provenance_snapshot, dict) else {}
+        deal_interests_by_buyer.setdefault(buyer_id, []).append(
+            BuyerDealInterestRead(
+                disposition_case_id=disposition_case_id,
+                deal_id=deal_id,
+                property_id=property_id,
+                property_label=", ".join(
+                    value for value in (street_address, city, state) if value
+                ),
+                lifecycle_stage=lifecycle_stage,
+                decision_status=decision_status,
+                campaign_name=(
+                    str(provenance.get("campaign_name")).strip()
+                    if provenance.get("campaign_name")
+                    else None
+                ),
+                updated_at=updated_at,
+            )
+        )
     user_ids = {
         user_id
         for buyer in buyers
@@ -1487,6 +1560,7 @@ def buyers_to_read(db: Session, principal: Principal, buyers: list[Buyer]) -> li
                 verified_at=buyer.verified_at,
                 last_contact_at=last_contact_at,
                 asset_focus=asset_focus,
+                deal_interests=deal_interests_by_buyer.get(buyer.id, []),
                 buy_boxes=[
                     BuyerBuyBoxSummaryRead(
                         buy_box_id=header.id,

@@ -20,6 +20,7 @@ type BuyerSearchParams = {
   q?: string | string[];
   returnTo?: string | string[];
   source?: string | string[];
+  segment?: string | string[];
   status?: string | string[];
   tab?: string | string[];
 };
@@ -52,6 +53,9 @@ export default async function BuyersPage({
     q: firstValue(rawParams?.q) ?? "",
     returnTo: requestedReturnTo?.startsWith("/os/") ? requestedReturnTo : undefined,
     source: firstValue(rawParams?.source) ?? "",
+    segment: (["leads", "network", "past"] as const).find(
+      (segment) => segment === firstValue(rawParams?.segment),
+    ) ?? "network",
     status: firstValue(rawParams?.status) ?? "",
     tab: firstValue(rawParams?.tab),
   };
@@ -64,6 +68,7 @@ export default async function BuyersPage({
       q: params.q,
       sourceKey: params.source,
       status: params.status,
+      segment: params.segment,
     }),
     getWorkspaceProfile(),
   ]);
@@ -84,13 +89,13 @@ export default async function BuyersPage({
   return (
     <WorkspacePage>
       <PageHeader
-        description="Qualify buyer evidence, compare purchasing criteria, and keep the active deal pool ready."
+        description={params.segment === "leads" ? "Work deal-specific investor prospects, then promote the relationships worth keeping." : params.segment === "past" ? "Review investors who have completed a purchase with Stonegate." : "Maintain reusable investor relationships for future deals and outreach."}
         eyebrow="Deal flow / buyer evidence"
         meta={<StatusBadge tone={buyerData.apiConnected ? "success" : "danger"}>{buyerData.apiConnected ? `${buyerData.total} matching buyer${buyerData.total === 1 ? "" : "s"}` : "Buyer CRM unavailable"}</StatusBadge>}
-        title="Buyers"
+        title={params.segment === "leads" ? "Buyer Leads" : params.segment === "past" ? "Past Buyers" : "Buyer Network"}
       />
       <BuyersWorkspace
-        key={`${params.q}|${params.status}|${params.owner}|${params.source}|${params.asset}|${buyerData.page}|${selectedBuyerId ?? ""}|${params.create ? "create" : "browse"}`}
+        key={`${params.segment}|${params.q}|${params.status}|${params.owner}|${params.source}|${params.asset}|${buyerData.page}|${selectedBuyerId ?? ""}|${params.create ? "create" : "browse"}`}
         buyers={buyerData.buyers}
         apiError={buyerData.errorMessage}
         canEdit={Boolean(profile?.permissions.includes("buyers:edit"))}
@@ -106,6 +111,7 @@ export default async function BuyersPage({
           source: params.source,
           status: params.status,
         }}
+        segment={params.segment}
         page={buyerData.page}
         pageSize={buyerData.pageSize}
         relationshipOwners={buyerData.relationshipOwners}

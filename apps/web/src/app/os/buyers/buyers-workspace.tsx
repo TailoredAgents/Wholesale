@@ -146,6 +146,15 @@ const buyerTabs: Array<{ key: BuyerTab; label: string }> = [
 ];
 
 type BuyerFilters = { asset: "" | "house" | "land" | "both"; owner: string; q: string; source: string; status: string };
+type BuyerSegment = "leads" | "network" | "past";
+
+function buyerStatusLabel(status: string) {
+  return status === "needs_review"
+    ? "Buyer lead"
+    : status === "active"
+      ? "Buyer network"
+      : labelize(status);
+}
 
 export function BuyersWorkspace({
   apiError,
@@ -166,6 +175,7 @@ export function BuyersWorkspace({
   selectedBuyer,
   selectedProfile,
   sourceOptions,
+  segment,
   total,
 }: {
   apiError: string | null;
@@ -186,6 +196,7 @@ export function BuyersWorkspace({
   selectedBuyer: BuyerListItem | null;
   selectedProfile: BuyerProfile | null;
   sourceOptions: string[];
+  segment: BuyerSegment;
   total: number;
 }) {
   const detailBuyers = selectedBuyer && !buyers.some((buyer) => buyer.id === selectedBuyer.id) ? [selectedBuyer, ...buyers] : buyers;
@@ -220,7 +231,7 @@ export function BuyersWorkspace({
   const blocker = !selected ? "No buyer selected" : selected.status === "archived" ? "Archived relationship" : !selectedProofVerified ? "Proof of funds" : !selected.email && !selected.phone ? "Contact method" : !selected.buy_boxes.some((box) => box.verification_status === "verified") ? "Verified buy box" : "No active blocker";
   const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
 
-  function locationFor(overrides: Partial<BuyerFilters> & { buyer?: string | null; page?: number; tab?: BuyerTab } = {}) {
+  function locationFor(overrides: Partial<BuyerFilters> & { buyer?: string | null; page?: number; tab?: BuyerTab; segment?: BuyerSegment } = {}) {
     const values = new URLSearchParams();
     const merged = { ...initialFilters, ...overrides };
     if (merged.q) values.set("q", merged.q);
@@ -228,6 +239,7 @@ export function BuyersWorkspace({
     if (merged.owner) values.set("owner", merged.owner);
     if (merged.source) values.set("source", merged.source);
     if (merged.asset) values.set("asset", merged.asset);
+    values.set("segment", overrides.segment ?? segment);
     const nextPage = overrides.page ?? page;
     if (nextPage > 1) values.set("page", String(nextPage));
     const buyerId = overrides.buyer === undefined ? selected?.id : overrides.buyer;
@@ -352,6 +364,29 @@ export function BuyersWorkspace({
     }
   }
 
+  async function promoteToNetwork() {
+    if (!selected || selected.status !== "needs_review" || actionStatus === "saving") return;
+    setActionStatus("saving");
+    setActionError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/buyers/${selected.id}`, {
+        method: "PATCH",
+        headers: await getHeaders(),
+        body: JSON.stringify({ status: "active", relationship_status: "active" }),
+      });
+      if (!response.ok) {
+        setActionError(await mutationError(response));
+        setActionStatus("error");
+        return;
+      }
+      setActionStatus("idle");
+      router.push(`/os/buyers?segment=network&buyer=${encodeURIComponent(selected.id)}&tab=summary`);
+      router.refresh();
+    } catch (failure) {
+      reportUnexpectedFailure(failure);
+    }
+  }
+
   async function addActivity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !activityNotes.trim() || (activityType === "follow_up" && !activitySchedule)) return;
@@ -471,6 +506,11 @@ export function BuyersWorkspace({
   return (
     <section aria-label="Buyer management" className={styles.workspace}>
       {returnTo ? <Link className={styles.returnLink} href={returnTo}><ChevronLeft size={15} />Back to buyer pool</Link> : null}
+      <nav aria-label="Buyer lifecycle" className={styles.segmentNav}>
+        <Link aria-current={segment === "leads" ? "page" : undefined} className={segment === "leads" ? styles.activeSegment : ""} href="/os/buyers?segment=leads"><span>Buyer Leads</span><small>Interested prospects being worked for a specific deal</small></Link>
+        <Link aria-current={segment === "network" ? "page" : undefined} className={segment === "network" ? styles.activeSegment : ""} href="/os/buyers?segment=network"><span>Buyer Network</span><small>Reusable relationships for future properties</small></Link>
+        <Link aria-current={segment === "past" ? "page" : undefined} className={segment === "past" ? styles.activeSegment : ""} href="/os/buyers?segment=past"><span>Past Buyers</span><small>Investors who have completed a purchase</small></Link>
+      </nav>
       <DealControlStrip
         authority={{ label: "Authority", value: canEdit ? "Buyer CRM editor" : "View only", detail: canEdit ? "Changes remain audited" : "No edit permission", tone: canEdit ? "success" : "warning" }}
         blocker={{ label: "Primary blocker", value: blocker, detail: selected?.name ?? "No buyer evidence", tone: blocker === "No active blocker" ? "success" : "warning" }}
@@ -479,7 +519,7 @@ export function BuyersWorkspace({
         nextAction={{ label: "Authorized next step", value: blocker === "Proof of funds" ? "Review buyer funds" : blocker === "Verified buy box" ? "Verify a buy box" : contractLeads.length ? "Compare active deals" : "Maintain buyer record", detail: `${contractLeads.length} deals need buyer coverage`, tone: "info" }}
       />
 
-      <section className={styles.metrics} aria-label="Buyer network summary"><div><UsersRound size={17} /><span>Matching buyers</span><strong>{total}</strong></div><div><ShieldCheck size={17} /><span>Active on page</span><strong>{activeOnPage}</strong></div><div><Building2 size={17} /><span>Deals needing buyers</span><strong>{contractLeads.length}</strong></div><div><BadgeDollarSign size={17} /><span>Expired POF on page</span><strong>{expiredOnPage}</strong></div></section>
+      <section className={styles.metrics} aria-label="Buyer network summary"><div><UsersRound size={17} /><span>{segment === "leads" ? "Matching leads" : segment === "past" ? "Past buyers" : "Matching buyers"}</span><strong>{total}</strong></div><div><ShieldCheck size={17} /><span>Active on page</span><strong>{activeOnPage}</strong></div><div><Building2 size={17} /><span>Deals needing buyers</span><strong>{contractLeads.length}</strong></div><div><BadgeDollarSign size={17} /><span>Expired POF on page</span><strong>{expiredOnPage}</strong></div></section>
 
       <form className={styles.toolbar} onSubmit={submitFilters} role="search">
         <label className={styles.searchField}><Search size={15} /><span className={styles.srOnly}>Search buyers</span><input defaultValue={initialFilters.q} name="q" placeholder="Search name, company, phone, or email" type="search" /></label>
@@ -488,19 +528,20 @@ export function BuyersWorkspace({
         <label><span className={styles.filterLabel}>Owner</span><select defaultValue={initialFilters.owner} name="owner"><option value="">All owners</option>{relationshipOwners.map((owner) => <option key={owner.user_id} value={owner.user_id}>{owner.display_name}</option>)}</select></label>
         <label><span className={styles.filterLabel}>Source</span><select defaultValue={initialFilters.source} name="source"><option value="">All sources</option>{sourceOptions.map((source) => <option key={source} value={source}>{labelize(source)}</option>)}</select></label>
         <button disabled={navigating} type="submit">{navigating ? "Loading..." : "Apply"}</button>
-        {Object.values(initialFilters).some(Boolean) ? <Link className={styles.clearFilters} href="/os/buyers">Clear</Link> : null}
-        {canEdit ? <button className={styles.addButton} onClick={() => setShowCreate(true)} type="button"><Plus size={15} />Add buyer</button> : null}
+        {Object.values(initialFilters).some(Boolean) ? <Link className={styles.clearFilters} href={`/os/buyers?segment=${segment}`}>Clear</Link> : null}
+        {canEdit ? <button className={styles.addButton} onClick={() => setShowCreate(true)} type="button"><Plus size={15} />{segment === "leads" ? "Add buyer lead" : "Add buyer"}</button> : null}
       </form>
       <p aria-live="polite" className={styles.resultSummary}>{apiError ? "Buyer search failed." : `${total} matching buyer${total === 1 ? "" : "s"}. Page ${page} of ${totalPages}.`}</p>
       {apiError ? <div className={styles.loadError} role="alert"><strong>Buyer CRM could not load.</strong><span>{apiError}</span><button onClick={() => router.refresh()} type="button">Retry</button></div> : null}
 
       <section className={styles.split}>
-        <aside className={styles.queue} aria-label="Buyer records"><header><span>Buyer CRM</span><strong>{buyers.length} on this page</strong></header>{buyers.length === 0 ? <p className={styles.empty}>No buyers match these filters.</p> : buyers.map((buyer) => <button className={buyer.id === selected?.id ? styles.selectedBuyer : styles.buyerRow} key={buyer.id} onClick={() => selectBuyer(buyer.id)} type="button"><div><strong>{buyer.name}</strong><StatusBadge tone={buyer.status === "active" ? "success" : buyer.status === "do_not_contact" || buyer.status === "archived" ? "danger" : "neutral"}>{labelize(buyer.status)}</StatusBadge></div><span>{buyer.company_name ?? labelize(buyer.buyer_type)}</span><div className={styles.rowBadges}><span>{buyer.asset_focus ? labelize(buyer.asset_focus) : "No buy box"}</span><span>Tier {buyer.tier === "unclassified" ? "—" : buyer.tier.toUpperCase()}</span><span>{labelize(buyer.temperature)}</span></div><dl><div><dt>Owner</dt><dd>{buyer.relationship_owner_name ?? "Unassigned"}</dd></div><div><dt>Follow-up</dt><dd>{displayDate(buyer.next_follow_up_at)}</dd></div></dl></button>)}</aside>
+        <aside className={styles.queue} aria-label="Buyer records"><header><span>{segment === "leads" ? "Buyer leads" : segment === "past" ? "Past buyers" : "Buyer network"}</span><strong>{buyers.length} on this page</strong></header>{buyers.length === 0 ? <p className={styles.empty}>No buyers match these filters.</p> : buyers.map((buyer) => <button className={buyer.id === selected?.id ? styles.selectedBuyer : styles.buyerRow} key={buyer.id} onClick={() => selectBuyer(buyer.id)} type="button"><div><strong>{buyer.name}</strong><StatusBadge tone={buyer.status === "active" ? "success" : buyer.status === "do_not_contact" || buyer.status === "archived" ? "danger" : "neutral"}>{buyerStatusLabel(buyer.status)}</StatusBadge></div><span>{buyer.company_name ?? labelize(buyer.buyer_type)}</span>{buyer.deal_interests[0] ? <p className={styles.dealInterest}><strong>Property:</strong> {buyer.deal_interests[0].property_label}{buyer.deal_interests.length > 1 ? ` +${buyer.deal_interests.length - 1}` : ""}</p> : null}<div className={styles.rowBadges}><span>{buyer.asset_focus ? labelize(buyer.asset_focus) : "No buy box"}</span><span>Tier {buyer.tier === "unclassified" ? "—" : buyer.tier.toUpperCase()}</span><span>{labelize(buyer.temperature)}</span></div><dl><div><dt>Owner</dt><dd>{buyer.relationship_owner_name ?? "Unassigned"}</dd></div><div><dt>Follow-up</dt><dd>{displayDate(buyer.next_follow_up_at)}</dd></div></dl></button>)}</aside>
 
         <section aria-label={selected ? `${selected.name} buyer profile` : "Buyer profile"} className={`${styles.detail} ${mobileDetailOpen ? styles.detailOpen : ""}`} ref={detailRef} tabIndex={-1}>
           {selected ? <>
             <header className={styles.buyerHeader}><div><span>{selected.asset_focus ? `${labelize(selected.asset_focus)} buyer` : labelize(selected.buyer_type)}</span><h2>{selected.name}</h2><p>{selected.company_name ?? "Independent buyer"}</p><div className={styles.rowBadges}><span>{labelize(selected.relationship_status)}</span><span>Tier {selected.tier === "unclassified" ? "—" : selected.tier.toUpperCase()}</span><span>{labelize(selected.temperature)}</span><span>{labelize(selected.verification_status)}</span></div></div><div className={styles.headerStatus}>
               {canEdit && selected.status !== "archived" ? <button className={styles.headerAction} onClick={() => setShowEdit(true)} type="button"><Pencil size={15} />Edit</button> : null}
+              {canEdit && selected.status === "needs_review" ? <button className={styles.promoteAction} disabled={actionStatus === "saving"} onClick={() => void promoteToNetwork()} type="button"><UsersRound size={15} />Add to Buyer Network</button> : null}
               {canEdit ? selected.status === "archived" ? <button className={styles.headerAction} disabled={actionStatus === "saving"} onClick={() => void restoreBuyer()} type="button"><ArchiveRestore size={15} />Restore</button> : <button className={styles.headerAction} onClick={() => setShowArchive(true)} type="button"><Archive size={15} />Archive</button> : null}
               {canEdit ? <button className={styles.conversationButton} disabled={actionStatus === "opening"} onClick={() => void openConversation()} type="button"><MessageSquare size={15} />{actionStatus === "opening" ? "Opening" : "Conversation"}</button> : null}
               <StatusBadge tone={selectedProofVerified ? "success" : "warning"}>POF {selectedProofVerified ? "verified" : labelize(selected.proof_of_funds_status)}</StatusBadge>
@@ -513,6 +554,7 @@ export function BuyersWorkspace({
               {profileError ? <div className={styles.loadError} role="alert"><strong>Buyer history could not load.</strong><span>{profileError}</span><button onClick={() => router.refresh()} type="button">Retry</button></div> : null}
               {activeTab === "summary" ? <div className={styles.detailGrid}>
                 <section className={styles.panel}><header><div><span>Relationship</span><h3>Buyer snapshot</h3></div>{canEdit ? <button className={styles.inlineAction} onClick={() => setShowVerification(true)} type="button"><ShieldCheck size={14} />Review</button> : null}</header><dl><div><dt>Status</dt><dd>{labelize(selected.status)}</dd></div><div><dt>Relationship</dt><dd>{labelize(selected.relationship_status)}</dd></div><div><dt>Profile verification</dt><dd>{labelize(selected.verification_status)}{selected.verified_at ? ` · ${displayDate(selected.verified_at)}` : ""}</dd></div><div><dt>Owner</dt><dd>{selected.relationship_owner_name ?? "Unassigned"}</dd></div><div><dt>Source</dt><dd>{labelize(selected.source_key)}{selected.source_detail ? ` · ${selected.source_detail}` : ""}</dd></div><div><dt>Asset focus</dt><dd>{selected.asset_focus ? labelize(selected.asset_focus) : "No structured buy box"}</dd></div><div><dt>Last contact</dt><dd>{displayDate(selected.last_contact_at, true)}</dd></div><div><dt>Next follow-up</dt><dd>{displayDate(selected.next_follow_up_at, true)}</dd></div><div><dt>Last reviewed</dt><dd>{displayDate(selected.last_verified_at, true)}</dd></div></dl>{selected.tags.length ? <div className={styles.tagList}>{selected.tags.map((tag) => <span key={tag}>{tag}</span>)}</div> : null}</section>
+                <section className={`${styles.panel} ${styles.dealInterestPanel}`}><header><div><span>Deal-specific interest</span><h3>Properties this buyer is being worked for</h3></div><strong>{selected.deal_interests.length}</strong></header>{selected.deal_interests.length ? <ol>{selected.deal_interests.map((interest) => <li key={interest.disposition_case_id}><Link href={`/os/dispositions/${interest.disposition_case_id}`}><strong>{interest.property_label}</strong><span>{labelize(interest.lifecycle_stage)} · {labelize(interest.decision_status)}</span>{interest.campaign_name ? <small>Campaign: {interest.campaign_name}</small> : null}</Link></li>)}</ol> : <p className={styles.empty}>No deal-specific investor interest has been recorded.</p>}</section>
                 <section className={styles.panel}><header><div><span>Contactability</span><h3>Permission and contact</h3></div></header><dl><div><dt>Call</dt><dd>{permissionLabel(selected, "phone")} · {displayDate(selected.phone_permission.recorded_at, true)}</dd></div><div><dt>SMS</dt><dd>{permissionLabel(selected, "sms")} · {displayDate(selected.sms_permission.recorded_at, true)}</dd></div><div><dt>Permission source</dt><dd>{selected.phone_permission.source ?? selected.sms_permission.source ?? "Not recorded"}</dd></div><div><dt>Email</dt><dd>{selected.email ?? "Missing"}</dd></div><div><dt>Phone</dt><dd>{selected.phone ?? "Missing"}</dd></div><div><dt>Reliability</dt><dd>{reliability(selected)}</dd></div></dl></section>
                 <section className={`${styles.panel} ${styles.permissionPanel}`}><header><div><span>Append-only record</span><h3>Permission history</h3></div></header>{selected.permission_history.length ? <ol aria-label="Contact permission history" className={styles.permissionHistory}>{selected.permission_history.map((entry, index) => <li key={`${entry.channel}-${entry.recorded_at ?? "unknown"}-${index}`}><div><strong>{labelize(entry.channel)} · {labelize(entry.status)}</strong>{entry.recorded_at ? <time dateTime={entry.recorded_at}>{displayDate(entry.recorded_at, true)}</time> : <span>Time not recorded</span>}</div><p>Source: {entry.source ? labelize(entry.source) : "Not recorded"}</p><small>{entry.normalized_address ? `Contact: ${entry.normalized_address}` : "Contact value not recorded"}{entry.wording_version ? ` · Wording ${entry.wording_version}` : ""}</small></li>)}</ol> : <p className={styles.permissionHistoryEmpty}>No permission history has been recorded for this buyer.</p>}</section>
               </div> : null}
@@ -545,7 +587,7 @@ export function BuyersWorkspace({
 
       <section className={styles.comparison}><header><div><span>Current result page</span><h3>Relationship readiness</h3></div></header><div><table><thead><tr><th>Buyer</th><th>Asset</th><th>Status</th><th>Tier</th><th>Owner</th><th>POF</th><th>Next follow-up</th></tr></thead><tbody>{buyers.map((buyer) => <tr key={buyer.id}><td><button onClick={() => selectBuyer(buyer.id)} type="button">{buyer.name}</button><small>{buyer.company_name}</small></td><td>{buyer.asset_focus ? labelize(buyer.asset_focus) : "None"}</td><td>{labelize(buyer.relationship_status)}</td><td>{buyer.tier === "unclassified" ? "—" : buyer.tier.toUpperCase()}</td><td>{buyer.relationship_owner_name ?? "Unassigned"}</td><td>{proofVerified(buyer.proof_of_funds_status, buyer.proof_of_funds_expires_at) ? "Verified" : labelize(buyer.proof_of_funds_status)}</td><td>{displayDate(buyer.next_follow_up_at)}</td></tr>)}</tbody></table></div></section>
 
-      <Drawer description="Create a buyer in Needs review. Add and verify House or Land criteria from the buyer profile." onClose={() => setShowCreate(false)} open={showCreate} title="Add buyer"><BuyerForm onCancel={() => setShowCreate(false)} onSaved={(saved) => { setShowCreate(false); setSelectedId(saved.id); router.push(returnTo ?? `/os/buyers?buyer=${saved.id}&tab=summary`); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} /></Drawer>
+      <Drawer description="Create a buyer lead first. Promote it to Buyer Network when the investor becomes a reusable relationship." onClose={() => setShowCreate(false)} open={showCreate} title={segment === "leads" ? "Add buyer lead" : "Add buyer"}><BuyerForm onCancel={() => setShowCreate(false)} onSaved={(saved) => { setShowCreate(false); setSelectedId(saved.id); router.push(returnTo ?? `/os/buyers?segment=leads&buyer=${saved.id}&tab=summary`); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} /></Drawer>
       <Drawer description="Update identity, relationship ownership, follow-up, and contact permission. Buy boxes stay independently versioned." onClose={() => setShowEdit(false)} open={showEdit} title={`Edit ${selected?.name ?? "buyer"}`}>{selected ? <BuyerForm buyer={selected} onCancel={() => setShowEdit(false)} onSaved={(saved) => { setShowEdit(false); setSelectedId(saved.id); router.refresh(); }} onUseExisting={useExisting} relationshipOwners={relationshipOwners} sourceOptions={sourceOptions} /> : null}</Drawer>
       <Drawer description="Save separate, versioned purchasing rules for this asset." onClose={() => setShowBuyBox(null)} open={Boolean(showBuyBox)} size="wide" title={`${showBuyBox ? labelize(showBuyBox) : "Buyer"} buy box`}>{selected && showBuyBox ? <BuyerBuyBoxForm asset={showBuyBox} buyerId={selected.id} current={selectedBox} onCancel={() => setShowBuyBox(null)} onSaved={() => { setShowBuyBox(null); router.refresh(); }} /> : null}</Drawer>
       <Drawer description="Relationship verification is separate from proof-of-funds and buy-box verification." onClose={() => setShowVerification(false)} open={showVerification} title={`Review ${selected?.name ?? "buyer"}`}><form className={styles.archiveForm} onSubmit={verifyRelationship}><label><span>Decision</span><select defaultValue={selected?.verification_status === "unverified" ? "needs_review" : selected?.verification_status} name="verification_status"><option value="verified">Verified relationship</option><option value="needs_review">Needs review</option><option value="rejected">Rejected</option></select></label><label><span>Reason or evidence</span><textarea maxLength={500} minLength={2} name="reason" placeholder="What was reviewed or still needs attention?" required /></label>{actionError ? <p className={styles.formError} role="alert">{actionError}</p> : null}<div className={styles.formActions}><button className={styles.secondaryAction} onClick={() => setShowVerification(false)} type="button">Cancel</button><button disabled={actionStatus === "saving"} type="submit">Save review</button></div></form></Drawer>

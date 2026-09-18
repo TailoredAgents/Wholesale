@@ -84,6 +84,7 @@ def read_buyers(
         Literal["house", "land", "both"] | None,
         Query(),
     ] = None,
+    segment: Annotated[Literal["leads", "network", "past"] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> BuyerListResponse:
@@ -96,6 +97,7 @@ def read_buyers(
             owner_id=owner_id,
             source_key=source_key,
             asset_class=asset_class,
+            segment=segment,
             limit=limit,
             offset=offset,
         )

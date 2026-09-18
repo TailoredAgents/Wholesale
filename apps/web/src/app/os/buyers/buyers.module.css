@@ -1,4 +1,10 @@
 .workspace { display: grid; gap: 14px; }
+.segmentNav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.segmentNav a { min-height: 62px; padding: 11px 14px; border-right: 1px solid var(--sg-color-border-soft); color: var(--sg-color-text); display: grid; align-content: center; gap: 3px; text-decoration: none; }
+.segmentNav a:last-child { border-right: 0; }
+.segmentNav span { font-size: 12px; font-weight: 850; }
+.segmentNav small { color: var(--sg-color-text-muted); font-size: 10px; }
+.segmentNav .activeSegment { background: var(--sg-color-brand-soft); box-shadow: inset 0 -3px var(--sg-color-brand); color: var(--sg-color-brand-strong); }
 .returnLink { width: fit-content; min-height: 38px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-md); background: var(--sg-color-surface); color: var(--sg-color-brand-strong); font-size: 11px; font-weight: 800; text-decoration: none; }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
 .metrics > div { min-height: 70px; padding: 12px 14px; border-right: 1px solid var(--sg-color-border-soft); display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; }
@@ -31,6 +37,8 @@
 .buyerRow dl div, .selectedBuyer dl div { display: grid; gap: 2px; }
 .buyerRow dt, .selectedBuyer dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
 .buyerRow dd, .selectedBuyer dd { margin: 0; font-size: 11px; font-weight: 750; }
+.dealInterest { margin: 0; padding: 7px 8px; border-radius: var(--sg-radius-sm); background: var(--sg-color-surface); color: var(--sg-color-text-muted); font-size: 10px; line-height: 1.35; }
+.dealInterest strong { color: var(--sg-color-brand-strong); }
 .rowBadges { display: flex; flex-wrap: wrap; gap: 5px; }
 .rowBadges > span { padding: 3px 6px; border: 1px solid var(--sg-color-border-soft); border-radius: 999px; background: var(--sg-color-surface); color: var(--sg-color-text-muted); font-size: 9px; font-weight: 800; }
 .detail { min-width: 0; }
@@ -41,6 +49,7 @@
 .headerStatus > button { display: none; width: 36px; height: 36px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-md); background: var(--sg-color-surface); color: var(--sg-color-text-soft); place-items: center; cursor: pointer; }
 .headerStatus > .conversationButton { display: inline-flex; width: auto; height: 34px; padding: 0 11px; align-items: center; gap: 6px; border-color: #176b54; background: #176b54; color: #fff; font-size: 11px; font-weight: 800; }
 .headerStatus > .headerAction { display: inline-flex; width: auto; min-height: 36px; padding: 0 10px; align-items: center; gap: 6px; color: var(--sg-color-brand-strong); font-size: 11px; font-weight: 800; }
+.headerStatus > .promoteAction { display: inline-flex; width: auto; min-height: 36px; padding: 0 11px; border-color: var(--sg-color-brand); background: var(--sg-color-brand); color: #fff; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; }
 .headerStatus > .mobileClose { display: none; }
 .headerStatus > .conversationButton:disabled { cursor: wait; opacity: .65; }
 .actionError { margin: 0; padding: 7px 17px; border-bottom: 1px solid #efb4ae; background: #fff2f0; color: #8f2d25; font-size: 11px; font-weight: 700; }
@@ -57,6 +66,12 @@
 .panel dl div { min-height: 41px; padding: 8px 0; border-bottom: 1px solid var(--sg-color-border-soft); display: flex; justify-content: space-between; gap: 10px; }
 .panel dt { color: var(--sg-color-text-muted); font-size: 10px; }
 .panel dd { margin: 0; max-width: 65%; text-align: right; font-size: 10px; font-weight: 750; }
+.dealInterestPanel { grid-column: 1 / -1; }
+.dealInterestPanel > ol { margin: 0; padding: 0; list-style: none; }
+.dealInterestPanel li + li { border-top: 1px solid var(--sg-color-border-soft); }
+.dealInterestPanel li a { padding: 10px 13px; color: inherit; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; text-decoration: none; }
+.dealInterestPanel li span, .dealInterestPanel li small { color: var(--sg-color-text-muted); font-size: 10px; }
+.dealInterestPanel li small { grid-column: 1 / -1; }
 .permissionPanel { grid-column: 1 / -1; }
 .permissionHistory { margin: 0; padding: 2px 13px; list-style: none; }
 .permissionHistory li { padding: 9px 0; border-bottom: 1px solid var(--sg-color-border-soft); display: grid; gap: 3px; }
@@ -207,3 +222,4 @@
 @media (max-width: 1000px) { .split { grid-template-columns: 260px minmax(0, 1fr); } .detailGrid, .buyBoxGrid { grid-template-columns: 1fr; } .formGridFour { grid-template-columns: repeat(2, minmax(0, 1fr)); } .choiceGroup > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .metrics { grid-template-columns: 1fr 1fr; } .split { display: block; overflow: visible; min-height: 0; } .queue { max-height: 420px; overflow-y: auto; border-right: 0; border-bottom: 0; } .detail { position: fixed; z-index: 52; inset: 0 0 0 auto; width: min(620px, calc(100vw - 28px)); height: 100dvh; background: var(--sg-color-surface, #fff); box-shadow: var(--sg-shadow-raised); overflow-y: auto; transform: translateX(105%); transition: transform 180ms ease; } .detailOpen { transform: translateX(0); } .buyerHeader { background: var(--sg-color-surface, #fff); } .headerStatus > button, .headerStatus > .mobileClose { display: inline-flex; min-height: 44px; height: 44px; align-items: center; justify-content: center; } .localTabs { position: sticky; z-index: 1; top: 0; background: var(--sg-color-surface, #fff); } .localTabs button { min-height: 48px; } .mobileBackdrop { position: fixed; z-index: 51; inset: 0; display: block; border: 0; background: rgba(16, 25, 27, .36); } .formGridThree { grid-template-columns: 1fr; } .sectionHeading { align-items: stretch; flex-direction: column; } .sectionHeading > div:last-child button { flex: 1; } }
 @media (max-width: 520px) { .toolbar { align-items: stretch; flex-direction: column; } .toolbar label, .toolbar .searchField { min-width: 0; width: 100%; max-width: none; } .toolbar select, .toolbar > button, .clearFilters { width: 100%; justify-content: center; } .toolbar > .addButton { margin-left: 0; } .metrics { grid-template-columns: 1fr; } .buyerHeader { align-items: flex-start; flex-direction: column; } .headerStatus { width: 100%; flex-wrap: wrap; justify-content: flex-start; } .permissionHistory li > div { align-items: flex-start; flex-direction: column; gap: 2px; } .formActions { flex-direction: column-reverse; } .formActions > button { width: 100%; } .loadError { align-items: flex-start; flex-direction: column; } .choiceGroup > div, .formGridFour, .activityControls, .proofUpload, .proofList dl { grid-template-columns: 1fr; } .buyBoxCard dl div, .legacyCriteria dl div { grid-template-columns: 1fr; } .buyBoxCard dd, .legacyCriteria dd { text-align: left; } .proofUpload > button { min-height: 44px; } }
+@media (max-width: 760px) { .segmentNav { grid-template-columns: 1fr; } .segmentNav a { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .segmentNav a:last-child { border-bottom: 0; } }

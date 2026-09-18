@@ -143,9 +143,9 @@ export function DispositionQueueBuilder({
     let total = 1;
     let firstPage: BuyerListResponse | null = null;
     while (offset < total) {
-      const result = await request<BuyerListResponse>(`/api/v1/buyers?limit=200&offset=${offset}`, { cache: "no-store" });
+      const result = await request<BuyerListResponse>(`/api/v1/buyers?segment=network&limit=200&offset=${offset}`, { cache: "no-store" });
       firstPage ??= result;
-      buyers.push(...result.items.filter((buyer) => buyer.archived_at === null && buyer.status !== "archived"));
+      buyers.push(...result.items);
       total = result.total;
       if (!result.items.length) break;
       offset = result.offset + result.items.length;
