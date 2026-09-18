@@ -363,6 +363,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/leads/closed",
     migration: "keep-and-expand",
     queryParameters: [
+      { name: "kind", status: "consumed" },
       { name: "page", status: "consumed" },
       { name: "q", status: "consumed" },
     ],

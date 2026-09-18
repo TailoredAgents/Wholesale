@@ -10,6 +10,20 @@ import styles from "./lifecycle.module.css";
 
 type Status = "idle" | "working" | "error";
 type CloseOutDisposition = "dead" | "disqualified";
+type NotALeadReason =
+  | "spam_robocall"
+  | "wrong_number"
+  | "vendor_solicitation"
+  | "duplicate"
+  | "other_non_seller";
+
+const notALeadReasons: Array<{ key: NotALeadReason; label: string; detail: string }> = [
+  { key: "spam_robocall", label: "Spam or robocall", detail: "Keep repeat calls from reopening this as active work." },
+  { key: "wrong_number", label: "Wrong number", detail: "The caller is not connected to a seller opportunity." },
+  { key: "vendor_solicitation", label: "Vendor or solicitation", detail: "A business solicitation, recruiter, or unrelated service call." },
+  { key: "duplicate", label: "Duplicate record", detail: "The real seller record already exists elsewhere in Stonegate." },
+  { key: "other_non_seller", label: "Other non-seller", detail: "Any other contact that should not stay in the seller pipeline." },
+];
 
 const closedStages = new Set(["dead", "disqualified"]);
 
@@ -44,6 +58,121 @@ function useLeadLifecycleApi() {
     }
     return fetch(`${apiBaseUrl}${path}`, { ...init, headers });
   };
+}
+
+export function LeadNotALeadAction({
+  leadId,
+  onComplete,
+}: {
+  leadId: string;
+  onComplete: (result: LeadCloseOutResponse) => void;
+}) {
+  const request = useLeadLifecycleApi();
+  const formId = useId();
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<Status>("idle");
+  const [error, setError] = useState("");
+  const [reasonCode, setReasonCode] = useState<NotALeadReason>("spam_robocall");
+  const [note, setNote] = useState("");
+
+  function closeDialog() {
+    if (status === "working") return;
+    setOpen(false);
+    setError("");
+  }
+
+  async function markNotALead(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("working");
+    setError("");
+    try {
+      const response = await request(`/api/v1/leads/${leadId}/not-a-lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason_code: reasonCode, note: note.trim() || null }),
+      });
+      if (!response.ok) {
+        throw new Error(await responseError(response, "The record could not be removed from Leads."));
+      }
+      const result = await response.json() as LeadCloseOutResponse;
+      setOpen(false);
+      onComplete(result);
+    } catch (caught) {
+      setStatus("error");
+      setError(caught instanceof Error ? caught.message : "The record could not be removed from Leads.");
+    }
+  }
+
+  return (
+    <div className={styles.quickAction}>
+      <button
+        className={styles.notALeadButton}
+        disabled={status === "working"}
+        onClick={() => {
+          setStatus("idle");
+          setError("");
+          setReasonCode("spam_robocall");
+          setNote("");
+          setOpen(true);
+        }}
+        type="button"
+      >
+        Not a lead
+      </button>
+      <Dialog
+        description="Remove this record from active seller work without deleting its call or message history."
+        footer={
+          <>
+            <Button disabled={status === "working"} onClick={closeDialog} type="button" variant="quiet">
+              Cancel
+            </Button>
+            <Button form={formId} loading={status === "working"} type="submit" variant="danger">
+              Remove from Leads
+            </Button>
+          </>
+        }
+        onClose={closeDialog}
+        open={open}
+        title="Mark as not a lead?"
+      >
+        <form className={styles.lifecycleForm} id={formId} onSubmit={markNotALead}>
+          <fieldset className={styles.dispositionChoices}>
+            <legend>Why is this not a seller lead?</legend>
+            {notALeadReasons.map((reason) => (
+              <label className={reasonCode === reason.key ? styles.dispositionSelected : undefined} key={reason.key}>
+                <input
+                  checked={reasonCode === reason.key}
+                  name={`${formId}-reason`}
+                  onChange={() => setReasonCode(reason.key)}
+                  type="radio"
+                  value={reason.key}
+                />
+                <span><strong>{reason.label}</strong><small>{reason.detail}</small></span>
+              </label>
+            ))}
+          </fieldset>
+          <FormField
+            hint="Optional. The reason above is enough for a quick cleanup."
+            htmlFor={`${formId}-note`}
+            label="Note"
+          >
+            <TextArea
+              id={`${formId}-note`}
+              maxLength={300}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Anything your team should know"
+              rows={3}
+              value={note}
+            />
+          </FormField>
+          <div className={styles.closeOutImpact}>
+            This closes the conversation and cancels open reminders, tasks, appointments, and pending lead work. The complete record stays under <strong>Closed Leads, in Non-leads</strong> and can be restored.
+          </div>
+          {error ? <p className={styles.error} role="alert">{error}</p> : null}
+        </form>
+      </Dialog>
+    </div>
+  );
 }
 
 export function LeadReopenControl({

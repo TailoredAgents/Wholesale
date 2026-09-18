@@ -63,7 +63,7 @@ import {
   type SavedLeadViewKey,
 } from "../os-utils";
 import styles from "./leads-workspace.module.css";
-import { LeadLifecycleActions } from "./lead-lifecycle-actions";
+import { LeadLifecycleActions, LeadNotALeadAction } from "./lead-lifecycle-actions";
 import { LeadReminderControl } from "./lead-reminder-control";
 
 function ownerLabel(email: string | null) {
@@ -403,7 +403,12 @@ export function LeadsWorkspace({
   const [workingLeads, setWorkingLeads] = useState(leads);
   const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
   const [pendingLeadIds, setPendingLeadIds] = useState<Set<string>>(() => new Set());
-  const [stageNotice, setStageNotice] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const [stageNotice, setStageNotice] = useState<{
+    actionLead?: LeadListItem;
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
+  const [undoingLeadId, setUndoingLeadId] = useState<string | null>(null);
   const [contractImportLeadId, setContractImportLeadId] = useState<string | null>(null);
   const [offerActionLeadId, setOfferActionLeadId] = useState<string | null>(null);
   const pendingLeadIdsRef = useRef(new Set<string>());
@@ -731,10 +736,46 @@ export function LeadsWorkspace({
     setSelectedLeadId(nextLead?.id ?? "");
     setPreviewOpen(false);
     replaceLocation({ leadId: nextLead?.id ?? "" });
+    const notALead = result.lead.qualification_context.not_a_lead as { active?: boolean } | undefined;
     setStageNotice({
-      message: `${result.lead.seller_name} was closed and removed from the active Leads board.`,
+      actionLead: notALead?.active ? result.lead : undefined,
+      message: notALead?.active
+        ? `${result.lead.seller_name} was marked Not a lead and removed from active Leads.`
+        : `${result.lead.seller_name} was closed and removed from the active Leads board.`,
       tone: "success",
     });
+  }
+
+  async function undoNotALead(lead: LeadListItem) {
+    if (undoingLeadId) return;
+    setUndoingLeadId(lead.id);
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(`${apiBaseUrl}/api/v1/leads/${lead.id}/not-a-lead/undo`, {
+        method: "POST",
+        headers,
+      });
+      const payload = await response.json().catch(() => null) as (LeadListItem & { detail?: unknown }) | null;
+      if (!response.ok || !payload) {
+        throw new Error(apiErrorMessage(payload?.detail, "Unable to restore this lead."));
+      }
+      setWorkingLeads((current) => [...current.filter((item) => item.id !== payload.id), payload]);
+      setSelectedLeadId(payload.id);
+      setPreviewOpen(true);
+      replaceLocation({ leadId: payload.id });
+      setStageNotice({ message: `${payload.seller_name} was restored to active Leads.`, tone: "success" });
+      router.refresh();
+    } catch (error) {
+      setStageNotice({
+        message: error instanceof Error ? error.message : "Unable to restore this lead.",
+        tone: "error",
+      });
+    } finally {
+      setUndoingLeadId(null);
+    }
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -905,13 +946,22 @@ export function LeadsWorkspace({
           <strong>{visibleLeads.length} shown</strong>
         </div>
         {stageNotice ? (
-          <p
+          <div
             aria-live={stageNotice.tone === "error" ? "assertive" : "polite"}
             className={stageNotice.tone === "error" ? styles.stageError : styles.stageSuccess}
             role={stageNotice.tone === "error" ? "alert" : "status"}
           >
-            {stageNotice.message}
-          </p>
+            <span>{stageNotice.message}</span>
+            {stageNotice.actionLead ? (
+              <button
+                disabled={undoingLeadId === stageNotice.actionLead.id}
+                onClick={() => void undoNotALead(stageNotice.actionLead!)}
+                type="button"
+              >
+                {undoingLeadId === stageNotice.actionLead.id ? "Restoring..." : "Undo"}
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <div className={`${styles.content} ${display === "board" ? styles.boardContent : styles.tableContent}`}>
@@ -1122,6 +1172,11 @@ export function LeadsWorkspace({
                   <Link href={fullRecordHref(selectedLead.id)}><ExternalLink size={15} />Full record</Link>
                   {selectedLead.appointment_status ? <Link href={`/os/calendar`}><CalendarDays size={15} />Calendar</Link> : null}
                 </div>
+                {canEditLead ? (
+                  <div className={styles.previewNotALead}>
+                    <LeadNotALeadAction leadId={selectedLead.id} onComplete={handleLeadClosed} />
+                  </div>
+                ) : null}
                 {canEditLead ? (
                   <details className={styles.previewMoreActions}>
                     <summary>More actions</summary>

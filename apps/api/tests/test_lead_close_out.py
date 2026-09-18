@@ -749,6 +749,110 @@ def test_inbound_does_not_reactivate_an_administratively_archived_lead(
     assert [item["id"] for item in archived] == [str(lead_id)]
 
 
+def test_mark_spam_not_a_lead_is_recoverable_and_does_not_auto_reactivate(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner = seed_owner(db_session)
+    client = TestClient(app)
+    created = create_lead(client, name="Spam Caller", street="Address pending")
+    lead_id = UUID(created["id"])
+    lead = db_session.get(Lead, lead_id)
+    assert lead is not None
+    seed_close_out_work(db_session, lead, owner)
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/not-a-lead",
+        headers=HEADERS,
+        json={"reason_code": "spam_robocall", "note": "Repeated warranty robocall."},
+    )
+    assert response.status_code == 200, response.text
+    closed = response.json()["lead"]
+    assert closed["stage_key"] == "disqualified"
+    assert closed["archived_at"] is not None
+    assert closed["close_out_reason"].startswith("Not a lead: Spam or robocall.")
+    metadata = closed["qualification_context"]["not_a_lead"]
+    assert metadata["active"] is True
+    assert metadata["previous_stage_key"] == "new"
+    assert metadata["suppress_future_inbound_reactivation"] is True
+    assert client.get("/api/v1/leads", headers=HEADERS).json()["items"] == []
+    non_leads = client.get(
+        "/api/v1/leads?closed=true&closed_kind=not_lead",
+        headers=HEADERS,
+    ).json()["items"]
+    assert [item["id"] for item in non_leads] == [str(lead_id)]
+
+    conversation = db_session.scalar(select(Conversation).where(Conversation.lead_id == lead_id))
+    assert conversation is not None
+    update_conversation_activity(
+        conversation,
+        direction="inbound",
+        occurred_at=datetime.now(UTC) + timedelta(seconds=1),
+        db=db_session,
+    )
+    db_session.commit()
+    db_session.expire_all()
+    lead = db_session.get(Lead, lead_id)
+    assert lead is not None and lead.archived_at is not None
+    assert lead.stage_key == "disqualified"
+    assert db_session.scalar(
+        select(func.count(Task.id)).where(
+            Task.lead_id == lead_id,
+            Task.task_type == "inbound_reactivation",
+        )
+    ) == 0
+
+    undo = client.post(f"/api/v1/leads/{lead_id}/not-a-lead/undo", headers=HEADERS)
+    assert undo.status_code == 200, undo.text
+    restored = undo.json()
+    assert restored["stage_key"] == "new"
+    assert restored["archived_at"] is None
+    assert restored["close_out_disposition"] is None
+    assert restored["close_out_reason"] is None
+    assert restored["qualification_context"]["not_a_lead"]["active"] is False
+    assert restored["next_follow_up_at"] is None
+    assert db_session.scalar(
+        select(func.count(Task.id)).where(
+            Task.lead_id == lead_id,
+            Task.status.in_(("open", "in_progress")),
+        )
+    ) == 0
+    db_session.expire_all()
+    conversation = db_session.get(Conversation, conversation.id)
+    assert conversation is not None and conversation.status == "open"
+
+
+def test_closed_not_a_lead_filter_excludes_regular_closed_leads(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    non_lead = create_lead(client, name="Wrong Number", street="Address pending")
+    regular = create_lead(client, name="Closed Seller", street="90 Final Road")
+    assert client.post(
+        f"/api/v1/leads/{non_lead['id']}/not-a-lead",
+        headers=HEADERS,
+        json={"reason_code": "wrong_number"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/leads/{regular['id']}/close-out",
+        headers=HEADERS,
+        json={
+            "disposition": "dead",
+            "reason": "The seller explicitly declined further discussion.",
+        },
+    ).status_code == 200
+
+    all_closed = client.get("/api/v1/leads?closed=true", headers=HEADERS).json()["items"]
+    non_leads = client.get(
+        "/api/v1/leads?closed=true&closed_kind=not_lead",
+        headers=HEADERS,
+    ).json()["items"]
+    assert {item["id"] for item in all_closed} == {non_lead["id"], regular["id"]}
+    assert [item["id"] for item in non_leads] == [non_lead["id"]]
+
+
 def test_delayed_inbound_from_before_latest_close_out_does_not_reactivate_lead(
     db_session: Session,
     api_db_override: None,

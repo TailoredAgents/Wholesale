@@ -1082,6 +1082,24 @@ class LeadCloseOutRequest(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class LeadNotALeadRequest(BaseModel):
+    reason_code: Literal[
+        "spam_robocall",
+        "wrong_number",
+        "vendor_solicitation",
+        "duplicate",
+        "other_non_seller",
+    ]
+    note: str | None = Field(default=None, max_length=300)
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def strip_note(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+
 class LeadReopenRequest(BaseModel):
     reason: str = Field(min_length=10, max_length=500)
     next_action_due_at: datetime

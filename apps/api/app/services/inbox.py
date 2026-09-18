@@ -1131,6 +1131,13 @@ def reactivate_closed_lead_for_inbound(
         lead.closed_out_at
     ):
         return None
+    not_a_lead = (lead.qualification_context or {}).get("not_a_lead")
+    if (
+        isinstance(not_a_lead, dict)
+        and not_a_lead.get("active") is True
+        and not_a_lead.get("suppress_future_inbound_reactivation") is True
+    ):
+        return None
 
     now = datetime.now(UTC)
     due_at = max(_as_utc_datetime(occurred_at), now) + timedelta(minutes=5)

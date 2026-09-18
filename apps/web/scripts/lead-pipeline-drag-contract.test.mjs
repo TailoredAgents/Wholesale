@@ -23,6 +23,7 @@ const offerStageAction = readFileSync(
 const dealsPage = readFileSync(resolve(appRoot, "os/deals/page.tsx"), "utf8");
 const dealsWorkspace = readFileSync(resolve(appRoot, "os/deals/deals-workspace.tsx"), "utf8");
 const pipelineWorkspace = readFileSync(resolve(appRoot, "os/pipeline/pipeline-workspace.tsx"), "utf8");
+const lifecycle = readFileSync(resolve(appRoot, "os/leads/lead-lifecycle-actions.tsx"), "utf8");
 
 test("Pipeline navigation changes the mounted workspace without a page refresh", () => {
   assert.match(page, /<WorkspacePage wide=\{display === "board"\}>/);
@@ -64,6 +65,19 @@ test("the Pipeline preview stays lightweight and the board remains directly usab
   assert.match(workspace, /<LeadLifecycleActions[\s\S]*compact/);
   assert.doesNotMatch(workspace, /className=\{styles\.backdrop\}/);
   assert.doesNotMatch(styles, /\.boardContent > \.backdrop/);
+});
+
+test("spam and non-seller records leave active Leads without losing their history", () => {
+  assert.match(workspace, /<LeadNotALeadAction/);
+  assert.match(lifecycle, /\/api\/v1\/leads\/\$\{leadId\}\/not-a-lead/);
+  assert.match(lifecycle, /spam_robocall/);
+  assert.match(lifecycle, /wrong_number/);
+  assert.match(lifecycle, /vendor_solicitation/);
+  assert.match(lifecycle, /duplicate/);
+  assert.match(lifecycle, /Other non-seller/);
+  assert.match(lifecycle, /Closed Leads, in Non-leads/);
+  assert.match(workspace, /\/not-a-lead\/undo/);
+  assert.match(workspace, /\? "Restoring\.\.\." : "Undo"/);
 });
 
 test("All Leads stays bounded and paginates instead of growing with every record", () => {

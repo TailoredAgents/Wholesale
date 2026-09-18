@@ -20,9 +20,10 @@ function normalizePage(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function pageHref(page: number, q: string) {
+function pageHref(page: number, q: string, kind: "all" | "not_lead") {
   const query = new URLSearchParams();
   if (q) query.set("q", q);
+  if (kind === "not_lead") query.set("kind", "not-lead");
   if (page > 1) query.set("page", String(page));
   const suffix = query.toString();
   return suffix ? `/os/leads/closed?${suffix}` : "/os/leads/closed";
@@ -39,11 +40,12 @@ export default async function ClosedLeadsPage({
 }) {
   const params = (await searchParams) ?? {};
   const q = first(params.q).trim().slice(0, 200);
+  const kind = first(params.kind) === "not-lead" ? "not_lead" : "all";
   const page = normalizePage(first(params.page));
   const pageSize = 100;
   const offset = (page - 1) * pageSize;
   const [{ leads, apiConnected }, profile] = await Promise.all([
-    getClosedLeads({ limit: pageSize + 1, offset, q }),
+    getClosedLeads({ kind, limit: pageSize + 1, offset, q }),
     getWorkspaceProfile(),
   ]);
   const canEditLead = Boolean(profile?.permissions.includes("leads:edit"));
@@ -68,7 +70,9 @@ export default async function ClosedLeadsPage({
       : `Showing ${rangeStart}-${rangeEnd} of ${rangeEnd}`
     : q
       ? "0 matching closed leads"
-      : "0 closed leads";
+      : kind === "not_lead"
+        ? "0 non-leads"
+        : "0 closed leads";
 
   return (
     <WorkspacePage>
@@ -92,7 +96,12 @@ export default async function ClosedLeadsPage({
       />
 
       <section aria-label="Search closed leads" className={styles.closedControls}>
+        <nav aria-label="Closed lead types" className={styles.closedKinds}>
+          <Link aria-current={kind === "all" ? "page" : undefined} href="/os/leads/closed">All closed</Link>
+          <Link aria-current={kind === "not_lead" ? "page" : undefined} href="/os/leads/closed?kind=not-lead">Non-leads</Link>
+        </nav>
         <form action="/os/leads/closed" className={styles.closedSearch} method="get">
+          {kind === "not_lead" ? <input name="kind" type="hidden" value="not-lead" /> : null}
           <label htmlFor="closed-lead-search">Search closed leads</label>
           <div>
             <input
@@ -104,7 +113,7 @@ export default async function ClosedLeadsPage({
               type="search"
             />
             <button type="submit">Search</button>
-            {q ? <Link href="/os/leads/closed">Clear</Link> : null}
+            {q ? <Link href={kind === "not_lead" ? "/os/leads/closed?kind=not-lead" : "/os/leads/closed"}>Clear</Link> : null}
           </div>
         </form>
       </section>
@@ -154,7 +163,9 @@ export default async function ClosedLeadsPage({
                   <td data-label="Property">{lead.property_address}</td>
                   <td data-label="Disposition">
                     <span className={styles.closedDisposition}>
-                      {labelize(lead.close_out_disposition ?? lead.stage_key)}
+                      {lead.close_out_reason?.startsWith("Not a lead:")
+                        ? "Not a lead"
+                        : labelize(lead.close_out_disposition ?? lead.stage_key)}
                     </span>
                   </td>
                   <td data-label="Closed">
@@ -178,13 +189,13 @@ export default async function ClosedLeadsPage({
           <span>{resultSummary}</span>
           <div>
             {page > 1 ? (
-              <Link href={pageHref(page - 1, q)}>Previous</Link>
+              <Link href={pageHref(page - 1, q, kind)}>Previous</Link>
             ) : (
               <span aria-disabled="true">Previous</span>
             )}
             <strong>Page {page}</strong>
             {hasNextPage ? (
-              <Link href={pageHref(page + 1, q)}>Next</Link>
+              <Link href={pageHref(page + 1, q, kind)}>Next</Link>
             ) : (
               <span aria-disabled="true">Next</span>
             )}

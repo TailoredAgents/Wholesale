@@ -356,7 +356,10 @@ test("seller lead close-out is atomic, auditable, and separate from administrati
   );
   assert.match(lifecycle, /A funded deal\s+remains a completed success/);
   assert.match(lifecycle, /confirmed duplicate or test records/);
-  assert.match(closedPage, /getClosedLeads\(\{ limit: pageSize \+ 1, offset, q \}\)/);
+  assert.match(closedPage, /getClosedLeads\(\{ kind, limit: pageSize \+ 1, offset, q \}\)/);
+  assert.match(closedPage, /aria-label="Closed lead types"/);
+  assert.match(api, /closed_kind: kind/);
+  assert.match(closedPage, /Not a lead:/);
   assert.match(
     closedPage,
     /full read-only seller, property, communication, appointment, valuation, transaction, and buyer-offer history/,
@@ -397,16 +400,17 @@ test("seller lead close-out is atomic, auditable, and separate from administrati
   assert.match(closedPage, /getWorkspaceProfile\(\)/);
   assert.match(closedPage, /limit: pageSize \+ 1, offset, q/);
   assert.match(closedPage, /name="q"/);
-  assert.match(closedPage, /pageHref\(page - 1, q\)/);
-  assert.match(closedPage, /pageHref\(page \+ 1, q\)/);
+  assert.match(closedPage, /pageHref\(page - 1, q, kind\)/);
+  assert.match(closedPage, /pageHref\(page \+ 1, q, kind\)/);
   assert.match(archivedPage, /permissions\.includes\("records:delete_or_archive"\)/);
-  assert.match(api, /closed: "true",\s*limit: String\(limit\),\s*offset: String\(offset\)/);
+  assert.match(api, /closed: "true",\s*closed_kind: kind,\s*limit: String\(limit\),\s*offset: String\(offset\)/);
   assert.match(api, /cancelled_pending_approvals: number/);
   const closedRoute = currentRouteInventory.find(
     (route) => route.routePattern === "/os/leads/closed",
   );
   assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "q"));
   assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "page"));
+  assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "kind"));
 });
 
 test("address-only website leads stay visible without polluting operational queues", () => {

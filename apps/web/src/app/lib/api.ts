@@ -6736,10 +6736,12 @@ export async function getArchivedLeads(): Promise<{
 }
 
 export async function getClosedLeads({
+  kind = "all",
   limit = 101,
   offset = 0,
   q = "",
 }: {
+  kind?: "all" | "not_lead";
   limit?: number;
   offset?: number;
   q?: string;
@@ -6750,6 +6752,7 @@ export async function getClosedLeads({
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
   const query = new URLSearchParams({
     closed: "true",
+    closed_kind: kind,
     limit: String(limit),
     offset: String(offset),
   });

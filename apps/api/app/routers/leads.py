@@ -45,6 +45,7 @@ from app.schemas.leads import (
     LeadMarketAnalysisCreate,
     LeadMarketAnalysisRead,
     LeadMarketValueEstimateRead,
+    LeadNotALeadRequest,
     LeadNoteCreate,
     LeadRead,
     LeadReopenRead,
@@ -88,11 +89,13 @@ from app.services.leads import (
     get_latest_lead_market_analysis,
     get_lead_detail,
     list_leads,
+    mark_lead_not_a_lead,
     permanently_delete_lead,
     preview_lead_market_value,
     record_outside_offer,
     reopen_lead,
     restore_lead,
+    undo_not_a_lead,
     update_lead_contact_permission,
     update_lead_sms_permission,
     update_lead_staff_details,
@@ -171,6 +174,7 @@ def read_leads(
     principal: Annotated[Principal, Depends(view_leads_dependency)],
     archived: bool = Query(default=False),
     closed: bool = Query(default=False),
+    closed_kind: Literal["all", "not_lead"] = Query(default="all"),
     asset_class: Literal["house", "land"] | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=101),
     offset: int = Query(default=0, ge=0),
@@ -181,6 +185,7 @@ def read_leads(
         principal,
         archived=archived,
         closed=closed,
+        closed_kind=closed_kind,
         asset_class=asset_class,
         limit=limit,
         offset=offset,
@@ -1003,6 +1008,42 @@ def close_out_seller_lead(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return result
+
+
+@router.post("/{lead_id}/not-a-lead")
+def mark_seller_record_not_a_lead(
+    lead_id: UUID,
+    payload: LeadNotALeadRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadCloseOutRead:
+    try:
+        result = mark_lead_not_a_lead(db, principal, lead_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return result
+
+
+@router.post("/{lead_id}/not-a-lead/undo")
+def undo_seller_record_not_a_lead(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadRead:
+    try:
+        lead = undo_not_a_lead(db, principal, lead_id)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
 
 
 @router.post("/{lead_id}/reopen")

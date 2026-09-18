@@ -22,9 +22,11 @@
 .toolbar > strong { color: var(--muted); font-size: 11px; text-align: right; }
 .pipelineToolbar { min-height: 54px; padding-block: 7px; grid-template-columns: minmax(260px, 1fr) 130px 150px 145px 150px auto; }
 .stageJump select { cursor: pointer; }
-.stageSuccess, .stageError { margin: 0; padding: 9px 13px; border-bottom: 1px solid var(--line-soft); font-size: 11px; font-weight: 750; }
+.stageSuccess, .stageError { margin: 0; padding: 9px 13px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; font-weight: 750; }
 .stageSuccess { background: #edf6f0; color: var(--brand-strong); }
 .stageError { background: #fff0ed; color: #9b3529; }
+.stageSuccess button { min-height: 28px; padding: 0 10px; border: 1px solid currentColor; border-radius: 5px; background: transparent; color: inherit; font: inherit; font-weight: 850; cursor: pointer; }
+.stageSuccess button:disabled { cursor: wait; opacity: 0.55; }
 .content { min-height: 560px; display: grid; grid-template-columns: minmax(620px, 1fr) minmax(290px, 0.38fr); }
 .tableContent { height: clamp(600px, calc(100dvh - 360px), 900px); min-height: 0; overflow: hidden; }
 .boardContent { position: relative; height: clamp(560px, calc(100dvh - 350px), 920px); min-height: 0; display: block; overflow: hidden; }
@@ -131,6 +133,7 @@
 .previewActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .previewActions a { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-soft); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 800; text-align: center; }
 .previewActions .primaryAction { grid-column: 1 / -1; border-color: var(--brand-strong); background: var(--brand); color: white; }
+.previewNotALead { display: flex; justify-content: flex-end; padding-top: 2px; }
 .previewLifecycle { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .previewLifecycle > div { width: 100%; }
 .previewLifecycle button { width: 100%; }

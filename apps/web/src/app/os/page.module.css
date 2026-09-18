@@ -1269,6 +1269,31 @@
   box-shadow: var(--sg-shadow-tight);
 }
 
+.closedKinds {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.closedKinds a {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-md);
+  display: inline-flex;
+  align-items: center;
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-sm);
+  font-weight: var(--sg-font-weight-strong);
+}
+
+.closedKinds a[aria-current="page"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
 .closedSearch {
   display: flex;
   align-items: end;

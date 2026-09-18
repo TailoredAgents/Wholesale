@@ -120,6 +120,7 @@ from app.schemas.leads import (
     LeadMarketValueEstimateRead,
     LeadMissingField,
     LeadNextBestAction,
+    LeadNotALeadRequest,
     LeadNoteCreate,
     LeadRead,
     LeadReopenRead,
@@ -833,6 +834,7 @@ def list_leads(
     *,
     archived: bool = False,
     closed: bool = False,
+    closed_kind: str = "all",
     asset_class: str | None = None,
     limit: int = 100,
     offset: int = 0,
@@ -891,6 +893,8 @@ def list_leads(
                 Lead.close_out_disposition.in_(TERMINAL_CLOSE_OUT_STAGES),
             )
         )
+        if closed_kind == "not_lead":
+            filters.append(Lead.close_out_reason.ilike("Not a lead:%"))
     elif archived:
         filters.append(Lead.stage_key.not_in(TERMINAL_CLOSE_OUT_STAGES))
     if (
@@ -5028,6 +5032,191 @@ def close_out_lead(
         payload,
         commit=True,
     )
+
+
+NOT_A_LEAD_REASON_LABELS = {
+    "spam_robocall": "Spam or robocall",
+    "wrong_number": "Wrong number",
+    "vendor_solicitation": "Vendor or solicitation",
+    "duplicate": "Duplicate record",
+    "other_non_seller": "Other non-seller contact",
+}
+
+
+def mark_lead_not_a_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadNotALeadRequest,
+) -> LeadCloseOutRead | None:
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
+    if lead is None:
+        return None
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise LeadLifecycleConflictError("This record is already closed.")
+
+    label = NOT_A_LEAD_REASON_LABELS[payload.reason_code]
+    reason = f"Not a lead: {label}."
+    if payload.note:
+        reason = f"{reason} {payload.note}"[:500]
+    previous_stage_key = lead.stage_key
+    result = apply_lead_close_out_transition(
+        db,
+        principal,
+        lead_id,
+        LeadCloseOutRequest(disposition="disqualified", reason=reason),
+        commit=False,
+    )
+    if result is None:
+        return None
+
+    now = datetime.now(UTC)
+    context = dict(lead.qualification_context or {})
+    context["not_a_lead"] = {
+        "active": True,
+        "reason_code": payload.reason_code,
+        "reason_label": label,
+        "note": payload.note,
+        "marked_at": now.isoformat(),
+        "marked_by_user_id": str(principal.user_id),
+        "previous_stage_key": previous_stage_key,
+        "suppress_future_inbound_reactivation": payload.reason_code == "spam_robocall",
+    }
+    lead.qualification_context = context
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.mark_not_a_lead",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value={"stage_key": previous_stage_key},
+            new_value={
+                "stage_key": "disqualified",
+                "reason_code": payload.reason_code,
+                "suppress_future_inbound_reactivation": payload.reason_code == "spam_robocall",
+            },
+            reason=reason,
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    result.lead = lead_to_read(db, lead)
+    return result
+
+
+def undo_not_a_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> LeadRead | None:
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
+    if lead is None:
+        return None
+    metadata = (lead.qualification_context or {}).get("not_a_lead")
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("active") is not True
+        or lead.archived_at is None
+        or lead.stage_key != "disqualified"
+    ):
+        raise LeadLifecycleConflictError("Only a record marked Not a lead can be undone here.")
+
+    original_stage = str(metadata.get("previous_stage_key") or "new")
+    if original_stage in TERMINAL_CLOSE_OUT_STAGES or original_stage == "closed":
+        original_stage = "new"
+    now = datetime.now(UTC)
+    previous = {
+        "stage_key": lead.stage_key,
+        "archived_at": lead.archived_at.isoformat(),
+        "close_out_reason": lead.close_out_reason,
+        "not_a_lead": metadata,
+    }
+    lead.stage_key = original_stage
+    lead.archived_at = None
+    lead.next_follow_up_at = None
+    lead.close_out_disposition = None
+    lead.close_out_reason = None
+    lead.closed_out_at = None
+    lead.closed_out_by_user_id = None
+    context = dict(lead.qualification_context or {})
+    context["not_a_lead"] = {
+        **metadata,
+        "active": False,
+        "undone_at": now.isoformat(),
+        "undone_by_user_id": str(principal.user_id),
+        "suppress_future_inbound_reactivation": False,
+    }
+    lead.qualification_context = context
+
+    management_case = db.scalar(
+        select(LeadManagementCase).where(
+            LeadManagementCase.organization_id == principal.organization_id,
+            LeadManagementCase.lead_id == lead.id,
+        )
+    )
+    if management_case is not None:
+        management_case.status = "active"
+        management_case.closed_at = None
+        management_case.next_action_type = None
+        management_case.next_action_due_at = None
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.organization_id == principal.organization_id,
+            Conversation.lead_id == lead.id,
+        )
+    )
+    if conversation is not None:
+        conversation.status = "open"
+        conversation.queue_key = "acquisitions_follow_up" if lead.assigned_user_id else "unassigned"
+        conversation.closed_at = None
+        conversation.unread_count = 0
+
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.not_a_lead_undone",
+            summary="Not-a-lead classification undone; record returned to active Leads.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.undo_not_a_lead",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=previous,
+            new_value={
+                "stage_key": original_stage,
+                "archived_at": None,
+                "close_out_disposition": None,
+                "close_out_reason": None,
+            },
+            reason="User undid the Not a lead action.",
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    return lead_to_read(db, lead)
 
 
 def reopen_lead(
