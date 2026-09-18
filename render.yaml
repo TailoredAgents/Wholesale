@@ -749,9 +749,7 @@ services:
 
   - type: keyvalue
     name: oakwell-key-value
-    plan: starter
     ipAllowList: []
 
 databases:
   - name: oakwell-postgres
-    plan: basic-256mb
