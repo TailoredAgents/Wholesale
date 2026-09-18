@@ -15,6 +15,7 @@ import {
   getVendorAccounting,
   getWorkspaceProfile,
 } from "../../lib/api";
+import { formatCompanyDate } from "../../lib/company-time";
 import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
@@ -49,7 +50,7 @@ function delta(current: number, previous: number | undefined) {
 }
 
 function date(value: string) {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
+  return formatCompanyDate(value);
 }
 
 export default async function FinancePage({

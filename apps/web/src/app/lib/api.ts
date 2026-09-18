@@ -103,6 +103,7 @@ export type LeadListItem = {
   closed_out_at: string | null;
   closed_out_by_user_id: string | null;
   closed_out_by_user_email: string | null;
+  received_at: string;
   created_at: string;
 };
 

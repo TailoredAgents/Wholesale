@@ -6,6 +6,7 @@ import type {
   LandAcquisitionProfile as LandAcquisitionProfileRead,
   LeadDetail,
 } from "../../lib/api";
+import { formatCompanyDate } from "../../lib/company-time";
 import { PropertyValidationControl } from "./property-validation-control";
 import { fallbackLandOpenQuestions } from "./land-acquisition-state";
 import styles from "./page.module.css";
@@ -174,9 +175,7 @@ function formatEvidenceValue(value: unknown, depth = 0): string {
 
 function formatObservedAt(value: string | null) {
   if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(parsed);
+  return formatCompanyDate(value, "Timestamp unavailable");
 }
 
 function factStatus(

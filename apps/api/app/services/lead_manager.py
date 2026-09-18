@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Mapping
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import distinct, func, select
@@ -49,6 +49,7 @@ from app.services.acquisition_operations import (
     create_notification,
     upsert_internal_calendar_event,
 )
+from app.services.company_time import company_day_bounds
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.land_acquisition_profile import (
     canonical_land_key,
@@ -256,8 +257,7 @@ def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
     cases = list(db.scalars(statement.order_by(LeadManagementCase.acceptance_due_at)).all())
     case_reads = [case_read(db, case, now) for case in cases]
     case_by_lead = {item.lead_id: item for item in case_reads}
-    today_start = datetime.combine(now.date(), time.min, tzinfo=UTC)
-    tomorrow_start = today_start + timedelta(days=1)
+    today_start, tomorrow_start = company_day_bounds(now)
     appointment_lead_ids = set(
         db.scalars(
             select(Appointment.lead_id).where(

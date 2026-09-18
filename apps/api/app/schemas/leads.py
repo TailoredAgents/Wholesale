@@ -125,6 +125,7 @@ class LeadRead(BaseModel):
     closed_out_at: datetime | None
     closed_out_by_user_id: UUID | None
     closed_out_by_user_email: str | None
+    received_at: datetime
     created_at: datetime
 
 

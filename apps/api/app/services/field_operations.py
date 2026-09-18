@@ -49,6 +49,7 @@ from app.schemas.field_operations import (
     FieldOperationsMetrics,
     FieldOperationsOverview,
 )
+from app.services.company_time import company_date
 from app.services.lead_lifecycle import (
     ADDRESS_ONLY_WEBSITE_INTAKE_STATUS,
     lock_organization_lead,
@@ -202,7 +203,8 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
     schedulable_leads = list_schedulable_leads(db, principal)
     appointments = list_upcoming_appointments(db, principal)
     now = datetime.now(UTC)
-    today_count = sum(item.scheduled_start_at.date() == now.date() for item in appointments)
+    today = company_date(now)
+    today_count = sum(company_date(item.scheduled_start_at) == today for item in appointments)
     active_profiles = [profile for profile in profiles if profile.is_active]
     at_capacity = 0
     for profile in active_profiles:
@@ -215,7 +217,7 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
             ready_to_schedule=len(ready_leads),
             appointments_today=today_count,
             unassigned_today=sum(
-                item.scheduled_start_at.date() == now.date() and item.closer_name == "Unassigned"
+                company_date(item.scheduled_start_at) == today and item.closer_name == "Unassigned"
                 for item in appointments
             ),
             at_capacity_today=at_capacity,

@@ -52,6 +52,10 @@ import type {
   FieldOperationsOverview,
   FieldRoomObservation,
 } from "../../lib/api";
+import {
+  companyDateTimeInputToIso,
+  companyDateTimeInputValue,
+} from "../../lib/company-time";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import styles from "./field-operations.module.css";
@@ -1625,7 +1629,7 @@ function NegotiationForm({
   const [counter, setCounter] = useState(dollars(existing?.seller_counter_cents));
   const [agreed, setAgreed] = useState(dollars(existing?.agreed_price_cents));
   const [outcome, setOutcome] = useState(existing?.outcome ?? "pending");
-  const [followUp, setFollowUp] = useState(existing?.next_follow_up_at?.slice(0, 16) ?? "");
+  const [followUp, setFollowUp] = useState(companyDateTimeInputValue(existing?.next_follow_up_at));
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [commitments, setCommitments] = useState(existing?.commitments.join("\n") ?? "");
   const [objections, setObjections] = useState(existing?.objections ?? []);
@@ -1693,7 +1697,7 @@ function NegotiationForm({
         commitments: commitments.split("\n").map((item) => item.trim()).filter(Boolean),
         outcome,
         notes: notes || null,
-        next_follow_up_at: followUp ? new Date(followUp).toISOString() : null,
+        next_follow_up_at: followUp ? companyDateTimeInputToIso(followUp) : null,
       }), "Seller meeting outcome saved.");
     }}>
       <div className={styles.ceilingBanner}>
@@ -1747,7 +1751,7 @@ function NegotiationForm({
       <label><span>Meeting notes</span><textarea onChange={(event) => setNotes(event.target.value)} rows={4} value={notes} /></label>
       <div className={styles.outcomeGrid}>
         <label><span>Outcome</span><select onChange={(event) => setOutcome(event.target.value)} value={outcome}><option value="pending">Meeting in progress</option><option value="follow_up">Follow up</option><option value="not_decided">Not decided</option><option value="accepted">Accepted</option><option value="declined">Declined</option></select></label>
-        <label><span>Next follow-up</span><input onChange={(event) => setFollowUp(event.target.value)} type="datetime-local" value={followUp} /></label>
+        <label><span>Next follow-up (ET)</span><input onChange={(event) => setFollowUp(event.target.value)} type="datetime-local" value={followUp} /></label>
       </div>
       <button className={styles.primaryAction} disabled={saving} type="submit"><Check size={16} />Save outcome</button>
     </form>

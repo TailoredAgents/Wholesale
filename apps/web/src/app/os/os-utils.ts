@@ -1,4 +1,5 @@
 import type { LeadListItem, SpeedToLeadTask } from "../lib/api";
+import { formatCompanyTime, formatCompanyTimestamp } from "../lib/company-time";
 
 export const pipelineStages = [
   {
@@ -207,25 +208,21 @@ export function apiErrorMessage(detail: unknown, fallback: string) {
 }
 
 export function formatTime(value: string | null) {
-  if (!value) {
-    return "Unscheduled";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCompanyTime(value);
 }
 
 export function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Unscheduled";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCompanyTimestamp(
+    value,
+    {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    },
+    "Unscheduled",
+  );
 }
 
 export function qualificationFieldCount(
@@ -461,8 +458,8 @@ function sortLeads(
 ) {
   void openTasks;
   return [...leads].sort((first, second) => {
-    const firstCreatedAt = Date.parse(first.created_at);
-    const secondCreatedAt = Date.parse(second.created_at);
+    const firstCreatedAt = Date.parse(first.received_at);
+    const secondCreatedAt = Date.parse(second.received_at);
     const createdDifference =
       (Number.isNaN(secondCreatedAt) ? 0 : secondCreatedAt) -
       (Number.isNaN(firstCreatedAt) ? 0 : firstCreatedAt);

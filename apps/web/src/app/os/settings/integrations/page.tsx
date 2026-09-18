@@ -1,4 +1,5 @@
 import { getIntegrationStatuses } from "../../../lib/api";
+import { formatCompanyDateTime } from "../../../lib/company-time";
 import { PageHeader, SectionPanel, WorkspacePage } from "../../_components/page-contracts";
 import { requireSettingsSection } from "../section-access";
 import styles from "../settings.module.css";
@@ -37,7 +38,7 @@ export default async function IntegrationSettingsPage() {
                 <small>Runtime: {integration.runtime_status.replaceAll("_", " ")}</small>
               ) : null}
               {integration.last_success_at ? (
-                <small>Last successful sync: {new Date(integration.last_success_at).toLocaleString()}</small>
+                <small>Last successful sync: {formatCompanyDateTime(integration.last_success_at)}</small>
               ) : null}
               {(integration.details ?? []).map((detail) => (
                 <small key={detail}>{detail}</small>

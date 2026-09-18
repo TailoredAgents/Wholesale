@@ -6841,8 +6841,25 @@ def _lead_read_from_context(
         closed_out_at=lead.closed_out_at,
         closed_out_by_user_id=lead.closed_out_by_user_id,
         closed_out_by_user_email=closed_out_by_user.email if closed_out_by_user else None,
+        received_at=lead_received_at(lead),
         created_at=lead.created_at,
     )
+
+
+def lead_received_at(lead: Lead) -> datetime:
+    """Return when the seller event occurred, falling back to CRM ingestion time."""
+    context = lead.qualification_context if isinstance(lead.qualification_context, dict) else {}
+    batchdialer = context.get("batchdialer")
+    raw_value = batchdialer.get("occurred_at") if isinstance(batchdialer, dict) else None
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return lead.created_at
+    try:
+        parsed = datetime.fromisoformat(raw_value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return lead.created_at
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def lead_list_to_read(

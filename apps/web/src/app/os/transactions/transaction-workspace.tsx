@@ -26,6 +26,11 @@ import type {
   TransactionDetail,
   TransactionOverview,
 } from "../../lib/api";
+import {
+  companyDateTimeInputToIso,
+  companyDateTimeInputValue,
+  formatCompanyDate,
+} from "../../lib/company-time";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { RecordTimeline } from "../_components/record-timeline";
 import { labelize } from "../os-utils";
@@ -45,12 +50,7 @@ function money(cents: number | null) {
 }
 
 function date(value: string | null) {
-  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not set";
-}
-
-function localDateTimeValue() {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  return formatCompanyDate(value);
 }
 
 const CHECKLIST_EVIDENCE_ITEM_KEYS = new Set([
@@ -240,7 +240,7 @@ export function TransactionWorkspace({
 
   async function updateClosing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    const timestamp = (name: string) => data.get(name) ? new Date(String(data.get(name))).toISOString() : null;
+    const timestamp = (name: string) => data.get(name) ? companyDateTimeInputToIso(String(data.get(name))) : null;
     await action(() => request(`/api/v1/transactions/${selectedId}`, { method: "PATCH", body: JSON.stringify({
       title_company: data.get("title_company") || null,
       closing_date: timestamp("closing_date"),
@@ -326,7 +326,7 @@ export function TransactionWorkspace({
     payload.set("file", file);
     payload.set("expected_purchase_price_cents", String(detail.purchase_price_cents));
     payload.set("revised_purchase_price_cents", String(revisedPrice));
-    payload.set("executed_at", new Date(String(values.get("executed_at"))).toISOString());
+    payload.set("executed_at", companyDateTimeInputToIso(String(values.get("executed_at"))));
     payload.set("execution_source", String(values.get("execution_source")));
     payload.set("investor_price_action", changeInvestorAsk ? "set_new" : "keep_current");
     if (changeInvestorAsk && newAsk) {
@@ -533,7 +533,7 @@ export function TransactionWorkspace({
               </section>
               <div className={styles.rightStack}><aside className={styles.section}><div className={styles.sectionTitle}><div><span>Deal snapshot</span><h4>Dates and funds</h4></div></div><dl className={styles.facts}><div><dt>Closing</dt><dd>{date(detail.closing_date)}</dd></div><div><dt>Due diligence</dt><dd>{date(detail.due_diligence_deadline)}</dd></div><div><dt>Earnest money</dt><dd>{money(detail.earnest_money_cents)}</dd></div><div><dt>Title opened</dt><dd>{date(detail.title_opened_at)}</dd></div><div><dt>Coordinator</dt><dd>{detail.coordinator_name ?? "Unassigned"}</dd></div></dl>
                 <button className={styles.fundButton} disabled={busy || detail.status === "funded"} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/close`, { method: "POST", body: JSON.stringify({ outcome: "funded", notes: "Funding and closing confirmed by transaction coordinator." }) }))} type="button"><CircleDollarSign size={16} />Record funded closing</button></aside>
-                <form className={styles.form} onSubmit={(event) => void updateClosing(event)}><div className={styles.sectionTitle}><div><span>Milestones</span><h4>Update closing schedule</h4></div></div><label><span>Closing attorney / title company</span><input defaultValue={detail.title_company ?? ""} name="title_company" /></label><label><span>Closing date</span><input defaultValue={detail.closing_date?.slice(0, 16)} name="closing_date" type="datetime-local" /></label><label><span>Earnest money due</span><input defaultValue={detail.earnest_money_due_at?.slice(0, 16)} name="earnest_money_due_at" type="datetime-local" /></label><label><span>Due diligence deadline</span><input defaultValue={detail.due_diligence_deadline?.slice(0, 16)} name="due_diligence_deadline" type="datetime-local" /></label><label><span>Assignment deadline</span><input defaultValue={detail.assignment_deadline?.slice(0, 16)} name="assignment_deadline" type="datetime-local" /></label><button disabled={busy} type="submit"><Check size={16} />Save milestones</button></form>
+                <form className={styles.form} onSubmit={(event) => void updateClosing(event)}><div className={styles.sectionTitle}><div><span>Milestones</span><h4>Update closing schedule</h4></div></div><label><span>Closing attorney / title company</span><input defaultValue={detail.title_company ?? ""} name="title_company" /></label><label><span>Closing date (ET)</span><input defaultValue={companyDateTimeInputValue(detail.closing_date)} name="closing_date" type="datetime-local" /></label><label><span>Earnest money due (ET)</span><input defaultValue={companyDateTimeInputValue(detail.earnest_money_due_at)} name="earnest_money_due_at" type="datetime-local" /></label><label><span>Due diligence deadline (ET)</span><input defaultValue={companyDateTimeInputValue(detail.due_diligence_deadline)} name="due_diligence_deadline" type="datetime-local" /></label><label><span>Assignment deadline (ET)</span><input defaultValue={companyDateTimeInputValue(detail.assignment_deadline)} name="assignment_deadline" type="datetime-local" /></label><button disabled={busy} type="submit"><Check size={16} />Save milestones</button></form>
               </div>
               </div>
             </> : null}
@@ -569,7 +569,7 @@ export function TransactionWorkspace({
                   <div className={styles.sectionTitle}><div><span>Renegotiated contract</span><h4>Record a signed amendment</h4></div><FileCheck2 size={18} /></div>
                   <div className={styles.amendmentSummary}><div><span>Current official price</span><strong>{money(detail.purchase_price_cents)}</strong></div><p>The original agreement stays preserved. This signed amendment becomes the newest binding version.</p></div>
                   <div className={styles.twoFields}><label><span>Signed amendment PDF</span><input accept="application/pdf,.pdf" name="file" required type="file" /></label><label><span>Revised purchase price</span><input min="1" name="revised_purchase_price" placeholder="7000" required step="0.01" type="number" /></label></div>
-                  <div className={styles.twoFields}><label><span>Signed date and time</span><input defaultValue={localDateTimeValue()} name="executed_at" required type="datetime-local" /></label><label><span>How it was signed</span><select defaultValue="docusign" name="execution_source"><option value="docusign">DocuSign</option><option value="signwell">SignWell</option><option value="pandadoc">PandaDoc</option><option value="adobe_sign">Adobe Sign</option><option value="manual_upload">Signed PDF / paper</option><option value="other">Other</option></select></label></div>
+                  <div className={styles.twoFields}><label><span>Signed date and time (ET)</span><input defaultValue={companyDateTimeInputValue()} name="executed_at" required type="datetime-local" /></label><label><span>How it was signed</span><select defaultValue="docusign" name="execution_source"><option value="docusign">DocuSign</option><option value="signwell">SignWell</option><option value="pandadoc">PandaDoc</option><option value="adobe_sign">Adobe Sign</option><option value="manual_upload">Signed PDF / paper</option><option value="other">Other</option></select></label></div>
                   <label><span>Investor asking price</span><select onChange={(event) => setChangeInvestorAsk(event.target.value === "set_new")} value={changeInvestorAsk ? "set_new" : "keep_current"}><option value="keep_current">Keep the current investor asking price</option><option value="set_new">Set a new investor asking price</option></select></label>
                   {changeInvestorAsk ? <label><span>New investor asking price</span><input min="1" name="investor_asking_price" required step="0.01" type="number" /></label> : <p className={styles.formHelp}>Stonegate will keep the marketed asking price and recalculate the expected assignment spread from the new contract basis.</p>}
                   <div className={styles.twoFields}><label><span>External reference</span><input name="external_reference" placeholder="DocuSign envelope ID (optional)" /></label><label><span>Internal note</span><input name="notes" placeholder="Why the terms changed (optional)" /></label></div>

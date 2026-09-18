@@ -23,6 +23,7 @@ import type {
   LeadManagerCopilotRecommendation,
   LeadManagerOverview,
 } from "../../lib/api";
+import { formatCompanyDateTime } from "../../lib/company-time";
 import { landStandardQuestions } from "../land-qualification-questions";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
@@ -45,13 +46,7 @@ const houseStandardQuestions = [
 ] as const;
 
 function formatDateTime(value: string | null) {
-  if (!value) return "Not scheduled";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCompanyDateTime(value, "Not scheduled");
 }
 
 function percent(basisPoints: number) {

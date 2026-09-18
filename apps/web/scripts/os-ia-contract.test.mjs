@@ -103,6 +103,7 @@ function loadTypeScriptModule(path) {
   vm.runInNewContext(compiled.outputText, {
     exports: commonJsModule.exports,
     module: commonJsModule,
+    require: (specifier) => loadTypeScriptModule(resolve(dirname(path), `${specifier}.ts`)),
   });
   return commonJsModule.exports;
 }
@@ -885,6 +886,7 @@ test("All Leads is chronological by default while operational lead views stay pr
   const makeLead = (id, createdAt, overrides = {}) => ({
     id,
     created_at: createdAt,
+    received_at: createdAt,
     lead_temperature: null,
     source: "referral",
     stage_key: "new",
@@ -934,7 +936,8 @@ test("Leads exposes received timestamps and URL-backed sort controls", () => {
   assert.match(workspace, /leadSortOptions\.map/);
   assert.match(workspace, /params\.set\("sort", next\.sort\)/);
   assert.match(workspace, /<span>Received<\/span>/);
-  assert.match(workspace, /className=\{styles\.received\} dateTime=\{lead\.created_at\}/);
+  assert.match(workspace, /className=\{styles\.received\} dateTime=\{lead\.received_at\}/);
+  assert.match(workspace, /Added to Stonegate/);
   assert.ok(leadsRoute?.queryParameters.some((parameter) => parameter.name === "sort"));
 });
 

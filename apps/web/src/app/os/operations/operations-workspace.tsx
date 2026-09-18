@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import type { AcquisitionOperations, LeadListItem } from "../../lib/api";
+import { formatCompanyDateTime } from "../../lib/company-time";
 import { apiErrorMessage, internalCode, labelize } from "../os-utils";
 import styles from "./operations.module.css";
 
@@ -39,12 +40,7 @@ function formValue(formData: FormData, key: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCompanyDateTime(value);
 }
 
 function splitValues(value: string) {

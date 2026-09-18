@@ -41,6 +41,12 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  companyDateKey,
+  formatCompanyDateTime,
+  formatCompanyTimestamp,
+} from "../../lib/company-time";
+
+import {
   EmailAdminPanel,
   type EmailSenderAlias,
 } from "./email-admin-panel";
@@ -359,27 +365,20 @@ function formatCompactTime(value: string | null) {
   if (!value) return "No activity";
   const date = new Date(value);
   const now = new Date();
-  if (date.toDateString() === now.toDateString()) {
-    return new Intl.DateTimeFormat("en-US", {
+  if (companyDateKey(date) === companyDateKey(now)) {
+    return formatCompanyTimestamp(date, {
       hour: "numeric",
       minute: "2-digit",
-    }).format(date);
+    });
   }
-  return new Intl.DateTimeFormat("en-US", {
+  return formatCompanyTimestamp(date, {
     month: "short",
     day: "numeric",
-  }).format(date);
+  });
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "Not scheduled";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatCompanyDateTime(value, "Not scheduled");
 }
 
 function formatDuration(totalSeconds: number | null) {

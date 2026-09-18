@@ -10,6 +10,7 @@ import {
   getTrustProofOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
+import { formatCompanyDate, formatCompanyDateTime } from "../../lib/company-time";
 import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
@@ -41,15 +42,11 @@ function delta(current: number, previous: number | null | undefined) {
 }
 
 function date(value: string) {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
+  return formatCompanyDate(value);
 }
 
 function dateTime(value: string | null) {
-  if (!value) return "None waiting";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatCompanyDateTime(value, "None waiting");
 }
 
 function pixelFingerprint(value: string | undefined) {

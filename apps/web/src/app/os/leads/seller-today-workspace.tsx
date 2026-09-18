@@ -189,7 +189,7 @@ export function SellerTodayWorkspace({
     .sort((first, second) => {
       const assignmentOrder = Number(Boolean(first.assigned_user_email)) - Number(Boolean(second.assigned_user_email));
       if (assignmentOrder !== 0) return assignmentOrder;
-      return new Date(second.created_at).getTime() - new Date(first.created_at).getTime();
+      return new Date(second.received_at).getTime() - new Date(first.received_at).getTime();
     });
 
   const communicationCount = inboxAlerts.length + missedCallbacks.length;

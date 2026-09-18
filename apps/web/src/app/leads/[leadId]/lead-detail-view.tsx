@@ -12,6 +12,7 @@ import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
 import { getBuyers, getLeadDetail, getWorkspaceProfile, type LeadDetail } from "../../lib/api";
+import { formatCompanyDateTime } from "../../lib/company-time";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { RecordTimeline } from "../../os/_components/record-timeline";
 import { AppointmentForm } from "./appointment-form";
@@ -74,10 +75,7 @@ function labelize(value: string | null) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatCompanyDateTime(value);
 }
 
 function formatOptionalDate(value: string | null) {
@@ -1237,7 +1235,10 @@ function ArchivedLeadRecord({ lead }: { lead: LeadDetail }) {
               <div><dt>Closed at</dt><dd>{formatOptionalDate(lead.closed_out_at)}</dd></div>
               <div><dt>Closed by</dt><dd>{lead.closed_out_by_user_email ?? "Unknown"}</dd></div>
               <div><dt>Archived at</dt><dd>{formatOptionalDate(lead.archived_at)}</dd></div>
-              <div><dt>Created at</dt><dd>{formatDate(lead.created_at)}</dd></div>
+              <div><dt>Received</dt><dd>{formatDate(lead.received_at)}</dd></div>
+              {Math.abs(Date.parse(lead.created_at) - Date.parse(lead.received_at)) > 60_000 ? (
+                <div><dt>Added to Stonegate</dt><dd>{formatDate(lead.created_at)}</dd></div>
+              ) : null}
               <div><dt>Close-out reason</dt><dd>{lead.close_out_reason ?? "Duplicate or test archive"}</dd></div>
             </dl>
           </section>

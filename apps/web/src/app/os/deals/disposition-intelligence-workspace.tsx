@@ -21,6 +21,7 @@ import type {
   DispositionIntelligenceResponse,
   DispositionIntelligenceState,
 } from "../../lib/api";
+import { formatCompanyDateTime } from "../../lib/company-time";
 import { StatusBadge } from "../_components/design-system";
 import styles from "./disposition-intelligence.module.css";
 
@@ -83,12 +84,7 @@ function formatRate(value: number | null, state: DispositionIntelligenceState) {
 }
 
 function formatDateTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Timestamp unavailable";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
+  return formatCompanyDateTime(value, "Timestamp unavailable");
 }
 
 function optionValue(option: DispositionIntelligenceFilterOption) {

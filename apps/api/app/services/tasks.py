@@ -40,6 +40,7 @@ from app.services.approvals import (
     approval_permission_for_request_type,
     approval_to_read,
 )
+from app.services.company_time import company_date
 from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 
 SPEED_TO_LEAD_TASK_TYPE = "speed_to_lead"
@@ -987,7 +988,7 @@ def workspace_due_status(
     normalized = as_utc(due_at)
     if normalized < now:
         return "overdue"
-    if normalized.date() == now.date():
+    if company_date(normalized) == company_date(now):
         return "today"
     return "upcoming"
 

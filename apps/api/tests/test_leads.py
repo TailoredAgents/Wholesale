@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID
@@ -52,9 +53,26 @@ from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
 )
-from app.services.leads import cached_market_data_snapshot_is_reusable, list_leads
+from app.services.leads import cached_market_data_snapshot_is_reusable, lead_received_at, list_leads
 
 OWNER_EMAIL = "owner@example.com"
+
+
+def test_lead_received_at_prefers_batchdialer_occurrence_time() -> None:
+    created_at = datetime(2026, 9, 18, 4, 0, tzinfo=UTC)
+    lead = SimpleNamespace(
+        created_at=created_at,
+        qualification_context={"batchdialer": {"occurred_at": "2026-09-17T21:00:00-04:00"}},
+    )
+
+    assert lead_received_at(cast(Lead, lead)) == datetime(2026, 9, 18, 1, 0, tzinfo=UTC)
+
+
+def test_lead_received_at_falls_back_for_non_provider_leads() -> None:
+    created_at = datetime(2026, 9, 18, 1, 0, tzinfo=UTC)
+    lead = SimpleNamespace(created_at=created_at, qualification_context={})
+
+    assert lead_received_at(cast(Lead, lead)) == created_at
 
 
 def test_cached_market_snapshot_reuse_depends_on_property_not_provider_status() -> None:

@@ -935,7 +935,7 @@ export function LeadsWorkspace({
                     <strong>{lead.seller_name}</strong><small>{lead.property_address}</small>
                     <em>{labelize(lead.asset_class)} · {labelize(lead.source)}</em>
                   </span>
-                  <time className={styles.received} dateTime={lead.created_at}>{formatDateTime(lead.created_at)}</time>
+                  <time className={styles.received} dateTime={lead.received_at}>{formatDateTime(lead.received_at)}</time>
                   <span className={styles.status}>
                     <LeadStageBadge stageKey={lead.stage_key} />
                     {isManualReminderDue(lead) ? <StatusBadge tone="warning">Reminder due</StatusBadge> : null}
@@ -1100,7 +1100,10 @@ export function LeadsWorkspace({
                   <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>
                   <div><dt>Lead type</dt><dd>{labelize(selectedLead.asset_class)}</dd></div>
                   <div><dt>Parcel / APN</dt><dd>{selectedLead.property_parcel_id ?? "Not captured"}</dd></div>
-                  <div><dt>Created</dt><dd>{formatDateTime(selectedLead.created_at)}</dd></div>
+                  <div><dt>Received</dt><dd>{formatDateTime(selectedLead.received_at)}</dd></div>
+                  {Math.abs(Date.parse(selectedLead.created_at) - Date.parse(selectedLead.received_at)) > 60_000 ? (
+                    <div><dt>Added to Stonegate</dt><dd>{formatDateTime(selectedLead.created_at)}</dd></div>
+                  ) : null}
                   <div><dt>Primary action</dt><dd>{selectedLead.primary_next_action?.title ?? "Not set"}</dd></div>
                   <div><dt>Action owner</dt><dd>{ownerLabel(selectedLead.primary_next_action?.responsible_user_email ?? null)}</dd></div>
                   <div><dt>Due</dt><dd>{scheduledTaskLabel(selectedLead)}</dd></div>
