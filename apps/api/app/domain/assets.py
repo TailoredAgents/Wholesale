@@ -131,15 +131,15 @@ def property_identity_label(
     postal = str(postal_code or "").strip()
     parcel = str(parcel_id or "").strip()
     clean_county = str(county or "").strip()
-    if street:
+    has_usable_street = street and not street.lower().startswith("address pending")
+    if has_usable_street:
         locality = " ".join(value for value in (clean_state, postal) if value)
         return ", ".join(value for value in (street, clean_city, locality) if value)
     if parcel:
         return ", ".join(
             value for value in (f"APN {parcel}", clean_county, clean_state) if value
         )
-    locality = " ".join(value for value in (clean_state, postal) if value)
-    return ", ".join(value for value in (clean_city, locality) if value)
+    return "Property not identified"
 
 
 def normalize_key(value: Any) -> str:

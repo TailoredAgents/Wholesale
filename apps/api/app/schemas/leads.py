@@ -17,7 +17,7 @@ class ContactCreate(BaseModel):
 class PropertyCreate(BaseModel):
     street_address: str = Field(default="", max_length=255)
     city: str = Field(default="", max_length=120)
-    state: str = Field(min_length=2, max_length=2)
+    state: str = Field(default="GA", min_length=2, max_length=2)
     postal_code: str = Field(default="", max_length=20)
     county: str | None = Field(default=None, max_length=120)
     property_type: str | None = Field(default=None, max_length=80)
@@ -26,7 +26,7 @@ class PropertyCreate(BaseModel):
 
 class LeadCreate(BaseModel):
     contact: ContactCreate
-    property: PropertyCreate
+    property: PropertyCreate = Field(default_factory=PropertyCreate)
     phone: str | None = Field(default=None, max_length=80)
     email: str | None = Field(default=None, max_length=320)
     assigned_user_id: UUID | None = None
@@ -67,15 +67,13 @@ class LeadCreate(BaseModel):
             and self.property.county.strip()
             and self.property.state.strip()
         )
-        if asset_class == LAND_ASSET_CLASS and (has_address or has_parcel):
+        if has_address or (asset_class == LAND_ASSET_CLASS and has_parcel):
             return self
-        if asset_class == LAND_ASSET_CLASS:
-            raise ValueError(
-                "Land leads require either a complete address or APN with county and state."
-            )
-        if not has_address:
-            raise ValueError("House leads require a complete street address, city, state, and ZIP.")
-        return self
+        if self.phone and self.phone.strip() or self.email and self.email.strip():
+            return self
+        raise ValueError(
+            "Enter a phone number or email when the property has not been identified yet."
+        )
 
 
 class PropertyValidationRead(BaseModel):

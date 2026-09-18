@@ -32,12 +32,32 @@
   gap: 12px;
 }
 
+.intakeNote {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 24%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--brand) 6%, var(--surface));
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .form legend {
   width: 100%;
   padding: 15px 0 0;
   color: var(--text);
   font-size: 12px;
   font-weight: 850;
+}
+
+.optional {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .form label {

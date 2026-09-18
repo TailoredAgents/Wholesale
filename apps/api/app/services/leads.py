@@ -466,6 +466,132 @@ class LeadStageConflictError(ValueError):
 TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 
 
+def property_identity_is_ready(property_record: Property, *, asset_class: str) -> bool:
+    refresh_property_identity_keys(property_record)
+    if normalize_asset_class(asset_class) == LAND_ASSET_CLASS:
+        return bool(
+            property_record.normalized_address_key
+            or property_record.normalized_parcel_key
+        )
+    return property_record.normalized_address_key is not None
+
+
+def require_lead_property_identity(
+    db: Session,
+    lead: Lead,
+    *,
+    workflow: str,
+) -> Property:
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise RuntimeError("lead is missing required property")
+    try:
+        require_valid_property_identity(property_record, asset_class=lead.asset_class)
+    except ValueError as error:
+        raise ValueError(
+            f"Add the property address or parcel identity before {workflow}."
+        ) from error
+    return property_record
+
+
+def matching_manual_contact(
+    db: Session,
+    *,
+    organization_id: UUID,
+    phone: str | None,
+    email: str | None,
+) -> Contact | None:
+    normalized_methods = [
+        ("phone", normalize_phone(phone or "")),
+        ("email", normalize_email(email or "")),
+    ]
+    contact_ids: set[UUID] = set()
+    for method_type, normalized_value in normalized_methods:
+        if not normalized_value:
+            continue
+        contact_ids.update(
+            db.scalars(
+                select(ContactMethod.contact_id).where(
+                    ContactMethod.organization_id == organization_id,
+                    ContactMethod.method_type == method_type,
+                    ContactMethod.normalized_value == normalized_value,
+                )
+            ).all()
+        )
+    if len(contact_ids) > 1:
+        raise ValueError(
+            "That phone number and email belong to different contacts. Open the existing "
+            "records and correct them before creating this lead."
+        )
+    return db.get(Contact, next(iter(contact_ids))) if contact_ids else None
+
+
+def add_missing_contact_methods(
+    db: Session,
+    *,
+    organization_id: UUID,
+    contact: Contact,
+    phone: str | None,
+    email: str | None,
+) -> None:
+    existing_methods = {
+        (method.method_type, method.normalized_value)
+        for method in db.scalars(
+            select(ContactMethod).where(
+                ContactMethod.organization_id == organization_id,
+                ContactMethod.contact_id == contact.id,
+            )
+        ).all()
+    }
+    has_primary_method = bool(existing_methods)
+    methods = [
+        ("phone", phone, normalize_phone(phone or "")),
+        ("email", email, normalize_email(email or "")),
+    ]
+    for method_type, raw_value, normalized_value in methods:
+        if not raw_value or not normalized_value:
+            continue
+        if (method_type, normalized_value) in existing_methods:
+            continue
+        db.add(
+            ContactMethod(
+                organization_id=organization_id,
+                contact_id=contact.id,
+                method_type=method_type,
+                value=raw_value.strip(),
+                normalized_value=normalized_value,
+                is_primary=not has_primary_method,
+            )
+        )
+        has_primary_method = True
+
+
+def matching_active_manual_lead(
+    db: Session,
+    *,
+    organization_id: UUID,
+    contact_id: UUID,
+    asset_class: str,
+    property_record: Property | None,
+) -> Lead | None:
+    filters = [
+        Lead.organization_id == organization_id,
+        Lead.contact_id == contact_id,
+        Lead.asset_class == asset_class,
+        Lead.archived_at.is_(None),
+        Lead.stage_key.not_in(TERMINAL_CLOSE_OUT_STAGES),
+    ]
+    query = select(Lead).where(*filters).order_by(Lead.created_at.desc())
+    if property_record is not None:
+        query = query.where(Lead.property_id == property_record.id)
+    else:
+        query = query.join(Property, Property.id == Lead.property_id).where(
+            Property.normalized_address_key.is_(None),
+            Property.normalized_parcel_key.is_(None),
+        )
+    return db.scalar(query.limit(1))
+
+
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
     if payload.stage_key not in SELLER_PIPELINE_STAGES:
         raise ValueError(f"Unsupported seller pipeline stage: {payload.stage_key}")
@@ -518,35 +644,6 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     if not can_own_lead:
         raise ValueError("Select an active acquisitions or management owner for this lead.")
 
-    contact = Contact(
-        organization_id=principal.organization_id,
-        legal_name=payload.contact.legal_name,
-        preferred_name=payload.contact.preferred_name,
-        contact_type=payload.contact.contact_type,
-        assigned_user_id=assigned_user.id,
-    )
-    db.add(contact)
-    db.flush()
-    contact_methods = [
-        ("phone", payload.phone, normalize_phone(payload.phone or "")),
-        ("email", payload.email, normalize_email(payload.email or "")),
-    ]
-    has_primary_method = False
-    for method_type, value, normalized_value in contact_methods:
-        if not value or not normalized_value:
-            continue
-        db.add(
-            ContactMethod(
-                organization_id=principal.organization_id,
-                contact_id=contact.id,
-                method_type=method_type,
-                value=value.strip(),
-                normalized_value=normalized_value,
-                is_primary=not has_primary_method,
-            )
-        )
-        has_primary_method = True
-
     asset_class = asset_class_for_property_type(
         payload.property.property_type,
         explicit_asset_class=payload.asset_class,
@@ -561,6 +658,40 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         parcel_id=payload.property.parcel_id,
         county=payload.property.county,
     )
+    contact = matching_manual_contact(
+        db,
+        organization_id=principal.organization_id,
+        phone=payload.phone,
+        email=payload.email,
+    )
+    if contact is None:
+        contact = Contact(
+            organization_id=principal.organization_id,
+            legal_name=payload.contact.legal_name,
+            preferred_name=payload.contact.preferred_name,
+            contact_type=payload.contact.contact_type,
+            assigned_user_id=assigned_user.id,
+        )
+        db.add(contact)
+        db.flush()
+    add_missing_contact_methods(
+        db,
+        organization_id=principal.organization_id,
+        contact=contact,
+        phone=payload.phone,
+        email=payload.email,
+    )
+    existing_lead = matching_active_manual_lead(
+        db,
+        organization_id=principal.organization_id,
+        contact_id=contact.id,
+        asset_class=asset_class,
+        property_record=property_record,
+    )
+    if existing_lead is not None:
+        db.commit()
+        return lead_to_read(db, existing_lead)
+
     if property_record is None:
         property_record = Property(
             organization_id=principal.organization_id,
@@ -585,10 +716,17 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         if payload.property.county and not property_record.county:
             property_record.county = payload.property.county
         refresh_property_identity_keys(property_record)
-    require_valid_property_identity(property_record, asset_class=asset_class)
+    identity_ready = property_identity_is_ready(
+        property_record,
+        asset_class=asset_class,
+    )
     if asset_class == "land" and not property_record.property_type:
         property_record.property_type = "land"
     qualification_context = dict(payload.qualification_context)
+    if not identity_ready:
+        qualification_context["property_identity_status"] = "pending"
+    if payload.asset_class is None and not payload.property.property_type:
+        qualification_context["asset_class_status"] = "pending"
     if asset_class == LAND_ASSET_CLASS:
         qualification_context = merge_land_staff_context(
             {},
@@ -1615,6 +1753,8 @@ def update_lead_stage(
         )
     if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:
         require_house_workflow(lead.asset_class, workflow="Residential execution stage")
+    if payload.stage_key == "underwriting":
+        require_lead_property_identity(db, lead, workflow="moving into underwriting")
     if (
         previous_stage in OFFER_WORKFLOW_STAGES
         and len((payload.reason or "").strip()) < 10
@@ -1679,6 +1819,7 @@ def record_outside_offer(
         raise ValueError(
             "This lead is already under contract. Record corrections in Contract & Deal."
         )
+    require_lead_property_identity(db, lead, workflow="recording an offer")
 
     previous_stage = lead.stage_key
     if payload.expected_stage_key and payload.expected_stage_key != previous_stage:
@@ -2219,6 +2360,7 @@ def create_lead_underwriting_version(
         return None
     require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential underwriting")
+    require_lead_property_identity(db, lead, workflow="starting underwriting")
 
     if payload.status not in UNDERWRITING_STATUSES:
         raise ValueError(f"Unsupported underwriting status: {payload.status}")
@@ -3410,6 +3552,7 @@ def create_lead_transaction(
         return None
     require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential contract and transaction")
+    require_lead_property_identity(db, lead, workflow="starting a contract")
 
     existing_transaction = db.scalar(
         select(Transaction).where(
@@ -4081,12 +4224,28 @@ def update_lead_staff_details(
         new_values
     )
     asset_class_changed = "asset_class" in previous_values or "asset_class" in new_values
-    if property_identity_changed or asset_class_changed:
-        require_valid_property_identity(property_record, asset_class=lead.asset_class)
+    asset_class_confirmed = "asset_class" in provided_fields
     if property_identity_changed:
         refresh_property_identity_keys(property_record)
         reset_property_validation(property_record)
         invalidate_property_intelligence(db, property_record)
+    if property_identity_changed or asset_class_changed or asset_class_confirmed:
+        identity_ready = property_identity_is_ready(
+            property_record,
+            asset_class=lead.asset_class,
+        )
+        current_context = dict(lead.qualification_context or {})
+        updated_context = dict(current_context)
+        if identity_ready:
+            updated_context.pop("property_identity_status", None)
+        else:
+            updated_context["property_identity_status"] = "pending"
+        if asset_class_confirmed:
+            updated_context.pop("asset_class_status", None)
+        if updated_context != current_context:
+            previous_values.setdefault("qualification_context", current_context)
+            new_values["qualification_context"] = updated_context
+            lead.qualification_context = updated_context
     if property_identity_changed or asset_class_changed:
         enqueue_property_research(
             db,

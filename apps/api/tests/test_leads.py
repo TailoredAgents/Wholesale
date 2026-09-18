@@ -226,6 +226,154 @@ def test_create_and_list_lead(
     )
 
 
+@pytest.mark.parametrize(
+    ("contact_field", "contact_value"),
+    [
+        ("phone", "(470) 555-0199"),
+        ("email", "contact-first@example.com"),
+    ],
+)
+def test_create_contact_first_lead_without_property(
+    db_session: Session,
+    api_db_override: None,
+    contact_field: str,
+    contact_value: str,
+) -> None:
+    seed_owner(db_session)
+    response = TestClient(app).post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contact": {"legal_name": "Contact First Seller"},
+            contact_field: contact_value,
+            "source": "manual",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert created["property_address"] == "Property not identified"
+    assert created["property_street_address"] == ""
+    assert created["property_state"] == "GA"
+    assert created["qualification_context"]["property_identity_status"] == "pending"
+    assert created["qualification_context"]["asset_class_status"] == "pending"
+
+
+def test_contact_first_lead_requires_a_reachable_contact_method(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    response = TestClient(app).post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"contact": {"legal_name": "Unreachable Seller"}},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "phone number or email" in response.text
+
+
+def test_repeated_contact_first_submission_reuses_the_active_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = {
+        "contact": {"legal_name": "Duplicate Safe Seller"},
+        "phone": "+1 470 555 0188",
+        "source": "manual",
+    }
+
+    first = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    second = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert second.json()["id"] == first.json()["id"]
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
+
+
+def test_contact_first_lead_cannot_enter_underwriting_without_property(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contact": {"legal_name": "Property Pending Seller"},
+            "email": "property-pending@example.com",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.patch(
+        f"/api/v1/leads/{created.json()['id']}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"stage_key": "underwriting", "reason": "Ready for underwriting review."},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "Add the property address or parcel identity" in response.json()["detail"]
+
+
+def test_contact_first_lead_can_add_property_and_continue_workflow(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contact": {"legal_name": "Progressive Intake Seller"},
+            "phone": "+1 470 555 0177",
+        },
+    )
+    assert created.status_code == 201, created.text
+    lead_id = created.json()["id"]
+
+    updated = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "asset_class": "house",
+            "property_street_address": "100 Progressive Way",
+            "property_city": "Atlanta",
+            "property_state": "GA",
+            "property_postal_code": "30303",
+            "reason": "Added the property supplied by the seller.",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["property_address"] == "100 Progressive Way, Atlanta, GA 30303"
+    assert "property_identity_status" not in updated.json()["qualification_context"]
+    assert "asset_class_status" not in updated.json()["qualification_context"]
+
+    moved = client.patch(
+        f"/api/v1/leads/{lead_id}/stage",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"stage_key": "underwriting", "reason": "Ready for underwriting review."},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["stage_key"] == "underwriting"
+
+
 def test_staff_can_record_and_change_sms_permission_with_evidence(
     db_session: Session,
     api_db_override: None,

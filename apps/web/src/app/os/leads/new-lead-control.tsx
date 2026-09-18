@@ -68,7 +68,7 @@ export function NewLeadControl({
       if (token) headers.Authorization = `Bearer ${token}`;
       else headers["X-Dev-User-Email"] = devUserEmail;
     const nextFollowUp = value(data, "next_follow_up_at");
-    const assetClass = value(data, "asset_class") || "house";
+    const assetClass = value(data, "asset_class");
     const selectedPropertyType = value(data, "property_type");
       const response = await fetch(`${apiBaseUrl}/api/v1/leads`, {
         method: "POST",
@@ -92,7 +92,7 @@ export function NewLeadControl({
           email: email || null,
           assigned_user_id: value(data, "assigned_user_id") || null,
           source: value(data, "source"),
-          asset_class: assetClass,
+          asset_class: assetClass || null,
           stage_key: "new",
           lead_temperature: value(data, "lead_temperature") || null,
           motivation: value(data, "motivation") || null,
@@ -132,7 +132,7 @@ export function NewLeadControl({
         New Lead
       </button>
       <Dialog
-        description="Create a warm, referral, phone, or staff-entered opportunity."
+        description="Save the person now. Add property and qualification details whenever you learn them."
         footer={
           <>
             <button className={styles.cancelButton} onClick={() => setOpen(false)} type="button">Cancel</button>
@@ -148,6 +148,9 @@ export function NewLeadControl({
         title="New lead"
       >
             <form className={styles.form} id="new-lead-form" onSubmit={submit}>
+              <p className={styles.intakeNote}>
+                Only a name and either a phone number or email are required.
+              </p>
               <fieldset>
                 <legend>Seller and contact</legend>
                 <label><span>Seller name</span><input autoFocus name="legal_name" required /></label>
@@ -157,12 +160,12 @@ export function NewLeadControl({
               </fieldset>
 
               <fieldset>
-                <legend>Property</legend>
-                <label><span>Lead type</span><select defaultValue="house" name="asset_class" required><option value="house">House</option><option value="land">Land</option></select></label>
-                <label className={styles.wide}><span>Street address</span><input autoComplete="street-address" name="street_address" required /></label>
-                <label><span>City</span><input autoComplete="address-level2" name="city" required /></label>
-                <label><span>State</span><input autoComplete="address-level1" defaultValue="GA" maxLength={2} name="state" required /></label>
-                <label><span>ZIP code</span><input autoComplete="postal-code" name="postal_code" required /></label>
+                <legend>Property <span className={styles.optional}>Optional</span></legend>
+                <label><span>Lead type</span><select defaultValue="" name="asset_class"><option value="">Not sure yet</option><option value="house">House</option><option value="land">Land</option></select></label>
+                <label className={styles.wide}><span>Street address</span><input autoComplete="street-address" name="street_address" /></label>
+                <label><span>City</span><input autoComplete="address-level2" name="city" /></label>
+                <label><span>State</span><input autoComplete="address-level1" defaultValue="GA" maxLength={2} name="state" /></label>
+                <label><span>ZIP code</span><input autoComplete="postal-code" name="postal_code" /></label>
                 <label><span>County</span><input name="county" /></label>
                 <label><span>Parcel / APN</span><input maxLength={255} name="parcel_id" /></label>
                 <label><span>Property type</span><select name="property_type"><option value="">Unknown</option><option value="single_family">Single family</option><option value="townhouse">Townhouse</option><option value="condo">Condo</option><option value="multi_family">Multi-family</option><option value="mobile_home">Mobile home</option><option value="land">Land</option><option value="other">Other</option></select></label>
@@ -170,9 +173,9 @@ export function NewLeadControl({
 
               <fieldset>
                 <legend>Lead ownership and source</legend>
-                <label><span>Source</span><select defaultValue="inbound_phone" name="source" required><option value="inbound_phone">Inbound phone call</option><option value="referral">Referral</option><option value="website">Website</option><option value="networking">Networking</option><option value="google_ppc">Google paid search</option><option value="organic">Organic search</option><option value="direct_mail">Direct mail</option><option value="cold_call">Cold call</option><option value="other">Other</option></select></label>
+                <label><span>Source</span><select defaultValue="manual" name="source" required><option value="manual">Staff entered</option><option value="inbound_phone">Inbound phone call</option><option value="referral">Referral</option><option value="website">Website</option><option value="networking">Networking</option><option value="google_ppc">Google paid search</option><option value="organic">Organic search</option><option value="direct_mail">Direct mail</option><option value="cold_call">Cold call</option><option value="other">Other</option></select></label>
                 <label><span>Assigned owner</span><select defaultValue="" name="assigned_user_id"><option value="">Acquisitions routing (recommended)</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
-                <label><span>Lead temperature</span><select defaultValue="warm" name="lead_temperature"><option value="">Unknown</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></label>
+                <label><span>Lead temperature</span><select defaultValue="" name="lead_temperature"><option value="">Unknown</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option></select></label>
                 <label><span>Next follow-up</span><input name="next_follow_up_at" type="datetime-local" /></label>
               </fieldset>
 
