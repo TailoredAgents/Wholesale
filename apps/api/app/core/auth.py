@@ -1,6 +1,7 @@
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Annotated, Any
 
 import httpx
@@ -32,6 +33,12 @@ class ClerkClaims:
     def __init__(self, *, subject: str, email: str | None) -> None:
         self.subject = subject
         self.email = email
+
+
+@lru_cache(maxsize=4)
+def get_clerk_jwks_client(jwks_url: str) -> PyJWKClient:
+    """Reuse PyJWT's bounded JWKS cache across authenticated requests."""
+    return PyJWKClient(jwks_url)
 
 
 def get_current_principal(
@@ -99,7 +106,7 @@ def verify_clerk_authorization_header(authorization: str) -> ClerkClaims:
         )
 
     try:
-        signing_key = PyJWKClient(jwks_url).get_signing_key_from_jwt(token)
+        signing_key = get_clerk_jwks_client(jwks_url).get_signing_key_from_jwt(token)
         decode_options: dict[str, Any] = {"algorithms": ["RS256"], "issuer": settings.clerk_issuer}
         if settings.clerk_audience:
             decode_options["audience"] = settings.clerk_audience
