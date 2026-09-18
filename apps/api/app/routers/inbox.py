@@ -23,6 +23,8 @@ from app.schemas.inbox import (
     InboxAssigneeListResponse,
     InboxAttentionSummaryRead,
     MailboxResponseOverviewRead,
+    QuickSmsSendRead,
+    QuickSmsSendRequest,
     SmsSendRead,
     SmsSendRequest,
 )
@@ -48,6 +50,7 @@ from app.services.messaging import (
     SmsConfigurationError,
     SmsDispatchConflictError,
     send_conversation_sms,
+    send_quick_sms,
 )
 
 router = APIRouter(prefix="/api/v1/inbox", tags=["inbox"])
@@ -67,6 +70,7 @@ send_sms_dependency = require_any_permission(
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
 )
+quick_sms_dependency = require_permission(PermissionKeys.SEND_SMS)
 
 edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
 
@@ -256,6 +260,9 @@ def send_inbox_sms(
             conversation_id,
             payload,
             require_permission=False,
+            require_open_lead=False,
+            allow_general=True,
+            enforce_contact_hours=False,
         )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -278,6 +285,32 @@ def send_inbox_sms(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return result
+
+
+@router.post("/quick-text", status_code=201)
+def send_inbox_quick_text(
+    payload: QuickSmsSendRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(quick_sms_dependency)],
+) -> QuickSmsSendRead:
+    try:
+        return send_quick_sms(db, principal, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except SmsComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except SmsDispatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SmsConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except TwilioMessagingError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/assignees")

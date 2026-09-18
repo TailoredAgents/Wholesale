@@ -147,6 +147,38 @@
   padding: 16px 17px 17px;
 }
 
+.modeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #edf2ef;
+}
+
+.modeSwitch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #50655b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.modeSwitch button[aria-selected="true"] {
+  border-color: #b9cbc1;
+  background: #fff;
+  color: #17633d;
+  box-shadow: 0 1px 3px rgba(12, 45, 31, 0.08);
+}
+
 .dialingFields {
   display: grid;
   min-width: 0;
@@ -173,7 +205,8 @@
 }
 
 .dialog input,
-.dialog select {
+.dialog select,
+.dialog textarea {
   width: 100%;
   min-height: 46px;
   border: 1px solid #bfcfc6;
@@ -184,8 +217,14 @@
   font: inherit;
 }
 
+.dialog textarea {
+  min-height: 118px;
+  resize: vertical;
+}
+
 .dialog input:focus,
-.dialog select:focus {
+.dialog select:focus,
+.dialog textarea:focus {
   border-color: #397c59;
   outline: 3px solid rgba(37, 105, 73, 0.18);
   outline-offset: 1px;

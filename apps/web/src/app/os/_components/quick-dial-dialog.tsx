@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Building2, Delete, Headphones, Phone, PhoneCall, PhoneIncoming, X } from "lucide-react";
+import { Building2, Delete, Headphones, MessageSquare, Phone, PhoneCall, PhoneIncoming, Send, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { useWebPhone } from "./web-phone-provider";
@@ -32,6 +33,12 @@ type QuickDialResponse = {
     expires_at: string;
     recording_enabled: boolean;
   };
+};
+
+type QuickTextResponse = {
+  conversation_id: string;
+  contact_name: string;
+  message: { recipient: string; status: string };
 };
 
 const purposeOptions: Array<{ value: QuickDialPurpose; label: string }> = [
@@ -108,13 +115,18 @@ export function QuickDialLauncher({
 }
 
 export function QuickDialDialog({
+  canCall,
+  canText,
   onClose,
   onSubmittingChange,
 }: {
+  canCall: boolean;
+  canText: boolean;
   onClose: (options?: QuickDialCloseOptions) => void;
   onSubmittingChange: (submitting: boolean) => void;
 }) {
   const { getToken } = useAuth();
+  const router = useRouter();
   const webPhone = useWebPhone();
   const dialogRef = useRef<HTMLElement>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -127,6 +139,8 @@ export function QuickDialDialog({
   const [companyName, setCompanyName] = useState("");
   const [purpose, setPurpose] = useState<QuickDialPurpose>("other");
   const [callReason, setCallReason] = useState("");
+  const [mode, setMode] = useState<"call" | "text">(canCall ? "call" : "text");
+  const [messageBody, setMessageBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const apiBaseUrl = useMemo(
@@ -156,7 +170,7 @@ export function QuickDialDialog({
 
   useEffect(() => {
     idempotencyKeyRef.current = null;
-  }, [callReason, companyName, contactName, phoneNumber, purpose]);
+  }, [callReason, companyName, contactName, messageBody, mode, phoneNumber, purpose]);
 
   useEffect(() => {
     const dialogElement = dialogRef.current;
@@ -220,6 +234,38 @@ export function QuickDialDialog({
     onSubmittingChange(true);
     setError(null);
     try {
+      if (mode === "text") {
+        const idempotencyKey = idempotencyKeyRef.current ?? window.crypto.randomUUID();
+        idempotencyKeyRef.current = idempotencyKey;
+        const token = await getToken().catch(() => null);
+        const headers: Record<string, string> = {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        else headers["X-Dev-User-Email"] = devUserEmail;
+        const response = await fetch(`${apiBaseUrl}/api/v1/inbox/quick-text`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            phone_number: phoneNumber,
+            contact_name: contactName.trim() || null,
+            company_name: companyName.trim() || null,
+            body: messageBody.trim(),
+            idempotency_key: idempotencyKey,
+          }),
+          signal: controller.signal,
+        });
+        const payload = (await response.json().catch(() => null)) as QuickTextResponse | null;
+        if (!response.ok || !payload) throw new Error(responseDetail(payload));
+        idempotencyKeyRef.current = null;
+        requestControllerRef.current = null;
+        onClose();
+        router.push(
+          `/os/inbox?conversation=${encodeURIComponent(payload.conversation_id)}&channel=sms`,
+        );
+        return;
+      }
       await webPhone.prepareAndStartCall(async () => {
         const idempotencyKey = idempotencyKeyRef.current ?? window.crypto.randomUUID();
         idempotencyKeyRef.current = idempotencyKey;
@@ -296,8 +342,8 @@ export function QuickDialDialog({
           </div>
           <div>
             <span>Stonegate Web Phone</span>
-            <h2 id="quick-dial-title">Quick Dial</h2>
-            <p>Type or paste any business number and call from Stonegate.</p>
+            <h2 id="quick-dial-title">Call or text</h2>
+            <p>Type or paste any external number and contact them from Stonegate.</p>
           </div>
           <button
             aria-label="Close Quick Dial"
@@ -311,6 +357,26 @@ export function QuickDialDialog({
         </header>
 
         <form onSubmit={submit}>
+          {canCall && canText ? (
+            <div aria-label="Communication type" className={styles.modeSwitch} role="tablist">
+              <button
+                aria-selected={mode === "call"}
+                onClick={() => setMode("call")}
+                role="tab"
+                type="button"
+              >
+                <PhoneCall aria-hidden="true" size={16} /> Call
+              </button>
+              <button
+                aria-selected={mode === "text"}
+                onClick={() => setMode("text")}
+                role="tab"
+                type="button"
+              >
+                <MessageSquare aria-hidden="true" size={16} /> Text
+              </button>
+            </div>
+          ) : null}
           <fieldset className={styles.dialingFields} disabled={submitting}>
             <label className={styles.wideField}>
               <span>Phone number</span>
@@ -372,50 +438,70 @@ export function QuickDialDialog({
                     value={companyName}
                   />
                 </label>
-                <label>
-                  <span>Call type</span>
-                  <select
-                    onChange={(event) => setPurpose(event.target.value as QuickDialPurpose)}
-                    value={purpose}
-                  >
-                    {purposeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Reason</span>
-                  <input
-                    maxLength={500}
-                    onChange={(event) => setCallReason(event.target.value)}
-                    placeholder="Discuss closing availability"
-                    value={callReason}
-                  />
-                </label>
+                {mode === "call" ? (
+                  <>
+                    <label>
+                      <span>Call type</span>
+                      <select
+                        onChange={(event) => setPurpose(event.target.value as QuickDialPurpose)}
+                        value={purpose}
+                      >
+                        {purposeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Reason</span>
+                      <input
+                        maxLength={500}
+                        onChange={(event) => setCallReason(event.target.value)}
+                        placeholder="Discuss closing availability"
+                        value={callReason}
+                      />
+                    </label>
+                  </>
+                ) : null}
               </div>
             </details>
+            {mode === "text" ? (
+              <label className={styles.wideField}>
+                <span>Message</span>
+                <textarea
+                  maxLength={1600}
+                  onChange={(event) => setMessageBody(event.target.value)}
+                  placeholder="Write your message…"
+                  required
+                  rows={5}
+                  value={messageBody}
+                />
+              </label>
+            ) : null}
           </fieldset>
 
           <div className={styles.callNotice}>
             <Building2 aria-hidden="true" size={18} />
             <p>
-              {webPhone.incomingEnabled
-                ? "This browser will ring with your configured Stonegate cellphone. First answer wins."
-                : "Turn on incoming calls to answer Stonegate callbacks here while this OS tab stays open."}
-              {" "}A matching contact is reused; otherwise a business contact is created and the call is saved in Conversations.
+              {mode === "call"
+                ? `${webPhone.incomingEnabled
+                    ? "This browser will ring with your configured Stonegate cellphone. First answer wins."
+                    : "Turn on incoming calls to answer Stonegate callbacks here while this OS tab stays open."} A matching contact is reused; otherwise a company conversation is created.`
+                : "The text is sent one-to-one from Stonegate and saved in Conversations. A matching contact is reused automatically."}
             </p>
-            <button
-              aria-pressed={webPhone.incomingEnabled}
-              className={styles.incomingToggle}
-              disabled={submitting || webPhone.busy || webPhone.status.callActive}
-              onClick={() => void toggleIncomingCalls()}
-              type="button"
-            >
-              <PhoneIncoming aria-hidden="true" size={16} />
-              {webPhone.incomingEnabled ? "Incoming on" : "Enable incoming"}
-            </button>
+            {mode === "call" ? (
+              <button
+                aria-pressed={webPhone.incomingEnabled}
+                className={styles.incomingToggle}
+                disabled={submitting || webPhone.busy || webPhone.status.callActive}
+                onClick={() => void toggleIncomingCalls()}
+                type="button"
+              >
+                <PhoneIncoming aria-hidden="true" size={16} />
+                {webPhone.incomingEnabled ? "Incoming on" : "Enable incoming"}
+              </button>
+            ) : null}
           </div>
           {error ? <p aria-live="assertive" className={styles.error}>{error}</p> : null}
           {webPhone.activeCall && webPhone.status.callActive ? (
@@ -434,11 +520,20 @@ export function QuickDialDialog({
             </button>
             <button
               className={styles.callButton}
-              disabled={submitting || webPhone.busy || webPhone.status.callActive}
+              disabled={
+                submitting ||
+                (mode === "call" && (webPhone.busy || webPhone.status.callActive))
+              }
               type="submit"
             >
-              <PhoneCall aria-hidden="true" size={17} />
-              {submitting || webPhone.busy ? "Starting browser call…" : "Call in browser"}
+              {mode === "call" ? (
+                <PhoneCall aria-hidden="true" size={17} />
+              ) : (
+                <Send aria-hidden="true" size={17} />
+              )}
+              {mode === "call"
+                ? submitting || webPhone.busy ? "Starting browser call…" : "Call in browser"
+                : submitting ? "Sending…" : "Send text"}
             </button>
           </footer>
         </form>

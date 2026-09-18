@@ -89,10 +89,12 @@ from app.services.communication_compliance import (
     phone_lookup_values,
 )
 from app.services.inbox import (
+    conversation_access_filter,
     create_general_conversation,
     ensure_buyer_conversation,
     ensure_primary_conversation,
     get_scoped_conversation,
+    principal_has_owner_mailbox_access,
     reactivate_closed_lead_for_inbound,
     update_conversation_activity,
 )
@@ -897,7 +899,7 @@ def create_quick_dial_intent(
 
     contact, conversation = find_quick_dial_context(
         db,
-        principal.organization_id,
+        principal,
         destination,
     )
     reused_contact = contact is not None
@@ -1236,6 +1238,7 @@ def start_forwarded_call(
     *,
     provider: TwilioVoiceCallProvider | None = None,
     require_recorded_permission: bool = True,
+    require_open_lead: bool = True,
 ) -> VoiceCallIntentRead | None:
     intent_read = create_call_intent(
         db,
@@ -1244,6 +1247,7 @@ def start_forwarded_call(
         payload,
         intent_source="forwarded_cellphone",
         require_recorded_permission=require_recorded_permission,
+        require_open_lead=require_open_lead,
     )
     if intent_read is None:
         return None
@@ -1368,6 +1372,7 @@ def start_forwarded_lead_call(
     *,
     provider: TwilioVoiceCallProvider | None = None,
     require_recorded_permission: bool = True,
+    require_open_lead: bool = True,
 ) -> VoiceCallIntentRead | None:
     lead = lock_organization_lead(
         db,
@@ -1376,7 +1381,8 @@ def start_forwarded_lead_call(
     )
     if lead is None:
         return None
-    require_lead_open_for_work(lead)
+    if require_open_lead:
+        require_lead_open_for_work(lead)
     if PermissionKeys.PLACE_CALLS not in principal.permission_keys and (
         PermissionKeys.PLACE_ASSIGNED_CALLS not in principal.permission_keys
         or lead.assigned_user_id != principal.user_id
@@ -1390,6 +1396,7 @@ def start_forwarded_lead_call(
         payload,
         provider=provider,
         require_recorded_permission=require_recorded_permission,
+        require_open_lead=require_open_lead,
     )
 
 
@@ -1408,7 +1415,6 @@ def create_lead_call_intent(
     )
     if lead is None:
         return None
-    require_lead_open_for_work(lead)
     conversation = ensure_primary_conversation(db, lead)
     return create_call_intent(
         db,
@@ -1418,6 +1424,7 @@ def create_lead_call_intent(
         intent_source="lead_detail",
         require_browser_voice=True,
         require_recorded_permission=False,
+        require_open_lead=False,
     )
 
 
@@ -1451,7 +1458,10 @@ def process_forwarded_voice_connect(
         except (ProspectingVoiceConfigurationError, ProspectingVoiceConflictError) as exc:
             raise VoiceConfigurationError(str(exc)) from exc
         db.commit()
-    if intent.lead_id is not None:
+    open_lead_required = bool(
+        (intent.intent_metadata or {}).get("open_lead_required", True)
+    )
+    if intent.lead_id is not None and open_lead_required:
         lead = lock_organization_lead(
             db,
             organization_id=intent.organization_id,
@@ -3043,11 +3053,12 @@ def validate_quick_dial_destination(
 
 def find_quick_dial_context(
     db: Session,
-    organization_id: UUID,
+    principal: Principal,
     destination: str,
 ) -> tuple[Contact | None, Conversation | None]:
+    organization_id = principal.organization_id
     lookup_values = phone_lookup_values(destination)
-    conversation = db.scalar(
+    conversation_query = (
         select(Conversation)
         .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
         .where(
@@ -3064,6 +3075,11 @@ def find_quick_dial_context(
             Conversation.created_at.desc(),
         )
     )
+    if not principal_has_owner_mailbox_access(db, principal):
+        conversation_query = conversation_query.where(
+            conversation_access_filter(db, principal)
+        )
+    conversation = db.scalar(conversation_query)
     if conversation is not None:
         return db.get(Contact, conversation.contact_id), conversation
     contact = db.scalar(

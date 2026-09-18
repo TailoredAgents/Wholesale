@@ -160,6 +160,8 @@ function OsShellContent({
     hasPermission("communications:send_email") ||
     hasPermission("communications:send_assigned_email");
   const canQuickDial = hasPermission("communications:place_calls");
+  const canQuickText = hasPermission("communications:send_sms");
+  const canOpenPhone = canQuickDial || canQuickText;
   const canOpenApprovals =
     hasPermission("offers:approve") || hasPermission("contracts:send");
   const canOpenNotifications =
@@ -569,7 +571,7 @@ function OsShellContent({
               ) : null}
             </div>
 
-            {canCreateLead || canComposeEmail || canQuickDial ? (
+            {canCreateLead || canComposeEmail || canOpenPhone ? (
               <div
                 className={styles.headerMenuWrap}
                 onBlur={(event) => {
@@ -612,7 +614,7 @@ function OsShellContent({
                         </div>
                       </Link>
                     ) : null}
-                    {canQuickDial ? (
+                    {canOpenPhone ? (
                       <button
                         aria-controls="stonegate-quick-dial"
                         aria-haspopup="dialog"
@@ -622,8 +624,8 @@ function OsShellContent({
                       >
                         <PhoneOutgoing aria-hidden="true" size={16} />
                         <div>
-                          <strong>Quick Dial</strong>
-                          <small>Call a company or professional</small>
+                          <strong>Call or text</strong>
+                          <small>Contact any external number</small>
                         </div>
                       </button>
                     ) : null}
@@ -729,15 +731,17 @@ function OsShellContent({
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {canQuickDial ? (
+        {canOpenPhone ? (
           <QuickDialLauncher
             buttonRef={quickDialLauncherRef}
             expanded={quickDialOpen}
             onOpen={openQuickDial}
           />
         ) : null}
-        {canQuickDial && quickDialOpen && !phoneOccupied ? (
+        {canOpenPhone && quickDialOpen && !phoneOccupied ? (
           <QuickDialDialog
+            canCall={canQuickDial}
+            canText={canQuickText}
             onClose={closeQuickDial}
             onSubmittingChange={setQuickDialSubmitting}
           />

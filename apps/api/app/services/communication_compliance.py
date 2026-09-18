@@ -155,18 +155,31 @@ def evaluate_sms_eligibility(
     settings: Settings | None = None,
     now: datetime | None = None,
     require_permission: bool = True,
+    requested_phone_number: str | None = None,
+    enforce_contact_hours: bool = True,
 ) -> SmsEligibility:
     settings = settings or get_settings()
+    requested_recipient = format_e164(requested_phone_number)
+    lookup_values = phone_lookup_values(requested_phone_number or "")
     phone_method = db.scalar(
         select(ContactMethod)
         .where(
             ContactMethod.organization_id == contact.organization_id,
             ContactMethod.contact_id == contact.id,
             ContactMethod.method_type == "phone",
+            *(
+                (ContactMethod.normalized_value.in_(lookup_values),)
+                if requested_recipient is not None
+                else ()
+            ),
         )
         .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
     )
-    recipient = format_e164(phone_method.normalized_value) if phone_method else None
+    recipient = (
+        requested_recipient
+        if phone_method is not None and requested_recipient is not None
+        else format_e164(phone_method.normalized_value) if phone_method else None
+    )
     latest_consent = db.scalar(
         select(ConsentRecord)
         .where(
@@ -201,6 +214,7 @@ def evaluate_sms_eligibility(
         is_suppressed=suppression is not None,
         within_allowed_hours=within_allowed_hours,
         require_permission=require_permission,
+        enforce_contact_hours=enforce_contact_hours,
     )
 
 
@@ -212,6 +226,7 @@ def _sms_eligibility_from_state(
     is_suppressed: bool,
     within_allowed_hours: bool,
     require_permission: bool,
+    enforce_contact_hours: bool = True,
 ) -> SmsEligibility:
     blockers: list[str] = []
     if recipient is None:
@@ -220,7 +235,7 @@ def _sms_eligibility_from_state(
         blockers.append("Recorded SMS consent is required.")
     if is_suppressed:
         blockers.append("This number is suppressed from text messaging.")
-    if not within_allowed_hours:
+    if enforce_contact_hours and not within_allowed_hours:
         blockers.append("Text messaging is outside Stonegate's allowed contact hours.")
     if not settings.twilio_sms_configured:
         missing = "; ".join(settings.twilio_sms_configuration_blockers)

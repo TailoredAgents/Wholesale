@@ -64,7 +64,6 @@ import {
   SMS_DELIVERY_REFRESH_INTERVAL_MS,
   SMS_DELIVERY_REFRESH_MAX_ATTEMPTS,
 } from "./sms-delivery";
-import { SmsPermissionControl } from "../_components/sms-permission-control";
 import { useWebPhone } from "../_components/web-phone-provider";
 import styles from "./inbox.module.css";
 
@@ -354,12 +353,6 @@ function labelize(value: string | null | undefined) {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function contactPermissionLabel(status: string) {
-  if (status === "granted") return "permission recorded";
-  if (status === "revoked") return "not permissioned";
-  return "permission not recorded";
 }
 
 function formatCompactTime(value: string | null) {
@@ -1525,16 +1518,6 @@ export function InboxWorkspace({
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
-  const canManageSmsPermission =
-    me?.permissions.includes("leads:edit") ||
-    me?.permissions.includes("communications:send_sms") ||
-    (me?.permissions.includes("communications:send_assigned_sms") &&
-      detail?.assigned_user_id === me.user_id);
-  const canManagePhonePermission =
-    me?.permissions.includes("leads:edit") ||
-    me?.permissions.includes("communications:place_calls") ||
-    (me?.permissions.includes("communications:place_assigned_calls") &&
-      detail?.assigned_user_id === me.user_id);
   const canUseEmail =
     me?.permissions.includes("communications:send_email") ||
     me?.permissions.includes("communications:send_assigned_email");
@@ -2812,7 +2795,7 @@ export function InboxWorkspace({
                     <span>
                       {detail.sms_eligibility.can_send
                         ? canUseSms
-                          ? `Ready to send to ${detail.sms_eligibility.recipient} · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
+                          ? `Ready to send to ${detail.sms_eligibility.recipient}`
                           : "Your role cannot send seller text messages."
                         : detail.sms_eligibility.blockers.join(" ")}
                     </span>
@@ -2897,8 +2880,8 @@ export function InboxWorkspace({
                           ? callComposerMode === "cellphone" && forwardedCallStatus === "started"
                             ? "Answer your cellphone and press 1 to connect."
                             : callComposerMode === "browser"
-                              ? `Ready to call ${detail.voice_eligibility.recipient} through this browser · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}.`
-                              : `Ready to call ${detail.voice_eligibility.recipient} through your cellphone · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}.`
+                              ? `Ready to call ${detail.voice_eligibility.recipient} through this browser.`
+                              : `Ready to call ${detail.voice_eligibility.recipient} through your cellphone.`
                           : detail.voice_eligibility.blockers.join(" ")}
                       </span>
                     </div>
@@ -3042,20 +3025,7 @@ export function InboxWorkspace({
                     </div>
                   ))}
                 </div>
-                {detail.lead_id ? (
-                  <SmsPermissionControl
-                    canManagePhone={Boolean(canManagePhonePermission)}
-                    canManageSms={Boolean(canManageSmsPermission)}
-                    fallbackConsentStatus={detail.sms_eligibility.consent_status}
-                    fallbackPhoneConsentStatus={detail.voice_eligibility.consent_status}
-                    isPhoneSuppressed={detail.voice_eligibility.is_suppressed}
-                    isSuppressed={detail.sms_eligibility.is_suppressed}
-                    key={`${detail.lead_id}:${detail.sms_eligibility.consent_status}:${detail.voice_eligibility.consent_status}:${Number(detail.sms_eligibility.is_suppressed)}:${Number(detail.voice_eligibility.is_suppressed)}:${detail.last_activity_at ?? "initial"}`}
-                    leadId={detail.lead_id}
-                    onSaved={() => loadDetail(detail.id)}
-                    phoneNumber={primaryPhone?.value ?? detail.sms_eligibility.recipient}
-                  />
-                ) : (
+                {!detail.lead_id ? (
                   <div
                     className={
                       detail.sms_eligibility.can_send
@@ -3070,13 +3040,13 @@ export function InboxWorkspace({
                     )}
                     <span>
                       {detail.sms_eligibility.can_send
-                        ? `SMS available · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
+                        ? "SMS available"
                         : detail.sms_eligibility.is_suppressed
-                          ? `SMS suppressed · ${contactPermissionLabel(detail.sms_eligibility.consent_status)}`
-                          : `SMS unavailable · ${contactPermissionLabel(detail.sms_eligibility.consent_status)} · ${detail.sms_eligibility.blockers.join(" ")}`}
+                          ? "SMS suppressed"
+                          : `SMS unavailable · ${detail.sms_eligibility.blockers.join(" ")}`}
                     </span>
                   </div>
-                )}
+                ) : null}
                 {!detail.lead_id ? (
                   <div
                     className={
@@ -3092,10 +3062,10 @@ export function InboxWorkspace({
                     )}
                     <span>
                       {detail.voice_eligibility.can_call
-                        ? `Calling available · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}`
+                        ? "Calling available"
                         : detail.voice_eligibility.is_suppressed
-                          ? `Calling suppressed · ${contactPermissionLabel(detail.voice_eligibility.consent_status)}`
-                          : `Calling unavailable · ${contactPermissionLabel(detail.voice_eligibility.consent_status)} · ${detail.voice_eligibility.blockers.join(" ")}`}
+                          ? "Calling suppressed"
+                          : `Calling unavailable · ${detail.voice_eligibility.blockers.join(" ")}`}
                     </span>
                   </div>
                 ) : null}

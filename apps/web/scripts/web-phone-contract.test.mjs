@@ -112,9 +112,10 @@ test("the persistent phone panel exposes safe active call controls", () => {
   assert.doesNotMatch(provider, /<small aria-live="polite">/);
 });
 
-test("the OS exposes governed Quick Dial without creating a seller lead", () => {
+test("the OS exposes manual calling and texting without creating a seller lead", () => {
   assert.match(shell, /<WebPhoneProvider>/);
   assert.match(shell, /communications:place_calls/);
+  assert.match(shell, /communications:send_sms/);
   assert.match(shell, /<QuickDialLauncher/);
   assert.match(shell, /buttonRef=\{quickDialLauncherRef\}/);
   assert.match(shell, /expanded=\{quickDialOpen\}/);
@@ -125,11 +126,14 @@ test("the OS exposes governed Quick Dial without creating a seller lead", () => 
   assert.match(shell, /setQuickDialOpen\(false\);\s+setHelpOpen\(false\)/);
   assert.match(shell, /stonegate-active-phone/);
   assert.match(quickDial, /\/api\/v1\/voice\/quick-dial/);
+  assert.match(quickDial, /\/api\/v1\/inbox\/quick-text/);
+  assert.match(quickDial, /Call or text/);
+  assert.match(quickDial, /Send text/);
   assert.match(quickDial, /company_name:/);
   assert.match(quickDial, /purpose,/);
   assert.match(quickDial, /callIntentId: payload\.intent\.id/);
   assert.match(quickDial, /fromNumber: payload\.intent\.from_number/);
-  assert.match(quickDial, /business contact is created and the call is saved in Conversations/);
+  assert.match(quickDial, /company conversation is created/);
   assert.match(quickDial, /useRef<string \| null>\(null\)/);
   assert.match(quickDial, /new AbortController\(\)/);
   assert.match(quickDial, /signal: controller\.signal/);

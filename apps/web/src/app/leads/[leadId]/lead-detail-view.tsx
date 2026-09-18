@@ -14,7 +14,6 @@ import { CompleteTaskButton } from "../../complete-task-button";
 import { getBuyers, getLeadDetail, getWorkspaceProfile, type LeadDetail } from "../../lib/api";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { RecordTimeline } from "../../os/_components/record-timeline";
-import { SmsPermissionControl } from "../../os/_components/sms-permission-control";
 import { AppointmentForm } from "./appointment-form";
 import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
@@ -146,8 +145,6 @@ function SectionHeader({ title, meta }: { title: string; meta?: string }) {
 }
 
 function ContactPanel({
-  canManagePhonePermission,
-  canManageSmsPermission,
   lead,
 }: {
   canManagePhonePermission: boolean;
@@ -176,24 +173,6 @@ function ContactPanel({
         <div><dt>Source</dt><dd>{labelize(lead.source)}</dd></div>
         <div><dt>Temperature</dt><dd>{labelize(lead.lead_temperature)}</dd></div>
       </dl>
-      <SmsPermissionControl
-        canManagePhone={canManagePhonePermission}
-        canManageSms={canManageSmsPermission}
-        disabled={Boolean(lead.archived_at)}
-        fallbackConsentStatus={lead.sms_eligibility.consent_status}
-        fallbackPhoneConsentStatus={lead.voice_eligibility.consent_status}
-        initialRecords={lead.consent_records}
-        isPhoneSuppressed={lead.voice_eligibility.is_suppressed}
-        isSuppressed={lead.sms_eligibility.is_suppressed}
-        leadId={lead.id}
-        phoneNumber={
-          lead.contact_methods.find(
-            (method) => method.method_type === "phone" && method.is_primary,
-          )?.value ??
-          lead.contact_methods.find((method) => method.method_type === "phone")?.value ??
-          null
-        }
-      />
     </section>
   );
 }

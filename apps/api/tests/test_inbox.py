@@ -580,7 +580,7 @@ def test_inbox_detail_combines_context_timeline_and_read_state(
     assert read_response.json()["unread_count"] == 0
 
 
-def test_inbox_detail_sms_readiness_matches_general_conversation_gate(
+def test_inbox_detail_allows_manual_sms_for_general_conversations(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -620,20 +620,19 @@ def test_inbox_detail_sms_readiness_matches_general_conversation_gate(
     )
     assert detail_response.status_code == 200, detail_response.text
     sms_readiness = detail_response.json()["sms_eligibility"]
-    blocker = "SMS is only available from seller and buyer conversations."
     assert sms_readiness["can_send"] is False
-    assert blocker in sms_readiness["blockers"]
+    assert not any("seller and buyer conversations" in item for item in sms_readiness["blockers"])
 
     send_response = client.post(
         f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
         headers=headers,
         json={"body": "Manual follow-up", "idempotency_key": "general-sms-gate-0001"},
     )
-    assert send_response.status_code == 503, send_response.text
-    assert send_response.json()["detail"] == blocker
+    assert send_response.status_code == 422, send_response.text
+    assert "not configured" in send_response.json()["detail"].lower()
 
 
-def test_inbox_detail_contact_readiness_matches_closed_lead_lifecycle_gate(
+def test_inbox_detail_does_not_gate_manual_contact_on_closed_lead_lifecycle(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -661,26 +660,29 @@ def test_inbox_detail_contact_readiness_matches_closed_lead_lifecycle_gate(
     )
     assert detail_response.status_code == 200, detail_response.text
     detail = detail_response.json()
-    blocker = "This lead is closed. Reopen it before adding or changing active work."
     assert detail["sms_eligibility"]["can_send"] is False
-    assert blocker in detail["sms_eligibility"]["blockers"]
+    assert not any(
+        "lead is closed" in item.lower() for item in detail["sms_eligibility"]["blockers"]
+    )
     assert detail["voice_eligibility"]["can_call"] is False
-    assert blocker in detail["voice_eligibility"]["blockers"]
+    assert not any(
+        "lead is closed" in item.lower() for item in detail["voice_eligibility"]["blockers"]
+    )
 
     sms_response = client.post(
         f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
         headers=headers,
-        json={"body": "Must not send", "idempotency_key": "closed-lead-sms-0001"},
+        json={"body": "Manual follow-up", "idempotency_key": "closed-lead-sms-0001"},
     )
-    assert sms_response.status_code == 409, sms_response.text
-    assert sms_response.json()["detail"] == blocker
+    assert sms_response.status_code == 422, sms_response.text
+    assert "lead is closed" not in sms_response.json()["detail"].lower()
     call_response = client.post(
         f"/api/v1/voice/conversations/{conversation.id}/forwarded-calls",
         headers=headers,
         json={"idempotency_key": "closed-lead-call-0001"},
     )
-    assert call_response.status_code == 409, call_response.text
-    assert call_response.json()["detail"] == blocker
+    assert call_response.status_code != 409, call_response.text
+    assert "lead is closed" not in call_response.json()["detail"].lower()
 
 
 def test_general_conversation_retains_email_without_a_lead(

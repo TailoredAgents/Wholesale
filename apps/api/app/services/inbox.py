@@ -80,11 +80,7 @@ from app.services.communication_compliance import (
 )
 from app.services.document_storage import read_content
 from app.services.email_identity import general_email_display_name
-from app.services.lead_lifecycle import (
-    LeadLifecycleConflictError,
-    lock_organization_lead,
-    require_lead_open_for_work,
-)
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.mailbox_notifications import (
     MAILBOX_NOTIFICATION_TYPES,
     latest_inbound_channel,
@@ -1769,6 +1765,7 @@ def get_conversation_detail(
         db,
         contact,
         require_permission=False,
+        enforce_contact_hours=False,
     )
     business_phone_number = business_voice_requested_phone_number(conversation, contact)
     voice_eligibility = evaluate_voice_eligibility(
@@ -1779,20 +1776,14 @@ def get_conversation_detail(
     )
     sms_blockers = list(sms_eligibility.blockers)
     voice_blockers = list(voice_eligibility.blockers)
-    if conversation.conversation_type not in {"lead", "buyer"}:
-        sms_blockers.append("SMS is only available from seller and buyer conversations.")
+    if conversation.conversation_type not in {"lead", "buyer", "general"}:
+        sms_blockers.append(
+            "Texting is only available from seller, buyer, and company conversations."
+        )
     if conversation.conversation_type not in {"lead", "buyer", "general"}:
         voice_blockers.append(
             "Calling is only available from seller, buyer, and company conversations."
         )
-    if conversation.conversation_type == "lead" and lead is not None:
-        try:
-            require_lead_open_for_work(lead)
-        except LeadLifecycleConflictError as exc:
-            lifecycle_blocker = str(exc)
-            sms_blockers.append(lifecycle_blocker)
-            voice_blockers.append(lifecycle_blocker)
-
     base = conversation_to_read(db, conversation)
     return ConversationDetailRead(
         **base.model_dump(),

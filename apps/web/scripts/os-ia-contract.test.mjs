@@ -667,27 +667,17 @@ test("Inbox preserves usable mobile list, thread, composer, and details panes", 
   assert.match(inboxStyles, /\.mobileBackButton[\s\S]*min-width: 40px/);
 });
 
-test("Lead contact permission control manages calls and SMS without a typed note", () => {
-  const control = readFileSync(
-    resolve(osSourceRoot, "_components/sms-permission-control.tsx"),
-    "utf8",
-  );
+test("Manual communication does not expose a confusing permission-record gate", () => {
   const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
   const leadDetail = readFileSync(
     resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
     "utf8",
   );
 
-  assert.match(control, /\/contact-permission/);
-  assert.match(control, /Phone calls/);
-  assert.match(control, /Text messages \(SMS\)/);
-  assert.match(control, /Call permission:/);
-  assert.match(control, /SMS permission:/);
-  assert.doesNotMatch(control, /name="evidence_note"/);
-  assert.match(inbox, /fallbackPhoneConsentStatus=\{detail\.voice_eligibility\.consent_status\}/);
-  assert.match(inbox, /fallbackConsentStatus=\{detail\.sms_eligibility\.consent_status\}/);
-  assert.match(leadDetail, /canManagePhone=\{canManagePhonePermission\}/);
-  assert.match(leadDetail, /canManageSms=\{canManageSmsPermission\}/);
+  assert.doesNotMatch(inbox, /Call permission:|SMS permission:|permission not recorded/i);
+  assert.doesNotMatch(leadDetail, /Call permission:|SMS permission:|permission not recorded/i);
+  assert.match(inbox, /detail\.sms_eligibility\.is_suppressed/);
+  assert.match(inbox, /detail\.voice_eligibility\.is_suppressed/);
 });
 
 test("Inbox call intelligence includes a safely derived completed-note quick read", () => {

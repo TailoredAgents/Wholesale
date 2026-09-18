@@ -1205,6 +1205,83 @@ def test_manual_outbound_sms_treats_permission_as_advisory_but_respects_suppress
     assert len(fake_provider.requests) == 2
 
 
+def test_quick_text_creates_company_conversation_for_any_external_number(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    fake_provider = FakeTwilioProvider()
+    monkeypatch.setattr(
+        "app.services.messaging.get_twilio_messaging_provider",
+        lambda: fake_provider,
+    )
+
+    response = TestClient(app).post(
+        "/api/v1/inbox/quick-text",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "phone_number": "(404) 555-0197",
+            "contact_name": "Jordan Smith",
+            "company_name": None,
+            "body": "Hi Jordan, this is Austin with Stonegate.",
+            "idempotency_key": "quick-text-external-0001",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["conversation_type"] == "general"
+    assert payload["contact_name"] == "Jordan Smith"
+    assert payload["reused_contact"] is False
+    assert payload["message"]["recipient"] == "+14045550197"
+    assert len(fake_provider.requests) == 1
+
+
+@pytest.mark.parametrize("closed_state", ["dead", "archived"])
+def test_manual_sms_reuses_inactive_lead_without_reopening_it(
+    closed_state: str,
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    lead = db_session.get(Lead, conversation.lead_id)
+    assert lead is not None
+    if closed_state == "dead":
+        lead.stage_key = "dead"
+    else:
+        lead.archived_at = datetime.now(UTC)
+    db_session.commit()
+    fake_provider = FakeTwilioProvider()
+    monkeypatch.setattr(
+        "app.services.messaging.get_twilio_messaging_provider",
+        lambda: fake_provider,
+    )
+
+    response = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "body": "Manual follow-up.",
+            "idempotency_key": f"inactive-lead-{closed_state}-sms",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    db_session.refresh(lead)
+    assert lead.stage_key == "dead" if closed_state == "dead" else lead.archived_at is not None
+    assert len(fake_provider.requests) == 1
+
+
 def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     db_session: Session,
     api_db_override: None,

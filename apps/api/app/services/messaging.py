@@ -37,14 +37,20 @@ from app.models.foundation import (
     TeamMembership,
     VoiceLine,
 )
-from app.schemas.inbox import SmsSendRead, SmsSendRequest
+from app.schemas.inbox import QuickSmsSendRead, QuickSmsSendRequest, SmsSendRead, SmsSendRequest
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     format_e164,
     phone_lookup_values,
 )
 from app.services.inbound_contacts import create_unknown_inbound_sms_conversation
-from app.services.inbox import get_scoped_conversation, update_conversation_activity
+from app.services.inbox import (
+    conversation_access_filter,
+    create_general_conversation,
+    get_scoped_conversation,
+    principal_has_owner_mailbox_access,
+    update_conversation_activity,
+)
 from app.services.lead_lifecycle import (
     LeadLifecycleConflictError,
     lock_organization_lead,
@@ -114,6 +120,10 @@ def send_conversation_sms(
     payload: SmsSendRequest,
     *,
     require_permission: bool = True,
+    require_open_lead: bool = True,
+    allow_general: bool = False,
+    requested_recipient: str | None = None,
+    enforce_contact_hours: bool = True,
 ) -> SmsSendRead | None:
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
@@ -123,7 +133,10 @@ def send_conversation_sms(
         or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("SMS can only be sent from an assigned conversation.")
-    if conversation.conversation_type not in {"lead", "buyer"}:
+    allowed_conversation_types = (
+        {"lead", "buyer", "general"} if allow_general else {"lead", "buyer"}
+    )
+    if conversation.conversation_type not in allowed_conversation_types:
         raise SmsConfigurationError("SMS is only available from seller and buyer conversations.")
     active_lead: Lead | None = None
     if conversation.conversation_type == "lead" and conversation.lead_id is not None:
@@ -134,7 +147,8 @@ def send_conversation_sms(
         )
         if active_lead is None:
             return None
-        require_lead_open_for_work(active_lead)
+        if require_open_lead:
+            require_lead_open_for_work(active_lead)
 
     body = payload.body.strip()
     body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -178,6 +192,8 @@ def send_conversation_sms(
         db,
         contact,
         require_permission=require_permission,
+        requested_phone_number=requested_recipient,
+        enforce_contact_hours=enforce_contact_hours,
     )
     if not eligibility.can_send or eligibility.recipient is None:
         raise SmsComplianceError(eligibility.blockers)
@@ -237,7 +253,7 @@ def send_conversation_sms(
     db.commit()
     dispatch_id = dispatch.id
 
-    if lead is not None:
+    if lead is not None and require_open_lead:
         lead = lock_organization_lead(
             db,
             organization_id=principal.organization_id,
@@ -386,6 +402,8 @@ def send_conversation_sms(
                 "Outbound buyer SMS accepted for delivery."
                 if entity_type == "buyer"
                 else "Outbound seller SMS accepted for delivery."
+                if entity_type == "lead"
+                else "Outbound company SMS accepted for delivery."
             ),
         )
     )
@@ -608,6 +626,90 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     event.processed_at = None if media_count else datetime.now(UTC)
     db.commit()
     return event.processing_status
+
+
+def send_quick_sms(
+    db: Session,
+    principal: Principal,
+    payload: QuickSmsSendRequest,
+) -> QuickSmsSendRead:
+    """Send a deliberate one-to-one text to any valid external number."""
+
+    if PermissionKeys.SEND_SMS not in principal.permission_keys:
+        raise PermissionError("Quick Text requires permission to send company SMS.")
+    destination = format_e164(payload.phone_number)
+    if destination is None:
+        raise SmsComplianceError(("Enter a valid phone number to text.",))
+
+    contact, conversation = find_quick_sms_context(
+        db,
+        principal,
+        destination,
+    )
+    reused_contact = contact is not None
+    reused_conversation = conversation is not None
+    if contact is None:
+        display_name = (payload.contact_name or payload.company_name or "").strip()
+        contact = Contact(
+            organization_id=principal.organization_id,
+            legal_name=display_name or f"Contact {destination}",
+            preferred_name=None,
+            contact_type="business_contact",
+            assigned_user_id=principal.user_id,
+        )
+        db.add(contact)
+        db.flush()
+        db.add(
+            ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=contact.id,
+                method_type="phone",
+                value=destination,
+                normalized_value="".join(
+                    character for character in destination if character.isdigit()
+                ),
+                is_primary=True,
+            )
+        )
+        db.flush()
+    if conversation is None:
+        conversation = create_general_conversation(
+            db,
+            organization_id=principal.organization_id,
+            contact_id=contact.id,
+            assigned_user_id=principal.user_id,
+        )
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "manual_text": {
+            "phone_number": destination,
+            "contact_name": (payload.contact_name or "").strip() or None,
+            "company_name": (payload.company_name or "").strip() or None,
+            "prepared_by_user_id": str(principal.user_id),
+        },
+    }
+    result = send_conversation_sms(
+        db,
+        principal,
+        conversation.id,
+        SmsSendRequest(body=payload.body, idempotency_key=payload.idempotency_key),
+        require_permission=False,
+        require_open_lead=False,
+        allow_general=True,
+        requested_recipient=destination,
+        enforce_contact_hours=False,
+    )
+    if result is None:
+        raise SmsConfigurationError("The Quick Text conversation could not be prepared.")
+    return QuickSmsSendRead(
+        conversation_id=conversation.id,
+        contact_id=contact.id,
+        conversation_type=conversation.conversation_type,
+        contact_name=contact.legal_name,
+        reused_contact=reused_contact,
+        reused_conversation=reused_conversation,
+        message=result,
+    )
 
 
 def resolve_twilio_status_tenant(
@@ -1344,6 +1446,54 @@ def get_provider_event(
             CommunicationProviderEvent.external_event_id == external_event_id,
         )
     )
+
+
+def find_quick_sms_context(
+    db: Session,
+    principal: Principal,
+    destination: str,
+) -> tuple[Contact | None, Conversation | None]:
+    organization_id = principal.organization_id
+    lookup_values = phone_lookup_values(destination)
+    conversation_query = (
+        select(Conversation)
+        .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
+        .where(
+            Conversation.organization_id == organization_id,
+            Conversation.conversation_type.in_(("general", "buyer", "lead")),
+            ContactMethod.organization_id == organization_id,
+            ContactMethod.method_type == "phone",
+            ContactMethod.normalized_value.in_(lookup_values),
+        )
+        .order_by(
+            (Conversation.status == "closed").asc(),
+            (Conversation.conversation_type == "general").desc(),
+            Conversation.last_activity_at.desc(),
+            Conversation.created_at.desc(),
+        )
+    )
+    if not principal_has_owner_mailbox_access(db, principal):
+        conversation_query = conversation_query.where(
+            conversation_access_filter(db, principal)
+        )
+    conversation = db.scalar(conversation_query)
+    if conversation is not None:
+        return db.get(Contact, conversation.contact_id), conversation
+    contact = db.scalar(
+        select(Contact)
+        .join(ContactMethod, ContactMethod.contact_id == Contact.id)
+        .where(
+            Contact.organization_id == organization_id,
+            ContactMethod.organization_id == organization_id,
+            ContactMethod.method_type == "phone",
+            ContactMethod.normalized_value.in_(lookup_values),
+        )
+        .order_by(
+            (Contact.contact_type == "business_contact").desc(),
+            Contact.created_at.desc(),
+        )
+    )
+    return contact, None
 
 
 def get_twilio_status_provider_event(

@@ -183,6 +183,7 @@ def create_conversation_call_intent(
             payload,
             require_browser_voice=True,
             require_recorded_permission=False,
+            require_open_lead=False,
         )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -221,6 +222,7 @@ def create_forwarded_conversation_call(
             conversation_id,
             payload,
             require_recorded_permission=False,
+            require_open_lead=False,
         )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -259,6 +261,7 @@ def create_forwarded_lead_call(
             lead_id,
             payload,
             require_recorded_permission=False,
+            require_open_lead=False,
         )
     except LeadLifecycleConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

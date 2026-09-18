@@ -218,6 +218,24 @@ class SmsSendRead(BaseModel):
     recipient: str
 
 
+class QuickSmsSendRequest(BaseModel):
+    phone_number: str = Field(min_length=7, max_length=80)
+    contact_name: str | None = Field(default=None, max_length=255)
+    company_name: str | None = Field(default=None, max_length=255)
+    body: str = Field(min_length=1, max_length=1600)
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class QuickSmsSendRead(BaseModel):
+    conversation_id: UUID
+    contact_id: UUID
+    conversation_type: str
+    contact_name: str
+    reused_contact: bool
+    reused_conversation: bool
+    message: SmsSendRead
+
+
 class ConversationWatcherCreate(BaseModel):
     user_id: UUID
     notification_level: str = Field(default="all", max_length=80)
