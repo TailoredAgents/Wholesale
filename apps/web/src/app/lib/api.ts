@@ -6063,6 +6063,10 @@ export type TaskWorkspace = {
 
 type LeadListResponse = {
   items: LeadListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 };
 
 type SpeedToLeadQueueResponse = {
@@ -6526,6 +6530,30 @@ async function fetchServerApiRead(
   throw lastError instanceof Error ? lastError : new Error("Stonegate API request failed.");
 }
 
+async function fetchAllLeadPages(
+  headers: Record<string, string>,
+  filters: Record<string, string> = {},
+): Promise<LeadListItem[]> {
+  const limit = 100;
+  let offset = 0;
+  const items: LeadListItem[] = [];
+
+  while (true) {
+    const query = new URLSearchParams({
+      ...filters,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const response = await fetchServerApiRead(`/api/v1/leads?${query.toString()}`, headers);
+    if (!response.ok) throw await apiError(response);
+
+    const page = (await response.json()) as LeadListResponse;
+    items.push(...page.items);
+    if (page.has_more !== true || page.items.length === 0) return items;
+    offset += page.items.length;
+  }
+}
+
 export async function getWorkspaceProfileResult(): Promise<{
   profile: WorkspaceProfile | null;
   apiConnected: boolean;
@@ -6596,23 +6624,21 @@ export async function getInboxAttentionSummary(): Promise<InboxAttentionSummary>
 export async function getDashboardData(): Promise<DashboardData> {
   try {
     const headers = await getServerApiHeaders();
-    const [summaryResponse, leadsResponse, speedToLeadResponse, openTaskResponse] =
+    const [summaryResponse, leads, speedToLeadResponse, openTaskResponse] =
       await Promise.all([
       fetchServerApiRead("/api/v1/dashboard/summary", headers),
-      fetchServerApiRead("/api/v1/leads", headers),
+      fetchAllLeadPages(headers),
       fetchServerApiRead("/api/v1/tasks/speed-to-lead", headers),
       fetchServerApiRead("/api/v1/tasks/open", headers),
     ]);
 
     if (
       !summaryResponse.ok ||
-      !leadsResponse.ok ||
       !speedToLeadResponse.ok ||
       !openTaskResponse.ok
     ) {
       const failedResponse = [
         summaryResponse,
-        leadsResponse,
         speedToLeadResponse,
         openTaskResponse,
       ].find((response) => !response.ok);
@@ -6620,7 +6646,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     }
 
     const summary = (await summaryResponse.json()) as DashboardSummary;
-    const leads = ((await leadsResponse.json()) as LeadListResponse).items;
     const speedToLeadQueue = ((await speedToLeadResponse.json()) as SpeedToLeadQueueResponse).items;
     const openTaskQueue = ((await openTaskResponse.json()) as TaskQueueResponse).items;
     return { summary, leads, speedToLeadQueue, openTaskQueue, apiConnected: true };
@@ -6686,19 +6711,10 @@ export async function getArchivedLeads(): Promise<{
   leads: LeadListItem[];
   apiConnected: boolean;
 }> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
-
   try {
     const headers = await getServerApiHeaders();
-    const response = await fetch(`${apiBaseUrl}/api/v1/leads?archived=true`, {
-      headers,
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      throw await apiError(response);
-    }
     return {
-      leads: ((await response.json()) as LeadListResponse).items,
+      leads: await fetchAllLeadPages(headers, { archived: "true" }),
       apiConnected: true,
     };
   } catch (error) {

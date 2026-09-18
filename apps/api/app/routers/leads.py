@@ -176,17 +176,22 @@ def read_leads(
     offset: int = Query(default=0, ge=0),
     q: str | None = Query(default=None, max_length=200),
 ) -> LeadListResponse:
+    page = list_leads(
+        db,
+        principal,
+        archived=archived,
+        closed=closed,
+        asset_class=asset_class,
+        limit=limit,
+        offset=offset,
+        q=q,
+    )
     return LeadListResponse(
-        items=list_leads(
-            db,
-            principal,
-            archived=archived,
-            closed=closed,
-            asset_class=asset_class,
-            limit=limit,
-            offset=offset,
-            q=q,
-        )
+        items=page.items,
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
+        has_more=page.has_more,
     )
 
 

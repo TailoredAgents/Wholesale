@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const appRoot = resolve(process.cwd(), "src/app");
+const api = readFileSync(resolve(appRoot, "lib/api.ts"), "utf8");
 const page = readFileSync(resolve(appRoot, "os/leads/page.tsx"), "utf8");
 const workspace = readFileSync(resolve(appRoot, "os/leads/leads-workspace.tsx"), "utf8");
 const navigation = readFileSync(resolve(appRoot, "os/leads/seller-leads-nav.tsx"), "utf8");
@@ -76,6 +77,17 @@ test("All Leads stays bounded and paginates instead of growing with every record
   assert.match(styles, /\.list \{[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/s);
   assert.match(styles, /\.listRows \{[^}]*overflow-y: auto;/s);
   assert.match(styles, /\.preview \{[^}]*overflow-y: auto;/s);
+});
+
+test("the Leads workspace receives every server page without restoring unbounded UI rows", () => {
+  assert.match(api, /type LeadListResponse = \{[\s\S]*total: number;[\s\S]*has_more: boolean;/);
+  assert.match(api, /async function fetchAllLeadPages\(/);
+  assert.match(api, /limit: String\(limit\),[\s\S]*offset: String\(offset\)/);
+  assert.match(api, /items\.push\(\.\.\.page\.items\)/);
+  assert.match(api, /page\.has_more !== true \|\| page\.items\.length === 0/);
+  assert.match(api, /fetchAllLeadPages\(headers\)/);
+  assert.match(api, /fetchAllLeadPages\(headers, \{ archived: "true" \}\)/);
+  assert.match(workspace, /const TABLE_PAGE_SIZE = 25/);
 });
 
 test("mouse and delayed touch dragging expose every board destination", () => {

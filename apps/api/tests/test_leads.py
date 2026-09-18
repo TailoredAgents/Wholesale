@@ -5,10 +5,12 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.rbac import PermissionKeys
 from app.integrations.dealmachine_client import DealMachinePropertyLookup
 from app.integrations.rentcast_client import (
     RentCastClientError,
@@ -50,7 +52,7 @@ from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
 )
-from app.services.leads import cached_market_data_snapshot_is_reusable
+from app.services.leads import cached_market_data_snapshot_is_reusable, list_leads
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -1633,6 +1635,110 @@ def test_update_lead_stage_rejects_stale_pipeline_card(
         )
         == 1
     )
+
+
+def test_lead_list_paginates_without_per_lead_queries(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    foundation = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    assert foundation.admin_user is not None
+    organization_id = foundation.organization.id
+    owner_id = foundation.admin_user.id
+
+    for index in range(100):
+        contact = Contact(
+            organization_id=organization_id,
+            legal_name=f"Performance Seller {index:03d}",
+            preferred_name=None,
+            contact_type="seller",
+            assigned_user_id=owner_id,
+        )
+        property_record = Property(
+            organization_id=organization_id,
+            street_address=f"{index} Batch Read Way",
+            city="Atlanta",
+            state="GA",
+            postal_code="30303",
+            county="Fulton",
+            property_type="single_family",
+        )
+        db_session.add_all((contact, property_record))
+        db_session.flush()
+        db_session.add(
+            Lead(
+                organization_id=organization_id,
+                contact_id=contact.id,
+                property_id=property_record.id,
+                assigned_user_id=owner_id,
+                source="performance_test",
+                asset_class="house",
+                qualification_context={},
+                stage_key="new",
+            )
+        )
+    db_session.commit()
+
+    principal = Principal(
+        user_id=owner_id,
+        organization_id=organization_id,
+        email=OWNER_EMAIL,
+        permission_keys=frozenset({PermissionKeys.VIEW_LEADS}),
+    )
+    engine = db_session.get_bind()
+
+    def measure_selects(limit: int) -> tuple[int, int, int, bool]:
+        select_count = 0
+
+        def count_selects(
+            _connection: object,
+            _cursor: object,
+            statement: str,
+            _parameters: object,
+            _context: object,
+            _executemany: bool,
+        ) -> None:
+            nonlocal select_count
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_count += 1
+
+        event.listen(engine, "before_cursor_execute", count_selects)
+        try:
+            with Session(bind=engine) as measured_db:
+                page = list_leads(measured_db, principal, limit=limit)
+                assert all(item.assigned_user_email == OWNER_EMAIL for item in page.items)
+                return len(page.items), page.total, select_count, page.has_more
+        finally:
+            event.remove(engine, "before_cursor_execute", count_selects)
+
+    one = measure_selects(1)
+    twenty_five = measure_selects(25)
+    one_hundred = measure_selects(100)
+
+    assert one[:2] == (1, 100)
+    assert twenty_five[:2] == (25, 100)
+    assert one_hundred[:2] == (100, 100)
+    assert one[3]
+    assert twenty_five[3]
+    assert not one_hundred[3]
+    assert one[2] == twenty_five[2] == one_hundred[2]
+    assert one_hundred[2] <= 6
+
+    response = TestClient(app).get(
+        "/api/v1/leads?limit=25&offset=25",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 100
+    assert response.json()["limit"] == 25
+    assert response.json()["offset"] == 25
+    assert response.json()["has_more"] is True
+    assert len(response.json()["items"]) == 25
 
 
 def test_update_lead_stage_rejects_unknown_stage(

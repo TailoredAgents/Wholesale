@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import Any, Literal
@@ -152,6 +153,7 @@ from app.schemas.leads import (
     UnderwritingVersionRead,
     UnderwritingVersionRepairSnapshot,
 )
+from app.schemas.tasks import PrimaryNextActionRead
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
@@ -192,8 +194,10 @@ from app.services.property_validation import (
 from app.services.repair_catalog import prepare_new_scope_items
 from app.services.repair_estimates import get_repair_estimate
 from app.services.tasks import (
+    OPEN_TASK_STATUSES,
     create_deal_next_action,
     create_initial_lead_next_action,
+    get_due_status,
     get_primary_next_action,
     supersede_open_primary_tasks,
 )
@@ -244,6 +248,15 @@ from app.services.underwriting_v3 import (
 )
 
 logger = structlog.get_logger()
+
+
+@dataclass(frozen=True)
+class LeadListPage:
+    items: list[LeadRead]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
@@ -686,7 +699,7 @@ def list_leads(
     limit: int = 100,
     offset: int = 0,
     q: str | None = None,
-) -> list[LeadRead]:
+) -> LeadListPage:
     archive_filter = (
         Lead.archived_at.is_not(None) if archived or closed else Lead.archived_at.is_(None)
     )
@@ -752,10 +765,18 @@ def list_leads(
         if closed
         else (Lead.created_at.desc(), Lead.id.desc())
     )
+    total = int(db.scalar(select(func.count(Lead.id)).where(*filters)) or 0)
     leads = db.scalars(
         select(Lead).where(*filters).order_by(*order_by).offset(offset).limit(limit)
     ).all()
-    return [lead_to_read(db, lead) for lead in leads]
+    items = lead_list_to_read(db, leads, organization_id=principal.organization_id)
+    return LeadListPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
 
 
 def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDetail | None:
@@ -6612,13 +6633,15 @@ def property_validation_to_read(property_record: Property) -> PropertyValidation
     )
 
 
-def lead_to_read(db: Session, lead: Lead) -> LeadRead:
-    contact = db.get(Contact, lead.contact_id)
-    property_record = db.get(Property, lead.property_id)
-    assigned_user = db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
-    closed_out_by_user = (
-        db.get(User, lead.closed_out_by_user_id) if lead.closed_out_by_user_id else None
-    )
+def _lead_read_from_context(
+    lead: Lead,
+    *,
+    contact: Contact | None,
+    property_record: Property | None,
+    assigned_user: User | None,
+    closed_out_by_user: User | None,
+    primary_next_action: PrimaryNextActionRead | None,
+) -> LeadRead:
     if contact is None or property_record is None:
         raise RuntimeError("lead is missing required contact or property")
 
@@ -6652,11 +6675,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         appointment_status=lead.appointment_status,
         qualification_context=dict(lead.qualification_context or {}),
         next_follow_up_at=lead.next_follow_up_at,
-        primary_next_action=get_primary_next_action(
-            db,
-            organization_id=lead.organization_id,
-            lead_id=lead.id,
-        ),
+        primary_next_action=primary_next_action,
         archived_at=lead.archived_at,
         close_out_disposition=lead.close_out_disposition,
         close_out_reason=lead.close_out_reason,
@@ -6664,4 +6683,138 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         closed_out_by_user_id=lead.closed_out_by_user_id,
         closed_out_by_user_email=closed_out_by_user.email if closed_out_by_user else None,
         created_at=lead.created_at,
+    )
+
+
+def lead_list_to_read(
+    db: Session,
+    leads: Sequence[Lead],
+    *,
+    organization_id: UUID,
+) -> list[LeadRead]:
+    if not leads:
+        return []
+
+    lead_ids = {lead.id for lead in leads}
+    contact_ids = {lead.contact_id for lead in leads}
+    property_ids = {lead.property_id for lead in leads}
+
+    contacts = {
+        contact.id: contact
+        for contact in db.scalars(
+            select(Contact).where(
+                Contact.organization_id == organization_id,
+                Contact.id.in_(contact_ids),
+            )
+        ).all()
+    }
+    properties = {
+        property_record.id: property_record
+        for property_record in db.scalars(
+            select(Property).where(
+                Property.organization_id == organization_id,
+                Property.id.in_(property_ids),
+            )
+        ).all()
+    }
+    primary_tasks: dict[UUID, Task] = {}
+    for stored_task in db.scalars(
+        select(Task)
+        .where(
+            Task.organization_id == organization_id,
+            Task.lead_id.in_(lead_ids),
+            Task.work_kind == "primary_next_action",
+            Task.status.in_(OPEN_TASK_STATUSES),
+        )
+        .order_by(Task.created_at.desc())
+    ).all():
+        if stored_task.lead_id is not None:
+            primary_tasks.setdefault(stored_task.lead_id, stored_task)
+
+    user_ids = {
+        user_id
+        for lead in leads
+        for user_id in (lead.assigned_user_id, lead.closed_out_by_user_id)
+        if user_id is not None
+    }
+    user_ids.update(
+        task.responsible_user_id
+        for task in primary_tasks.values()
+        if task.responsible_user_id is not None
+    )
+    users = (
+        {
+            user.id: user
+            for user in db.scalars(
+                select(User).where(
+                    User.organization_id == organization_id,
+                    User.id.in_(user_ids),
+                )
+            ).all()
+        }
+        if user_ids
+        else {}
+    )
+    now = datetime.now(UTC)
+
+    items: list[LeadRead] = []
+    for lead in leads:
+        primary_task = primary_tasks.get(lead.id)
+        primary_next_action = (
+            PrimaryNextActionRead(
+                task_id=primary_task.id,
+                title=primary_task.title,
+                action_type=primary_task.task_type,
+                due_at=primary_task.due_at,
+                responsible_user_id=primary_task.responsible_user_id,
+                responsible_user_email=(
+                    users[primary_task.responsible_user_id].email
+                    if primary_task.responsible_user_id in users
+                    else None
+                ),
+                due_status=get_due_status(primary_task, now),
+                sms_notification_enabled=primary_task.sms_notification_enabled,
+            )
+            if primary_task is not None
+            else None
+        )
+        items.append(
+            _lead_read_from_context(
+                lead,
+                contact=contacts.get(lead.contact_id),
+                property_record=properties.get(lead.property_id),
+                assigned_user=(
+                    users.get(lead.assigned_user_id)
+                    if lead.assigned_user_id is not None
+                    else None
+                ),
+                closed_out_by_user=(
+                    users.get(lead.closed_out_by_user_id)
+                    if lead.closed_out_by_user_id is not None
+                    else None
+                ),
+                primary_next_action=primary_next_action,
+            )
+        )
+    return items
+
+
+def lead_to_read(db: Session, lead: Lead) -> LeadRead:
+    contact = db.get(Contact, lead.contact_id)
+    property_record = db.get(Property, lead.property_id)
+    assigned_user = db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
+    closed_out_by_user = (
+        db.get(User, lead.closed_out_by_user_id) if lead.closed_out_by_user_id else None
+    )
+    return _lead_read_from_context(
+        lead,
+        contact=contact,
+        property_record=property_record,
+        assigned_user=assigned_user,
+        closed_out_by_user=closed_out_by_user,
+        primary_next_action=get_primary_next_action(
+            db,
+            organization_id=lead.organization_id,
+            lead_id=lead.id,
+        ),
     )

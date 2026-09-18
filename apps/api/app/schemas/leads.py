@@ -132,6 +132,10 @@ class LeadRead(BaseModel):
 
 class LeadListResponse(BaseModel):
     items: list[LeadRead]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class ContactMethodRead(BaseModel):
