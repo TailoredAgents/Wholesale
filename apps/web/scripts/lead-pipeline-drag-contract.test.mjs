@@ -76,6 +76,7 @@ test("spam and non-seller records leave active Leads without losing their histor
   assert.match(lifecycle, /duplicate/);
   assert.match(lifecycle, /Other non-seller/);
   assert.match(lifecycle, /Closed Leads, in Non-leads/);
+  assert.match(lifecycle, /setOpen\(false\);\s*setStatus\("idle"\);\s*onComplete\(result\);/);
   assert.match(workspace, /\/not-a-lead\/undo/);
   assert.match(workspace, /\? "Restoring\.\.\." : "Undo"/);
 });

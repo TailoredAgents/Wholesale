@@ -96,6 +96,7 @@ export function LeadNotALeadAction({
       }
       const result = await response.json() as LeadCloseOutResponse;
       setOpen(false);
+      setStatus("idle");
       onComplete(result);
     } catch (caught) {
       setStatus("error");
