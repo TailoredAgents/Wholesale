@@ -89,10 +89,10 @@ export default async function BuyersPage({
   return (
     <WorkspacePage>
       <PageHeader
-        description={params.segment === "leads" ? "Work deal-specific investor prospects, then promote the relationships worth keeping." : params.segment === "past" ? "Review investors who have completed a purchase with Stonegate." : "Maintain reusable investor relationships for future deals and outreach."}
+        description={params.segment === "leads" ? "Work every investor currently tied to a property, including new BatchDialer responses and established buyers." : params.segment === "past" ? "Review investors who have completed a purchase with Stonegate." : "Maintain reusable investor relationships for future deals and outreach."}
         eyebrow="Deal flow / buyer evidence"
         meta={<StatusBadge tone={buyerData.apiConnected ? "success" : "danger"}>{buyerData.apiConnected ? `${buyerData.total} matching buyer${buyerData.total === 1 ? "" : "s"}` : "Buyer CRM unavailable"}</StatusBadge>}
-        title={params.segment === "leads" ? "Buyer Leads" : params.segment === "past" ? "Past Buyers" : "Buyer Network"}
+        title={params.segment === "leads" ? "Active Buyer Prospects" : params.segment === "past" ? "Past Buyers" : "Buyer Network"}
       />
       <BuyersWorkspace
         key={`${params.segment}|${params.q}|${params.status}|${params.owner}|${params.source}|${params.asset}|${buyerData.page}|${selectedBuyerId ?? ""}|${params.create ? "create" : "browse"}`}

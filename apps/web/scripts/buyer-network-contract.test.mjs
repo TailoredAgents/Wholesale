@@ -64,6 +64,15 @@ test("buyer lifecycle controls remain explicit and audited by API", () => {
   assert.match(api, /permission_history: BuyerPermissionHistoryEntry\[\]/);
 });
 
+test("deal prospects and reusable buyer relationships are clearly distinguished", () => {
+  assert.match(page, /Active Buyer Prospects/);
+  assert.match(workspace, /Investors currently being worked for a property/);
+  assert.match(workspace, /Property:/);
+  assert.match(workspace, /Campaign:/);
+  assert.match(workspace, /Add to Buyer Network/);
+  assert.doesNotMatch(workspace, />Buyer Leads</);
+});
+
 test("operator states and mobile controls remain accessible", () => {
   assert.match(form, /aria-live="polite"/);
   assert.match(workspace, /role="alert"/);

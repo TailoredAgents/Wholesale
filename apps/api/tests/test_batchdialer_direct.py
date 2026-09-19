@@ -1553,6 +1553,27 @@ def test_investor_campaign_routes_result_to_buyer_and_disposition_without_seller
     assert buyer_network_response.status_code == 200, buyer_network_response.text
     assert buyer_network_response.json()["total"] == 0
 
+    # Promoting the relationship must not remove the investor from the
+    # property-specific prospect view while that deal interest is still open.
+    buyer.status = "active"
+    db_session.commit()
+    active_prospect_response = client.get(
+        "/api/v1/buyers?segment=leads",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert active_prospect_response.status_code == 200, active_prospect_response.text
+    assert [item["id"] for item in active_prospect_response.json()["items"]] == [
+        str(buyer.id)
+    ]
+    buyer_network_response = client.get(
+        "/api/v1/buyers?segment=network",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert buyer_network_response.status_code == 200, buyer_network_response.text
+    assert [item["id"] for item in buyer_network_response.json()["items"]] == [
+        str(buyer.id)
+    ]
+
     negative_cdr = sample_cdr("Not Interested")
     negative_cdr["id"] = int(negative_cdr["id"]) + 1
     negative_cdr["callid"] = "investor-negative-result"

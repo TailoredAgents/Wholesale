@@ -1388,7 +1388,7 @@ export function DispositionExecutionWorkspace({
           </div>
 
           <aside aria-labelledby="investor-queue-heading" className={styles.queuePanel}>
-            <header><div><span>Investor queue</span><h4 id="investor-queue-heading">Choose who to contact</h4></div><strong>{workspace.remaining_candidate_count} available</strong></header>
+            <header><div><span>Prospects for this deal</span><h4 id="investor-queue-heading">Choose who to contact</h4></div><strong>{workspace.remaining_candidate_count} available</strong></header>
             <dl className={styles.queueMetrics}>
               <div><dt>Position</dt><dd>{queuePosition || "–"}/{candidates.length}</dd></div>
               <div><dt>Contacted</dt><dd>{contactedCount}</dd></div>

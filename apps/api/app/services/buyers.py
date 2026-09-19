@@ -201,7 +201,29 @@ def list_buyers(
     else:
         filters.append(Buyer.archived_at.is_(None))
     if segment == "leads":
-        filters.append(Buyer.status == "needs_review")
+        active_deal_prospect_ids = (
+            select(DispositionBuyerPoolCandidate.buyer_id)
+            .join(
+                DispositionCase,
+                DispositionCase.id
+                == DispositionBuyerPoolCandidate.disposition_case_id,
+            )
+            .where(
+                DispositionBuyerPoolCandidate.organization_id
+                == principal.organization_id,
+                DispositionBuyerPoolCandidate.buyer_id.is_not(None),
+                DispositionBuyerPoolCandidate.decision_status != "passed",
+                DispositionBuyerPoolCandidate.lifecycle_stage != "pass",
+                DispositionCase.organization_id == principal.organization_id,
+                DispositionCase.status != "reconciled",
+            )
+        )
+        filters.append(
+            or_(
+                Buyer.status == "needs_review",
+                Buyer.id.in_(active_deal_prospect_ids),
+            )
+        )
     elif segment == "network":
         filters.append(Buyer.status.in_(("active", "paused")))
     elif segment == "past":
