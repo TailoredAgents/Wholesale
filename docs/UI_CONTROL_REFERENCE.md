@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: September 5, 2026
+Last verified against the application: September 19, 2026
 
 ## Purpose
 
@@ -232,7 +232,7 @@ change staff-reviewed information.
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **Inbox** | Opens seller communications | Navigation only |
+| **Conversations** | Opens seller communications | Navigation only; the compatibility route remains `/os/inbox` |
 | **Tasks** | Opens assigned and overdue tasks | Navigation only |
 | **Calendar** | Opens the company field calendar | Navigation only |
 | Executive Copilot launcher | Opens evidence-backed management analysis | Visible when the Executive Copilot is installed |
@@ -272,7 +272,7 @@ An **API fallback view** warning means counts are empty fallback data, not proof
 | Work row | Selects an item and preserves it in the URL | Does not change the source |
 | **Open source** | Opens the seller, deal, conversation, calendar, or governed review | Navigation only |
 | **Mark complete** | Completes a supporting task | Visible only with completion authority |
-| **Complete and continue** | Opens the outcome and successor dialog for a primary action | A successor is required while the source is active |
+| **Complete and continue** | Opens the outcome dialog for a primary action and optionally creates a real successor task | A successor is optional; create one only when the outcome produced a future obligation |
 | Outcome | Records what happened on the completed primary action | Required |
 | Completion notes | Preserves useful handoff context | Optional but recommended |
 | Next action | Names the replacement primary action | Required for an active source |
@@ -315,10 +315,10 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | --- | --- | --- |
 | **New Lead** | Opens internal entry for warm calls, referrals, networking, and staff-entered sellers | Requires `leads:edit` |
 | Seller name / preferred name | Creates the seller identity | Seller name required |
-| Phone / Email | Creates usable contact methods | At least one is required by the form |
-| Property address fields | Creates the property record | Street, city, state, and ZIP required |
-| Source / Assigned owner | Preserves attribution and responsibility | Active owner required |
-| Temperature / Next follow-up | Sets urgency and the first dated commitment | Optional but recommended |
+| Phone / Email | Creates usable contact methods | At least one is required by the form; either channel may be supplied without the other |
+| Lead type / Property address fields | Creates the working property record | Optional during progressive intake; unknown type and address may be completed later |
+| Source / Assigned owner | Preserves attribution and responsibility | Source is required; owner may be left to configured acquisitions routing |
+| Temperature / Next follow-up | Records known urgency and an intentional dated commitment | Optional; do not create a placeholder reminder merely because the lead is new |
 | Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
 | **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
 | Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid prospects; address-only records are excluded from operational counts but remain included in paid-prospect acquisition totals | Read-only |
@@ -329,7 +329,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Stage filter | Shows one normalized pipeline stage in Table mode | Pipeline mode clears this filter so every valid drop destination remains visible |
 | Sort | Orders the visible leads by Newest, Oldest, or Highest priority | All Leads and Address Only default to Newest; saved operational queues default to Highest priority |
 | Table / Board | Changes display while preserving saved view, search, owner, and selected seller | Board mode clears a single-stage filter so the complete pipeline can accept moves |
-| Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
+| Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed consistently in Stonegate's company timezone, America/New_York |
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Conversations, Calendar, Underwriting, Negotiation, or the full record based on status | Navigation only |
 | **Conversation** | Opens Conversations on this seller | Requires conversation access; absent for an address-only record until contact details are completed |
@@ -337,6 +337,8 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
 | **Close out lead** | Opens the business close-out dialog | Active leads only; requires `leads:edit` |
+| **Not a lead** | Removes spam, a wrong number, an unrelated solicitation, a duplicate, or another non-seller from active seller work while preserving communication history | Requires `leads:edit`; select a reason and confirm |
+| **Undo** after Not a lead | Restores the just-closed record without requiring a page refresh | Available from the success confirmation immediately after the action |
 | Dead / Disqualified | Records why routine seller work should end | One disposition is required |
 | Close-out reason | Preserves the business reason in activity and audit history | At least 10 characters required |
 | Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes legacy lead-management and conversation records; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
@@ -693,6 +695,20 @@ Lead. My Calls remains for separately assigned manual CRM records, corrections, 
 evidence. Starting or saving a My Calls record must not recreate a Lead that already arrived from
 the same provider CDR.
 
+### BatchDialer Campaign Routes
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| **Refresh campaigns** | Reloads active BatchDialer campaigns without changing their Stonegate routes | Prior confirmed mappings remain visible if the provider times out |
+| Campaign purpose | Selects **Seller acquisition** or **Investor disposition** | Results are held instead of guessed while a campaign remains unmapped |
+| Seller asset lane | Routes qualified seller results to House or Land Leads | Required for Seller acquisition |
+| Disposition deal | Connects interested investors to one active contracted deal | Required for Investor disposition; only active Dispositions targets appear |
+| **Save route** | Stores the campaign purpose and destination used by future completed-call results | Changing or clearing a route requires confirmation and does not rewrite prior CRM records |
+
+Seller routes create or update seller Leads. Investor routes create or update an **Active Buyer
+Prospect**, connect the investor to the chosen deal, retain the conversation evidence, and never
+create a seller lead. Non-conversion results remain provider evidence without becoming prospects.
+
 ### Work Queue And Attempt
 
 | Control or field | Purpose and effect | Availability and common blocker |
@@ -813,7 +829,6 @@ history into separate channel threads.
 | Mailbox group: **Restricted** | Shows restricted correspondence only to authorized roles | Hidden without permission |
 | Search | Finds a conversation by seller, property, phone, email, or message context | Searches visible records only |
 | Conversation row | Opens the unified timeline and seller detail panel | Requires conversation access |
-| Right-panel **SMS permission** | Shows **Permissioned** or **Not permissioned** for the selected seller | Read-only status is visible with the seller context; editing requires lead-edit or SMS-send authority |
 | **Compose** | Opens the global email composer without requiring a property lead | Requires outbound email permission and an active sender |
 | **Refresh** | Reloads conversation and provider status | Available while Conversations is open |
 | Mobile **Conversations / Thread / Details** | Changes the active pane on narrow screens | Mobile layout only |
@@ -838,7 +853,7 @@ history into separate channel threads.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **SMS** | Selects text-message composition | Manual one-to-one texting requires a routable phone number, configured Twilio SMS, and no active STOP/DNC suppression; the recorded permission label remains visible but is advisory |
+| **SMS** | Selects text-message composition | Manual one-to-one texting requires a routable phone number, configured Twilio SMS, and no active STOP/DNC suppression; no separate permission record is required |
 | **Email** | Selects email composition | Requires an active Resend sender and recipient email |
 | **Call** | Opens device calling or manual call logging | Requires a seller phone number |
 | **Note** | Creates an internal timeline note | Requires conversation edit access |
@@ -854,23 +869,13 @@ history into separate channel threads.
 | **Send** | Sends the selected external message | Disabled when provider, sender, recipient, suppression, contact-hour, or content requirements fail |
 | **Save note / Log communication** | Adds an internal or manually logged event | Does not contact the seller |
 
-### SMS Permission
+### Manual SMS Availability
 
-| Control or field | Purpose and effect | Availability and common blocker |
-| --- | --- | --- |
-| **SMS permission: Permissioned / Not permissioned** | Shows the latest recorded seller SMS decision in the Conversations right sidebar and seller-record Contact panel | A missing or revoked record remains **Not permissioned** |
-| **Edit SMS permission** | Opens the staff documentation form | Available to authorized lead-edit or SMS-send staff while the lead is open |
-| Status | Records a new permission grant or revocation | Appends a new record; it does not rewrite prior evidence |
-| Where was this decision confirmed? | Identifies phone call, in person, Facebook, seller text, written form, or another documented source | Required for every staff-recorded change |
-| Automatic audit evidence | Preserves the selected source, employee, timestamp, displayed phone number, activity, and audit history | No typed note is required |
-| **Save SMS permission** | Appends the permission record for the displayed phone number and writes activity and audit history | A grant requires a valid seller phone number; a not-permissioned decision can still be recorded without one |
-
-A seller's carrier-level **STOP** is an absolute suppression. Staff cannot manually replace it with
-a permission grant; the seller must send **START** from that phone number before SMS can resume.
-Permission recorded for one number does not transfer when the primary phone number changes.
-For deliberate staff-initiated CRM calls and one-to-one texts, this permission state is an
-informational label rather than a send/call blocker. Automated and bulk outreach retain their
-separate eligibility controls.
+Stonegate does not require employees to create a separate call- or SMS-permission record before a
+deliberate one-to-one business contact. The composer still blocks carrier **STOP**, Do Not Contact,
+suppression, invalid destinations, unavailable providers, and other concrete delivery restrictions.
+The seller must send **START** from the suppressed number before a carrier-level STOP can be lifted.
+Automated and bulk outreach retain their own eligibility controls.
 
 ### Cellphone Calling
 
@@ -915,7 +920,7 @@ employee explicitly selects **Answer** in the OS.
 | --- | --- | --- |
 | Call Intelligence status | Shows queued, processing, temporary failure, stopped/exhausted, or automatically posted state | Processing starts from the completed recording; no separate generation or approval button is required |
 | **Retry call intelligence** | Resets an exhausted transcript's attempt counter and queues the same call for another audited run | Visible only after repeated failures stop automatic retry and requires recording access |
-| Summary | Adds the transcript-grounded call result to Inbox and the seller record | Internal only and posted automatically |
+| Summary | Adds the transcript-grounded call result to Conversations and the seller record | Internal only and posted automatically |
 | **Quick read** | Shows a compact reason, stated numbers, timing, and next-step summary at the bottom of a completed call note | Derived from the saved structured note and never replaces the full transcript or evidence |
 | Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the CRM record |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
@@ -965,7 +970,7 @@ button provides the number-level inbound webhook without exposing credentials.
 | Staff cellphone | Stores an employee's private forwarding destination | Enter in `+1...` format; never shown to sellers or buyers |
 | Ring cellphone | Adds that cellphone to the company line's forwarding group | Requires a valid cellphone; answering requires pressing 1 |
 | Text new leads | Opts that employee into internal SMS alerts for new seller leads from the website, Facebook forms, and supported future intake sources | Requires a saved personal cellphone and live staff-alert provider readiness |
-| Text all inbound messages | Opts that employee into company-wide internal SMS alerts when a seller or buyer texts any Stonegate line | Requires a saved personal cellphone; each opted-in employee receives one minimal alert with an Inbox link |
+| Text all inbound messages | Opts that employee into company-wide internal SMS alerts when a seller or buyer texts any Stonegate line | Requires a saved personal cellphone; each opted-in employee receives one minimal alert with a Conversations link |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |
@@ -1122,7 +1127,6 @@ changing ownership or stage does not create a second record.
 | Contact type / value | Edits any seller phone number or email address | Phone and email format validation applies |
 | Primary | Chooses the preferred phone and preferred email used first by Stonegate | One primary is maintained per contact type |
 | Remove contact method | Deletes an incorrect or obsolete phone number or email address | Cannot leave the lead without any phone or email |
-| **SMS permission: Permissioned / Not permissioned** | Shows and edits the latest documented seller SMS decision from the Contact panel | Authorized staff may append a sourced grant or revocation without typing a note; carrier **STOP** requires seller **START** |
 | Property address / City / State / ZIP | Edits the subject property | Address required for market analysis |
 | Source / Campaign | Records acquisition attribution | Options come from configured operations data |
 | Motivation / Timeline / Condition / Occupancy | Saves qualification facts | Unknown is valid until confirmed |
@@ -1184,7 +1188,7 @@ contact, qualification, or activity history.
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **Open in Inbox** | Opens the seller's full unified conversation | Requires Inbox access |
+| **Open in Conversations** | Opens the seller's full unified conversation | Requires Conversations access |
 | Channel / Direction | Classifies a manually logged message or call | Required |
 | Subject / Body / Outcome | Records what happened | Body or outcome required by channel |
 | **Log communication** | Adds the event to the seller timeline | Does not send an external message |
@@ -1488,7 +1492,10 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Search | Finds buyers through the server-backed Buyer Network search | Searches the complete organization-scoped result set, not only the currently loaded page |
+| **Active Buyer Prospects** | Shows investors currently being worked for a specific property | Includes actionable BatchDialer investor-disposition results and displays the connected property |
+| **Buyer Network** | Shows reusable relationships for future properties | A prospect enters this view only after a deliberate **Add to Buyer Network** decision |
+| **Past Buyers** | Shows investors who have completed a purchase | Completion evidence controls this segment |
+| Search | Finds investors through the server-backed current segment | Searches the complete organization-scoped result set, not only the currently loaded page |
 | Status filter | Limits the list to Needs Review, Active, Paused, Do Not Contact, or Archived | Filter only; it does not change buyer status |
 | Relationship owner filter | Limits the list to the employee responsible for the investor relationship | Available owners are organization scoped |
 | Source filter | Limits the list by manual, import, or provider provenance | A missing provider reference does not make outside data staff-verified |
@@ -1496,7 +1503,7 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | Buyer row | Opens the buyer profile | Requires buyer access |
 | Summary / Criteria & Markets / Active Deals / Proof & Capacity | Changes the selected buyer section and updates the URL | Navigation only |
 | Close buyer details | Returns to the buyer list | Phone layout only |
-| **Add buyer** | Opens the new-buyer drawer | Requires buyer edit permission |
+| **Add buyer prospect** / **Add buyer** | Opens the investor drawer in the current segment | Requires buyer edit permission; new deal-specific work should begin as a prospect |
 | Name / Company | Identifies the investor or organization | Name is required; company is optional |
 | Phone / Email | Stores canonical contact methods | At least one usable phone number or email address is required |
 | Relationship owner | Identifies the staff member responsible for verification and follow-up | Must be an eligible user in the same organization |
@@ -1518,15 +1525,16 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | Status: **Paused** | Retains a relationship that should not receive current opportunities | Excluded from matching |
 | Status: **Do Not Contact** | Records an opt-out or other documented contact restriction | Excluded from matching; do not use as a temporary pause |
 | Status: **Archived** | Retains an out-of-workflow buyer outside normal active results | Excluded from matching |
-| Call/SMS permission state and evidence | Shows the latest decision and its supporting history for the applicable contact path | Append evidence; never infer permission from the presence of a phone or email |
-| Inbox conversation | Opens or creates the canonical buyer communication thread | Profile contact edits synchronize the linked contact and conversation identity |
+| Call/SMS relationship evidence | Retains any known contact decision and supporting history | Deliberate one-to-one work does not require a separate permission record; STOP, DNC, suppression, invalid destinations, and provider limits remain enforced |
+| Conversation | Opens or creates the canonical buyer communication thread | Profile contact edits synchronize the linked contact and conversation identity |
 | Reliability/status | Records performance and relationship state | Staff-managed; lifecycle status is separate from reliability |
 | Notes | Captures buyer-specific context | Internal |
 | **Save buyer** | Creates or updates the buyer profile and current criteria version | Disabled while saving or when validation/duplicate review is unresolved |
-| **Archive buyer** | Removes the buyer from normal working views and future matching | Preserves profile, criteria versions, provenance, permission, Inbox, offer, and deal history |
+| **Archive buyer** | Removes the buyer from normal working views and future matching | Preserves profile, criteria versions, provenance, conversation, offer, and deal history |
 | **Restore buyer** | Returns an archived buyer to a reviewable lifecycle | Review identity, criteria, permission, and status before making the buyer Active |
+| **Add to Buyer Network** | Promotes a current prospect into the reusable relationship segment | Human decision only; the property-specific history remains attached |
 
-The Buyer Network does not include a merge control. Use the existing record when a duplicate match
+The buyer workspace does not include a merge control. Use the existing record when a duplicate match
 represents the same investor; use **Create separate** only for a truly distinct record and document
 why. Live InvestorLift synchronization and automated outreach remain disabled, so no Buyer Network
 control sends an InvestorLift campaign. Buyer profile maintenance also does not trigger Stonegate's

@@ -1,6 +1,10 @@
 # Stonegate CRM Target Mental Model
 
-Status: Accepted target architecture for page blueprinting; not yet implemented
+Status: Partially implemented and retained as the target mental model. Conversations, the simplified
+left navigation, Leads Today/All Leads/Pipeline, manual reminders, and buyer relationship segments
+are live; a unified Contacts destination is not.
+
+Last implementation review: September 19, 2026
 
 Created: September 7, 2026
 

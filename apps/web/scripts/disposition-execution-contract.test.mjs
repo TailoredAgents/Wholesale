@@ -142,7 +142,7 @@ test("the canonical Buyer Network stays selectable before or after ranking", asy
   assert.match(api, /score_basis_points: number \| null/);
   assert.match(workspace, /workspace\.candidates\.length/);
   assert.match(workspace, /canonical Buyer Network record/);
-  assert.match(workspace, /Investor queue/);
+  assert.match(workspace, /Prospects for this deal/);
   assert.match(workspace, /Choose who to contact/);
   assert.match(workspace, /candidates\.map\(\(item\) =>/);
   assert.match(workspace, /key=\{item\.buyer_id\}/);

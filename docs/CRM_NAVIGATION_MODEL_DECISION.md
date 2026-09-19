@@ -1,6 +1,10 @@
 # CRM Navigation Model Decision
 
-Status: Accepted for page blueprinting; not yet implemented
+Status: Largely implemented; retained as decision history. The current shell uses Work, CRM,
+Outreach, Business, and Administration, while people remain split between Leads and Buyers rather
+than one Contacts page.
+
+Last implementation review: September 19, 2026
 
 Decision date: September 7, 2026
 

@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: September 8, 2026
+Last verified against the repository: September 19, 2026
 
 ## Purpose
 
@@ -37,7 +37,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
 | Operational email | Resend | Configured; controlled acceptance pending |
 | SMS | Twilio | Seller-inquiry A2P approved; website and Facebook staff alerts are implemented; repeat internal new-lead alert acceptance after the worker credential correction |
-| Voice | Twilio + OpenAI Realtime | Human calling is implemented; Marin seller-callback code is deployed fail-closed and awaits OpenAI/Twilio SIP setup and controlled acceptance |
+| Voice | Twilio + ElevenLabs | Human calling is implemented; Caroline actively handles the 470 seller-callback line, signed post-call records return to Stonegate, and OpenAI Realtime remains the rollback provider |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Governed House buyer discovery enabled in the production API manifest; controlled real-deal acceptance remains |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
@@ -708,6 +708,7 @@ failures. An SMS in `delivery_unknown` must be investigated rather than retried 
 - `OPENAI_TRANSCRIPTION_MODEL`
 - `CALL_TRANSCRIPTION_POLL_SECONDS`
 - `CALL_TRANSCRIPTION_MAX_ATTEMPTS`
+- `CALL_TRANSCRIPTION_MAX_AUDIO_BYTES`
 - `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
@@ -753,53 +754,52 @@ All paths use `https://api.stonegatehb.com` as the base.
    disclosure is not.
 9. Force one temporary transcription or note-generation failure. Confirm the worker waits for the
    exponential retry delay rather than immediately repeating the provider charge.
-10. In a controlled test, exhaust `CALL_TRANSCRIPTION_MAX_ATTEMPTS`, confirm Inbox displays the
+10. In a controlled test, exhaust `CALL_TRANSCRIPTION_MAX_ATTEMPTS`, confirm Conversations displays the
     stopped state, then select **Retry call intelligence** and verify the audited retry succeeds on
     the same call record.
 
-## Marin AI Seller Callback Line
+## Caroline AI Seller Callback Line
 
-Stonegate reserves `+1 (470) 888-7952` for Marin, an OpenAI Realtime phone concierge for possible
-sellers returning BatchDialer cold calls. The publicly marketed `+1 (678) 541-7725` remains the
-human company line and the only live-transfer destination. `+1 (404) 777-2631` is not a Stonegate
-number and must not appear in provider or runtime configuration. The AI line is excluded from
-browser and manual outbound line selection.
+Stonegate reserves `+1 (470) 888-7952` for Caroline, the ElevenLabs conversational agent for
+possible sellers returning BatchDialer cold calls. The publicly marketed `+1 (678) 541-7725`
+remains the human company line and live-transfer destination. The AI line is excluded from normal
+manual outbound line selection.
 
-The implementation is deployed fail-closed. It does not answer with AI until all of these API
-service variables are configured and the enable flag is deliberately set to `true`:
+The active provider is selected explicitly. Configure the following on the Render API service and
+worker, using secret values only in Render and ElevenLabs:
 
-- `OPENAI_API_KEY`
-- `OPENAI_PROJECT_ID`
-- `OPENAI_WEBHOOK_SECRET`
-- `OPENAI_REALTIME_VOICE_ENABLED`
-- `OPENAI_REALTIME_MODEL=gpt-realtime-2.1`
-- `OPENAI_REALTIME_VOICE=marin`
-- `OPENAI_REALTIME_LINE_NUMBER=+14708887952`
-- `OPENAI_REALTIME_TRANSFER_NUMBER=+16785417725`
-- `OPENAI_REALTIME_MAX_CALL_SECONDS=900`
+- `SELLER_CALLBACK_AGENT_PROVIDER=elevenlabs`
+- `ELEVENLABS_AGENT_ENABLED=true`
+- `ELEVENLABS_AGENT_ID`
+- `ELEVENLABS_WEBHOOK_SECRET`
+- `ELEVENLABS_TOOL_SECRET`
+- `ELEVENLABS_LINE_NUMBER=+14708887952`
+- `ELEVENLABS_TRANSFER_NUMBER=+16785417725`
+- `ELEVENLABS_WEBHOOK_MAX_BYTES=2000000`
 
-Provider setup:
+ElevenLabs calls Stonegate at:
 
-1. In the OpenAI project that owns the API key, create a webhook for
-   `realtime.call.incoming` at
-   `https://api.stonegatehb.com/api/v1/webhooks/openai/realtime`.
-2. Copy its signing secret into the Render API `OPENAI_WEBHOOK_SECRET` value and set the matching
-   OpenAI project ID in `OPENAI_PROJECT_ID`.
-3. In Twilio, associate only the 470 number with a SIP trunk and set that trunk's Origination SIP
-   URI to `sip:<OPENAI_PROJECT_ID>@sip.api.openai.com;transport=tls`.
-4. Configure Twilio's trunk failure/fallback handling to the 678 company line. Do not point the 678
-   number at OpenAI.
-5. Open **Settings > Communications** and confirm the Marin readiness card shows the 470 AI line,
-   678 transfer line, signed webhook URL, SIP URI, and four ready checks.
-6. Set `OPENAI_REALTIME_VOICE_ENABLED=true`, allow the API to redeploy, and run only controlled
-   acceptance calls before public use.
+- initiation context: `/api/v1/webhooks/elevenlabs/conversation-initiation`
+- signed post-call transcript: `/api/v1/webhooks/elevenlabs/post-call`
+- agent tools: `/api/v1/webhooks/elevenlabs/tools/*`
 
-Acceptance must cover a returning seller, unknown caller, interested owner, not interested,
-wrong number, explicit do-not-contact request, agreed callback, human transfer, long silence,
-hang-up, duplicate webhook, and provider failure. Verify that Marin never reveals a stored
-property before caller-supplied identity verification, never creates a lead without confirmed
-ownership and seller interest, and creates exactly one task only when the caller agreed to a
-specific future callback. The complete behavioral contract is in
+The post-call webhook uses ElevenLabs HMAC signing. Agent tools use the separate
+`X-Stonegate-Agent-Secret` value. The secrets serve different purposes and must match their
+corresponding Render variables. Do not put either secret in source control or this document.
+
+Acceptance must cover a returning seller, unknown caller, interested owner, not interested, wrong
+number, explicit do-not-contact request, agreed callback, human transfer, long silence, hang-up,
+duplicate webhook, and provider failure. Confirm the completed recording and transcript appear in
+**Conversations > AI seller calls** and that useful CRM facts are preserved once. The exact agent,
+tool schemas, webhook steps, and rollback procedure are in
+`ELEVENLABS_SELLER_CALLBACK_AGENT.md`.
+
+### OpenAI Realtime Rollback
+
+The former OpenAI Realtime implementation remains deployed but inactive. To use it as a deliberate
+rollback, set `SELLER_CALLBACK_AGENT_PROVIDER=openai_realtime` and verify the existing
+`OPENAI_REALTIME_*`, `OPENAI_PROJECT_ID`, and `OPENAI_WEBHOOK_SECRET` configuration before routing
+traffic. Do not enable both providers for the same line. The retained runbook is
 `OPENAI_REALTIME_SELLER_CALLBACK_AGENT.md`.
 
 ## Dormant Native VA Dialer Foundation And Historical Browser Softphone
@@ -1332,10 +1332,16 @@ The API key is sent as the raw `X-ApiKey` value to the fixed official host. Do n
 1. In BatchDialer, open **Settings > Integrations > Integration Keys**, add a key named
    **Stonegate Direct API**, and place it only in the authorized Render secret fields.
 2. Give each VA an individual **Agent** login and only the campaign access needed for their work.
-3. Build one required lead sheet with owner verification, full property address, motivation,
+3. In **Prospecting > BatchDialer campaign mapping**, assign every observed campaign one purpose:
+   - **Seller acquisition** creates or updates seller Leads after the normal evidence gate.
+   - **Investor disposition** creates or updates an Active Buyer Prospect for the selected
+     contracted property and disposition case.
+   Choose the asset class for seller acquisition. Choose the exact deal/disposition case for
+   investor disposition. Unmapped campaigns are held and do not silently enter either CRM path.
+4. Build one required lead sheet with owner verification, full property address, motivation,
    timeline, condition, occupancy, asking price, mortgage or lien context, best callback time,
    authorized follow-up channels, appointment, and notes.
-4. Configure these call results:
+5. Configure these call results:
    - **Qualified Seller - Follow Up**: use this exact label and **Do Not Redial Contact**.
    - **Appointment Set**: use this exact label and **Do Not Redial Contact**.
    - **Callback**: schedule the callback; use a qualified label only when the seller is genuinely
@@ -1345,8 +1351,14 @@ The API key is sent as the raw `X-ApiKey` value to the fixed official host. Do n
    - **Wrong Number**: stop redialing that number.
    - **No Answer/Voicemail**: remain inside the BatchDialer cadence.
 
-Stonegate recognizes only the exact reviewed **Qualified Seller - Follow Up** and **Appointment
-Set** labels as candidate warm handoffs. A label alone cannot create a Lead. Transcript evidence
+For an **Investor disposition** campaign, Stonegate recognizes qualified-buyer follow-up,
+interested, packet-requested, appointment/showing, offer-expected, and callback outcomes as
+deal-specific prospect activity. Not Interested, Wrong Number, and Do Not Call close or suppress
+that prospect appropriately; no-answer and voicemail remain evidence without promoting the person
+into the reusable Buyer Network.
+
+For a **Seller acquisition** campaign, Stonegate recognizes only the exact reviewed **Qualified
+Seller - Follow Up** and **Appointment Set** labels as candidate warm handoffs. A label alone cannot create a Lead. Transcript evidence
 must prove a live two-way conversation with two distinct speakers and no clear disqualifier. Strong
 evidence of seller interest is accepted automatically. When the live conversation is valid but
 seller interest, classifier confidence, or the AI decision remains ambiguous, Stonegate imports the

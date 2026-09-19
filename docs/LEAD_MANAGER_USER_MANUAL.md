@@ -1,16 +1,11 @@
 # Stonegate Lead Manager User Manual
 
-Last verified: September 15, 2026
+Last verified: September 19, 2026
 
-> Historical reference: the primary **Lead Queue** interface has been replaced by **Leads >
-> Today**. Today shows real inbound activity, missed callbacks, manually scheduled reminders,
-> appointments, and new or unassigned leads. It no longer requires handoff acceptance, labels
-> leads neglected, or forces a next action. Qualification is available from the **Needs
-> Qualification** filter and the seller record. The remaining sections below document retained
-> legacy records and workflows.
-
-Navigation note: the communication workspace formerly labeled **Inbox** is now **Conversations**.
-The `/os/inbox` route and all existing conversation history remain unchanged.
+This guide describes the current **Today**, **All Leads**, **Pipeline**, and **Conversations**
+workflows. The retired Lead Queue and warm-handoff acceptance workflow are not current operating
+steps. The `/os/inbox` route remains a technical compatibility path, but the page employees see is
+named **Conversations**.
 
 ## Who This Guide Is For
 
@@ -25,18 +20,18 @@ Calendar, administration, provider-status, and troubleshooting instructions.
 
 ## Your Job In One Sentence
 
-Respond quickly, understand the seller's situation, and make sure every active seller has a clear
-owner and a dated next action.
+Respond quickly, understand the seller's situation, and make sure real commitments are assigned to
+the correct person with an accurate reminder when one is actually needed.
 
 ## Your Main Responsibilities
 
-- Accept new warm leads quickly.
+- Review new warm leads quickly.
 - Contact the seller using an allowed communication method.
 - Complete the seller qualification questions.
 - Decide whether the seller needs an appointment, follow-up, nurture, or disqualification.
 - Schedule qualified appointments with an available closer.
 - Keep notes, tasks, and seller information current.
-- Make sure no active seller is forgotten.
+- Set a manual reminder when Stonegate promised a future action.
 - Give the closer a complete and accurate handoff.
 
 ## What You Should Not Do
@@ -52,95 +47,84 @@ owner and a dated next action.
 
 ## The Most Important Rule
 
-Before leaving an active seller record, confirm all three items:
+Stages, qualification status, unread messages, and reminders mean different things:
 
-1. The correct person owns the lead.
-2. The next action is clear.
-3. The next action has a future date and time.
+1. The **stage** says where the seller opportunity is in the pipeline.
+2. The **owner** says who is responsible for moving the relationship forward.
+3. A **reminder** is a deliberate promise to do something at a particular time.
 
-If one of these is missing, the lead can be forgotten.
+Do not create a placeholder reminder merely because a lead exists. Set one when the seller asks for
+a callback, an employee promises an action, or the team chooses a real follow-up date. Mark it
+**Done** after the action or reschedule it when the timing changes.
 
 ## Where You Will Work
 
 | Page | What you use it for |
 | --- | --- |
 | **Home** | See urgent work, appointments, and exceptions |
-| **Leads > Lead Queue** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
-| **Inbox** | Read and record seller conversations |
+| **Leads > Today** | See new or unassigned leads, manual reminders, appointments, and current seller work |
+| **Leads > All Leads** | Search, filter, and open any active seller record |
+| **Conversations** | Read and record seller texts, emails, calls, and notes |
 | **Tasks** | Complete assigned and overdue tasks |
 | **Calendar** | Review appointments, choose a closer, and schedule or dispatch meetings |
 | **Leads** | Search for any active seller |
 | **Leads > Pipeline** | See where sellers are in the process |
 
-Your primary sidebar page is **Leads**. Select **Lead Queue** for guided qualification work,
-**Pipeline** for stage review, or **Underwriting** for valuation work.
+Your primary sidebar page is **Leads**. Select **Today** for focused daily work, **All Leads** for the
+bounded searchable database, **Pipeline** for stage review, or **Underwriting** for valuation work.
 
 ## Starting Your Day
 
 Follow this order every workday:
 
-1. Open **Leads > Lead Queue**.
-2. Look at the numbers across the top.
-3. Open **Daily queue**.
-4. Accept every new warm handoff assigned to you.
-5. Work any overdue seller follow-ups.
-6. Review today's appointments.
-7. Resolve neglected leads.
-8. Open **Inbox > Needs reply**.
-9. Open **Tasks > My Tasks** and check **Needs Approval**.
-10. Check **Calendar** before offering appointment times.
+1. Open **Leads > Today**.
+2. Review new and unassigned seller records that need a human decision.
+3. Work reminders that are actually due or overdue.
+4. Review today's appointments.
+5. Open **Conversations > Needs reply** and decide which messages truly need a response.
+6. Mark conversations **Done** or **Waiting** when no reply is currently required.
+7. Open **Tasks > My Tasks** for deliberately assigned work.
+8. Check **Calendar** before offering appointment times.
 
 Work new warm leads before routine follow-up. Fast response matters.
 
-## Understanding The Lead Queue
+## Understanding Today
 
-The numbers at the top tell you what needs attention:
+**Today** is a focused work lens, not a second database. It brings together real inbound activity,
+missed callbacks, manually scheduled reminders, appointments, and new or unassigned leads. It does
+not require handoff acceptance, invent a neglect deadline, or force every seller to have a task.
 
-- **Awaiting acceptance:** New warm leads waiting for someone to take responsibility.
-- **Overdue SLA:** Warm leads that were not accepted within the required response time.
-- **Qualification due:** Sellers who still need the qualification questions completed.
-- **Follow-ups due:** Promised calls, texts, or emails that are due.
-- **Appointments today:** Seller appointments scheduled for today.
-- **Neglected:** Active sellers without proper follow-up protection.
+Use the visible shortcuts to open all reminders, new leads, unassigned leads, or the full All Leads
+list. Treat only a task or reminder with a past due time as overdue. A **Needs qualification** label
+means seller facts are incomplete; it is not itself a late task.
 
-Red or warning-styled numbers should be handled first.
+## Opening A New Seller
 
-The Lead Queue contains these tabs:
+When BatchDialer, a public form, Caroline, an inbound call, or another team member creates a seller
+record:
 
-- **Copilot**
-- **Daily queue**
-- **Qualification**
-- **Performance**, for authorized managers only
-- **Standards**, for authorized managers only
+1. Open **Leads > Today** or find the seller in **All Leads**.
+2. Review the seller name, property information, source, owner, stage, and recent conversation.
+3. Open **Conversations** before contacting the seller so you understand prior calls and messages.
+4. Contact the seller or assign the record to the correct acquisitions employee.
+5. Set a reminder only when a real future action has been agreed.
 
-## Accepting A New Warm Lead
-
-When a VA, public form, campaign, or team member creates a warm handoff:
-
-1. Open **Leads > Lead Queue**.
-2. Select **Daily queue**.
-3. Find **Accept warm handoffs**.
-4. Review the seller name, property, source, assigned person, and acceptance deadline.
-5. Click **Accept**.
-6. Use the open-record icon to review the full lead when needed.
-7. Open the seller in **Inbox** and read the conversation history before contacting them.
-
-Clicking **Accept** means you are taking responsibility for the lead. It does not mean the seller
-is qualified or that Stonegate has agreed to buy the property.
+Ownership means responsibility for moving the lead forward. It does not hide the record from the
+company owner or from authorized acquisitions staff.
 
 ## Contacting The Seller
 
-Open **Inbox** and select the seller conversation.
+Open **Conversations** and select the seller conversation.
 
 Before contacting the seller:
 
 1. Read the entire recent conversation.
 2. Confirm the seller's preferred contact method.
-3. Check SMS consent and Do Not Contact status.
+3. Check for STOP, Do Not Contact, suppression, or an invalid destination.
 4. Check the seller's local time.
 5. Review the assigned owner and next task.
 
-The middle of the Inbox contains the full timeline. It can include:
+The middle of Conversations contains the full timeline. It can include:
 
 - Text messages
 - Emails
@@ -194,14 +178,13 @@ An unhelpful note is vague:
 
 Complete qualification during or immediately after the seller conversation.
 
-1. Open **Lead Queue**.
-2. Select **Qualification**.
-3. Choose the seller from **Needs qualification**.
+1. Open **Leads > All Leads**.
+2. Select the **Needs Qualification** saved filter when you need a focused list.
+3. Open the seller record.
 4. Ask the displayed questions naturally.
 5. Enter the seller's answers accurately.
-6. Select the correct **Next action**.
-7. Choose a future **Due date and time** when required.
-8. Click **Complete qualification**.
+6. Save the qualification.
+7. Use **Set reminder** only if the conversation created a real future commitment.
 
 The standard questions cover:
 
@@ -233,21 +216,20 @@ Missing optional details do not always prevent an appointment. Record what is un
 part of the closer's preparation. Escalate unusual ownership, title, legal, safety, or compliance
 issues instead of trying to solve them yourself.
 
-## Choosing The Correct Next Action
+## Choosing The Correct Follow-Up
 
-| Next action | Use it when |
+| Follow-up | Use it when |
 | --- | --- |
-| **Call** | You promised another phone call or need missing information |
-| **Text** | The seller asked for a text or a short follow-up is appropriate |
-| **Email** | The seller prefers email or needs written information |
-| **Seller appointment** | The seller is qualified and ready to meet |
-| **Nurture follow-up** | The seller may become ready later but is not ready now |
-| **Disqualify** | The lead is not a fit and no continued follow-up is appropriate |
+| **Call reminder** | You promised another phone call at a particular date and time |
+| **Text reminder** | The seller asked for a later text or you promised written information |
+| **Email reminder** | The seller prefers email or expects documents at a later time |
+| **Seller appointment** | The seller is ready for a scheduled meeting or walkthrough |
+| **Nurture reminder** | The seller may become ready later and provided a meaningful timeframe |
+| **No reminder** | Nothing is currently promised or due |
 
-All choices except **Disqualify** require a future date and time.
-
-Choose the next action that reflects what will actually happen. Do not select **Seller
-appointment** merely to improve a scorecard.
+Choose the action that reflects what will actually happen. A record may remain active without an
+open reminder when no follow-up is warranted. Do not schedule an appointment or artificial task to
+improve a scorecard.
 
 ## Scheduling A Seller Appointment
 
@@ -296,46 +278,20 @@ Before the appointment, confirm the record contains:
 
 The closer should not need to call you for basic information that the seller already provided.
 
-## Using The Lead Manager Copilot
+## Using Ask Stonegate And AI Suggestions
 
-The Copilot helps organize information. It does not replace your judgment.
+Use **Ask Stonegate** when you need help finding a page, understanding a control, or following the
+documented company process. It is read-only and cannot send a message, schedule an appointment,
+change seller facts, transfer ownership, or promise an offer.
 
-To use it:
+AI preparation that genuinely needs review appears in **Tasks > AI Suggestions** or another
+explicit review surface. It is not a human deadline and must not become overdue merely because time
+passed. Compare any suggestion with the seller record before using it, then perform the real action
+yourself in Conversations, Leads, or Calendar.
 
-1. Open **Lead Queue > Copilot**.
-2. Select a seller under **Needs attention**.
-3. Review the system's recommended action and alerts.
-4. Click **Generate brief**.
-5. Compare the brief with the seller record and conversation.
-6. Review:
-   - Summary
-   - Why the seller is prioritized
-   - Handoff information
-   - Missing qualification details
-   - Suggested questions
-   - Draft message
-   - Proposed task
-   - Appointment suggestion
-   - Evidence and risks
-7. Choose one review result:
-   - **Accept brief:** It is accurate as written.
-   - **Correct:** Fix the summary or message, explain the correction, and save it.
-   - **Reject:** It is not useful or contains important errors.
+## Working Conversations
 
-The Copilot cannot:
-
-- Send the draft message.
-- Schedule an appointment.
-- Change seller facts.
-- Transfer ownership.
-- Promise or approve an offer.
-
-After reviewing the Copilot, perform the real action yourself in Inbox, Work Queue, Qualification,
-or Calendar.
-
-## Working The Inbox
-
-Use these Inbox views:
+Use these Conversations views:
 
 - **Mine:** Conversations assigned to you.
 - **Unassigned:** Conversations that need an owner.
@@ -347,34 +303,34 @@ Use these Inbox views:
 For each conversation:
 
 1. Read the newest message and enough history to understand it.
-2. Review the permission label and confirm the channel is operationally available. Permission is
-   advisory for a deliberate staff call or one-to-one text; STOP, DNC, suppression, an invalid
-   number, or a provider problem still blocks contact.
+2. Confirm that STOP, Do Not Contact, suppression, an invalid destination, or a provider problem is
+   not blocking the channel. A separate permission record is not required for a deliberate staff
+   call or one-to-one text.
 3. Respond or log the completed contact.
 4. Add an internal note when staff needs context.
 5. Update assignment when responsibility changes.
-6. Create a dated follow-up before leaving the conversation.
+6. Create a dated reminder only when a real follow-up is promised or required. Otherwise mark the
+   conversation **Done** or **Waiting** as appropriate.
 
 ## Working Tasks
 
 Open **Tasks** and use:
 
-- **My Tasks:** Tasks and AI preparation assigned to you.
+- **My Tasks:** Human work deliberately assigned to you.
 - **Overdue:** Tasks already late.
 - **Do Today:** Tasks that need attention today.
 - **Unscheduled:** Tasks missing a proper date.
-- **Needs Approval:** Decisions and AI briefs waiting for you.
+- **Needs Approval:** Governed decisions waiting for an authorized reviewer.
+- **AI Suggestions:** AI preparation ready for optional human review.
 - **AI Completed:** AI briefs already accepted or rejected.
 - **Team:** Team work you are allowed to see.
 
 Start with **Overdue**, then **Do Today**, then **Needs Approval**.
 
-For a new lead brief, read the summary, recommended next step, missing information, questions,
-risks, confidence, and evidence. Select **Accept brief** when it is useful and accurate. Stonegate
-adds it as an internal note on that seller's existing timeline. Select **Reject** when it is wrong
-or unhelpful. Neither choice contacts the seller or completes your actual follow-up task.
+AI work remains outside the human due-date views. Review a suggestion when it is useful, but do not
+treat queued, completed, failed, or optional AI preparation as an overdue employee task.
 
-Call summaries appear automatically in Inbox and the seller record after transcription. Eligible
+Call summaries appear automatically in Conversations and the seller record after transcription. Eligible
 empty CRM fields may also be populated from transcript evidence. No note approval is required;
 correct an inaccurate CRM value or add a clarifying internal note when needed.
 
@@ -415,7 +371,8 @@ Examples:
 
 Set a realistic follow-up date based on the seller's situation. Record why that date was chosen.
 
-Nurture is not a place to hide leads. Every nurture lead still needs a meaningful next action.
+Nurture is not a place to hide leads. Set the next reminder when the seller or team has identified a
+meaningful future date; otherwise leave the reminder empty until there is a real commitment.
 
 ## When To Disqualify A Lead
 
@@ -489,8 +446,8 @@ problem remains, ask an Owner or Administrator to verify your active role and pe
 
 ## Manager Performance Scorecard
 
-The **Performance** tab is available only to managers with **Manage acquisition operations**
-permission. It compares eligible acquisition specialists without ranking them. Managers can select
+Open **Performance**, for authorized managers only, when your account has **Manage acquisition
+operations** permission. It compares eligible acquisition specialists without ranking them. Managers can select
 the trailing 30- or 90-day evidence window and review:
 
 - speed to lead;
@@ -514,21 +471,21 @@ and use the coverage, warnings, and raw evidence before drawing a conclusion.
 
 Before signing out:
 
-- No warm handoff assigned to you is waiting for acceptance.
-- No seller in **Needs reply** is waiting without a reason.
+- New or unassigned leads in **Today** have been reviewed by the correct person.
+- No seller in **Needs reply** is waiting when a response is actually required.
 - No overdue task assigned to you is ignored.
-- Every active lead has a dated next action.
+- Every reminder on the calendar reflects a real commitment; no placeholder reminder was added.
 - Tomorrow's appointments are confirmed.
 - Appointment notes and access instructions are complete.
 - Important calls and messages are logged.
-- Copilot drafts you used were accepted, corrected, or rejected.
+- AI suggestions you used were checked against the seller record.
 - Any blocked lead has been escalated to the correct manager.
 
 ## Quick Reference
 
 ### New warm lead
 
-**Lead Queue > Daily queue > Accept > Inbox > Contact > Qualification > Next action**
+**Leads > Today > Open seller > Conversations > Contact > Qualification > Set reminder if needed**
 
 ### Qualified seller ready to meet
 
@@ -537,20 +494,19 @@ closer > Dispatch appointment > Calendar**
 
 ### Seller needs more time
 
-**Qualification > Nurture follow-up > Choose future date > Complete qualification**
+**Move to Nurture when appropriate > Set the future reminder the seller requested**
 
 ### Seller is waiting for a reply
 
-**Inbox > Needs reply > Open seller > Review history > Respond > Create next follow-up**
+**Conversations > Needs reply > Open seller > Review history > Respond > Set reminder if promised**
 
 ### Overdue work
 
 **Tasks > Overdue > Open action > Finish work > Mark complete**
 
-### Copilot assistance
+### CRM guidance
 
-**Lead Queue > Copilot > Choose seller > Generate brief > Review > Accept, Correct, or Reject >
-Perform the real action**
+**Ask Stonegate > Ask where the work belongs > Open the recommended page > Perform the action**
 
 ## Getting Help
 

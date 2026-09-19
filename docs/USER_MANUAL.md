@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: September 5, 2026
+Last verified against the application: September 19, 2026
 
 ## Purpose
 
@@ -54,10 +54,11 @@ The complete internal workflow is implemented:
 
 - Public seller intake and consent evidence.
 - Campaigns, imports, screening, calling batches, and VA prospecting.
-- Warm handoff, Lead Queue, qualification, tasks, Inbox, and appointments.
+- Seller Today, qualification, manual reminders, Conversations, tasks, and appointments.
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
 - Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
-- Buyers, House disposition packages, governed owned-buyer email/SMS outreach and reply review,
+- Active Buyer Prospects, the reusable Buyer Network, Past Buyers, House disposition packages,
+  governed owned-buyer email/SMS outreach and reply review,
   the manual-only InvestorLift exact-artifact handoff with **Preliminary** provenance when applicable
   and staged evidence review, buyer offers,
   selection, reconciliation, and accounting export.
@@ -93,13 +94,13 @@ interpret a provider-disabled message as lost CRM data.
 
 Stonegate uses one **Leads** workspace for both business lines. A record is explicitly labeled
 **House** or **Land**; use the **Type** filter in Leads to focus the list. Do not create a second
-contact, Inbox thread, or deal pipeline solely because the property is Land.
+contact, conversation, or deal pipeline solely because the property is Land.
 
 Current Land pilot controls include:
 
-- House/Land selection on manual lead creation, Inbox email conversion, campaigns, imports, and
+- House/Land selection on manual lead creation, Conversations email conversion, campaigns, imports, and
   approved VA/Lead Manager scripts.
-- Land propagation through warm handoff, the Lead Queue, staff new-lead text alerts, call
+- Land propagation through Today, staff new-lead text alerts, call
   intelligence, Activity, and AI context.
 - Parcel/APN capture and Land-specific seller facts such as acreage, access/frontage, utilities,
   stated zoning/use, septic/perc, taxes/HOA, and known terrain or environmental concerns.
@@ -199,7 +200,7 @@ Many pages use a list on the left and selected-record details on the right:
 3. Use the visible primary action for the next workflow step.
 4. Return to the list without creating a second record.
 
-On mobile, the list, record, and details become separate **Inbox**, **Thread**, **Details**, or
+On mobile, the list, record, and details become separate **Conversations**, **Thread**, **Details**, or
 similar views. Use the mobile view buttons rather than expecting all panels at once.
 
 ### Tabs And Segmented Controls
@@ -234,7 +235,8 @@ the current form before changing tabs when the page warns about unsaved work.
 - Use the seller's or closing document's exact amount, not a rounded estimate, for contracts,
   offers, reconciliation, and accounting.
 - Verify timezone and date before scheduling, closing, or posting.
-- A missing due date means the work cannot be managed reliably; add the next dated action.
+- A missing due date is valid when nobody has promised or scheduled a follow-up. Add a reminder only
+  for real work with a real date.
 
 ## Roles And Access
 
@@ -245,7 +247,7 @@ intentional.
 | --- | --- | --- |
 | Owner / Founder / CEO | Home | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
 | Administrator | Home | User support, records, audit, and acquisition administration |
-| Lead Manager | Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
+| Lead Manager | Leads > Today | Warm response, qualification, intentional reminders, nurture, and appointment setting |
 | Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
 | Dispositions Manager / Rep | Dispositions | Buyer matching, package and outreach preparation, reply review, offers, buyer outcome, and backup |
@@ -289,7 +291,7 @@ The exact list is reduced by role and permission.
 ### Work
 
 - **Home:** Today's priorities, exceptions, meetings, pipeline pulse, and Executive Copilot.
-- **Inbox:** Seller communication timeline and follow-up.
+- **Conversations:** Seller communication timeline and follow-up.
 - **Tasks:** Assigned and overdue actions.
 - **Calendar:** Month, week, day, and agenda commitments.
 
@@ -299,7 +301,7 @@ The exact list is reduced by role and permission.
 - **Leads:** Warm-lead qualification, seller records, pipeline, follow-up, and underwriting.
 - **Dispositions:** Buyer-placement queues, investor packets, buyer search, outreach, and offers.
 - **Deals:** Shared contract, approval, and closing records.
-- **Buyers:** Buyer CRM, criteria, proof of funds, and reliability.
+- **Buyers:** Active Buyer Prospects, reusable Buyer Network relationships, Past Buyers, criteria, proof of funds, and reliability.
 
 ### Business
 
@@ -319,7 +321,7 @@ configured cellphone can still answer. Configured cellphones continue ringing un
 first-answer-wins policy and still require pressing 1. During a connected browser call, Stonegate
 warns if the live connection degrades and confirms when call quality recovers. Use each workspace's
 local views for focused work: Campaigns, Analytics, and My Calls in Prospecting;
-Lead Queue, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
+Today, All Leads, Pipeline, and Underwriting in Leads; and transaction, disposition, and finance sections
 inside Deals. Analytics is manager-only. Native Dialer Control and Pilot Acceptance are dormant.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
@@ -361,7 +363,8 @@ still blocks the call.
 | Legacy Campaigns redirect | `/os/campaigns` |
 | Legacy Team & Access redirect | `/os/operations?tab=team` |
 | Legacy Email Management redirect | `/os/inbox?manage=email` |
-| Leads: Lead Queue | `/os/leads?view=queue` |
+| Leads: Today | `/os/leads?view=today` |
+| Historical Lead Queue compatibility redirect | `/os/leads?view=queue` |
 | Closed Leads | `/os/leads/closed` |
 | Archived Leads | `/os/leads/archived` |
 | Leads: Pipeline | `/os/leads?display=board` |
@@ -442,9 +445,9 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Owner
 
-1. Open **Home** and review overdue work, unassigned leads, today's appointments, approvals,
+1. Open **Home** and review deliberate overdue work, unassigned leads, today's appointments, approvals,
    and the Executive Copilot health summary.
-2. Open **Inbox > Needs reply** and confirm no qualified seller is waiting.
+2. Open **Conversations > Needs reply** and confirm no qualified seller is waiting.
 3. Open **Tasks > Overdue** and assign or escalate blocked work.
 4. Open **Calendar** and confirm closer capacity and appointment coverage.
 5. Open **Tasks > Needs Approval** and make only evidence-supported decisions.
@@ -455,11 +458,11 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Lead Manager
 
-1. Open **Leads > Lead Queue** for priority and neglected-lead signals.
-2. Open **Today** and accept new warm handoffs before the SLA expires.
-3. Complete **Qualification** using the approved questions.
-4. Work **Inbox > Needs reply**.
-5. Schedule qualified appointments and create the next dated task for every lead not scheduled.
+1. Open **Leads > Today** for new or unassigned leads, genuine reminders, and appointments.
+2. Review the newest seller records and assign the correct owner.
+3. Use **Needs Qualification** when missing seller facts need focused work.
+4. Work **Conversations > Needs reply**, marking messages Done or Waiting when no response is due.
+5. Schedule qualified appointments and set a reminder only when a real future action is promised.
 
 ### Acquisitions Closer
 
@@ -494,7 +497,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 3. Use **Active Deals**, **Buyer Follow-ups**, **Replies**, **Offers**, or **Deadlines** when focusing
    on one kind of work.
 4. Use a card's direct action to address a checklist item when it is the most valuable work. The
-   action opens the canonical Deal, Buyer, Inbox conversation, Task, or disposition control.
+   action opens the canonical Deal, Buyer, Conversations thread, Task, or disposition control.
 5. For a House or Land deal, review Package readiness, evidence classes, the buyer-visible preview,
    and authorized private economics. Record missing or uncertain facts accurately. You may rank
    buyers, call, follow up, log activity, and record offers while those checklist items remain open.
@@ -507,7 +510,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
    the exact rendered message, and create the immutable approval draft. An authorized disposition
    operator explicitly approves and releases that exact revision. The standard Disposition
    representative has that authority and does not wait for a separate manager.
-9. Work Buyer Inbox reply-review tasks before recording interest, offers, or follow-up.
+9. Work buyer-conversation reply-review tasks before recording interest, offers, or follow-up.
 10. Approve the primary buyer when the decision is ready. Add backup coverage when available and
     keep any missing-backup warning visible; a backup is recommended, not required to keep working.
 
@@ -553,7 +556,7 @@ and duplicate-review count.
 
 - Select **Open** on an alert to perform the underlying work.
 - Select **Mark read** only after understanding the alert.
-- Create a saved view for a repeated appointment, calling-list, lead, or Inbox filter.
+- Create a saved view for a repeated appointment, calling-list, lead, or Conversations filter.
 
 ### Create A Market
 
@@ -756,8 +759,8 @@ The normal deal path and its completion evidence are:
 | --- | --- | --- |
 | Address-only website capture | Public form, Leads > Address Only | A complete property address exists as a cold record awaiting research and a manual DNC check; this is not yet a contactable seller inquiry |
 | Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
-| Warm handoff | Prospecting, Lead Queue | The Lead Manager accepted a sufficiently documented handoff |
-| Qualification | Lead Queue, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
+| Seller handoff | Prospecting, Leads | BatchDialer or staff created a sufficiently documented seller record |
+| Qualification | Leads, Conversations | Required facts are confirmed or marked unknown; add a reminder only when a real next contact was agreed |
 | Appointment | Calendar | The meeting has an owner, time, location, preparation, and recorded outcome |
 | Underwriting | Lead record, Underwriting | Comps and repairs were human-reviewed, a version was saved, and warnings were understood |
 | Negotiation | Lead record, Approvals | Current offer authority exists and each seller response is recorded |
@@ -816,7 +819,7 @@ When the seller selects **Request My Options Review**:
 6. Property research, AI preparation, and speed-to-lead work start.
 7. Each active staff member with **Text new leads** enabled is queued a separate **Stage 2 filled**
    SMS alert containing the seller contact and property address.
-8. Staff sees the completed lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard
+8. Staff sees the completed lead in **All Leads**, **Today** when actionable, **Conversations**, and relevant dashboard
    queues.
 9. The browser and server send one deduplicated Meta `Contact` event.
 
@@ -899,9 +902,30 @@ blocked.
 ### BatchDialer VA Prospecting
 
 BatchDialer is the normal workspace for high-volume VA cold calling. Stonegate becomes the source
-of truth when the owner is genuinely interested and the warm handoff begins. BatchDialer remains
+of truth when a seller or investor is genuinely interested and the relationship work begins. BatchDialer remains
 the authority for raw calling cadence, cold-call DNC, phone-number operations, and ordinary call
 results. Do not copy every dial, voicemail, or no-answer into Stonegate.
+
+### Map A BatchDialer Campaign
+
+Before the campaign is worked, an authorized manager opens **Prospecting > BatchDialer campaign
+routes**, refreshes the provider campaigns, and assigns exactly one purpose:
+
+- **Seller acquisition** requires a House or Land lane. Qualified results create or update seller
+  Leads.
+- **Investor disposition** requires one active contracted deal. Actionable results create or update
+  an **Active Buyer Prospect**, connect the investor to that deal, and add the relationship to
+  Dispositions. They never create seller Leads.
+
+Select **Save route** after choosing the purpose and destination. Results from an unmapped campaign
+are held for review instead of being guessed. Route changes affect future completed-call results and
+do not rewrite records already created.
+
+For an investor-disposition campaign, use the approved truthful labels such as **Qualified Buyer -
+Follow Up**, **Send Packet**, **Appointment Set**, **Offer Expected**, or **Callback** only when the
+conversation supports them. **Not Interested**, **Wrong Number**, and **Do Not Call** update that
+investor's current relationship appropriately. No Answer and Voicemail remain provider evidence and
+do not create an active prospect.
 
 ### Work A BatchDialer Campaign
 
@@ -949,7 +973,7 @@ warm Lead from the eligible provider result; staff must not recreate that handof
    escalate the mapping warning; do not discard the seller.
 6. For **Appointment Set**, open **Enter/verify Stonegate appointment**, create the real Appointment,
    and confirm the task and warning clear.
-7. Continue follow-up, Inbox communication, qualification, underwriting, and pipeline work in
+7. Continue follow-up, Conversations, qualification, underwriting, and pipeline work in
    Stonegate after the handoff.
 
 **Prospecting > My Calls** remains available for separately assigned manual CRM records and
@@ -1114,29 +1138,25 @@ the assignment itself is wrong; do not share logins.
 
 ## 4. Lead Manager Qualification
 
-Open **Leads > Lead Queue**. Its views are:
+Open **Leads**. The current views are **Today**, **All Leads**, **Pipeline**, and **Underwriting**.
+Use the **Needs Qualification** saved filter in All Leads when you need to focus on incomplete
+seller facts. The historical Lead Queue acceptance workflow is retired.
 
-- **Copilot**
-- **Today**
-- **Qualification**
-- **Performance**
-- **Standards**
-
-### Accept New Work
+### Review New Work
 
 1. Open **Today**.
-2. Select an unaccepted warm lead.
-3. Review handoff evidence and due time.
-4. Accept the case.
-5. If information is materially wrong, return the handoff from the prospecting review flow with a
-   specific correction reason.
-6. If the person or property is not a valid warm lead, select a rejection type and record the
-   specific reason instead of returning it for more VA work.
+2. Select a new or unassigned warm lead.
+3. Review source evidence, recent conversation, current stage, and ownership.
+4. Contact the seller or assign the correct acquisitions employee.
+5. If the person is not a seller opportunity, use **Not a lead**, select the factual reason, and
+   confirm. This removes the record from active work without deleting its communication history.
+6. If a legitimate seller opportunity is no longer moving forward, use the separate controlled
+   **Close out lead** workflow instead.
 
 ### Complete Qualification
 
-1. Open **Qualification**.
-2. Select the seller.
+1. Open the seller from **All Leads** or the **Needs Qualification** filter.
+2. Open the qualification section.
 3. Confirm the lead's **House** or **Land** label before asking qualification questions.
 4. For a **House**, ask the approved questions for ownership, decision-makers, motivation,
    timeline, condition, occupancy, price expectation, mortgage or liens, and access.
@@ -1215,7 +1235,8 @@ starts a new company email. **Email ready** opens sender settings or owner admin
 6. Send only when the eligibility indicator allows it.
 7. Add internal information as a **Note**, not as a seller message.
 8. Reassign the conversation when responsibility changes.
-9. Create a dated follow-up before leaving the thread.
+9. Select **Remind me** only when a real future action is promised. Otherwise select **Done** or
+   **Waiting** so the thread does not remain in Needs reply unnecessarily.
 
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
@@ -1236,35 +1257,20 @@ so **Queued** normally advances to **Sent**, **Delivered**, **Failed**, or **Und
 page reload. If a carrier reports later than that window, select **Refresh** to retrieve the latest
 provider state.
 
-### Record SMS Permission Obtained Elsewhere
+### Manual Call And Text Availability
 
-The Conversations right sidebar and the seller record's Contact panel show **SMS permission: Permissioned**
-or **Not permissioned**. If the seller granted or withdrew permission outside the website form, an
-authorized employee can document it without creating a second lead:
-
-1. Open the seller in **Conversations** or open the full seller record.
-2. In the Contact panel, expand **Edit SMS permission**.
-3. Choose **Permissioned** or **Not permissioned**.
-4. Choose where the decision came from: phone call, in person, Facebook, seller text, written form,
-   or another documented source.
-5. Select **Save SMS permission**. No typed note is required.
-
-Stonegate appends the change rather than replacing prior evidence. The source, employee, timestamp,
-activity event, and audit history remain available for review. Never mark a
-seller permissioned based only on possession of a phone number. A carrier-level **STOP** cannot be
-manually overridden; the seller must text **START** from that number before SMS can resume.
-The saved permission is tied to the phone number shown in the editor; if the primary number changes,
-the label resets for the new number. Manual one-to-one CRM calls and texts remain available when the
-label is missing or not permissioned, but STOP/DNC suppression, invalid numbers, contact hours, and
-provider configuration still block contact. Automated and bulk outreach retain their separate
-permission rules.
+A deliberate employee call or one-to-one text does not require a separate permission record.
+Stonegate still blocks a carrier-level **STOP**, Do Not Contact, suppression, an invalid number, or
+an unavailable provider. Staff cannot manually override a carrier STOP; the person must text
+**START** from that number before SMS can resume. Automated and bulk outreach retain their separate
+eligibility rules.
 
 ### Understand Response State
 
 - **Needs reply** means the newest external communication has not received an appropriate company
   response.
-- **Due soon** means the configured response target is approaching.
-- **Overdue** means the response target passed.
+- **Reminder** means an employee deliberately selected **Remind me** and chose a date and time.
+- **Overdue** means that manually scheduled conversation reminder passed.
 - **Waiting on contact** means Stonegate sent the latest message and no team response is currently
   required.
 - **Unread** is personal notification state; another teammate reading the thread does not
@@ -1372,7 +1378,7 @@ When an approved employee uses a staff cellphone:
 2. Select **Log call** or the correct inbound/outbound direction.
 3. Enter what happened, not a planned script.
 4. Save the communication.
-5. Create the next task.
+5. Set a reminder only if the communication created a real future obligation.
 
 Logging a communication does not send a message or place a call.
 
@@ -1402,7 +1408,14 @@ records the employee who answers. After an unanswered ring sequence, or when no 
 member is available, the selected missed-call policy sends the caller to Stonegate voicemail or
 creates an urgent return-call task.
 
-### Place A Call From Inbox
+The separate `470-888-7952` seller-callback line is assigned to **Caroline**, Stonegate's
+ElevenLabs voice agent for people returning BatchDialer seller calls. Caroline can capture a
+potential seller, record a do-not-contact request, schedule a callback, and transfer an interested
+caller to the human acquisitions line. Review **Conversations > AI seller calls** for the recording,
+transcript, outcome, and any CRM action. OpenAI Realtime remains a rollback provider and is not the
+normal employee calling interface.
+
+### Place A Call From Conversations
 
 When the seller has a callable number:
 
@@ -1411,7 +1424,8 @@ When the seller has a callable number:
 3. Confirm the number and select **Call seller**.
 4. Stonegate calls your saved cellphone. Answer and press 1.
 5. Twilio connects the seller and shows the Stonegate company number as caller ID.
-6. Return to Stonegate, record any additional notes, and create the next action.
+6. Return to Stonegate, record any additional notes, and set a reminder only when a future action
+   was promised.
 
 Inbound calls to a Stonegate company number are different: Twilio forwards them to the enabled
 staff cellphones. The employee presses 1 to accept the business call.
@@ -1427,7 +1441,7 @@ When recording and transcription are active:
    Stonegate remembers the call position and speed for the current browser session only, without
    automatically restarting playback. If loading fails, use **Retry** on the player.
 3. Read the automatic call summary. Use **Quick read** at the bottom for the seller's main reason,
-   timing, stated numbers, and next step. Stonegate adds the full note to the Inbox conversation,
+   timing, stated numbers, and next step. Stonegate adds the full note to the Conversations timeline,
    seller record, communication history, and recent activity as soon as processing succeeds; no
    approval is required.
 4. Open **Full transcript** directly beneath the AI notes to read the complete speaker-separated
@@ -1527,18 +1541,19 @@ deadline, work type, warnings, and permitted action. **Open source** takes you t
 deal, conversation, calendar, or governed review that created the work.
 
 Supporting tasks can be marked complete after the work is done. For a **Primary action**, select
-**Complete and continue**, record what happened, then name and schedule the next action. Stonegate
-will not close a primary action without a successor while the seller lead or deal is active. Use
-the terminal checkbox only when the source is already closed; the API verifies that state.
+**Complete and continue** and record what happened. Creating a successor is optional; choose one
+only when the outcome produced a real future obligation.
 
-Every active seller lead and deal must have one owner, one primary action, and one due date. Team,
-Needs Approval and some decision controls appear only when the signed-in role has authority.
+Human Tasks contains work someone actually agreed or is required to do. Creating or importing a
+seller lead does not create a reminder. AI preparation is separated into **AI Suggestions**, **AI
+Completed**, and **Exceptions**, and does not increase human overdue counts. Team, Needs Approval,
+and some decision controls appear only when the signed-in role has authority.
 
-New seller leads can also create an assigned AI brief. Open it in **Needs Approval** to review the
+When a new seller lead has an AI brief, open it in **AI Suggestions** to review the
 summary, recommended next step, missing qualification facts, questions, risks, confidence, and
 evidence. **Accept brief** adds a labeled internal note to the seller timeline; **Reject** records
 that the draft should not be used. This review never messages the seller, overwrites lead facts,
-or replaces the employee's primary next action. Call summaries post automatically in Inbox and the
+or creates a human deadline. Call summaries post automatically in Conversations and the
 seller record; they do not create approval work or replace the employee's next action.
 
 ## 7. Calendar And Scheduling
@@ -1556,7 +1571,7 @@ Use:
 To schedule:
 
 1. Open **Calendar** and select **Schedule appointment**. The same scheduler opens from a seller
-   record, the Inbox contact panel, or an empty Calendar day with the seller or date preselected.
+   record, the Conversations contact panel, or an empty Calendar day with the seller or date preselected.
 2. Choose the seller, meeting format, purpose, start and end time, and assigned team member.
 3. Confirm the automatically suggested phone number or property address, add preparation notes,
    and select **Schedule appointment**.
@@ -1663,22 +1678,29 @@ until the device is returned.
 
 ### Leads
 
-Use **Leads** to work from one seller database. Its local views include **Lead Queue**, **All
-Leads**, **Address Only**, **Pipeline**, and **Underwriting**.
+Use **Leads** to work from one seller database. Its local views are **Today**, **All Leads**,
+**Pipeline**, and **Underwriting**. Address Only and other focused sets are saved filters inside All
+Leads rather than separate peer workspaces.
 
 1. Select **New Lead** for a warm call, referral, networking contact, or other staff-entered seller.
 2. Enter the seller name and at least one phone number or email.
-3. Enter the complete property address.
-4. Choose the real source, assigned owner, temperature, and next follow-up.
+3. Enter the property type and address when known. Progressive intake allows these facts to remain
+   unknown while the relationship is being built.
+4. Choose the real source. Select an owner when known or leave the record to configured acquisitions
+   routing. Add temperature and a reminder only when those facts are meaningful.
 5. Add known motivation, timeline, condition, occupancy, price context, and an initial note.
 6. Select **Create lead**. Stonegate opens the complete seller record.
 7. Search by seller, property, phone, email, or source.
 8. Filter by owner, stage, or saved view.
 9. Review status and next action in the local detail drawer.
 10. Open the full seller record when deeper work is required.
-11. Select **Close out lead** when a real opportunity is dead or disqualified. Choose the
+11. Select **Not a lead** for spam, a wrong number, an unrelated solicitation, a duplicate, or
+    another non-seller. Choose the reason and confirm; use **Undo** from the success message if the
+    action was accidental.
+12. Select **Close out lead** when a real opportunity is dead or disqualified. Choose the
     disposition and record a specific reason.
-12. Use **Administrative archive** only for a confirmed duplicate or test record. Never use it to
+13. Use **Administrative archive** only for a confirmed test record or an administrative duplicate
+    that requires retained read-only history. Never use it to
     remove a real seller opportunity from the pipeline.
 
 When you open **Full record** from a filtered list or Pipeline view, Stonegate remembers that exact
@@ -1687,7 +1709,7 @@ view. Select **Back** in the seller record to return to the same filters and sel
 Use **New Lead** only for a genuine CRM opportunity. Cold list records normally belong in Campaigns
 and Prospecting as prospects until the seller expresses interest. **Address Only** is the deliberate
 exception for valid Property steps abandoned before the website Contact step. Those records are
-cold, show **Skip trace needed**, have no Inbox conversation, and are excluded from qualification,
+cold, show **Skip trace needed**, have no conversation, and are excluded from qualification,
 no-follow-up, urgency, and other operational queues until the visitor completes Contact.
 
 For an address-only record, review the property and source evidence, research or skip trace the
@@ -1697,7 +1719,7 @@ promotes that record automatically and normal seller workflows begin.
 
 Closing a lead cancels its open tasks, scheduled appointments, automated follow-up, calling and
 handoff work, every pending approval tied to the lead, and unused offer authority. It closes the
-Lead Queue case and active Inbox route so routine overdue warnings stop. Active deal, contract, or
+legacy lead-management case and active Conversations route so routine work stops. Active deal, contract, or
 disposition work must be cancelled or resolved first. A funded deal is already a completed success
 and cannot be closed as dead or disqualified.
 
@@ -1714,7 +1736,7 @@ test records.
 
 Select **Pipeline** to switch the same active records to a stage board. Search, owner, selected
 seller, and display mode stay in the URL. Pipeline mode clears a single-stage filter so every valid
-drop destination remains visible. Use the recommended next action to open Inbox, Lead Queue,
+drop destination remains visible. Use the recommended next action to open Conversations, Today,
 Calendar, Valuation & Offer, Contract & Deal, or the complete record.
 
 If you have lead-edit access, drag the grip on a lead card into another column to change its saved
@@ -1764,10 +1786,10 @@ The full lead record has seven sections:
 Use the lead record when you need the complete evidence chain. Use focused workspaces for daily
 queue execution.
 
-The Contact panel also shows the latest **SMS permission** state. Authorized staff may append a
-grant or revocation by selecting its real source; no typed note is required. The employee,
-timestamp, source, Activity event, and audit history preserve each change. A seller's **STOP**
-remains blocked until that seller sends **START**.
+Deliberate one-to-one calls and texts do not require staff to maintain a separate permission
+label. Stonegate still blocks an active **STOP**, Do Not Call, company suppression, invalid
+destination, or unavailable provider. A seller's **STOP** remains blocked until that seller sends
+**START**.
 
 In **Property > Property Intelligence**, use the property map to confirm the general location,
 pan or zoom around the neighborhood, and select **Recenter** to return to the saved property pin.
@@ -2290,7 +2312,7 @@ package is not ready, a deal lacks enough matched buyers or offers, or a selecte
 coverage. These are attention signals, not workflow locks. An external-provider warning does not
 mean the owned Buyer Network or manual work is unavailable.
 
-Use **Add buyer** for a new relationship. On an Active Deal card, use **Packet**, **Find buyers**,
+Use **Add buyer prospect** for an investor being worked for a specific property. On an Active Deal card, use **Packet**, **Find buyers**,
 **Reach out**, or **Offers** to enter the needed workbench directly; these actions remain available
 while checklist items are open. Use **Open reply** for the actual buyer conversation. Refresh the page if the
 desk reports stale data; cached owned records remain usable when an outside provider is unavailable.
@@ -2302,10 +2324,18 @@ visibly disabled until the profile reloads.
 
 Open **Buyers**.
 
-The Buyer Network list is searched and filtered on the server. Search by the buyer identity or
-contact information; use the **Status**, **Relationship owner**, and **Source** filters to narrow the
-list. Use the pagination controls to continue through the full database. Clearing a filter restores
-the broader result set; it does not delete or change buyers.
+Choose the segment that matches the relationship:
+
+- **Active Buyer Prospects** contains investors currently being worked for a specific property.
+  Actionable BatchDialer investor-disposition results arrive here with that property attached.
+- **Buyer Network** contains reusable investor relationships Stonegate wants to retain for future
+  deals. Use **Add to Buyer Network** only after deciding the relationship belongs beyond one deal.
+- **Past Buyers** contains investors who completed a purchase.
+
+Each segment is searched and filtered on the server. Search by the investor identity or contact
+information; use the **Status**, **Relationship owner**, and **Source** filters to narrow the list.
+Use pagination to continue through the full database. Clearing a filter restores the broader result
+set; it does not delete or change records.
 
 Select a buyer, then use **Summary**, **Criteria & Markets**, **Active Deals**, or **Proof &
 Capacity**. The selected buyer and section stay in the page URL. On a phone, selecting a buyer
@@ -2321,15 +2351,16 @@ For each buyer, maintain:
 - Proof-of-funds status and expiration.
 - Reliability and prior activity.
 - Notes and relationship history.
-- The latest call and SMS permission decision and its factual source.
+- Any known contact restriction or relationship decision.
 
 Expired or missing proof of funds should reduce selection confidence.
 
 #### Add A Buyer
 
-1. Search the Buyer Network first. Do not assume a spelling difference or a different company name
+1. Search all three buyer segments first. Do not assume a spelling difference or a different company name
    means the person is new.
-2. Select **Add buyer**.
+2. Select **Add buyer prospect** for property-specific work or **Add buyer** for a deliberately
+   reusable relationship.
 3. Enter the buyer's name and at least one usable phone number or email address. A name alone is not
    enough to create the record.
 4. Enter the company, relationship owner, source, source reference when available, and facts that
@@ -2366,20 +2397,20 @@ a buyer Active solely to make a disposition match appear.
    date from factual evidence.
 3. Update criteria when the buyer gives new guidance. Each criteria save creates another version;
    it does not erase the prior criteria record.
-4. Record call or SMS permission only from evidence. Include the source and any available note;
-   later permission changes remain in history.
-5. Save the profile. Stonegate synchronizes the canonical buyer contact and linked Inbox
+4. Record any known Do Not Contact or other relationship restriction from evidence. A separate
+   permission record is not required for deliberate one-to-one contact.
+5. Save the profile. Stonegate synchronizes the canonical buyer contact and linked Conversations
    conversation so staff do not have to create another thread.
 6. Confirm the status still represents the relationship. Move the buyer to **Active** only after
    the review is complete.
 
-Changing a phone number or email does not transfer permission from a different contact method.
-Document the permission that applies to the contact path being used.
+Changing a phone number or email does not erase STOP, Do Not Contact, suppression, or other known
+contact restrictions. Verify the destination before using it.
 
 #### Archive Or Restore A Buyer
 
 Use **Archive buyer** to remove a buyer from normal working views without deleting relationship,
-criteria, permission, Inbox, offer, or deal history. Use **Restore buyer** when the record should
+criteria, conversation, offer, or deal history. Use **Restore buyer** when the record should
 return to review, then verify the displayed lifecycle status before making the buyer Active.
 
 Imported and provider-created buyers display their available provenance. Treat that data as a lead
@@ -3079,7 +3110,7 @@ Copilots live inside the human workspace they assist:
 
 | Copilot | Location | Current authority |
 | --- | --- | --- |
-| Lead Manager | Lead Queue | Draft and recommend |
+| Seller workday | Leads > Today and Tasks > AI Suggestions | Draft and recommend |
 | Prospecting | Prospecting | Priority, preparation, and reviewed coaching |
 | Acquisitions | Calendar Appointment | Meeting and follow-up drafts |
 | Transaction | Deal > Contract or Closing | Coordination drafts |
@@ -3205,7 +3236,7 @@ operating exception.
 ### Seller Form Returns A Validation Error
 
 - Review required fields and field-level messages.
-- Use a valid phone and complete property address.
+- Use a valid phone or email. A property address may be completed later during progressive staff intake.
 - The phone/email/one-to-one-text authorization is passive text on the Contact step; there is no
   required contact-permission checkbox. The separate recurring automated SMS choice is optional.
 - Retry after correcting the highlighted field.
@@ -3230,10 +3261,8 @@ Possible reasons include:
 - Contact-hour or frequency policy blocks the action.
 - The user lacks permission or assignment.
 
-If permission was obtained by phone, in person, Facebook, seller text, or a written record, use
-**Edit SMS permission** in the Inbox right sidebar or seller Contact panel and save the source. No
-typed note is required. A missing or not-permissioned label does not block a deliberate manual
-one-to-one CRM text. Do not override a seller's **STOP** or company suppression, and do not
+No separate permission record is required for a deliberate manual one-to-one CRM text. Do not
+override a seller's **STOP** or company suppression, and do not
 use another business's Messaging Service. Only a new **START** from the seller can restore a
 carrier-level STOP.
 
@@ -3252,7 +3281,7 @@ Read the provider status in Settings first.
 - A final **Call completed**, **Line busy**, **No answer**, **Canceled**, or **Failed** label comes
   from the saved Twilio callback. It can appear shortly after browser audio closes.
 
-Log approved communication manually in Inbox when a provider is unavailable. Recording must remain
+Log the communication manually in Conversations when a provider is unavailable. Recording must remain
 off until market authorization, access, retention, and deletion settings are approved.
 
 ### An Email Went To Spam
@@ -3265,9 +3294,9 @@ off until market authorization, access, retention, and deletion settings are app
 - Review Resend delivery events. Stonegate cannot force a recipient's mailbox provider to place a
   message in the inbox.
 
-### An Email Reply Is Missing Or In The Wrong Inbox
+### An Email Reply Is Missing Or In The Wrong Conversation
 
-- Open **Inbox** and check **My addresses**, **Team inboxes**, **Restricted**, **Unread**, and
+- Open **Conversations** and check **My addresses**, **Team conversations**, **Restricted**, **Unread**, and
   **Needs Reply**.
 - Search by sender address, subject, or contact name.
 - Confirm the recipient replied to the same Stonegate address that sent the message.
@@ -3281,7 +3310,7 @@ off until market authorization, access, retention, and deletion settings are app
 - Confirm email status is ready.
 - Confirm your role has global email compose permission.
 - Confirm at least one active outbound sender is granted to you or your team.
-- Ask the Owner to inspect **Inbox > Senders** rather than creating a fake property lead.
+- Ask the Owner to inspect **Conversations > Senders** rather than creating a fake property lead.
 
 ### Underwriting Analysis Fails
 

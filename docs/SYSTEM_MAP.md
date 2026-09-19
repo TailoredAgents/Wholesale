@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: September 5, 2026
+Last verified against the repository: September 19, 2026
 
 ## 1. Document Authority
 
@@ -85,7 +85,7 @@ must use Stonegate Home Buyers.
 | PostgreSQL data layer | Implemented and active |
 | Resend two-way email | Implemented and configured with UUID-fenced leases, route checkpoints, bounded retry, restricted routing, and manager-only dead-letter recovery; controlled mailbox acceptance and malware decision remain |
 | Twilio SMS | Implemented; internal new-lead alerts cover website and Facebook intake and have prior delivery evidence, but require repeat acceptance after the worker credential correction; seller-facing SMS acceptance remains |
-| Twilio Voice | Implemented and processing recordings/transcripts; full routing, recording, failure-recovery, retention, and deletion acceptance remains |
+| Twilio Voice | Human web/cellphone calling is implemented and processing recordings/transcripts; the 470 seller-callback line is handled by ElevenLabs Caroline, with OpenAI Realtime retained as rollback |
 | RentCast property data | Implemented; provider coverage varies by address |
 | RealEstateAPI property intelligence | Implemented and active; controlled property research passed |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
@@ -93,7 +93,7 @@ must use Stonegate Home Buyers.
 | DealMachine buyer discovery | Governed deal-specific House workflow implemented and enabled in the production API manifest; DS12 controlled real-deal acceptance remains. DealMachine underwriting comps remain separately disabled |
 | Internal accounting | Implemented; CPA acceptance and first real close remain |
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
-| BatchDialer outbound calling | Selected production calling system for VAs; official direct API is the sole Stonegate integration, with implementation complete and controlled production acceptance pending |
+| BatchDialer outbound calling | Selected production calling system for VAs; each observed campaign is explicitly routed as seller acquisition or investor disposition before results can enter the CRM |
 | Native Stonegate VA dialer | Dormant-mode repository and Blueprint change prepared; production company/campaign drain, deployment, and no-call verification remain pending. Historical evidence, analytics, late callbacks, and safe cleanup are retained |
 | Land acquisition pilot | Intake classification, Land qualification profile, call-note normalization, parcel research, and deterministic valuation review are implemented behind controlled activation; official diligence, legal execution, and disposition remain incomplete |
 
@@ -383,19 +383,12 @@ the staff alert preference; the seller-facing checkbox does not control those al
 stage and completed-contact stage use separate durable identities, so each recipient gets at most
 one Stage 1 text and one Stage 2 text even when the browser or worker retries.
 
-The seller record Contact panel and Inbox right sidebar show the latest SMS state as
-**Permissioned** or **Not permissioned**. Authorized staff can append a grant or revocation when
-the seller communicates the decision through a phone call, in person, Facebook, an inbound seller
-text, a written form, or another documented source. No typed note is required; every staff entry
-preserves source, actor, timestamp, activity, and audit history. It does not rewrite earlier consent
-evidence. An active Twilio **STOP** suppression cannot be manually overridden; the seller must send
-**START** from the same number before SMS permission can be restored.
-New SMS permission records are also bound to the normalized phone number that was permissioned, so
-replacing a seller's primary number does not silently transfer prior permission to the new number.
-For a deliberate staff-initiated CRM call or one-to-one text, the recorded permission state is an
-informational label rather than an execution gate. STOP/DNC suppression, invalid numbers, provider
-configuration, line authorization, role permissions, closed records, and SMS contact hours remain
-enforceable. Automated and bulk outreach continue to require their stricter permission checks.
+Deliberate staff-initiated CRM calls and one-to-one texts do not require a separate permission
+label. Historical consent evidence remains append-only for audit and automated/bulk uses. An active
+Twilio **STOP** suppression cannot be manually overridden; the seller must send **START** from the
+same number before SMS can resume. Do Not Call, company suppression, invalid destinations,
+provider configuration, line authorization, role permissions, and SMS contact hours remain
+enforceable. Automated and bulk outreach continue to require their stricter authorization checks.
 
 ### 6.4 Conversion Measurement
 
@@ -453,26 +446,25 @@ not presented as competing navigation.
 - Shows seller work, intervention counts, meetings, offers, and pipeline health.
 - Hosts the owner-facing Executive Copilot.
 
-**Inbox (`/os/inbox`)**
+**Conversations (`/os/inbox`)**
 
 - Shared three-panel communication workspace.
 - Views include Mine, Unassigned, Team, Needs Reply, Unread, Appointments, My Addresses, team
   inboxes, and authorized restricted inboxes.
 - Supports lead, buyer, transaction, and general email contexts.
-- The seller context in the right pane shows the current SMS permission state and lets authorized
-  staff append a sourced, evidenced grant or revocation without leaving the conversation.
+- Deliberate one-to-one calls and texts are available without a separate permission label; active
+  STOP, Do Not Call, company suppression, invalid destinations, and provider limits remain enforced.
 
 **Tasks (`/os/tasks`)**
 
-- Unified daily work center for primary next actions, supporting tasks, governed approvals, and
-  operational exceptions, plus assigned AI preparation and review.
-- Saved views include My Tasks, Do Today, Overdue, Upcoming, Unscheduled, Team, Needs Approval,
-  AI Completed, Exceptions, and Completed, with role-aware visibility.
-- Completing a primary action requires an outcome and a successor when its seller lead or deal
-  remains active.
+- Unified daily work center for manually created human work, governed approvals, operational
+  exceptions, and separately presented AI preparation and review.
+- Saved views separate human Tasks from AI Suggestions, AI Completed, Exceptions, and Completed.
+- Completing a primary action records its outcome; a successor is optional and should be created
+  only when the outcome produced a real future obligation.
 - Home, Leads, seller records, and Tasks read the same primary next-action record.
 - Lead briefs created from new seller events are reviewed inline. Transcript-grounded call notes
-  immediately fill empty qualification fields, while the narrative review opens in Inbox so staff
+  immediately fill empty qualification fields, while the narrative review opens in Conversations so staff
   can hear the source evidence and correct any AI-populated value.
 
 **Calendar (`/os/calendar`)**
@@ -480,7 +472,7 @@ not presented as competing navigation.
 - Internal month, week, day, and agenda views.
 - Combines appointments, field scheduling, and due work without requiring Google Calendar.
 - Owns one central appointment composer opened from Calendar, empty schedule days, seller records,
-  and Inbox; phone and property meetings reuse the lead's saved contact and address context.
+  and Conversations; phone and property meetings reuse the lead's saved contact and address context.
 - Renders duration-aware blocks by meeting format, preserves cancelled blocks as history, and
   requires an explicit second action before saving an assigned-user scheduling conflict.
 - Keeps Dispatch as the advanced closer-capacity, territory, overlap, and travel-buffer workflow.
@@ -1303,14 +1295,12 @@ The Twilio SMS implementation supports:
 - signed inbound and delivery callbacks
 - provider event idempotency
 - delivery, failure, and inbound state
-- inbound MMS photo capture with authenticated inline Inbox previews and downloads
+- inbound MMS photo capture with authenticated inline Conversations previews and downloads
 - private document retention instead of browser-visible Twilio media URLs
 - worker retry and automatic recovery of retained pre-deployment MMS events when provider media is
   still available
 - STOP and START processing
-- suppression and consent controls
-- an editable **Permissioned / Not permissioned** seller-context control for authorized staff, with
-  required source selection, no typed-note requirement, and append-only activity and audit history
+- carrier STOP/START, Do Not Call, and company suppression controls
 - number normalization
 - organization and permission scope
 
@@ -1488,9 +1478,15 @@ document. This does not create a separate contract or signature system.
 
 ### 13.1 Buyer CRM
 
-The Buyer Network is the organization-scoped source of truth for investor relationships. Its list
-uses server-side search, lifecycle, relationship-owner, and source filtering with pagination, so
-staff can work the full buyer database rather than only a browser-loaded subset.
+Buyers is the organization-scoped investor workspace with three intentionally distinct segments:
+
+- **Active Buyer Prospects** are investors currently being worked for one contracted property.
+- **Buyer Network** contains reusable investor relationships Stonegate wants to contact for future deals.
+- **Past Buyers** contains investors with completed purchase history.
+
+The lists use server-side search and pagination so staff can work the full database rather than
+only a browser-loaded subset. An Active Buyer Prospect can be promoted into the Buyer Network
+without losing the property-specific prospect history.
 
 Buyer records retain:
 
@@ -1511,9 +1507,11 @@ duplicates. Staff must either use the existing buyer or deliberately create a se
 record why. The foundation does not silently merge records, and an actual buyer-merge workflow is
 not implemented.
 
-Only **Active** buyers are eligible for future automated matching. **Needs Review**, **Paused**,
+Only active **Buyer Network** relationships are eligible for future automated matching. Deal-specific
+prospects remain available to the linked disposition case without being represented as reusable
+network relationships. **Needs Review**, **Paused**,
 **Do Not Contact**, and **Archived** buyers remain visible to authorized staff but are excluded from
-matching. Archive and restore preserve criteria versions, provenance, permission evidence, Inbox
+matching. Archive and restore preserve criteria versions, provenance, permission evidence, Conversations
 history, and prior deal activity.
 
 Buyer profile edits synchronize canonical contact methods and the linked Buyer Inbox conversation
@@ -2029,7 +2027,8 @@ telemarketing, recording, or real-estate advice.
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 226 operational model classes. They group into:
+The primary SQLAlchemy model file contains the operational model classes grouped below. Exact model
+counts are intentionally omitted because additive migrations change them frequently.
 
 ### Identity And Organization
 
@@ -2115,8 +2114,7 @@ runtime, external-action, orchestrator, run, tool, evaluation, comparison, and p
 
 Current repository verification includes:
 
-- API unit and integration tests under `apps/api/tests`
-- 153 API test modules
+- API unit and integration test modules under `apps/api/tests`
 - Ruff linting
 - MyPy type checking
 - Python and Node dependency vulnerability audits

@@ -5,7 +5,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API through migration 0134.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API through migration 0135.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker, plus lead intake, property research, AI preparation, alerts, and
   provider retries. Fair sweeps give every queue a turn. An independent liveness heartbeat remains
@@ -21,7 +21,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   approval decisions require the permission for their exact request type. The approval API and
   Tasks approval feed show only request types covered by the viewer's permissions; `audit:view` is
   the only blanket organization-wide approval-read authority.
-- CRM, shared inbox, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
+- CRM, shared Conversations, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
   transactions, buyers, finance, marketing, and AI control foundations are implemented.
 - Complete lead addresses automatically create a reusable Property Intelligence snapshot with
   normalized RealEstateAPI property facts, screened RentCast and RealEstateAPI comparable evidence,
@@ -37,9 +37,16 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   manager-only audited dead-letter requeue, and bounded attachment downloads. Restricted aliases
   cannot auto-route or be manually assigned to standard-visibility conversations. Controlled
   production mailbox acceptance and the malware-scanning decision remain.
+- Lead work now uses **Today**, **All Leads**, **Pipeline**, and **Underwriting**; reminders are
+  deliberately created by staff, AI suggestions remain outside human overdue counts, and progressive
+  intake can begin with a name plus a phone number or email address.
+- Buyers is split into **Active Buyer Prospects**, **Buyer Network**, and **Past Buyers**. BatchDialer
+  campaigns are explicitly mapped to seller acquisition or investor disposition before imports run.
+- The 470 seller-callback line runs ElevenLabs Caroline with signed post-call ingestion and CRM
+  tools; the prior OpenAI Realtime agent remains an explicit rollback provider.
 - Call Intelligence automatically fills only empty CRM fields, keeps narrative review beside the
   recording, retries temporary failures, exposes terminal exhaustion, and supports an audited
-  manual retry from Inbox.
+  manual retry from Conversations.
 - Purchase agreements capture approved offer/underwriting/concession authority and revalidate it
   through approval, sending, e-signature, and execution. Manual execution requires exact signed
   evidence and an attestation.

@@ -10,6 +10,7 @@
     "audit:contracts": "npm --prefix apps/web run audit:contracts",
     "audit:ia": "npm --prefix apps/web run audit:ia",
     "audit:underwriting": "npm --prefix apps/web run audit:underwriting",
+    "docs:check": "python scripts/check-documentation-drift.py",
     "baseline:ia": "npm --prefix apps/web run baseline:ia",
     "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --reload-exclude '.venv/*' --host 0.0.0.0 --port 8000",
     "test:api": "cd apps/api && uv run pytest",
