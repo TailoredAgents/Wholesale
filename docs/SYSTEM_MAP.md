@@ -1,6 +1,10 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: September 19, 2026
+Last verified against the repository: September 21, 2026
+
+> **Current property-data boundary:** live House and Land research uses OpenAI cited public-web
+> evidence. RentCast and RealEstateAPI are retired from runtime use. Historical snapshots and
+> labels remain readable for audit continuity, but no fresh workflow calls those providers.
 
 ## 1. Document Authority
 
@@ -86,8 +90,8 @@ must use Stonegate Home Buyers.
 | Resend two-way email | Implemented and configured with UUID-fenced leases, route checkpoints, bounded retry, restricted routing, and manager-only dead-letter recovery; controlled mailbox acceptance and malware decision remain |
 | Twilio SMS | Implemented; internal new-lead alerts cover website and Facebook intake and have prior delivery evidence, but require repeat acceptance after the worker credential correction; seller-facing SMS acceptance remains |
 | Twilio Voice | Human web/cellphone calling is implemented and processing recordings/transcripts; the 470 seller-callback line is handled by ElevenLabs Caroline, with OpenAI Realtime retained as rollback |
-| RentCast property data | Implemented; provider coverage varies by address |
-| RealEstateAPI property intelligence | Implemented and active; controlled property research passed |
+| Cited public property research | Implemented through OpenAI web search for House and Land facts and comparable-sale candidates; deterministic Stonegate math and human review remain authoritative |
+| Retired property providers | RentCast and RealEstateAPI are not called by live workflows; historical saved evidence remains readable |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
 | SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
 | DealMachine buyer discovery | Governed deal-specific House workflow implemented and enabled in the production API manifest; DS12 controlled real-deal acceptance remains. DealMachine underwriting comps remain separately disabled |
@@ -950,21 +954,20 @@ research range can be reviewed without releasing opening guidance or an offer ce
 diligence, manual comparable completion, contract execution, and disposition remain later launch
 gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 
-1. Stonegate validates the subject address and canonical property facts.
-2. RentCast supplies the subject record and recorded-sale candidates when available.
-3. Fresh recorded-sale discovery starts with a preferred 0.5-mile / 180-day search, expands to 1
-   mile / 365 days, and reaches 3 miles / 730 days only when the prior level remains insufficient.
+1. Stonegate records the staff-confirmed subject address.
+2. Bounded OpenAI public-web research collects cited subject facts and closed-sale candidates.
+3. Research asks for nearby recent sales first and permits wider or older evidence only when the
+   closer evidence remains insufficient.
 4. Wider-query duplicates are removed, and every unique sale retains its earliest search level,
    fit grade, subdivision relationship, score, and screening reason.
-5. Safe address variants may be retried when the provider misses the original string.
+5. Conflicting subject identity or address evidence requires review instead of silent substitution.
 6. Authorized staff can add a known closed sale with its verification source, reference, condition
    evidence, and notes. Subject, duplicate, future-dated, voided, and provider-duplicate records are
    rejected or suppressed; accepted records pass through the existing comp scorer.
-7. RentCast active sale listings and ZIP-level listing statistics are saved as supporting context.
-   They are explicitly excluded from ARV and offer math.
-8. Bounded OpenAI web research collects cited subject evidence and can propose nearby closed-sale
-   candidates. Stonegate admits only candidates with exact address, closed price/date, living area,
-   and consulted citations; deterministic scoring and human review still control valuation use.
+7. Cited active-listing or market context may be saved as supporting context. Asking prices remain
+   excluded from ARV and offer math.
+8. Stonegate admits only research candidates with exact address, closed price/date, required
+   physical facts, and consulted citations; deterministic scoring and human review control use.
 9. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
    condition, and material price or price-per-square-foot outliers.
 10. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
@@ -996,10 +999,10 @@ gates documented in `LAND_WHOLESALING_IMPLEMENTATION_ROADMAP.md`.
 18. The seller's Valuation & Offer section presents Quick Comp, Desk Review, Walkthrough, and Offer
     Decision as progressive stages over these same records. It does not create a separate comp or
     repair workflow.
-19. **Run Stonegate valuation** creates the first provider snapshot; the same control becomes
-    **Update Stonegate valuation** afterward and recalculates from that saved same-address snapshot
-    with zero paid provider calls. **Refresh market evidence (may use credits)** is a separate,
-    explicit action that replaces the snapshot and retries providers when newer evidence is needed.
+19. **Run Stonegate valuation** uses the current cited research snapshot; the same control becomes
+    **Update Stonegate valuation** afterward and recalculates from that saved same-address evidence
+    without new research. **Refresh market evidence** is a separate, explicit action that replaces
+    the snapshot with newer cited public-web evidence.
 20. A persistent decision summary shows the current ARV, repairs, buyer target, opening, and seller
     ceiling and links to reports, the appointment/field workflow, approval, and contract signing.
     Version comparison and manual scenarios remain available under expandable advanced records.
@@ -1393,14 +1396,14 @@ requires review; it should not be silently averaged away.
 The one complete-analysis workflow performs:
 
 1. address normalization and identity validation
-2. provider-safe address retries
+2. cited subject identity research
 3. subject fact reconciliation
-4. adaptive preferred, expanded, and extended RentCast recorded-sale search
-5. exact-match RealEstateAPI Property Detail and candidate or shadow comp retrieval
-6. cross-provider normalization, transfer deduplication, conflict retention, subdivision
+4. bounded public-web comparable-sale discovery
+5. strict source-link and required-field validation
+6. source normalization, transfer deduplication, conflict retention, subdivision
    comparison, A-D grading, screening, and scoring
 7. subject-versus-candidate review data, engine recommendation, and location direction
-8. optional bounded public-record research and draft-only AI Comp Analyst review
+8. optional draft-only AI Comp Analyst review of the saved cited evidence
 9. locally supported adjustments and comparable weighting
 10. interpolated weighted adjusted-sale Q25/Q50/Q75 ARV conclusion and range diagnostics
 11. repair and contingency math
@@ -1409,10 +1412,10 @@ The one complete-analysis workflow performs:
 14. immutable analysis storage
 
 The search stops when at least three screened closed sales satisfy available market-area evidence.
-If the complete provider search remains thin, the result is labeled `manual`, records the exact
+If the complete cited search remains thin, the result is labeled `manual`, records the exact
 shortage and next action, and preserves every suitable sale found. Ordinary updates, repair-only
 reruns, and comp reviews reuse this immutable provider snapshot—even after a provider failure or no
-match—and make no paid retry unless the operator explicitly refreshes market data.
+match—and start no new research unless the operator explicitly refreshes market data.
 
 The Comparable Review workbench consumes the saved subject snapshot and complete candidate set.
 Filters and sorting affect only the display. Every apply request still carries one include/exclude
@@ -2007,9 +2010,9 @@ telemarketing, recording, or real-estate advice.
 | --- | --- | --- | --- |
 | Clerk | Authentication | Implemented | Active |
 | Render | Hosting, Postgres, key value | Implemented | Active |
-| OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
-| RentCast | Independent recorded-sale, rent, and market evidence | Implemented | Configured; address coverage varies |
-| RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Active; controlled property research passed |
+| OpenAI | Copilots, cited bounded property research, and transcription | Implemented | API configured; production pilots remain |
+| RentCast | Historical property-evidence adapter only | Retired from live runtime paths; old snapshots remain readable | No credential or renewal required |
+| RealEstateAPI | Historical property-intelligence adapter only | Retired from live runtime paths; old snapshots remain readable | No credential or renewal required |
 | Resend | Outbound and inbound operational email, including governed House buyer outreach with an exact frozen investor PDF and retained **Preliminary** or approved provenance | Implemented with signed events, UUID-fenced leases, durable route checkpointing, bounded retry, manager-only audited dead-letter recovery, restricted-mailbox isolation, bounded attachment downloads, and DS6 exact-message delivery/reply reconciliation | DNS and webhook configured; controlled mailbox and disposition-outreach acceptance plus malware-scanning decision remain |
 | Twilio | SMS, Voice, recordings, Call Intelligence, and governed House buyer SMS outreach | Implemented with transcript backoff, exhaustion visibility, audited manual retry, DS6 sender/permission/suppression preflight, delivery reconciliation, and uncertain-submission duplicate protection | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS, buyer-outreach SMS, and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |

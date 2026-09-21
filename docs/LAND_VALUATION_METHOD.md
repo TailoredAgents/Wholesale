@@ -1,6 +1,6 @@
 # Stonegate Land Valuation Method
 
-Last updated: August 8, 2026
+Last updated: September 21, 2026
 Live methodology key: `land_v1.0`
 
 ## Purpose And Boundary
@@ -10,27 +10,25 @@ not use House ARV, living square footage, room counts, repair estimates, residen
 or a provider AVM. AI may summarize saved evidence and missing diligence; it does not select,
 weight, calculate, or alter the conclusion.
 
-The subject property record comes from the immutable current `land_v1` property-intelligence
-snapshot. RealEstateAPI supports the documented [Property Detail](https://developer.realestateapi.com/reference/property-detail-api-1)
-lookup used by this workflow. Comparable research uses the documented
-[Property Search](https://developer.realestateapi.com/reference/property-search-api) filters for
-Land, arms-length sale evidence, sale date, lot size, and geography.
+The subject property record and candidate sales come from the immutable current `land_v1`
+property-intelligence snapshot. OpenAI web search collects cited county, recorder, GIS, planning,
+FEMA, and sold-listing evidence. RentCast and RealEstateAPI are not called. Stonegate then applies
+the deterministic eligibility, weighting, value, policy, and approval rules documented below.
 
-## Provider And Cost Boundary
+## Research And Cost Boundary
 
-- A property-research run uses one Property Detail request and saves the result for reuse.
+- A Property-tab research run performs one bounded cited-web research pass and saves the result.
 - The Land Valuation tab never searches merely because it was opened.
-- **Search closed Land sales and save analysis** makes one explicit Property Search request.
-- Every paid-search request carries a lead-scoped idempotency key. Replaying the same request key
-  returns its saved analysis instead of spending another provider call, and same-parcel leads keep
-  separate valuation histories.
-- The request is capped by `LAND_VALUATION_MAX_PROVIDER_RESULTS`, currently defaulted to 25.
-- Reviewing or rejecting saved comparable evidence creates a new immutable analysis with zero
-  provider calls.
+- **Use cited Land sales and save analysis** evaluates the sales already saved by Property
+  research; it performs no new web or paid-provider request.
+- Every valuation save carries a lead-scoped idempotency key. Replaying the same request key
+  returns its saved analysis, and same-parcel leads keep separate valuation histories.
+- Reviewing or rejecting saved comparable evidence creates a new immutable analysis with zero new
+  research calls.
 - Selected and rejected candidates remain saved and visible, so a reviewer can restore a rejected
   sale or recover from a reject-all decision without another provider search.
-- Changing acreage, valuation basis, or per-lot count invalidates the saved sale indications and
-  requires a fresh explicit search.
+- Changing acreage, valuation basis, or per-lot count invalidates saved sale indications and
+  requires refreshed Property research before a new valuation.
 
 ## Subject Identity And Evidence
 

@@ -5,12 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.integrations.realestateapi_client import RealEstateAPIClient, RealEstateAPIError
 from app.schemas.marketing_experiments import PublicExperimentResponse
 from app.schemas.public_intake import (
     ConversionEventCreate,
     ConversionEventResponse,
-    PublicAddressSuggestion,
     PublicAddressSuggestionsResponse,
     SellerIntakeEnrichmentCreate,
     SellerIntakeEnrichmentResponse,
@@ -103,31 +101,9 @@ def read_public_address_suggestions(
             detail="Address search must contain at least 3 characters.",
         )
     enforce_public_address_suggestions_rate_limit(request)
-    settings = get_settings()
-    if not settings.realestateapi_api_key:
-        return PublicAddressSuggestionsResponse(available=False)
-    try:
-        suggestions = RealEstateAPIClient(settings).autocomplete_addresses(
-            clean_query,
-            max_results=limit,
-            preferred_state="GA",
-        )
-    except RealEstateAPIError:
-        return PublicAddressSuggestionsResponse(available=False)
-    return PublicAddressSuggestionsResponse(
-        available=True,
-        suggestions=[
-            PublicAddressSuggestion(
-                provider_id=suggestion.provider_id,
-                label=suggestion.label,
-                street_address=suggestion.street_address,
-                city=suggestion.city,
-                state=suggestion.state,
-                postal_code=suggestion.postal_code,
-            )
-            for suggestion in suggestions
-        ],
-    )
+    # Address autocomplete previously called a paid property-data provider. Stonegate now
+    # accepts direct address entry and verifies facts through cited public research instead.
+    return PublicAddressSuggestionsResponse(available=False)
 
 
 @router.get("/experiments")

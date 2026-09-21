@@ -1,6 +1,10 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 29, 2026
+Last updated: September 21, 2026
+
+> **Current underwriting direction:** OpenAI cited public-web research now supplies subject facts
+> and comparable-sale candidates. RentCast and RealEstateAPI references later in this roadmap are
+> retained only as historical implementation context and do not authorize live provider use.
 
 ## Purpose
 
@@ -50,7 +54,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage, offer-authority snapshots, execution evidence, and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM, governed House owned-buyer Resend/Twilio outreach, Buyer Inbox reply review, Offer Room protection, DS8 manual-only InvestorLift handoff, and DS11 cost-governed DealMachine House buyer discovery are implemented; live InvestorLift transport and Land outreach remain disabled | Controlled buyer-placement acceptance; DS11 real-deal credit/result acceptance; operator acceptance of the manual InvestorLift handoff; written provider-contract verification before any InvestorLift live transport |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
+| F7 Underwriting proof | Stonegate Valuation V3.1 uses cited public-web evidence with deterministic valuation math; retired provider snapshots remain readable; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy, citation quality, and corrections |
 | F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
 | F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
 | Native VA dialer | D0-D10 foundation is implemented but was not production-accepted; the owner selected BatchDialer as the production dialer | Execute BD0 dormancy without deleting native records, evidence, migrations, or shared communication behavior |

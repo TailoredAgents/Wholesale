@@ -236,8 +236,8 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
       subject_use_override: subjectUse || null,
       subject_use_evidence_reference: subjectUseReference || null,
       review_note: options.sourceAnalysisId
-        ? "Human-reviewed saved comparable set; no provider search requested."
-        : "Explicit Land closed-sale search requested from the CRM.",
+        ? "Human-reviewed saved comparable set; no new public research requested."
+        : "Latest cited Land closed-sale research loaded from the property snapshot.",
     };
     if (refreshComps) body.idempotency_key = crypto.randomUUID();
     if (acreage) {
@@ -266,7 +266,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
       setState("ready");
       setMessage(
         options.sourceAnalysisId
-          ? "Reviewed comp set saved without another provider search."
+          ? "Reviewed comp set saved without another research pass."
           : "Land sale evidence and valuation saved.",
       );
       router.refresh();
@@ -377,12 +377,12 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
         <section className={styles.sectionPanel} id="land-valuation-search">
           <div className={styles.sectionHeader}>
             <h2>Land closed-sale research</h2>
-            <span>Explicit provider search</span>
+            <span>Cited public evidence</span>
           </div>
           <form className={styles.underwritingForm} onSubmit={runSearch}>
             <p>
-              This button makes one RealEstateAPI Land sale search and saves the returned
-              evidence. Opening this tab and reviewing saved sales do not use provider credits.
+              This loads the closed Land sales saved by the latest cited property-research pass.
+              Refresh the Property tab first whenever you need newly researched evidence.
             </p>
             <div className={styles.taskGrid}>
               <label>
@@ -413,7 +413,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
               <label>
                 <span>Human-reviewed Land use group (optional)</span>
                 <select name="subject_use_override" defaultValue="">
-                  <option value="">Use saved provider record</option>
+                  <option value="">Use saved public research</option>
                   <option value="residential">Residential</option>
                   <option value="agricultural">Agricultural</option>
                   <option value="commercial">Commercial</option>
@@ -450,7 +450,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
               </label>
             </div>
             <button disabled={state === "saving"} type="submit">
-              {state === "saving" ? "Working..." : "Search closed Land sales and save analysis"}
+              {state === "saving" ? "Working..." : "Use cited Land sales and save analysis"}
             </button>
             <small>
               Provider AVMs, House ARV, living-area adjustments, and repair formulas are excluded.
@@ -472,8 +472,8 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
           {state === "loading" ? <p className={styles.emptyState}>Loading saved evidence...</p> : null}
           {!analysis && state !== "loading" ? (
             <p className={styles.emptyState}>
-              No Land valuation is saved yet. Confirm the parcel research, then run the explicit
-              closed-sale search above.
+              No Land valuation is saved yet. Refresh the Property tab research, then use its
+              cited closed sales above.
             </p>
           ) : null}
           {analysis ? (
@@ -536,7 +536,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
               <p>
                 Check every saved sale that should support the conclusion, including a previously
                 rejected candidate, or uncheck every sale to reject all. Saving re-evaluates the
-                saved evidence and makes no provider call.
+                saved evidence and runs no new web research.
               </p>
               <div className={styles.taskGrid}>
                 <label>
@@ -572,7 +572,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
                     }
                     name="subject_use_override"
                   >
-                    <option value="">Use saved provider record</option>
+                    <option value="">Use saved public research</option>
                     <option value="residential">Residential</option>
                     <option value="agricultural">Agricultural</option>
                     <option value="commercial">Commercial</option>
@@ -633,7 +633,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
                 })}
               </div>
               <small>
-                Provider eligibility and the eight-sale limit are checked again when this saved
+                Sale eligibility and the eight-sale limit are checked again when this saved
                 review is submitted.
               </small>
               <input name="search_tier" type="hidden" value={String(analysis.search_snapshot.tier ?? "preferred")} />
@@ -648,7 +648,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
                 </>
               ) : null}
               <button disabled={state === "saving"} type="submit">
-                Save reviewed comp set · no provider search
+                Save reviewed comp set · no new research
               </button>
             </form>
           </section>
@@ -707,7 +707,7 @@ export function LandValuationWorkspace({ leadId }: { leadId: string }) {
           <div><dt>Opening guidance</dt><dd>{guidanceMoney(analysis?.opening_offer_cents ?? null)}</dd></div>
           <div><dt>Seller ceiling</dt><dd>{guidanceMoney(analysis?.seller_contract_ceiling_cents ?? null)}</dd></div>
           <div><dt>Selected sales</dt><dd>{analysis?.selected_comps.length ?? 0}</dd></div>
-          <div><dt>Provider results saved</dt><dd>{typeof searchCount === "number" ? searchCount : "Not run"}</dd></div>
+          <div><dt>Cited sales found</dt><dd>{typeof searchCount === "number" ? searchCount : "Not run"}</dd></div>
           <div><dt>Residential ARV / repairs</dt><dd>Excluded</dd></div>
         </dl>
         <nav>

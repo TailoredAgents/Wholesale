@@ -695,6 +695,9 @@ class UnderwritingExecutionMetricsRead(BaseModel):
     manual_review_required: bool
     provider_duplicate_count: int = Field(default=0, ge=0)
     provider_conflict_count: int = Field(default=0, ge=0)
+    ai_research_comp_count: int = Field(default=0, ge=0)
+    ai_research_duplicate_count: int = Field(default=0, ge=0)
+    research_only: bool = False
     dealmachine_returned_comp_count: int = Field(default=0, ge=0)
     # Retained for response compatibility; this is the net-new DM coverage count.
     dealmachine_unique_comp_count: int = Field(default=0, ge=0)

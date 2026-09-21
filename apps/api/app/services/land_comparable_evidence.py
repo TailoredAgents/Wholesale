@@ -222,6 +222,55 @@ def normalize_realestateapi_land_sale(
     }
 
 
+def normalize_public_land_sale(
+    candidate: dict[str, Any],
+    *,
+    subject_acres: Decimal,
+    subject_lot_count: int | None,
+    valuation_basis: str,
+    subject_latitude: float | None,
+    subject_longitude: float | None,
+    today: date,
+) -> dict[str, Any]:
+    """Normalize a cited public-research sale through the existing land math."""
+    mapped = {
+        "id": "public:" + str(candidate.get("parcel_id") or candidate.get("formatted_address")),
+        "formattedAddress": candidate.get("formatted_address"),
+        "county": candidate.get("county"),
+        "state": candidate.get("state"),
+        "latestArmsLengthSaleAmount": candidate.get("sale_price_dollars"),
+        "latestArmsLengthSaleDate": candidate.get("sale_date"),
+        "lotSquareFeet": candidate.get("lot_size_square_feet"),
+        "lotAcres": candidate.get("acres"),
+        "lotCount": candidate.get("lot_count"),
+        "propertyType": "LAND",
+        "propertyUse": candidate.get("land_use"),
+        "zoning": candidate.get("zoning"),
+        "latitude": candidate.get("latitude"),
+        "longitude": candidate.get("longitude"),
+        "apn": candidate.get("parcel_id"),
+    }
+    normalized = normalize_realestateapi_land_sale(
+        mapped,
+        subject_acres=subject_acres,
+        subject_lot_count=subject_lot_count,
+        valuation_basis=valuation_basis,
+        subject_latitude=subject_latitude,
+        subject_longitude=subject_longitude,
+        today=today,
+    )
+    normalized["source"] = "ai_web_research"
+    normalized["source_urls"] = [
+        value for value in candidate.get("source_urls", []) if isinstance(value, str)
+    ]
+    normalized["source_reference"] = "; ".join(
+        value for value in candidate.get("source_titles", []) if isinstance(value, str)
+    )
+    normalized["arms_length_evidence"] = candidate.get("arms_length_evidence")
+    normalized["research_summary"] = candidate.get("research_summary")
+    return normalized
+
+
 def evaluate_land_sales(
     records: list[dict[str, Any]],
     *,

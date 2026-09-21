@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: September 19, 2026
+Last verified against the application: September 21, 2026
 
 ## Purpose
 
@@ -75,7 +75,6 @@ The following still require external configuration, approval, or production acce
 - Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
-- Ongoing RealEstateAPI credit, match-quality, and duplicate-refresh monitoring.
 - Controlled production acceptance of governed House buyer-package email/SMS delivery and Google
   conversion delivery; the accepted Meta browser/server path still requires ongoing diagnostics and
   campaign monitoring.
@@ -104,15 +103,14 @@ Current Land pilot controls include:
   intelligence, Activity, and AI context.
 - Parcel/APN capture and Land-specific seller facts such as acreage, access/frontage, utilities,
   stated zoning/use, septic/perc, taxes/HOA, and known terrain or environmental concerns.
-- A dedicated `land_v1` property-research profile. When enabled, RealEstateAPI collects saved
-  property-record facts and optional licensed imagery without running residential comps or ARV.
+- A dedicated `land_v1` property-research profile. OpenAI web search collects cited parcel facts
+  and closed Land-sale candidates without running residential comps or ARV.
 - Addressed parcels and parcels identified only by APN + county + state use the same Land research
   path. APN matching is county-scoped, and a provider identity mismatch fails closed without
   overwriting the CRM parcel.
-- A dedicated **Land Valuation** tab searches arms-length closed Land sales only after a user
-  presses the explicit search button. The first analysis makes at most one RealEstateAPI property
-  search; reopening the tab and saving a reviewed comparable set reuse saved evidence with zero
-  provider calls.
+- A dedicated **Land Valuation** tab evaluates the arms-length closed Land sales already saved by
+  Property research. Opening the tab or saving a reviewed comparable set performs no new web or
+  paid-provider request; use **Refresh research** on Property when fresher evidence is needed.
 - Land value ranges are calculated deterministically from saved price-per-acre evidence. Provider
   AVMs, residential ARV, building square footage, and repair formulas are excluded.
 - The latest Land valuation and selected saved sales are included in the lead's governed AI

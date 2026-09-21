@@ -56,11 +56,7 @@ def read_integration_status(
     if not settings.openai_api_key:
         openai_blockers.append("OPENAI_API_KEY")
 
-    property_blockers = []
-    if settings.property_data_provider == "rentcast" and not settings.rentcast_api_key:
-        property_blockers.append("RENTCAST_API_KEY")
-    elif settings.property_data_provider == "attom" and not settings.attom_api_key:
-        property_blockers.append("ATTOM_API_KEY")
+    property_blockers = list(settings.property_intelligence_configuration_blockers)
 
     voice_blockers = list(settings.twilio_voice_configuration_blockers)
     call_intelligence_blockers = list(settings.call_intelligence_configuration_blockers)
@@ -117,17 +113,15 @@ def read_integration_status(
     if not settings.dealmachine_api_key:
         dealmachine_comp_blockers.append("DEALMACHINE_API_KEY")
 
-    realestateapi_blockers = []
-    if settings.underwriting_realestateapi_comps_mode == "disabled":
-        realestateapi_blockers.append("UNDERWRITING_REALESTATEAPI_COMPS_MODE=shadow or candidate")
-    if not settings.realestateapi_api_key:
-        realestateapi_blockers.append("REALESTATEAPI_API_KEY")
-
     land_workflow_blockers = []
     if not settings.land_workflow_enabled:
         land_workflow_blockers.append("LAND_WORKFLOW_ENABLED=true")
-    if not settings.realestateapi_api_key:
-        land_workflow_blockers.append("REALESTATEAPI_API_KEY")
+    if not settings.ai_enabled:
+        land_workflow_blockers.append("AI_ENABLED=true")
+    if not settings.openai_web_search_enabled:
+        land_workflow_blockers.append("OPENAI_WEB_SEARCH_ENABLED=true")
+    if not settings.openai_api_key:
+        land_workflow_blockers.append("OPENAI_API_KEY")
 
     comp_analyst_blockers = []
     if settings.underwriting_ai_comp_analyst_mode == "disabled":
@@ -152,10 +146,10 @@ def read_integration_status(
             ),
             _status(
                 key="property-data",
-                name="Property data",
+                name="Cited public property research",
                 category="Underwriting",
-                mode=settings.property_data_provider,
-                enabled=settings.property_data_provider != "disabled",
+                mode="openai_web_search",
+                enabled=True,
                 blockers=property_blockers,
             ),
             _status(
@@ -232,14 +226,6 @@ def read_integration_status(
                 mode=settings.underwriting_dealmachine_comps_mode,
                 enabled=settings.underwriting_dealmachine_comps_mode != "disabled",
                 blockers=dealmachine_comp_blockers,
-            ),
-            _status(
-                key="realestateapi-underwriting",
-                name="RealEstateAPI property intelligence",
-                category="Underwriting",
-                mode=settings.underwriting_realestateapi_comps_mode,
-                enabled=settings.underwriting_realestateapi_comps_mode != "disabled",
-                blockers=realestateapi_blockers,
             ),
             _status(
                 key="land-property-research",

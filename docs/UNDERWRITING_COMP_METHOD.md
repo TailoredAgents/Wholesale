@@ -1,5 +1,12 @@
 # Stonegate Underwriting Method
 
+> **Current data-source policy (September 21, 2026):** Fresh House and Land research uses cited
+> public web research through OpenAI. RentCast and RealEstateAPI are retired from live execution;
+> they are not required configuration and receive no new requests. References to those providers
+> later in this document describe immutable legacy analyses and the superseded implementation only.
+> Stonegate's deterministic comp screening, adjustment, repair, buyer-economics, approval, and
+> audit rules remain authoritative. AI collects evidence; it does not set value or approve offers.
+
 ## Version Status
 
 - **Current implemented method:** Stonegate Valuation, methodology `v3`, with adaptive closed-sale
@@ -29,23 +36,12 @@ The engine keeps three conclusions separate:
 2. **After-repair value (ARV):** the supported retail value after a defined renovation.
 3. **Contract recommendation:** the amount Stonegate can pay while preserving a viable exit.
 
-RealEstateAPI supplies the canonical public-record property profile, financial/property signals,
-and a second pool of standard comparable-sale observations. RentCast independently supplies
-recorded sales, rent evidence, market context, and an AVM benchmark. Stonegate normalizes both comp
-feeds, deduplicates the same transfer, preserves both providers' provenance, and exposes field
-conflicts; the same sale never receives double weight. In `shadow` mode RealEstateAPI comps cannot
-affect ARV. In `candidate` mode unique closed sales enter the same deterministic screening and
-human-review workflow as every other provider sale.
-
-RealEstateAPI identity is fail-closed: Property Detail is requested with `exact_match=true`, and a
-different returned normalized address excludes both its facts and comps. Direct phone and email
-fields are removed before provider payloads are saved. Underwriting never purchases contact
-enrichment as part of property research.
-
-Recorded sale price and date are the core comp evidence. RentCast and RealEstateAPI value estimates
-are retained only as external benchmarks and disagreement checks. Provider listing prices, active
-listings, estimates, and foreclosure transfers are not treated as ordinary closed-sale prices and
-never enter ARV or seller-ceiling math.
+Cited public research supplies the subject profile and nearby closed-sale candidates. Every fact
+or sale must retain a consulted URL. Stonegate rejects incomplete records, mismatched subjects,
+unverified transfers, asking prices, automated estimates, assessments presented as sales, and
+non-market transfers before valuation. Historical provider estimates may remain visible on older
+saved analyses as labeled external context, but no fresh AVM or paid-provider result enters the
+live workflow.
 
 Structured sales also pass a transfer screen before scoring. Explicit foreclosure or
 non-arm's-length flags, quitclaim/gift/family transfers, sheriff/tax sales, deeds in lieu,
@@ -62,8 +58,8 @@ to two years; and sub-half-room or sub-one-garage-space rounding. Differences be
 classified as review or high severity by field. High conflicts force manual review; minor
 differences remain in provenance without reducing source-agreement confidence.
 
-When the provider set is thin, the same valuation action also runs a bounded OpenAI web search.
-The research agent can propose nearby closed sales, but it cannot state ARV or choose an offer.
+Each fresh valuation research action runs a bounded OpenAI web search. The research agent can
+propose nearby closed sales, but it cannot state ARV or choose an offer.
 Stonegate admits a proposed sale only when it has an exact address, closed price, closed date,
 living area, and a source URL the search actually consulted. A sale found in two or more consulted
 sources is marked `public_corroborated`; a one-source sale is marked

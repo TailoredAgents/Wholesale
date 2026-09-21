@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import principal_for_user
 from app.core.config import Settings, get_settings
-from app.integrations.realestateapi_client import RealEstateAPIPropertyDetail
 from app.main import app
 from app.models.foundation import (
     Lead,
@@ -74,9 +73,41 @@ def land_workflow_settings(*, enabled: bool) -> Settings:
         {
             "LAND_WORKFLOW_ENABLED": enabled,
             "PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED": True,
-            "REALESTATEAPI_API_KEY": "re_test_secret",
+            "AI_ENABLED": True,
+            "OPENAI_WEB_SEARCH_ENABLED": True,
+            "OPENAI_API_KEY": "test-openai-key",
         }
     )
+
+
+def land_public_evidence(
+    *,
+    parcel_id: str,
+    formatted_address: str,
+    acres: float,
+    address_match: str = "confirmed",
+) -> dict[str, object]:
+    source_url = "https://assessor.example/property"
+    return {
+        "status": "partial",
+        "summary": "Cited county parcel research.",
+        "address_match": address_match,
+        "subject": {
+            "formatted_address": formatted_address,
+            "property_type": "Vacant Land",
+            "parcel_id": parcel_id,
+            "county": "Pickens" if "Talking Rock" in formatted_address else "Fulton",
+            "lot_size_acres": acres,
+            "zoning": "AG" if "Talking Rock" in formatted_address else "R-3",
+            "latitude": 34.4817 if "Talking Rock" in formatted_address else 33.75,
+            "longitude": -84.371 if "Talking Rock" in formatted_address else -84.39,
+            "source_urls": [source_url],
+            "source_titles": ["County assessor"],
+        },
+        "comparable_candidates": [],
+        "limitations": ["No sufficiently verified closed land sales were found."],
+        "sources": [{"url": source_url, "title": "County assessor"}],
+    }
 
 
 def parcel_only_land_payload(name: str) -> dict[str, object]:
@@ -361,63 +392,16 @@ def test_enabled_land_research_saves_facts_without_residential_analysis(
     assert queued is not None
     assert queued.status == "queued"
 
-    def fake_property_detail(
-        _client: object,
-        *,
-        address: str | None = None,
-        apn: str | None = None,
-        county: str | None = None,
-        state: str | None = None,
-        include_comps: bool = True,
-    ) -> RealEstateAPIPropertyDetail:
-        assert address == "123 Peachtree Street, Atlanta, GA 30303"
-        assert apn is None
-        assert county is None
-        assert state is None
-        assert include_comps is False
-        return RealEstateAPIPropertyDetail(
-            found=True,
-            property={
-                "id": "land-subject-1",
-                "estimatedValue": 500_000,
-                "comps": [{"id": "embedded-must-not-be-saved"}],
-                "propertyType": "Vacant Land",
-                "latitude": 33.75,
-                "longitude": -84.39,
-                "lastSaleDate": "2024-01-10",
-                "lastSalePrice": 220_000,
-                "propertyInfo": {
-                    "address": {
-                        "address": "123 Peachtree Street",
-                        "city": "Atlanta",
-                        "state": "GA",
-                        "zip": "30303",
-                    },
-                    "waterSource": "Public",
-                    "sewer": "Septic",
-                },
-                "lotInfo": {
-                    "apn": "14-0001-LL-001",
-                    "lotAcres": 4.2,
-                    "zoning": "R-3",
-                },
-                "taxInfo": {
-                    "taxAmount": 2_400,
-                    "assessedLandValue": 180_000,
-                },
-            },
-            comparables=[{"id": "must-not-be-used"}],
-            status_code=200,
-            status_message=None,
-            raw_response={},
-        )
-
     def fail_residential_analysis(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Land research must not call residential market analysis.")
 
     monkeypatch.setattr(
-        "app.services.property_intelligence.RealEstateAPIClient.get_property_detail",
-        fake_property_detail,
+        "app.services.property_intelligence.collect_land_market_evidence",
+        lambda *_args, **_kwargs: land_public_evidence(
+            parcel_id="14-0001-LL-001",
+            formatted_address="123 Peachtree Street, Atlanta, GA 30303",
+            acres=4.2,
+        ),
     )
     monkeypatch.setattr(
         "app.services.leads.create_lead_market_analysis",
@@ -441,11 +425,7 @@ def test_enabled_land_research_saves_facts_without_residential_analysis(
     assert snapshot.facts["parcel_id"]["value"] == "14-0001-LL-001"
     assert snapshot.facts["lot_size_acres"]["value"] == 4.2
     assert "realestateapi_estimated_value" not in snapshot.facts
-    saved_provider_record = snapshot.market_context["provider_property_records"][
-        "realestateapi"
-    ]
-    assert "estimatedValue" not in saved_provider_record
-    assert "comps" not in saved_provider_record
+    assert snapshot.market_context["public_research"]["status"] == "partial"
     assert snapshot.snapshot_metadata is not None
     assert snapshot.snapshot_metadata["residential_market_analysis_skipped"] is True
     assert property_record.parcel_id == "14-0001-LL-001"
@@ -499,71 +479,30 @@ def test_apn_only_land_research_uses_one_parcel_lookup_and_reuses_fresh_snapshot
     assert queued is not None
     assert queued.address_signature == "parcel:GA|pickens|001203A004"
 
-    calls: list[dict[str, object]] = []
+    calls: list[str] = []
 
-    def fake_property_detail(
-        _client: object,
+    def fake_land_research(
+        _settings: object,
+        _property: object,
         *,
-        address: str | None = None,
-        apn: str | None = None,
-        county: str | None = None,
-        state: str | None = None,
-        include_comps: bool = True,
-    ) -> RealEstateAPIPropertyDetail:
-        calls.append(
-            {
-                "address": address,
-                "apn": apn,
-                "county": county,
-                "state": state,
-                "include_comps": include_comps,
-            }
-        )
-        return RealEstateAPIPropertyDetail(
-            found=True,
-            property={
-                "id": "land-parcel-1",
-                "propertyType": "Vacant Land",
-                "latitude": 34.4817,
-                "longitude": -84.371,
-                "propertyInfo": {
-                    "address": {
-                        "address": "Lot 12 Talking Rock Road",
-                        "city": "Talking Rock",
-                        "county": "Pickens",
-                        "state": "GA",
-                        "zip": "30175",
-                    }
-                },
-                "lotInfo": {
-                    "apn": "001203A004",
-                    "lotAcres": 3.25,
-                    "zoning": "AG",
-                },
-            },
-            comparables=[],
-            status_code=200,
-            status_message=None,
-            raw_response={},
+        requested_identity: str,
+    ) -> dict[str, object]:
+        calls.append(requested_identity)
+        return land_public_evidence(
+            parcel_id="0012-03-A.004",
+            formatted_address="Lot 12 Talking Rock Road, Talking Rock, GA 30175",
+            acres=3.25,
         )
 
     monkeypatch.setattr(
-        "app.services.property_intelligence.RealEstateAPIClient.get_property_detail",
-        fake_property_detail,
+        "app.services.property_intelligence.collect_land_market_evidence",
+        fake_land_research,
     )
 
     processed_id = process_next_property_research(db_session, settings)
 
     assert processed_id == queued.id
-    assert calls == [
-        {
-            "address": None,
-            "apn": "0012-03-A.004",
-            "county": "Pickens County",
-            "state": "GA",
-            "include_comps": False,
-        }
-    ]
+    assert calls == ["GA|pickens|001203A004"]
     snapshot = current_property_snapshot(
         db_session,
         organization_id=lead.organization_id,
@@ -576,10 +515,10 @@ def test_apn_only_land_research_uses_one_parcel_lookup_and_reuses_fresh_snapshot
     assert snapshot.snapshot_metadata["lookup_mode"] == "parcel"
     assert snapshot.facts["parcel_id"]["value"] == "0012-03-A.004"
     db_session.refresh(property_record)
-    assert property_record.street_address == "Lot 12 Talking Rock Road"
-    assert property_record.city == "Talking Rock"
-    assert property_record.postal_code == "30175"
-    assert property_record.address_validation_status == "provider_confirmed"
+    assert property_record.street_address == ""
+    assert property_record.city == ""
+    assert property_record.postal_code == ""
+    assert property_record.address_validation_status == "unverified"
 
     assert (
         enqueue_property_research(
@@ -618,34 +557,14 @@ def test_apn_only_land_research_rejects_provider_parcel_mismatch_without_snapsho
     property_record = db_session.get(Property, lead.property_id)
     assert property_record is not None
 
-    def fake_mismatched_property_detail(
-        _client: object,
-        **_kwargs: object,
-    ) -> RealEstateAPIPropertyDetail:
-        return RealEstateAPIPropertyDetail(
-            found=True,
-            property={
-                "id": "wrong-land-parcel",
-                "propertyInfo": {
-                    "address": {
-                        "address": "999 Wrong Parcel Road",
-                        "city": "Talking Rock",
-                        "county": "Pickens",
-                        "state": "GA",
-                        "zip": "30175",
-                    }
-                },
-                "lotInfo": {"apn": "DIFFERENT-APN", "lotAcres": 8.0},
-            },
-            comparables=[],
-            status_code=200,
-            status_message=None,
-            raw_response={},
-        )
-
     monkeypatch.setattr(
-        "app.services.property_intelligence.RealEstateAPIClient.get_property_detail",
-        fake_mismatched_property_detail,
+        "app.services.property_intelligence.collect_land_market_evidence",
+        lambda *_args, **_kwargs: land_public_evidence(
+            parcel_id="DIFFERENT-APN",
+            formatted_address="999 Wrong Parcel Road, Talking Rock, GA 30175",
+            acres=8.0,
+            address_match="conflicting",
+        ),
     )
 
     processed_id = process_next_property_research(db_session, settings)
@@ -798,8 +717,8 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     assert intelligence["facts"]["estimated_equity_amount"]["value"] == 175_000
     assert intelligence["facts"]["estimated_equity_amount"]["unit"] == "dollars"
     assert intelligence["facts"]["parcel_id"]["value"] == "14-0001-LL-001"
-    assert intelligence["image_source"] == "realestateapi_listing"
-    assert intelligence["image_views"] == ["listing"]
+    assert intelligence["image_source"] == "placeholder"
+    assert intelligence["image_views"] == []
     assert (
         intelligence["market_context"]["provider_property_records"]["realestateapi"][
             "estimatedEquity"
@@ -819,10 +738,6 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     assert research_run.run_metadata["existing_analysis_backfilled"] is True
     principal = principal_for_user(db_session, owner)
     assert principal.organization_id == lead.organization_id
-    monkeypatch.setattr(
-        "app.services.property_intelligence.get_realestateapi_image",
-        lambda image_url, timeout_seconds: (image_url.encode(), "image/jpeg"),
-    )
     image = get_property_image_content(
         db_session,
         principal,
@@ -830,9 +745,7 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
         get_settings(),
         view="listing",
     )
-    assert image is not None
-    assert image.source == "realestateapi_listing"
-    assert image.content.startswith(b"https://imagecdn.realty.dev/mls_photos/")
+    assert image is None
     captured_at = datetime.fromisoformat(intelligence["captured_at"])
     assert captured_at.tzinfo is not None
     assert captured_at <= datetime.now(UTC)

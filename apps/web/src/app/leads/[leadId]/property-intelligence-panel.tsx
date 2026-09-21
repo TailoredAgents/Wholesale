@@ -140,9 +140,9 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
   }
 
   const attribution = !intelligence.image_available
-    ? "No licensed image returned"
+    ? "No Stonegate photo uploaded"
     : sourceType === "realestateapi_listing"
-      ? "RealEstateAPI licensed listing media"
+      ? "Legacy RealEstateAPI listing media"
       : intelligence.image_attribution ?? "Stonegate property media";
 
   return (
@@ -153,7 +153,7 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
         <div className={styles.propertyImagePlaceholder}>
           <Home size={42} />
           <strong>No property photo available</strong>
-          <span>A licensed listing image or Stonegate inspection photo will appear here.</span>
+          <span>Upload a Stonegate inspection photo to add property imagery.</span>
         </div>
       )}
       <div className={styles.propertyImageCaption}>
@@ -490,13 +490,13 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
                   <span>{labelize(String(source.role ?? "supporting evidence"))}</span>
                 </li>
               ))}</ul>
-            ) : <p>No provider sources captured yet.</p>}
+            ) : <p>No cited research sources captured yet.</p>}
           </section>
           <section>
             <h4>Review items</h4>
             {intelligence.conflicts.length ? (
               <ul>{intelligence.conflicts.slice(0, 8).map((conflict, index) => (
-                <li key={index}>{String(conflict.message ?? conflict.reason ?? "Provider fact conflict")}</li>
+                <li key={index}>{String(conflict.message ?? conflict.reason ?? "Public fact conflict")}</li>
               ))}</ul>
             ) : <p>No material source conflicts are recorded.</p>}
           </section>

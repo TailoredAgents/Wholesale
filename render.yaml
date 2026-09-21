@@ -259,11 +259,11 @@ services:
       - key: ESIGN_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: PROPERTY_DATA_PROVIDER
-        value: rentcast
+        value: public_web
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
         value: "true"
       - key: LAND_WORKFLOW_ENABLED
-        value: "false"
+        value: "true"
       - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
         value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
@@ -276,18 +276,6 @@ services:
         sync: false
       - key: GOOGLE_STREET_VIEW_BASE_URL
         value: https://maps.googleapis.com/maps/api/streetview
-      - key: ATTOM_API_KEY
-        sync: false
-      - key: RENTCAST_API_KEY
-        sync: false
-      - key: RENTCAST_BASE_URL
-        value: https://api.rentcast.io/v1
-      - key: REALESTATEAPI_API_KEY
-        sync: false
-      - key: REALESTATEAPI_BASE_URL
-        value: https://api.realestateapi.com
-      - key: REALESTATEAPI_REQUEST_TIMEOUT_SECONDS
-        value: 30
       - key: BUYER_DATA_PROVIDER
         value: dealmachine
       - key: DEALMACHINE_API_KEY
@@ -301,7 +289,7 @@ services:
       - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
         value: 2
       - key: UNDERWRITING_REALESTATEAPI_COMPS_MODE
-        value: candidate
+        value: disabled
       - key: UNDERWRITING_AI_COMP_ANALYST_MODE
         value: draft
       - key: BUYER_DISCOVERY_MAX_RESULTS
@@ -552,6 +540,8 @@ services:
         value: ""
       - key: OPENAI_REASONING_EFFORT
         value: medium
+      - key: OPENAI_WEB_SEARCH_ENABLED
+        value: "true"
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 75
       - key: OPENAI_PRICING_OVERRIDES_JSON
@@ -695,11 +685,11 @@ services:
       - key: STAFF_LEAD_ALERT_RETRY_BASE_SECONDS
         value: 30
       - key: PROPERTY_DATA_PROVIDER
-        value: rentcast
+        value: public_web
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
         value: "true"
       - key: LAND_WORKFLOW_ENABLED
-        value: "false"
+        value: "true"
       - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
         value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
@@ -712,16 +702,6 @@ services:
         sync: false
       - key: GOOGLE_STREET_VIEW_BASE_URL
         value: https://maps.googleapis.com/maps/api/streetview
-      - key: RENTCAST_API_KEY
-        sync: false
-      - key: RENTCAST_BASE_URL
-        value: https://api.rentcast.io/v1
-      - key: REALESTATEAPI_API_KEY
-        sync: false
-      - key: REALESTATEAPI_BASE_URL
-        value: https://api.realestateapi.com
-      - key: REALESTATEAPI_REQUEST_TIMEOUT_SECONDS
-        value: 30
       - key: DEALMACHINE_API_KEY
         sync: false
       - key: DEALMACHINE_BASE_URL
@@ -733,7 +713,7 @@ services:
       - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
         value: 2
       - key: UNDERWRITING_REALESTATEAPI_COMPS_MODE
-        value: candidate
+        value: disabled
       - key: UNDERWRITING_AI_COMP_ANALYST_MODE
         value: draft
       - key: TWILIO_SMS_ENABLED

@@ -446,9 +446,12 @@ function titleCaseValue(value: string) {
 
 function providerLabel(value: string) {
   const normalized = value.trim().toLowerCase();
-  if (normalized.includes("rentcast")) return "RentCast";
+  if (normalized.includes("openai") || normalized.includes("public_web")) {
+    return "Cited public research";
+  }
+  if (normalized.includes("rentcast")) return "Legacy RentCast";
   if (normalized.includes("dealmachine")) return "DealMachine";
-  if (normalized.includes("realestateapi")) return "RealEstateAPI";
+  if (normalized.includes("realestateapi")) return "Legacy RealEstateAPI";
   return titleCaseValue(value || "Provider");
 }
 
@@ -1202,10 +1205,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             <button
               disabled={isLoading}
               onClick={() => void createAnalysis(true)}
-              title="Fetch a new provider snapshot; this may use paid provider credits."
+              title="Run a fresh cited public-web research pass."
               type="button"
             >
-              Refresh market evidence (may use credits)
+              Refresh cited market research
             </button>
           ) : null}
         </div>

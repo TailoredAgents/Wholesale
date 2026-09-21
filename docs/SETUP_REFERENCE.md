@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: September 19, 2026
+Last verified against the repository: September 21, 2026
 
 ## Purpose
 
@@ -34,7 +34,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | API domain | `api.stonegatehb.com` | Active |
 | Authentication | Clerk | Active |
 | AI | OpenAI | Configured; Copilot pilots pending |
-| Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
+| Property data | OpenAI cited public web research | Active; RentCast and RealEstateAPI retired |
 | Operational email | Resend | Configured; controlled acceptance pending |
 | SMS | Twilio | Seller-inquiry A2P approved; website and Facebook staff alerts are implemented; repeat internal new-lead alert acceptance after the worker credential correction |
 | Voice | Twilio + ElevenLabs | Human calling is implemented; Caroline actively handles the 470 seller-callback line, signed post-call records return to Stonegate, and OpenAI Realtime remains the rollback provider |
@@ -52,6 +52,15 @@ local ignored `.env` files.
 
 If a secret is pasted into chat, a screenshot, source code, or committed file, it should eventually
 be rotated even when immediate development continues.
+
+### Current Property-Research Configuration
+
+Fresh Property and Valuation research requires `AI_ENABLED=true`,
+`OPENAI_WEB_SEARCH_ENABLED=true`, `OPENAI_API_KEY`, and
+`PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED=true`. Set `PROPERTY_DATA_PROVIDER=public_web` and
+keep `UNDERWRITING_REALESTATEAPI_COMPS_MODE=disabled`. Do not add or rotate RentCast or
+RealEstateAPI credentials for Stonegate; later provider-specific sections are retained only as
+historical implementation notes and are not active setup instructions.
 
 ## Local Development
 
@@ -323,88 +332,55 @@ Activation checks:
 4. Web search, when enabled, remains bounded and cited.
 5. No Copilot receives autonomous consequential authority.
 
-## RentCast, RealEstateAPI, And Property Data
+## Cited Public Property Research
 
-Variables:
+Variables required on both API and worker:
 
-- `PROPERTY_DATA_PROVIDER=rentcast`
-- `RENTCAST_API_KEY`
-- `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
+- `PROPERTY_DATA_PROVIDER=public_web`
+- `AI_ENABLED=true`
+- `OPENAI_API_KEY`
+- `OPENAI_WEB_SEARCH_ENABLED=true`
 - `PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED=true`
 - `PROPERTY_INTELLIGENCE_FRESH_DAYS=30`
 - `PROPERTY_INTELLIGENCE_MAX_ATTEMPTS=3`
 - `PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS=60`
-- `REALESTATEAPI_API_KEY`
-- `REALESTATEAPI_BASE_URL=https://api.realestateapi.com`
-- `REALESTATEAPI_REQUEST_TIMEOUT_SECONDS=30`
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3`
 - `UNDERWRITING_V3_SHADOW_ENABLED=false`
-- `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate`
+- `UNDERWRITING_REALESTATEAPI_COMPS_MODE=disabled`
 - `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled`
 - `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`
-- optional `ATTOM_API_KEY` placeholder
 
-`REALESTATEAPI_API_KEY` also enables the public seller form's full-address suggestions through the
-provider's free AutoComplete endpoint. The API key remains server-side. If it is absent, rate
-limited, or temporarily unavailable, the public endpoint returns no suggestions and the seller can
-continue through manual street, city, state, and ZIP entry.
+Do not configure RentCast, RealEstateAPI, or ATTOM credentials. The public seller form accepts
+direct street, city, state, and ZIP entry; its compatibility suggestion endpoint returns no
+provider suggestions.
 
 V3 is the single live Stonegate Valuation method. V2.2 is retained only for historical reads and an
 engineering rollback; staff do not choose between versions. Keep shadow mode disabled in normal
-operation.
-
-Fresh analysis may use these RentCast endpoints:
-
-- `/properties` and `/avm/value` for subject identity, recorded sales, and the benchmark AVM
-- `/avm/rent/long-term` for rental exit support
-- `/listings/sale` for active asking-price context only
-- `/markets` for ZIP-level sale-listing context only
-
-The active-listing and market-statistics calls consume provider requests and are cached with the
-analysis. **Update Stonegate valuation**, repair changes, and comp review reuse that same-address
-snapshot without a paid retry. **Refresh market evidence (may use credits)** explicitly replaces
-the snapshot. Neither endpoint supplies closed-sale evidence to ARV or offer math.
+operation. **Update Stonegate valuation**, repair changes, and comp review reuse the saved cited
+snapshot. **Refresh market evidence** is the only action that starts fresh public-web research.
 
 ### Automatic Property Intelligence
 
-When a lead has a usable street address and city, the worker automatically runs the same V3
-research pipeline used by Stonegate Valuation and saves an immutable, property-level snapshot. The
-snapshot centralizes normalized property facts, screened comparable sales, calculated valuation
-evidence, provider provenance, conflicts, market context, confidence, and freshness. Leads that
-resolve to the same normalized property reuse the current snapshot and its cached market analysis
-instead of buying the same provider evidence again. A normal snapshot remains fresh for the
-configured number of days; **Refresh research** intentionally requests current evidence and may
-use provider credits.
+When a lead has a usable street address and city, the worker runs bounded cited public-web research
+and saves an immutable property-level snapshot. The snapshot centralizes supported subject facts,
+screened comparable sales, citations, conflicts, market context, confidence, and freshness. Leads
+that resolve to the same normalized property reuse the current snapshot and cached analysis. A
+normal snapshot remains fresh for the configured number of days; **Refresh research** explicitly
+requests newer evidence.
 
-The API and worker must receive the same RentCast, RealEstateAPI, and intelligence variables. A
-fresh analysis makes one exact-address RealEstateAPI Property Detail request with standard comps
-included, then reuses that response for the property profile, secondary comp evidence, provider
-benchmark, and any licensed listing image. The complete sanitized property record is saved inside
-the immutable snapshot so the UI and AI runtime do not re-buy it.
-
-The image order is the latest Stonegate field-inspection photo, a RealEstateAPI listing image when
-the response directly includes an approved `imagecdn.realty.dev` URL, then a clear no-photo
-placeholder. Stonegate does not use Street View, satellite, aerial, or scraped images. The browser
-retrieves provider media through Stonegate's authenticated API and never receives the API key.
+The image order is the latest Stonegate field-inspection photo and then a clear no-photo
+placeholder. Stonegate does not use provider listing media, Street View, satellite, aerial, or
+scraped images.
 
 Existing saved market analyses are lazily backfilled into property snapshots by the worker without
 a provider call. Automatic research does not move the seller into Underwriting, approve a value,
 or make an offer. It prepares evidence for staff and AI; consequential valuation and offer controls
 remain human-operated.
 
-Set `OPENAI_WEB_SEARCH_ENABLED=true` to allow the underwriting research agent to supplement thin
-RentCast results. It uses medium-context live search with a five-call ceiling, stores consulted
-citations, and never lets the model set ARV or an offer directly. Use
-`OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search request has time to finish.
-
-Stonegate's configured RealEstateAPI mode is `candidate`: unique closed sales may enter the
-candidate pool, but every sale still passes the same deterministic screen, confidence rules, and
-human review as RentCast evidence. `shadow` remains available for diagnostics and records overlap,
-conflicts, benchmark, estimated credits, and latency without affecting ARV. Exact address matching
-is fail-closed. The provider audit distinguishes returned, usable, overlapping, net-new, duplicate,
-ineligible, dropped, and conflicting sales. Reused snapshots show zero current-run credits while
-preserving original source cost and latency. RealEstateAPI and RentCast estimates remain external
-benchmarks; Stonegate's screened comp math remains the valuation conclusion.
+The research agent uses bounded live search, stores consulted citations, and never lets the model
+set ARV or an offer directly. Use `OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search
+request has time to finish. Every proposed closed sale passes deterministic required-field,
+transaction, duplicate, geography, recency, similarity, confidence, and human-review rules.
 
 Production enables `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`. With `AI_ENABLED=true` and a valid
 OpenAI key, the draft analyst and persistent Comp Copilot can organize comp review work and explain
@@ -414,7 +390,7 @@ adjustments, and approval authority.
 
 Each Copilot thread belongs to one immutable market-analysis ID. It stores messages, citations,
 suggested navigation actions, model use, and token counts. It uses saved analysis and structured
-inspection metadata and does not make a RentCast or RealEstateAPI request. Apply migration `0096`
+inspection metadata and does not start new public-web research. Apply migration `0096`
 before deploying the web application that exposes this workspace.
 
 Acceptance:
@@ -422,14 +398,13 @@ Acceptance:
 1. Analyze several known Georgia addresses.
 2. Confirm subject identity before relying on returned records.
 3. Review selected and excluded comparables.
-4. Confirm active listings and ZIP statistics appear only under supporting context.
+4. Confirm every material public fact and sale retains a working citation.
 5. Add one source-verified manual closed sale, rerun, then confirm its source remains visible.
 6. Confirm investor and client PDFs.
-7. Record provider failures and verified outcomes.
+7. Record research failures and verified outcomes.
 
-A RentCast 404 is a data-coverage result, not proof that the Stonegate API is down. The
-underwriting workflow can continue from verified subject facts and recorded sales when permitted
-by the method.
+Thin or unavailable public evidence is a research-coverage result, not proof that the Stonegate API
+is down. The workflow can continue from verified manual subject facts and recorded sales.
 
 ## Resend Operational Email
 
@@ -1582,8 +1557,8 @@ The burst circuit is an in-process limit. The rolling 24-hour accepted-lead limi
 durable database events. A duplicate provider lead ID is recognized before the daily circuit so a
 legitimate Zap replay does not consume another accepted-lead slot.
 
-The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
-address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
+Paid Facebook address enrichment is retired. The worker needs OpenAI cited-research configuration
+for property intelligence and the complete Twilio SMS configuration when staff alerts are live.
 Website address capture, website contact completion, and completed Facebook intake create
 source-tagged alerts for every active user who has a valid cellphone and **Text new leads** enabled.
 Website messages say **Stage 1 filled** and **Stage 2 filled** respectively. Their separate durable

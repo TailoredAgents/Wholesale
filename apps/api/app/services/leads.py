@@ -21,8 +21,6 @@ from app.domain.assets import (
 from app.domain.rbac import PermissionKeys
 from app.integrations.openai_client import OpenAIResponsesClient
 from app.integrations.rentcast_client import (
-    RentCastClient,
-    RentCastClientError,
     RentCastRentEstimate,
     RentCastValueEstimate,
     rent_estimate_from_payload,
@@ -189,7 +187,6 @@ from app.services.property_intelligence import (
 )
 from app.services.property_validation import (
     reset_property_validation,
-    validate_property_with_provider,
     validate_provider_record,
 )
 from app.services.repair_catalog import prepare_new_scope_items
@@ -211,16 +208,14 @@ from app.services.underwriting_comp_analyst import (
     build_saved_comp_context_evidence,
     unavailable_comp_analyst,
 )
-from app.services.underwriting_comp_search import (
-    search_adaptive_closed_sales,
-    warnings_from_search_summary,
-)
+from app.services.underwriting_comp_search import warnings_from_search_summary
 from app.services.underwriting_comparable_evidence import normalize_address_key
 from app.services.underwriting_evidence import (
     collect_secondary_market_evidence,
+    empty_value_estimate,
     merge_research_comparable_sales,
     research_comparable_sale_records,
-    resolve_rentcast_subject,
+    research_subject_record,
     secondary_conflict_warnings,
     unavailable_secondary_evidence,
 )
@@ -231,16 +226,13 @@ from app.services.underwriting_manual_comps import (
 from app.services.underwriting_methodology import resolve_underwriting_methodology
 from app.services.underwriting_provider_pipeline import (
     COMP_INTELLIGENCE_VERSION,
-    build_comparable_intelligence,
     reuse_cached_comparable_intelligence,
 )
 from app.services.underwriting_supporting_evidence import (
-    collect_supporting_market_evidence,
     unavailable_supporting_evidence,
 )
 from app.services.underwriting_v2 import (
     UnderwritingV2Result,
-    analyze_recorded_sales,
     analyze_underwriting_v2,
 )
 from app.services.underwriting_v3 import (
@@ -2460,43 +2452,36 @@ def preview_lead_market_value(
         return None
     require_house_workflow(lead.asset_class, workflow="Residential value preview")
 
-    settings = get_settings()
-    if settings.property_data_provider.lower() != "rentcast":
-        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for this preview.")
-    if not settings.rentcast_api_key:
-        raise ValueError("RENTCAST_API_KEY is not configured.")
-
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
-
     address = format_property_address(property_record)
-    client = RentCastClient(
-        api_key=settings.rentcast_api_key,
-        base_url=settings.rentcast_base_url,
-        timeout_seconds=settings.openai_request_timeout_seconds,
-    )
-    try:
-        estimate = client.get_value_estimate(
-            address=address,
-            property_type=property_record.property_type,
+    analysis = db.scalar(
+        select(UnderwritingMarketAnalysis)
+        .where(
+            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+            UnderwritingMarketAnalysis.property_id == property_record.id,
         )
-    except RentCastClientError as exc:
-        raise RuntimeError(str(exc)) from exc
+        .order_by(UnderwritingMarketAnalysis.created_at.desc())
+    )
+    if analysis is None:
+        raise ValueError(
+            "Run cited property research before opening the market-value preview."
+        )
 
     return LeadMarketValueEstimateRead(
         lead_id=lead.id,
         property_id=property_record.id,
-        provider="rentcast",
+        provider=analysis.provider,
         requested_address=address,
-        estimated_value_cents=dollars_to_cents(estimate.price),
-        estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
-        estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
-        subject_property=estimate.subject_property,
-        comparables=[rentcast_comp_to_read(comp) for comp in estimate.comparables],
+        estimated_value_cents=analysis.estimated_value_cents,
+        estimated_value_low_cents=analysis.estimated_value_low_cents,
+        estimated_value_high_cents=analysis.estimated_value_high_cents,
+        subject_property=analysis.subject_property,
+        comparables=[],
         source_note=(
-            "RentCast /avm/value estimate and comparable listings. Use as draft "
-            "underwriting support only; human ARV approval is required."
+            "Latest saved cited public research. Use as draft underwriting support only; "
+            "human ARV approval is required."
         ),
     )
 
@@ -2506,11 +2491,6 @@ def validate_lead_property_address(
     principal: Principal,
     lead_id: UUID,
 ) -> PropertyValidationRead | None:
-    settings = get_settings()
-    if settings.property_data_provider.lower() != "rentcast":
-        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for address validation.")
-    if not settings.rentcast_api_key:
-        raise ValueError("RENTCAST_API_KEY is not configured.")
     lead = get_scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
@@ -2522,10 +2502,26 @@ def validate_lead_property_address(
         "status": property_record.address_validation_status,
         "validated_address": property_record.validated_formatted_address,
     }
-    try:
-        metadata = validate_property_with_provider(property_record, settings)
-    except RentCastClientError as exc:
-        raise RuntimeError(str(exc)) from exc
+    address = format_property_address(property_record)
+    if not property_record.street_address.strip() or not property_record.city.strip():
+        raise ValueError("Enter a complete street address and city before confirming it.")
+    metadata = {
+        "requested": {
+            "street_address": property_record.street_address,
+            "city": property_record.city,
+            "state": property_record.state,
+            "postal_code": property_record.postal_code,
+        },
+        "match_score": 100,
+        "issues": [],
+        "confirmation_method": "stonegate_user",
+    }
+    property_record.address_validation_status = "verified"
+    property_record.address_validation_provider = "stonegate_user"
+    property_record.provider_property_id = None
+    property_record.validated_formatted_address = address
+    property_record.address_validated_at = datetime.now(UTC)
+    property_record.address_validation_metadata = metadata
 
     db.add(
         ActivityEvent(
@@ -2555,16 +2551,15 @@ def validate_lead_property_address(
                 "match_score": metadata.get("match_score"),
                 "issues": metadata.get("issues"),
             },
-            reason="Provider property-record validation",
+            reason="Stonegate user confirmed the property address",
         )
     )
-    if property_record.address_validation_status == "provider_confirmed":
-        enqueue_property_research(
-            db,
-            property_record,
-            source_lead_id=lead.id,
-            trigger_source="manual_address_validation",
-        )
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source="manual_address_confirmation",
+    )
     db.commit()
     db.refresh(property_record)
     return property_validation_to_read(property_record)
@@ -2603,11 +2598,6 @@ def create_lead_market_analysis(
 
     settings = get_settings()
     methodology_control = resolve_underwriting_methodology(settings)
-    if settings.property_data_provider.lower() != "rentcast":
-        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for market analysis.")
-    if not settings.rentcast_api_key:
-        raise ValueError("RENTCAST_API_KEY is not configured.")
-
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
@@ -2712,7 +2702,6 @@ def create_lead_market_analysis(
     provider_returned_comp_count = 0
     rentcast_sale_records: list[dict[str, Any]] = []
     comp_intelligence: dict[str, Any] = {}
-    external_property_provider_payload: dict[str, Any] = {}
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
@@ -2790,7 +2779,6 @@ def create_lead_market_analysis(
         )
         sale_records = cached_intelligence.analysis_records
         comp_intelligence = cached_intelligence.metadata
-        external_property_provider_payload = cached_intelligence.provider_payload
         cached_search_summary = (
             (cached_analysis.analysis_metadata or {}).get("comp_search_summary")
             if cached_analysis is not None
@@ -2826,134 +2814,93 @@ def create_lead_market_analysis(
         if comp_search_summary is not None:
             provider_warnings.extend(warnings_from_search_summary(comp_search_summary))
     else:
-        client = RentCastClient(
-            api_key=settings.rentcast_api_key,
-            base_url=settings.rentcast_base_url,
-            timeout_seconds=settings.openai_request_timeout_seconds,
-        )
-        try:
-            resolution = resolve_rentcast_subject(
-                client,
-                property_record,
-                requested_address=address,
-            )
-        except RentCastClientError as exc:
-            logger.warning(
-                "underwriting_market_data_failed",
-                lead_id=str(lead.id),
-                provider="rentcast",
-                operation=exc.operation,
-                provider_status_code=exc.status_code,
-                provider_error_code=exc.error_code,
-                error_message=str(exc),
-            )
-            raise RuntimeError(str(exc)) from exc
-        estimate = resolution.estimate
-        subject_record = resolution.subject_record
-        address_evidence = resolution.address_evidence
-        property_record_error = resolution.property_record_error
-        avm_error = resolution.avm_error
-        resolved_address = resolution.resolved_address
-        if property_record_error:
-            provider_warnings.append(
-                "The separate public property record was unavailable; subject facts came "
-                "from the RentCast AVM response."
-            )
-            logger.warning(
-                "underwriting_optional_property_record_failed",
-                lead_id=str(lead.id),
-                provider="rentcast",
-                operation="property record",
-                error_message=property_record_error,
-            )
-        if avm_error:
-            provider_warnings.append(
-                "The RentCast AVM was unavailable; value conclusions use screened recorded "
-                "sales only."
-            )
-
-        subject_facts = {**estimate.subject_property, **subject_record}
-        try:
-            search_result = search_adaptive_closed_sales(
-                client,
-                address=resolved_address,
-                subject_facts=subject_facts,
-                local_property_type=property_record.property_type,
-                condition_overrides=payload.comp_condition_overrides,
-            )
-        except RentCastClientError as exc:
-            logger.warning(
-                "underwriting_market_data_failed",
-                lead_id=str(lead.id),
-                provider="rentcast",
-                operation=exc.operation,
-                provider_status_code=exc.status_code,
-                provider_error_code=exc.error_code,
-                error_message=str(exc),
-            )
-            raise RuntimeError(str(exc)) from exc
-        rentcast_sale_records = search_result.records
-        comp_search_summary = search_result.summary
-        provider_returned_comp_count = search_result.provider_returned_count
-        provider_warnings.extend(search_result.warnings)
-        intelligence_result = build_comparable_intelligence(
+        # Public web research is now Stonegate's only live property-data source. The
+        # deterministic valuation engine below still screens and weights every cited sale.
+        crm_subject_facts = {
+            "formattedAddress": address,
+            "addressLine1": property_record.street_address,
+            "city": property_record.city,
+            "state": property_record.state,
+            "zipCode": property_record.postal_code,
+            "propertyType": property_record.property_type,
+            "county": property_record.county,
+            "parcelId": property_record.parcel_id,
+        }
+        secondary_evidence = collect_secondary_market_evidence(
             settings,
-            address=resolved_address,
-            rentcast_records=rentcast_sale_records,
-            comp_search_summary=comp_search_summary,
-            rentcast_estimated_value_cents=dollars_to_cents(estimate.price),
-            rentcast_estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
-            rentcast_estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
-            subject_facts=subject_facts,
+            property_record,
+            requested_address=address,
+            subject_facts=crm_subject_facts,
         )
-        sale_records = intelligence_result.analysis_records
-        comp_intelligence = intelligence_result.metadata
-        external_property_provider_payload = intelligence_result.provider_payload
-
-        try:
-            rent_estimate = client.get_rent_estimate(
-                address=resolved_address,
-                property_type=property_record.property_type,
+        if secondary_evidence.get("status") == "unavailable":
+            limitations = secondary_evidence.get("limitations")
+            detail = limitations[0] if isinstance(limitations, list) and limitations else None
+            raise RuntimeError(
+                str(detail or "AI public property research is currently unavailable.")
             )
-        except RentCastClientError as exc:
-            logger.warning(
-                "underwriting_optional_rent_data_failed",
-                lead_id=str(lead.id),
-                provider="rentcast",
-                operation=exc.operation,
-                provider_status_code=exc.status_code,
-                provider_error_code=exc.error_code,
-                error_message=str(exc),
-            )
-            rent_error = str(exc)
-        structured_selected_comps, _structured_rejected_comps = analyze_recorded_sales(
-            subject_facts,
-            sale_records,
-            condition_overrides=payload.comp_condition_overrides,
+        subject_record = research_subject_record(
+            secondary_evidence,
+            property_record,
+            requested_address=address,
         )
-        if len(structured_selected_comps) >= 3:
-            secondary_evidence = unavailable_secondary_evidence(
-                "Structured provider evidence met the closed-sale threshold, so web comp "
-                "discovery was not requested."
-            )
-        else:
-            secondary_evidence = collect_secondary_market_evidence(
-                settings,
-                property_record,
-                requested_address=resolved_address,
-                subject_facts=subject_facts,
-            )
+        estimate = empty_value_estimate(subject_record, None)
+        address_match = str(secondary_evidence.get("address_match") or "not_found")
+        address_evidence = {
+            "requested_address": address,
+            "resolved_address": subject_record.get("formattedAddress") or address,
+            "resolution_method": "cited_public_web_research",
+            "match_score": (
+                100
+                if address_match == "confirmed"
+                else 80
+                if address_match == "probable"
+                else 0
+            ),
+            "status": address_match,
+            "issues": secondary_evidence.get("limitations") or [],
+            "sources": secondary_evidence.get("sources") or [],
+        }
+        rentcast_sale_records = []
+        sale_records = []
+        comp_intelligence = {
+            "version": COMP_INTELLIGENCE_VERSION,
+            "strategy": "cited_public_web_research_plus_stonegate_math",
+            "providers": [
+                {
+                    "provider": "openai_web_search",
+                    "mode": "primary",
+                    "returned_count": len(
+                        secondary_evidence.get("comparable_candidates") or []
+                    ),
+                    "usable_count": int(
+                        secondary_evidence.get("valuation_candidate_count") or 0
+                    ),
+                    "credits_used": None,
+                }
+            ],
+            "duplicate_count": 0,
+            "conflict_count": len(secondary_evidence.get("conflicts") or []),
+        }
+        comp_search_summary = None
+        provider_returned_comp_count = len(
+            secondary_evidence.get("comparable_candidates") or []
+        )
+        supporting_evidence = unavailable_supporting_evidence(
+            "Standalone provider listings and ZIP statistics are disabled. Cited public "
+            "research is stored with the analysis instead."
+        )
         provider_warnings.extend(secondary_conflict_warnings(secondary_evidence))
-        supporting_evidence = collect_supporting_market_evidence(
-            client,
-            address=resolved_address,
-            postal_code=property_record.postal_code,
-            subject_facts=subject_facts,
-            local_property_type=property_record.property_type,
+        provider_warnings.append(
+            "Value guidance is based on cited public closed-sale research and Stonegate's "
+            "deterministic comp math; review the cited records before presenting an offer."
         )
 
     if subject_record:
-        validate_provider_record(property_record, subject_record)
+        validate_provider_record(
+            property_record,
+            subject_record,
+            provider="openai_web_search",
+        )
         property_record.address_validation_metadata = {
             **(property_record.address_validation_metadata or {}),
             "resolution": address_evidence,
@@ -2967,7 +2914,7 @@ def create_lead_market_analysis(
     )
     if research_sale_records:
         provider_warnings.append(
-            "AI-discovered public closed sales supplement the provider search. Review each "
+            "AI-discovered public closed sales are the primary market evidence. Review each "
             "cited source before approving seller-facing value or offer guidance."
         )
     manual_sale_records, manual_comp_ids = resolve_manual_comparable_records(
@@ -3355,9 +3302,9 @@ def create_lead_market_analysis(
             report_stage=report_stage,
             methodology_version=methodology_control.active_version,
         ),
-        source="rentcast_property_records",
+        source="cited_public_web_research",
         underwriting_metadata={
-            "provider_imported": True,
+            "provider_imported": False,
             **analysis_metadata,
             "method": (
                 "market_supported_adjusted_closed_sales_and_buyer_economics"
@@ -3376,7 +3323,7 @@ def create_lead_market_analysis(
         property_id=lead.property_id,
         underwriting_version_id=version.id,
         created_by_user_id=principal.user_id,
-        provider="rentcast",
+        provider="openai_web_search",
         requested_address=address,
         estimated_value_cents=dollars_to_cents(estimate.price),
         estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
@@ -3402,16 +3349,8 @@ def create_lead_market_analysis(
             "subject_record": subject_record,
             "recorded_sales": rentcast_sale_records,
             "normalized_provider_sales": provider_sale_records,
-            "realestateapi": (
-                external_property_provider_payload
-                if settings.underwriting_realestateapi_comps_mode != "disabled"
-                else None
-            ),
-            "dealmachine": (
-                external_property_provider_payload
-                if settings.underwriting_realestateapi_comps_mode == "disabled"
-                else None
-            ),
+            "realestateapi": None,
+            "dealmachine": None,
             "comp_intelligence": comp_intelligence,
             "research_recorded_sales": research_sale_records,
             "manual_recorded_sales": manual_sale_records,

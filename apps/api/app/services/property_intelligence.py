@@ -12,19 +12,12 @@ from app.domain.assets import (
     HOUSE_RESEARCH_PROFILE,
     LAND_ASSET_CLASS,
     LAND_RESEARCH_PROFILE,
-    normalize_parcel_id,
     parcel_identity_key,
     property_identity_label,
     research_profile_for_asset,
 )
 from app.domain.rbac import PermissionKeys
-from app.integrations.realestateapi_client import (
-    RealEstateAPIClient,
-    RealEstateAPIError,
-    get_realestateapi_image,
-    is_realestateapi_image_url,
-    realestateapi_primary_image_url,
-)
+from app.integrations.realestateapi_client import realestateapi_primary_image_url
 from app.models.foundation import (
     ActivityEvent,
     FieldInspection,
@@ -44,7 +37,10 @@ from app.services.land_valuation_state import (
     current_land_analysis_reasons,
 )
 from app.services.property_validation import canonical_address_key, normalize_postal_code
-from app.services.underwriting_comparable_evidence import normalize_address_key
+from app.services.underwriting_evidence import (
+    collect_land_market_evidence,
+    research_subject_record,
+)
 
 ACTIVE_RESEARCH_STATUSES = {"queued", "processing", "retry"}
 PROPERTY_IMAGE_VIEWS = ("listing",)
@@ -571,92 +567,45 @@ def process_land_property_research(
     lead: Lead,
 ) -> UUID:
     """Collect land property facts without entering the residential valuation pipeline."""
-    if not settings.realestateapi_api_key:
-        return finish_research_needs_review(
-            db,
-            run,
-            "Land property research requires REALESTATEAPI_API_KEY. Residential comps and "
-            "value math were not run.",
-        )
     use_address = usable_research_address(property_record)
-    try:
-        detail = RealEstateAPIClient(settings).get_property_detail(
-            address=format_property_address(property_record) if use_address else None,
-            apn=property_record.parcel_id if not use_address else None,
-            county=property_record.county if not use_address else None,
-            state=property_record.state if not use_address else None,
-            include_comps=False,
-        )
-    except RealEstateAPIError as exc:
-        raise RuntimeError(str(exc)) from exc
-    if not detail.found:
-        return finish_research_needs_review(
-            db,
-            run,
-            "RealEstateAPI found no exact land property match. Residential comps and value "
-            "math were not run.",
-        )
-    requested_parcel = normalize_parcel_id(property_record.parcel_id)
-    returned_parcel = normalize_parcel_id(realestateapi_property_parcel_id(detail.property))
-    returned_components = realestateapi_property_address_components(detail.property)
     requested_parcel_key = parcel_identity_key(
         property_record.parcel_id,
         county=property_record.county,
         state=property_record.state,
     )
-    returned_parcel_key = parcel_identity_key(
-        returned_parcel,
-        county=returned_components.get("county"),
-        state=returned_components.get("state"),
-    )
-    if requested_parcel and (
-        returned_parcel != requested_parcel
-        or (not use_address and returned_parcel_key != requested_parcel_key)
-    ):
-        return finish_research_needs_review(
-            db,
-            run,
-            "RealEstateAPI returned a different Land parcel/APN. Its facts were excluded, "
-            "and residential comps and value math were not run.",
-        )
-    returned_address = realestateapi_property_address(detail.property)
     requested_address = format_property_address(property_record)
-    if (
-        use_address
-        and returned_address
-        and normalize_address_key(returned_address) != normalize_address_key(requested_address)
-    ):
+    requested_identity = (
+        requested_address if use_address else requested_parcel_key or "parcel-unavailable"
+    )
+    evidence = collect_land_market_evidence(
+        settings,
+        property_record,
+        requested_identity=requested_identity,
+    )
+    if evidence.get("status") == "unavailable":
+        limitations = evidence.get("limitations")
+        reason = limitations[0] if isinstance(limitations, list) and limitations else None
         return finish_research_needs_review(
             db,
             run,
-            "RealEstateAPI returned a different land property address. Its facts were excluded, "
-            "and residential comps and value math were not run.",
+            str(reason or "AI public Land research is currently unavailable."),
         )
-    if not use_address:
-        apply_realestateapi_parcel_address(property_record, detail.property)
-        property_record.address_validation_status = "provider_confirmed"
-        property_record.address_validation_provider = "realestateapi"
-        property_record.provider_property_id = string_value(detail.property.get("id"))
-        property_record.validated_formatted_address = returned_address
-        property_record.address_validated_at = datetime.now(UTC)
-        property_record.address_validation_metadata = {
-            "lookup_mode": "parcel",
-            "requested_parcel_key": requested_parcel_key,
-            "returned_parcel_key": returned_parcel_key,
-            "match_score": 100,
-            "issues": [],
-        }
-    snapshot = create_land_property_snapshot(
+    if evidence.get("address_match") == "conflicting":
+        return finish_research_needs_review(
+            db,
+            run,
+            "Cited public research matched a different Land parcel/APN. Review the "
+            "property identity before researching again.",
+        )
+    snapshot = create_public_land_property_snapshot(
         db,
         settings,
         property_record=property_record,
         lead=lead,
-        property_payload=detail.property,
+        evidence=evidence,
         trigger_source=run.trigger_source,
         lookup_mode="address" if use_address else "parcel",
-        requested_identity=(
-            requested_address if use_address else requested_parcel_key or "parcel-unavailable"
-        ),
+        requested_identity=requested_identity,
     )
     completed_at = datetime.now(UTC)
     run.status = snapshot.status
@@ -666,9 +615,8 @@ def process_land_property_research(
         **(run.run_metadata or {}),
         "snapshot_id": str(snapshot.id),
         "completed_at": completed_at.isoformat(),
-        "provider": "realestateapi",
-        "provider_status": "completed",
-        "provider_credits_estimated": 1,
+        "research_source": "openai_web_search",
+        "research_status": evidence.get("status"),
         "lookup_mode": "address" if use_address else "parcel",
         "requested_identity": (
             format_property_address(property_record)
@@ -688,13 +636,168 @@ def process_land_property_research(
             entity_id=lead.id,
             event_type="property.research_ready",
             summary=(
-                "Land property-record research is ready. Residential comps and value math "
-                "were intentionally skipped."
+            "Cited Land property research is ready. Residential comps and value math were "
+            "intentionally skipped."
             ),
         )
     )
     db.commit()
     return run.id
+
+
+def create_public_land_property_snapshot(
+    db: Session,
+    settings: Settings,
+    *,
+    property_record: Property,
+    lead: Lead,
+    evidence: dict[str, Any],
+    trigger_source: str,
+    lookup_mode: str,
+    requested_identity: str,
+) -> PropertyIntelligenceSnapshot:
+    research_profile = research_profile_for_lead(lead)
+    captured_at = datetime.now(UTC)
+    subject = research_subject_record(
+        evidence,
+        property_record,
+        requested_address=format_property_address(property_record),
+    )
+    provenance = {
+        key: "cited_public_web_research"
+        for key, value in subject.items()
+        if value is not None
+    }
+    facts = fallback_property_facts(property_record)
+    facts.update(normalized_fact_snapshot(subject, provenance, captured_at))
+    facts["asset_class"] = fact_value("land", "stonegate_crm", captured_at)
+    land_fact_mappings = {
+        "lot_size_acres": "lotAcres",
+        "parcel_id": "parcelId",
+        "zoning": "zoning",
+        "land_use": "landUse",
+        "legal_description": "legalDescription",
+        "water": "water",
+        "sewer": "sewer",
+        "flood_zone": "floodZone",
+        "assessed_total_value": "assessedValue",
+        "assessed_land_value": "assessedLandValue",
+        "annual_property_tax": "propertyTaxes",
+    }
+    for fact_name, source_name in land_fact_mappings.items():
+        value = subject.get(source_name)
+        if value is not None:
+            facts[fact_name] = fact_value(
+                value,
+                "cited_public_web_research",
+                captured_at,
+            )
+    researched_parcel = string_value(subject.get("parcelId"))
+    if not property_record.parcel_id and researched_parcel:
+        property_record.parcel_id = researched_parcel
+    researched_county = string_value(subject.get("county"))
+    if not property_record.county and researched_county:
+        property_record.county = researched_county
+    property_record.normalized_parcel_key = parcel_identity_key(
+        property_record.parcel_id,
+        county=property_record.county,
+        state=property_record.state,
+    )
+    if evidence.get("address_match") == "confirmed" and usable_research_address(
+        property_record
+    ):
+        property_record.address_validation_status = "verified"
+        property_record.address_validation_provider = "openai_web_search"
+        property_record.validated_formatted_address = string_value(
+            subject.get("formattedAddress")
+        ) or format_property_address(property_record)
+        property_record.address_validated_at = captured_at
+        property_record.address_validation_metadata = {
+            "confirmation_method": "cited_public_web_research",
+            "sources": evidence.get("sources") or [],
+        }
+    comparables = [
+        item
+        for item in evidence.get("comparable_candidates", [])
+        if isinstance(item, dict)
+    ]
+    media: dict[str, Any] = {}
+    completeness_score = land_property_completeness_score(facts, media)
+    status = "ready" if completeness_score >= 65 and comparables else "partial"
+    db.execute(
+        update(PropertyIntelligenceSnapshot)
+        .where(
+            PropertyIntelligenceSnapshot.organization_id == property_record.organization_id,
+            PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.research_profile == research_profile,
+            PropertyIntelligenceSnapshot.is_current.is_(True),
+        )
+        .values(is_current=False)
+    )
+    snapshot = PropertyIntelligenceSnapshot(
+        organization_id=property_record.organization_id,
+        property_id=property_record.id,
+        source_lead_id=lead.id,
+        source_market_analysis_id=None,
+        research_profile=research_profile,
+        version_number=next_property_snapshot_version(
+            db,
+            property_id=property_record.id,
+            research_profile=research_profile,
+        ),
+        status=status,
+        is_current=True,
+        address_signature=property_research_signature(
+            property_record,
+            research_profile=research_profile,
+        ),
+        completeness_score=completeness_score,
+        confidence_score=70 if evidence.get("address_match") == "confirmed" else 50,
+        facts=facts,
+        valuation={},
+        comparables=comparables,
+        market_context={
+            "asset_class": "land",
+            "research_profile": research_profile,
+            "public_research": evidence,
+            "land_comparable_candidates": comparables,
+            "residential_market_analysis": {
+                "status": "skipped",
+                "reason": LAND_RESIDENTIAL_SKIP_MESSAGE,
+            },
+            "manual_review_required": True,
+            "review_reasons": [LAND_VALUATION_PENDING_MESSAGE],
+        },
+        sources=[
+            {
+                "source": "openai_web_search",
+                "captured_at": captured_at.isoformat(),
+                "role": "cited_public_property_and_sale_research",
+            },
+            {
+                "source": "stonegate",
+                "captured_at": captured_at.isoformat(),
+                "role": "crm_property_identity",
+            },
+        ],
+        conflicts=[],
+        media=media,
+        snapshot_metadata={
+            "trigger_source": trigger_source,
+            "asset_class": "land",
+            "research_profile": research_profile,
+            "lookup_mode": lookup_mode,
+            "requested_identity": requested_identity,
+            "research_source": "openai_web_search",
+            "residential_market_analysis_skipped": True,
+            "land_valuation_status": "not_started",
+        },
+        captured_at=captured_at,
+        expires_at=captured_at + timedelta(days=settings.property_intelligence_fresh_days),
+    )
+    db.add(snapshot)
+    db.flush()
+    return snapshot
 
 
 def create_land_property_snapshot(
@@ -1174,7 +1277,7 @@ def normalized_fact_snapshot(
     return {
         target: fact_value(
             subject[source],
-            str(provenance.get(source) or "rentcast_property_record"),
+            str(provenance.get(source) or "property_record"),
             captured_at,
         )
         for target, source in mappings.items()
@@ -1454,7 +1557,8 @@ def source_role(name: str) -> str:
         "rentcast": "independent_comparable_and_market_evidence",
         "realestateapi": "canonical_property_record_and_candidate_comparable_evidence",
         "dealmachine": "candidate_comparable_evidence",
-        "cited_public_research": "supplemental_review_only",
+        "openai_web_search": "primary_cited_public_research",
+        "cited_public_research": "primary_cited_public_research",
         "stonegate": "crm_and_calculation_record",
     }.get(name, "supporting_evidence")
 
@@ -1565,25 +1669,12 @@ def build_property_intelligence_read(
     image_attribution = None
     imagery_date = None
     photo = latest_property_photo(db, principal.organization_id, property_record.id)
-    realestateapi_media: dict[str, Any] = {}
-    if snapshot is not None:
-        raw_media = snapshot.media.get("realestateapi")
-        if isinstance(raw_media, dict):
-            realestateapi_media = raw_media
-    listing_image_url = string_value(realestateapi_media.get("primary_listing_image_url"))
     if photo is not None:
         image_source = "inspection_photo"
         image_available = True
         image_views = ["listing"]
         image_attribution = "Stonegate field inspection"
         imagery_date = (photo.captured_at or photo.created_at).date().isoformat()
-    elif listing_image_url and is_realestateapi_image_url(listing_image_url):
-        image_source = "realestateapi_listing"
-        image_available = True
-        image_views = ["listing"]
-        image_attribution = str(
-            realestateapi_media.get("attribution") or "RealEstateAPI licensed listing media"
-        )
     valuation = dict(snapshot.valuation) if snapshot else {}
     comparables = list(snapshot.comparables) if snapshot else []
     market_context = dict(snapshot.market_context) if snapshot else dict(fallback_market_context)
@@ -1872,28 +1963,6 @@ def get_property_image_content(
             ),
             content_type=photo.content_type,
             source="inspection_photo",
-        )
-    snapshot = current_property_snapshot(
-        db,
-        organization_id=principal.organization_id,
-        property_id=lead.property_id,
-        research_profile=research_profile_for_lead(lead),
-    )
-    realestateapi = snapshot.media.get("realestateapi") if snapshot else None
-    image_url = (
-        string_value(realestateapi.get("primary_listing_image_url"))
-        if isinstance(realestateapi, dict)
-        else None
-    )
-    if image_url and is_realestateapi_image_url(image_url):
-        content, content_type = get_realestateapi_image(
-            image_url,
-            timeout_seconds=settings.realestateapi_request_timeout_seconds,
-        )
-        return PropertyImageContent(
-            content=content,
-            content_type=content_type,
-            source="realestateapi_listing",
         )
     return None
 

@@ -671,7 +671,7 @@ def test_zapier_land_lead_preserves_asset_and_parcel_identity(
     assert alert.message_body.startswith("New Facebook Land lead:")
 
 
-def test_facebook_address_enrichment_fills_zip_and_county_after_staff_alert(
+def test_facebook_paid_address_enrichment_is_retired_after_staff_alert(
     db_session: Session,
     api_db_override: None,
     zapier_settings: Settings,
@@ -698,20 +698,19 @@ def test_facebook_address_enrichment_fills_zip_and_county_after_staff_alert(
     assert lead is not None
     property_record = db_session.get(Property, lead.property_id)
     assert property_record is not None
-    assert event.address_enrichment_status == "enriched"
+    assert event.address_enrichment_status == "blocked"
     assert event.address_enrichment_attempt_count == 1
-    assert event.address_enriched_at is not None
-    assert event.address_enrichment_last_error is None
-    assert property_record.postal_code == "30303"
-    assert property_record.county == "Fulton"
-    assert property_record.address_validation_status == "provider_confirmed"
-    assert property_record.normalized_address_key == "101 zapier ln|atlanta|GA|30303"
-    assert provider.addresses == ["101 Zapier Lane, Atlanta, GA"]
+    assert event.address_enriched_at is None
+    assert "retired" in (event.address_enrichment_last_error or "").lower()
+    assert property_record.postal_code == "Unknown"
+    assert property_record.county is None
+    assert property_record.address_validation_status == "unverified"
+    assert provider.addresses == []
     assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) is None
-    assert len(provider.addresses) == 1
+    assert provider.addresses == []
 
 
-def test_facebook_address_enrichment_routes_ambiguous_and_missing_addresses_to_review(
+def test_facebook_paid_address_enrichment_blocks_without_calling_provider(
     db_session: Session,
     api_db_override: None,
     zapier_settings: Settings,
@@ -742,16 +741,16 @@ def test_facebook_address_enrichment_routes_ambiguous_and_missing_addresses_to_r
     assert ambiguous_lead is not None
     ambiguous_property = db_session.get(Property, ambiguous_lead.property_id)
     assert ambiguous_property is not None
-    assert first.address_enrichment_status == "needs_review"
+    assert first.address_enrichment_status == "blocked"
     assert ambiguous_property.postal_code == "Unknown"
     assert ambiguous_property.county is None
-    assert ambiguous_property.address_validation_status == "needs_review"
-    assert second.address_enrichment_status == "skipped"
-    assert "did not provide" in (second.address_enrichment_last_error or "")
-    assert len(provider.addresses) == 1
+    assert ambiguous_property.address_validation_status == "unverified"
+    assert second.address_enrichment_status == "blocked"
+    assert "retired" in (second.address_enrichment_last_error or "").lower()
+    assert provider.addresses == []
 
 
-def test_facebook_address_enrichment_retries_provider_outage_without_losing_lead(
+def test_facebook_paid_address_enrichment_never_calls_retired_provider(
     db_session: Session,
     api_db_override: None,
     zapier_settings: Settings,
@@ -773,12 +772,12 @@ def test_facebook_address_enrichment_retries_provider_outage_without_losing_lead
 
     event = db_session.get(MetaLeadEvent, event_id)
     assert event is not None and event.lead_id is not None
-    assert event.address_enrichment_status == "retry"
+    assert event.address_enrichment_status == "blocked"
     assert event.address_enrichment_attempt_count == 1
-    assert event.address_enrichment_next_attempt_at is not None
+    assert event.address_enrichment_next_attempt_at is None
     assert event.address_enrichment_last_attempt_at is not None
-    assert event.address_enrichment_next_attempt_at > event.address_enrichment_last_attempt_at
-    assert event.address_enrichment_last_error == "temporary RentCast outage"
+    assert "retired" in (event.address_enrichment_last_error or "").lower()
+    assert provider.addresses == []
     assert db_session.get(Lead, event.lead_id) is not None
 
 

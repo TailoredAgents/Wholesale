@@ -35,6 +35,48 @@ WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["confirmed", "probable", "conflicting", "not_found"],
         },
+        "subject": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "formatted_address": {"type": ["string", "null"]},
+                "property_type": {"type": ["string", "null"]},
+                "bedrooms": {"type": ["number", "null"]},
+                "bathrooms": {"type": ["number", "null"]},
+                "square_footage": {"type": ["integer", "null"]},
+                "lot_size_square_feet": {"type": ["integer", "null"]},
+                "lot_size_acres": {"type": ["number", "null"]},
+                "year_built": {"type": ["integer", "null"]},
+                "subdivision": {"type": ["string", "null"]},
+                "county": {"type": ["string", "null"]},
+                "parcel_id": {"type": ["string", "null"]},
+                "latitude": {"type": ["number", "null"]},
+                "longitude": {"type": ["number", "null"]},
+                "last_sale_date": {"type": ["string", "null"]},
+                "last_sale_price_dollars": {"type": ["number", "null"]},
+                "annual_property_tax_dollars": {"type": ["number", "null"]},
+                "assessed_total_value_dollars": {"type": ["number", "null"]},
+                "assessed_land_value_dollars": {"type": ["number", "null"]},
+                "zoning": {"type": ["string", "null"]},
+                "land_use": {"type": ["string", "null"]},
+                "legal_description": {"type": ["string", "null"]},
+                "water": {"type": ["string", "null"]},
+                "sewer": {"type": ["string", "null"]},
+                "flood_zone": {"type": ["string", "null"]},
+                "source_urls": {"type": "array", "items": {"type": "string"}},
+                "source_titles": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "formatted_address", "property_type", "bedrooms", "bathrooms",
+                "square_footage", "lot_size_square_feet", "lot_size_acres",
+                "year_built", "subdivision", "county", "parcel_id", "latitude",
+                "longitude", "last_sale_date", "last_sale_price_dollars",
+                "annual_property_tax_dollars", "assessed_total_value_dollars",
+                "assessed_land_value_dollars", "zoning", "land_use",
+                "legal_description", "water", "sewer", "flood_zone",
+                "source_urls", "source_titles"
+            ]
+        },
         "facts": {
             "type": "array",
             "items": {
@@ -163,10 +205,69 @@ WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
         "status",
         "summary",
         "address_match",
+        "subject",
         "facts",
         "conflicts",
         "comparable_candidates",
         "limitations",
+    ],
+}
+
+LAND_WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "status": {"type": "string", "enum": ["completed", "insufficient"]},
+        "summary": {"type": "string"},
+        "address_match": {
+            "type": "string",
+            "enum": ["confirmed", "probable", "conflicting", "not_found"],
+        },
+        "subject": WEB_EVIDENCE_SCHEMA["properties"]["subject"],
+        "comparable_candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "formatted_address": {"type": ["string", "null"]},
+                    "parcel_id": {"type": ["string", "null"]},
+                    "county": {"type": ["string", "null"]},
+                    "state": {"type": ["string", "null"]},
+                    "sale_price_dollars": {"type": ["number", "null"]},
+                    "sale_date": {"type": ["string", "null"]},
+                    "closed_sale_confirmed": {"type": "boolean"},
+                    "arms_length_status": {
+                        "type": "string",
+                        "enum": ["verified", "unverified", "non_market"],
+                    },
+                    "arms_length_evidence": {"type": ["string", "null"]},
+                    "acres": {"type": ["number", "null"]},
+                    "lot_size_square_feet": {"type": ["integer", "null"]},
+                    "lot_count": {"type": ["integer", "null"]},
+                    "land_use": {"type": ["string", "null"]},
+                    "zoning": {"type": ["string", "null"]},
+                    "latitude": {"type": ["number", "null"]},
+                    "longitude": {"type": ["number", "null"]},
+                    "source_urls": {"type": "array", "items": {"type": "string"}},
+                    "source_titles": {"type": "array", "items": {"type": "string"}},
+                    "research_summary": {"type": "string"},
+                },
+                "required": [
+                    "formatted_address", "parcel_id", "county", "state",
+                    "sale_price_dollars", "sale_date", "closed_sale_confirmed",
+                    "arms_length_status", "arms_length_evidence", "acres",
+                    "lot_size_square_feet", "lot_count", "land_use", "zoning",
+                    "latitude", "longitude", "source_urls", "source_titles",
+                    "research_summary"
+                ],
+            },
+        },
+        "limitations": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "status", "summary", "address_match", "subject",
+        "comparable_candidates", "limitations"
     ],
 }
 
@@ -491,21 +592,22 @@ def collect_secondary_market_evidence(
                 "occupants, tenants, phone numbers, emails, or other personal information. "
                 "Do not estimate value, ARV, repairs, an offer, or a price range. Automated "
                 "home-value estimates are not sale evidence. Report conflicts rather than "
-                "resolving them. Every fact, conflict, and comparable must cite URLs actually "
-                "consulted during this search. Return incomplete fields as null; do not infer "
+                "resolving them. Every subject field, fact, conflict, and comparable must cite "
+                "URLs actually consulted during this search. Fill the structured subject object "
+                "only from cited public sources. Return incomplete fields as null; do not infer "
                 "or fabricate them."
             ),
             user_prompt=json.dumps(
                 {
                     "task": (
-                        "Verify the address and collect secondary public evidence for property "
+                        "Verify the address and collect primary public evidence for property "
                         "facts, prior recorded sales, listing history/condition clues, permits, "
                         "local market context, and up to eight likely nearby closed-sale "
-                        "comparables. This evidence supplements a provider comp search and is "
-                        "validated by Stonegate before it can affect valuation math."
+                        "comparables. Stonegate validates this cited evidence before it can "
+                        "affect valuation math."
                     ),
                     "subject_address": requested_address,
-                    "primary_provider_facts": public_facts,
+                    "known_crm_facts": public_facts,
                 },
                 sort_keys=True,
             ),
@@ -563,6 +665,7 @@ def sanitize_grounded_evidence(
         parsed.get("comparable_candidates"),
         consulted,
     )
+    subject = sanitize_subject(parsed.get("subject"), consulted)
     status = string_value(parsed.get("status")) or "insufficient"
     if not facts and not conflicts and not comparable_candidates:
         status = "insufficient"
@@ -572,6 +675,7 @@ def sanitize_grounded_evidence(
         "summary": string_value(parsed.get("summary"))
         or "No corroborating public property evidence was found.",
         "address_match": string_value(parsed.get("address_match")) or "not_found",
+        "subject": subject,
         "facts": facts,
         "conflicts": conflicts,
         "comparable_candidates": comparable_candidates,
@@ -582,6 +686,235 @@ def sanitize_grounded_evidence(
             item for item in parsed.get("limitations", []) if isinstance(item, str) and item.strip()
         ][:6],
         "sources": list(consulted.values())[:24],
+    }
+
+
+def sanitize_subject(
+    raw_subject: Any,
+    consulted: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    if not isinstance(raw_subject, dict):
+        return {}
+    urls = list(
+        dict.fromkeys(
+            normalized
+            for value in raw_subject.get("source_urls", [])
+            if (normalized := normalize_url(value)) in consulted
+        )
+    )
+    if not urls:
+        return {}
+    return {
+        **raw_subject,
+        "source_urls": urls,
+        "source_titles": [
+            string_value(consulted[url].get("title")) or url for url in urls
+        ],
+    }
+
+
+def collect_land_market_evidence(
+    settings: Settings,
+    property_record: Property,
+    *,
+    requested_identity: str,
+) -> dict[str, Any]:
+    if not settings.ai_enabled:
+        return unavailable_secondary_evidence("AI is disabled.")
+    if not settings.openai_web_search_enabled:
+        return unavailable_secondary_evidence(
+            "Controlled web research is disabled by OPENAI_WEB_SEARCH_ENABLED."
+        )
+    if not settings.openai_api_key:
+        return unavailable_secondary_evidence("OPENAI_API_KEY is not configured.")
+    client = OpenAIResponsesClient(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout_seconds=settings.openai_request_timeout_seconds,
+    )
+    try:
+        parsed, usage, sources = client.create_grounded_structured_response(
+            model=settings.openai_default_model,
+            system_prompt=(
+                "You research vacant-land property records and closed land sales for real-estate "
+                "underwriting. Use county assessor, recorder, GIS, planning/zoning, FEMA, and "
+                "dated sold-listing sources. Match the exact address or parcel before returning "
+                "subject facts. Find up to twelve nearby closed vacant-land sales, preferring "
+                "similar acreage and use. A candidate needs cited sale price, sale date, acreage "
+                "or lot square feet, and exact address or parcel identity. Never treat asking "
+                "prices, estimates, assessments, quitclaims, gifts, tax sales, or foreclosures as "
+                "ordinary market sales. Mark arms-length verified only with affirmative cited "
+                "evidence. Do not identify owners or other people. Do not estimate value or an "
+                "offer. Use null for facts you cannot support, and cite every returned record."
+            ),
+            user_prompt=json.dumps(
+                {
+                    "task": "Verify this land parcel and collect cited closed land sales.",
+                    "subject_identity": requested_identity,
+                    "crm": {
+                        "address": property_lookup_identity(property_record),
+                        "parcel_id": property_record.parcel_id,
+                        "county": property_record.county,
+                        "state": property_record.state,
+                        "property_type": property_record.property_type,
+                    },
+                },
+                sort_keys=True,
+            ),
+            schema_name="stonegate_land_public_evidence",
+            json_schema=LAND_WEB_EVIDENCE_SCHEMA,
+            reasoning_effort="low",
+            max_output_tokens=5000,
+            safety_identifier=f"land-research-{property_record.id}",
+            prompt_cache_key="stonegate:land-public-evidence:v1",
+            user_location={
+                "country": "US",
+                "city": property_record.city,
+                "region": property_record.state,
+                "timezone": "America/New_York",
+            },
+            blocked_domains=[
+                "facebook.com", "instagram.com", "reddit.com", "tiktok.com", "x.com"
+            ],
+            max_tool_calls=7,
+            search_context_size="medium",
+        )
+    except OpenAIClientError as exc:
+        return unavailable_secondary_evidence(str(exc))
+    consulted = {
+        normalize_url(source.get("url")): source
+        for source in sources
+        if normalize_url(source.get("url"))
+    }
+    candidates: list[dict[str, Any]] = []
+    for raw in list_of_dicts(parsed.get("comparable_candidates"))[:16]:
+        urls = list(
+            dict.fromkeys(
+                normalized
+                for value in raw.get("source_urls", [])
+                if (normalized := normalize_url(value)) in consulted
+            )
+        )
+        price = positive_number(raw.get("sale_price_dollars"))
+        sold_on = iso_date_value(raw.get("sale_date"))
+        acres = positive_number(raw.get("acres"))
+        lot_square_feet = positive_integer(raw.get("lot_size_square_feet"))
+        if acres is None and lot_square_feet is not None:
+            acres = lot_square_feet / 43_560
+        if lot_square_feet is None and acres is not None:
+            lot_square_feet = round(acres * 43_560)
+        rejection = public_transfer_rejection_reason(
+            transaction_type="land sale",
+            arms_length_status=string_value(raw.get("arms_length_status")),
+            arms_length_evidence=string_value(raw.get("arms_length_evidence")),
+            sale_price=price or 0,
+        )
+        if (
+            not urls
+            or price is None
+            or sold_on is None
+            or acres is None
+            or raw.get("closed_sale_confirmed") is not True
+            or rejection is not None
+        ):
+            continue
+        candidates.append(
+            {
+                **raw,
+                "sale_price_dollars": price,
+                "sale_date": sold_on,
+                "acres": acres,
+                "lot_size_square_feet": lot_square_feet,
+                "source_urls": urls,
+                "source_titles": [
+                    string_value(consulted[url].get("title")) or url for url in urls
+                ],
+                "source": "ai_web_research",
+            }
+        )
+    status = string_value(parsed.get("status")) or "insufficient"
+    evidence = {
+        "research_version": "land_public_research_v1",
+        "status": status,
+        "summary": string_value(parsed.get("summary")) or "No land evidence was found.",
+        "address_match": string_value(parsed.get("address_match")) or "not_found",
+        "subject": sanitize_subject(parsed.get("subject"), consulted),
+        "comparable_candidates": candidates[:12],
+        "valuation_candidate_count": len(candidates[:12]),
+        "limitations": [
+            item for item in parsed.get("limitations", [])
+            if isinstance(item, str) and item.strip()
+        ][:8],
+        "sources": list(consulted.values())[:30],
+        "model": settings.openai_default_model,
+        "usage": usage,
+    }
+    if not evidence["subject"] and not evidence["comparable_candidates"]:
+        evidence["status"] = "insufficient"
+    return evidence
+
+
+def property_lookup_identity(property_record: Property) -> str:
+    return ", ".join(
+        value.strip()
+        for value in (
+            property_record.street_address,
+            property_record.city,
+            property_record.state,
+            property_record.postal_code,
+        )
+        if isinstance(value, str) and value.strip()
+    )
+
+
+def research_subject_record(
+    evidence: dict[str, Any],
+    property_record: Property,
+    *,
+    requested_address: str,
+) -> dict[str, Any]:
+    """Translate cited public research into Stonegate's canonical subject shape."""
+    raw_subject = evidence.get("subject")
+    values = raw_subject if isinstance(raw_subject, dict) else {}
+    lot_square_feet = positive_integer(values.get("lot_size_square_feet"))
+    lot_acres = positive_number(values.get("lot_size_acres"))
+    if lot_square_feet is None and lot_acres is not None:
+        lot_square_feet = round(lot_acres * 43_560)
+    parcel_id = string_value(values.get("parcel_id")) or property_record.parcel_id
+    return {
+        "formattedAddress": string_value(values.get("formatted_address")) or requested_address,
+        "addressLine1": property_record.street_address,
+        "city": property_record.city,
+        "state": property_record.state,
+        "zipCode": property_record.postal_code,
+        "propertyType": string_value(values.get("property_type"))
+        or property_record.property_type,
+        "bedrooms": positive_number(values.get("bedrooms")),
+        "bathrooms": positive_number(values.get("bathrooms")),
+        "squareFootage": positive_integer(values.get("square_footage")),
+        "lotSize": lot_square_feet,
+        "lotAcres": lot_acres,
+        "yearBuilt": positive_integer(values.get("year_built")),
+        "subdivision": string_value(values.get("subdivision")),
+        "county": string_value(values.get("county")) or property_record.county,
+        "id": parcel_id,
+        "parcelId": parcel_id,
+        "latitude": values.get("latitude"),
+        "longitude": values.get("longitude"),
+        "lastSaleDate": iso_date_value(values.get("last_sale_date")),
+        "lastSalePrice": positive_number(values.get("last_sale_price_dollars")),
+        "propertyTaxes": positive_number(values.get("annual_property_tax_dollars")),
+        "assessedValue": positive_number(values.get("assessed_total_value_dollars")),
+        "assessedLandValue": positive_number(values.get("assessed_land_value_dollars")),
+        "zoning": string_value(values.get("zoning")),
+        "landUse": string_value(values.get("land_use")),
+        "legalDescription": string_value(values.get("legal_description")),
+        "water": string_value(values.get("water")),
+        "sewer": string_value(values.get("sewer")),
+        "floodZone": string_value(values.get("flood_zone")),
+        "_stonegateEvidenceSource": "ai_web_research",
+        "_stonegateSourceUrls": list(values.get("source_urls", [])),
+        "_stonegateSourceTitles": list(values.get("source_titles", [])),
     }
 
 
@@ -785,6 +1118,7 @@ def unavailable_secondary_evidence(reason: str) -> dict[str, Any]:
         "status": "unavailable",
         "summary": "Secondary public-record research was not added to this analysis.",
         "address_match": "not_checked",
+        "subject": {},
         "facts": [],
         "conflicts": [],
         "comparable_candidates": [],

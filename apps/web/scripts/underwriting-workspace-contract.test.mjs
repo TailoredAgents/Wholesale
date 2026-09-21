@@ -65,16 +65,16 @@ test("valuation workspace preserves the four progressive stages", () => {
   assert.match(leadDetail, /lead\.intelligence\.missing_fields\.slice\(0, 3\)/);
 });
 
-test("valuation updates reuse evidence and market refresh stays explicit", () => {
+test("valuation updates reuse evidence and cited research refresh stays explicit", () => {
   assert.match(marketValue, /createAnalysis\(false\)/);
   assert.match(marketValue, /createAnalysis\(true\)/);
   assert.match(marketValue, /Update Stonegate valuation/);
   assert.match(marketValue, /Run Stonegate valuation/);
-  assert.match(marketValue, /Refresh market evidence/);
-  assert.match(marketValue, /paid provider credits/);
+  assert.match(marketValue, /Refresh cited market research/);
+  assert.match(marketValue, /fresh cited public-web research/);
 });
 
-test("Land comp review can restore or reject saved candidates without a provider search", () => {
+test("Land comp review can restore or reject saved candidates without new web research", () => {
   assert.match(landValuation, /new Map<string, ComparableReviewCandidate>/);
   assert.match(landValuation, /analysis\.selected_comps\.forEach/);
   assert.match(landValuation, /analysis\.rejected_comps\.forEach/);
@@ -82,7 +82,7 @@ test("Land comp review can restore or reject saved candidates without a provider
   assert.match(landValuation, /savedComparableCandidates\.map/);
   assert.match(landValuation, /options\.selectedKeys !== undefined/);
   assert.match(landValuation, /if \(refreshComps\) body\.idempotency_key = crypto\.randomUUID\(\)/);
-  assert.match(landValuation, /makes no provider call/);
+  assert.match(landValuation, /runs no new web research/);
   assert.match(landValuation, /Saved status:/);
   assert.match(landValuation, /Latest saved analysis/);
 });

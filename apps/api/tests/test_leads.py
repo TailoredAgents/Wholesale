@@ -1181,55 +1181,13 @@ def test_lead_api_enriches_only_a_missing_counterpart_identity(
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 2
 
 
-def test_validate_property_address_preserves_crm_address_and_provider_provenance(
+def test_validate_property_address_records_user_confirmation_and_preserves_crm_address(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
-    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
-    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
     get_settings.cache_clear()
-
-    class FakeRentCastClient:
-        def __init__(self, **_: object) -> None:
-            pass
-
-        def get_property_record(self, **_: object) -> dict[str, object]:
-            return {
-                "id": "123-Peachtree-St,-Atlanta,-GA-30303",
-                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
-                "addressLine1": "123 Peachtree St",
-                "addressLine2": None,
-                "city": "Atlanta",
-                "state": "GA",
-                "zipCode": "30303",
-                "county": "Fulton",
-                "countyFips": "121",
-                "latitude": 33.75,
-                "longitude": -84.39,
-                "propertyType": "Single Family",
-                "bedrooms": 3,
-                "bathrooms": 2,
-                "squareFootage": 1800,
-                "yearBuilt": 1980,
-                "owner": {"names": ["Must Not Be Retained"]},
-            }
-
-    monkeypatch.setattr(
-        "app.services.property_validation.RentCastClient",
-        FakeRentCastClient,
-    )
-
-    def unexpected_web_comp_discovery(*_: object, **__: object) -> dict[str, object]:
-        raise AssertionError(
-            "Web comp discovery must not run after structured evidence meets the threshold."
-        )
-
-    monkeypatch.setattr(
-        "app.services.leads.collect_secondary_market_evidence",
-        unexpected_web_comp_discovery,
-    )
     client = TestClient(app)
     create_payload = lead_payload()
     assert isinstance(create_payload["property"], dict)
@@ -1253,17 +1211,15 @@ def test_validate_property_address_preserves_crm_address_and_provider_provenance
 
     assert response.status_code == 200
     validation = response.json()
-    assert validation["status"] == "provider_confirmed"
-    assert validation["match_score"] == 100
-    assert validation["validated_address"] == "123 Peachtree St, Atlanta, GA 30303"
-    assert validation["facts"]["squareFootage"] == 1800
-    assert "owner" not in validation["facts"]
+    assert validation["status"] == "verified"
+    assert validation["provider"] == "stonegate_user"
+    assert validation["validated_address"] == "123 Peachtree Street, Atlanta, GA 30303-1234"
     detail = client.get(
         f"/api/v1/leads/{lead_id}",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     ).json()
     assert detail["property_street_address"] == "123 Peachtree Street"
-    assert detail["property_validation"]["status"] == "provider_confirmed"
+    assert detail["property_validation"]["status"] == "verified"
 
     update_response = client.patch(
         f"/api/v1/leads/{lead_id}",
@@ -2583,53 +2539,15 @@ def test_create_lead_underwriting_rejects_invalid_ranges(
     assert response.status_code == 422
 
 
-def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
+def test_preview_lead_market_value_uses_latest_saved_public_research(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
-    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
-    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
     get_settings.cache_clear()
-
-    captured: dict[str, object] = {}
-
-    class FakeRentCastClient:
-        def __init__(self, **kwargs: object) -> None:
-            captured["init"] = kwargs
-
-        def get_value_estimate(self, **kwargs: object) -> RentCastValueEstimate:
-            captured["request"] = kwargs
-            return RentCastValueEstimate(
-                price=285000,
-                price_range_low=260000,
-                price_range_high=305000,
-                subject_property={
-                    "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
-                    "propertyType": "Single Family",
-                },
-                comparables=[
-                    {
-                        "id": "comp-1",
-                        "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
-                        "status": "Inactive",
-                        "listingType": "Standard",
-                        "propertyType": "Single Family",
-                        "price": 280000,
-                        "bedrooms": 3,
-                        "bathrooms": 2,
-                        "squareFootage": 1800,
-                        "yearBuilt": 1985,
-                        "distance": 0.4,
-                        "daysOld": 42,
-                        "correlation": 0.98,
-                    }
-                ],
-                raw_response={},
-            )
-
-    monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
     client = TestClient(app)
     created_response = client.post(
         "/api/v1/leads",
@@ -2637,6 +2555,36 @@ def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
         json=lead_payload(),
     )
     lead_id = created_response.json()["id"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    db_session.add(
+        UnderwritingMarketAnalysis(
+            organization_id=lead.organization_id,
+            lead_id=lead.id,
+            property_id=lead.property_id,
+            created_by_user_id=owner.id,
+            provider="openai_web_search",
+            requested_address="123 Peachtree St, Atlanta, GA 30303",
+            estimated_value_cents=None,
+            estimated_value_low_cents=None,
+            estimated_value_high_cents=None,
+            subject_property={
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "propertyType": "Single Family",
+            },
+            selected_comps=[],
+            rejected_comps=[],
+            selected_comp_count=0,
+            rejected_comp_count=0,
+            confidence_score=0,
+            offer_low_percentage=65,
+            offer_high_percentage=70,
+            assignment_fee_cents=15_000_00,
+            raw_response={},
+            analysis_metadata={},
+        )
+    )
+    db_session.commit()
 
     response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-value",
@@ -2645,29 +2593,22 @@ def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["provider"] == "rentcast"
-    assert payload["estimated_value_cents"] == 28500000
-    assert payload["estimated_value_low_cents"] == 26000000
-    assert payload["estimated_value_high_cents"] == 30500000
+    assert payload["provider"] == "openai_web_search"
+    assert payload["estimated_value_cents"] is None
+    assert payload["estimated_value_low_cents"] is None
+    assert payload["estimated_value_high_cents"] is None
     assert payload["human_review_required"] is True
-    assert payload["comparables"][0]["provider_id"] == "comp-1"
-    assert payload["comparables"][0]["price_cents"] == 28000000
-    assert captured["request"] == {
-        "address": "123 Peachtree St, Atlanta, GA 30303",
-        "property_type": "single_family",
-    }
+    assert payload["comparables"] == []
     assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 0
     get_settings.cache_clear()
 
 
-def test_preview_lead_market_value_requires_rentcast_key(
+def test_preview_lead_market_value_requires_saved_research(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
-    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
-    monkeypatch.delenv("RENTCAST_API_KEY", raising=False)
     get_settings.cache_clear()
     client = TestClient(app)
     created_response = client.post(
@@ -2683,10 +2624,108 @@ def test_preview_lead_market_value_requires_rentcast_key(
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "RENTCAST_API_KEY is not configured."
+    assert response.json()["detail"] == (
+        "Run cited property research before opening the market-value preview."
+    )
     get_settings.cache_clear()
 
 
+def test_market_analysis_uses_cited_public_research_without_paid_provider_calls(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    source_url = "https://county.example/closed-sales"
+    comparables = []
+    for index, price in enumerate((280_000, 300_000, 320_000), start=1):
+        comparables.append(
+            {
+                "formatted_address": f"12{index} Peachtree St, Atlanta, GA 30303",
+                "address_line1": f"12{index} Peachtree St",
+                "city": "Atlanta",
+                "state": "GA",
+                "postal_code": "30303",
+                "property_type": "Single Family",
+                "sale_price_dollars": price,
+                "sale_date": f"2026-0{index + 2}-15",
+                "transaction_type": "Warranty deed market sale",
+                "arms_length_status": "verified",
+                "arms_length_evidence": "County deed record confirms an ordinary sale.",
+                "closed_sale_confirmed": True,
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "square_footage": 1_800,
+                "year_built": 1982,
+                "lot_size": 8_000,
+                "source_urls": [source_url],
+                "source_titles": ["County closed-sale record"],
+                "source_grade": "cited_single_source",
+                "valuation_eligible": True,
+            }
+        )
+    evidence = {
+        "research_version": "ai_comp_discovery_v1",
+        "status": "supported",
+        "summary": "Exact subject and three cited closed sales found.",
+        "address_match": "confirmed",
+        "subject": {
+            "formatted_address": "123 Peachtree St, Atlanta, GA 30303",
+            "property_type": "Single Family",
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "square_footage": 1_800,
+            "lot_size_square_feet": 8_000,
+            "year_built": 1980,
+            "county": "Fulton",
+            "latitude": 33.75,
+            "longitude": -84.39,
+            "source_urls": [source_url],
+            "source_titles": ["County property record"],
+        },
+        "facts": [],
+        "conflicts": [],
+        "comparable_candidates": comparables,
+        "valuation_candidate_count": 3,
+        "limitations": [],
+        "sources": [{"url": source_url, "title": "County closed-sale record"}],
+    }
+    monkeypatch.setattr(
+        "app.services.leads.collect_secondary_market_evidence",
+        lambda *_args, **_kwargs: evidence,
+    )
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"refresh_market_data": True},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["provider"] == "openai_web_search"
+    assert payload["execution_metrics"]["provider_returned_comp_count"] == 3
+    assert payload["execution_metrics"]["ai_research_comp_count"] == 3
+    assert len(payload["selected_comps"]) >= 1
+    saved = db_session.scalar(
+        select(UnderwritingMarketAnalysis).where(
+            UnderwritingMarketAnalysis.lead_id == UUID(lead_id)
+        )
+    )
+    assert saved is not None
+    assert saved.provider == "openai_web_search"
+    assert saved.raw_response["realestateapi"] is None
+    assert saved.raw_response["dealmachine"] is None
+
+
+@pytest.mark.skip(reason="Legacy paid-provider pipeline was retired in favor of cited research.")
 def test_market_analysis_reuses_failed_and_no_match_dealmachine_snapshots_until_refresh(
     db_session: Session,
     api_db_override: None,
@@ -2913,6 +2952,7 @@ def test_market_analysis_reuses_failed_and_no_match_dealmachine_snapshots_until_
     assert dealmachine_call_counts["comps"] == 0
 
 
+@pytest.mark.skip(reason="Legacy paid-provider pipeline was retired in favor of cited research.")
 def test_market_analysis_records_provider_failure_without_partial_results(
     db_session: Session,
     api_db_override: None,
@@ -3001,6 +3041,7 @@ def test_market_analysis_records_provider_failure_without_partial_results(
     get_settings.cache_clear()
 
 
+@pytest.mark.skip(reason="Legacy paid-provider pipeline was retired in favor of cited research.")
 def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
     db_session: Session,
     api_db_override: None,
@@ -3164,6 +3205,7 @@ def test_guided_repair_catalog_and_saved_scope_are_versioned(
     assert estimate["scope_items"][0]["estimated_cost_cents"] == 1_250_000
 
 
+@pytest.mark.skip(reason="Legacy paid-provider pipeline was retired in favor of cited research.")
 def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     db_session: Session,
     api_db_override: None,
@@ -4231,6 +4273,7 @@ def test_offer_ceiling_approval_uses_immutable_negotiation_plan(
     assert "newer underwriting version" in stale_decision.json()["detail"]
 
 
+@pytest.mark.skip(reason="Legacy paid-provider pipeline was retired in favor of cited research.")
 def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
     db_session: Session,
     api_db_override: None,

@@ -23,11 +23,11 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   the only blanket organization-wide approval-read authority.
 - CRM, shared Conversations, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
   transactions, buyers, finance, marketing, and AI control foundations are implemented.
-- Complete lead addresses automatically create a reusable Property Intelligence snapshot with
-  normalized RealEstateAPI property facts, screened RentCast and RealEstateAPI comparable evidence,
-  Stonegate-owned valuation math, provenance, conflicts, freshness, and an authorized listing
-  image when the provider returns one. Inspection photos remain preferred; no Street View,
-  satellite, or scraped imagery is used.
+- Complete lead addresses automatically queue reusable Property Intelligence research through
+  OpenAI web search. Stonegate saves cited public facts and closed-sale candidates, then applies
+  its own deterministic screening, valuation math, provenance, conflicts, and freshness rules.
+  RentCast and RealEstateAPI are retired from live runtime paths. Historical snapshots remain
+  readable, and property imagery now comes only from Stonegate inspection uploads.
 - The branded web domain is live. Stonegate's seller-inquiry A2P Campaign is approved. Internal
   Facebook lead alerts have prior delivery evidence but require one repeat acceptance after the
   worker credential correction; seller-facing SMS and final Twilio Voice acceptance remain.

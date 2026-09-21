@@ -443,14 +443,11 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
         "OPENAI_API_KEY",
         "OPENAI_DEFAULT_MODEL",
         "OPENAI_TRANSCRIPTION_MODEL",
+        "OPENAI_WEB_SEARCH_ENABLED",
         "PROSPECTING_NATIVE_DIALER_ENABLED",
         "PROSPECTING_NATIVE_DIALER_MAX_LINES",
         "PROPERTY_DATA_PROVIDER",
         "PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED",
-        "REALESTATEAPI_API_KEY",
-        "REALESTATEAPI_BASE_URL",
-        "RENTCAST_API_KEY",
-        "RENTCAST_BASE_URL",
         "RESEND_API_KEY",
         "RESEND_EVENT_MAX_ATTEMPTS",
         "RESEND_EVENT_PROCESSING_LEASE_SECONDS",
@@ -479,6 +476,11 @@ def test_render_worker_keeps_critical_provider_configuration_in_sync() -> None:
     for service_values in (api_values, worker_values):
         assert service_values["PROSPECTING_NATIVE_DIALER_ENABLED"] == "false"
         assert service_values["PROSPECTING_NATIVE_DIALER_MAX_LINES"] == "1"
+        assert service_values["PROPERTY_DATA_PROVIDER"] == "public_web"
+        assert service_values["OPENAI_WEB_SEARCH_ENABLED"] == "true"
+        assert service_values["UNDERWRITING_REALESTATEAPI_COMPS_MODE"] == "disabled"
+        assert "RENTCAST_API_KEY" not in service_values
+        assert "REALESTATEAPI_API_KEY" not in service_values
 
 
 def render_service_environment_keys(blueprint: str, service_name: str) -> set[str]:

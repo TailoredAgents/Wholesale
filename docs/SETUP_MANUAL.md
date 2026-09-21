@@ -1,6 +1,11 @@
 # How To Set Up And Maintain Stonegate
 
-Last verified against the repository: July 29, 2026
+Last verified against the repository: September 21, 2026
+
+> **Current property-research policy:** Stonegate uses OpenAI cited public-web research for House
+> and Land property facts and comparable-sale candidates. RentCast and RealEstateAPI are retired
+> from live runtime paths. Do not create, renew, or configure either provider for Stonegate.
+> Historical provider snapshots remain readable so old analyses preserve their evidence trail.
 
 ## Who This Guide Is For
 
@@ -16,8 +21,7 @@ do I know it worked?”
 
 Stonegate setup is split between:
 
-1. **Outside provider accounts**, such as Render, Clerk, Resend, Twilio, SignWell, OpenAI,
-   RentCast, and RealEstateAPI.
+1. **Outside provider accounts**, such as Render, Clerk, Resend, Twilio, SignWell, and OpenAI.
 2. **Stonegate OS**, where the owner creates staff users, teams, sender permissions, templates,
    roles, operating policies, and assignments.
 
@@ -50,12 +54,12 @@ Follow this order for a new environment or a complete production review:
 1. Confirm Render services and branded domains.
 2. Confirm Clerk authentication.
 3. Confirm the owner account and create staff accounts.
-4. Confirm OpenAI and RentCast.
+4. Confirm OpenAI cited public-web research.
 5. Configure and test Resend email.
 6. Configure SignWell and contract templates.
 7. Activate Twilio SMS only after A2P approval.
 8. Configure Twilio Voice.
-9. Deploy and test RealEstateAPI property intelligence on the API and worker.
+9. Test cited House and Land property research on the API and worker.
 10. Configure bank, vendor, accounting, and compensation policy.
 11. Test backups and production health.
 12. Train each employee using **My Setup** and the role manuals.
@@ -87,8 +91,6 @@ provider account. For example:
 | Key | Value comes from |
 | --- | --- |
 | `OPENAI_API_KEY` | OpenAI API Keys |
-| `RENTCAST_API_KEY` | RentCast account |
-| `REALESTATEAPI_API_KEY` | RealEstateAPI account |
 | `RESEND_API_KEY` | Resend API Keys |
 | `TWILIO_ACCOUNT_SID` | Twilio Account Info |
 | `TWILIO_AUTH_TOKEN` | Twilio Account Info; it is not the Account SID |
@@ -308,28 +310,26 @@ approved automation explicitly performs an action.
 
 Do not enable autonomous external actions merely because draft generation works.
 
-## RentCast Property Data
+## Cited Public Property Research
 
 ### Setup
 
-1. Open RentCast.
-2. Copy the API key.
-3. Set `PROPERTY_DATA_PROVIDER=rentcast`.
-4. Add the key to `RENTCAST_API_KEY` on **oakwell-api**.
-5. Keep `RENTCAST_BASE_URL=https://api.rentcast.io/v1`.
-6. Redeploy.
+1. Set `PROPERTY_DATA_PROVIDER=public_web` on **oakwell-api** and **oakwell-worker**.
+2. Confirm `AI_ENABLED=true`, `OPENAI_WEB_SEARCH_ENABLED=true`, and a valid `OPENAI_API_KEY` on
+   both services.
+3. Keep `UNDERWRITING_REALESTATEAPI_COMPS_MODE=disabled`.
+4. Do not add RentCast or RealEstateAPI credentials.
+5. Redeploy the API and worker.
 
 ### Acceptance
 
-1. Create or open a test Georgia lead with a complete address.
-2. Validate the property address.
-3. Run **Analyze comps**.
-4. Confirm the subject property is correct.
-5. Review included and excluded comparables.
-6. Download both Investor and Client PDFs.
-
-If RentCast returns no property, verify the address and use the controlled evidence workflow.
-A provider 404 does not mean Stonegate is down.
+1. Create or open a test lead with a complete address.
+2. Open Property and select **Refresh research**.
+3. Confirm the subject facts and comparable candidates include working source links.
+4. Confirm an unsupported or conflicting fact remains unknown or requires review.
+5. Open Valuation & Offer and run the Stonegate valuation from that saved evidence.
+6. Confirm changing repairs or comp review reuses the snapshot instead of starting new research.
+7. Download both Investor and Client PDFs and verify their facts match the saved analysis.
 
 ## Resend Email
 
@@ -561,32 +561,16 @@ the API and worker, and review the operating policy before calling into other st
 9. Open **Settings > Integrations** and confirm **Call recording and AI notes** is configured before
    launch.
 
-## RealEstateAPI Property Intelligence And DealMachine Buyer Discovery
+## Property Intelligence And DealMachine Buyer Discovery
 
-RealEstateAPI supplies the reusable property profile and secondary comp evidence. DealMachine has
-a separate bounded role: cost-governed, deal-specific buyer discovery for House dispositions.
-Enabling DealMachine buyer discovery does not enable DealMachine underwriting comps, and Stonegate
+OpenAI cited public-web research supplies the reusable property profile and comparable candidates.
+DealMachine has a separate bounded role: cost-governed, deal-specific buyer discovery for House
+dispositions. DealMachine buyer discovery does not supply underwriting comps, and Stonegate
 continues to use its owned Buyer Network first.
 
-For RealEstateAPI activation:
-
-1. Add `REALESTATEAPI_API_KEY` to both the Render API and worker services. Never paste the key into
-   chat, documentation, source code, or browser settings.
-2. Set `REALESTATEAPI_BASE_URL=https://api.realestateapi.com` and
-   `REALESTATEAPI_REQUEST_TIMEOUT_SECONDS=30` on both services.
-3. Set `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate` on both services.
-4. Keep `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` on both services. The production API's
-   separate `BUYER_DATA_PROVIDER=dealmachine` setting does not affect RealEstateAPI research or
-   underwriting comps.
-5. Redeploy API and worker, then use **Refresh research** on a known Georgia property.
-6. Confirm Sources shows RentCast and RealEstateAPI, duplicate transfers appear once, and the
-   Stonegate ARV is based on screened comp math rather than either provider estimate.
-7. Confirm physical, tax, sale, equity, mortgage, lien, ownership, listing, and hazard signals are
-   saved when returned. Unknown fields must remain unknown.
-8. If the response contains licensed listing media, confirm it loads through Stonegate. If not,
-   confirm the UI shows **No property photo available** with no Street View or scraped fallback.
-9. Repeat **Update Stonegate valuation** without refreshing and confirm no new RealEstateAPI call is
-   made. Only explicit evidence refreshes may spend another provider credit.
+The property-research setup and acceptance steps are in **Cited Public Property Research** above.
+RentCast and RealEstateAPI must remain retired. `UNDERWRITING_DEALMACHINE_COMPS_MODE` also remains
+`disabled`; the separate `BUYER_DATA_PROVIDER=dealmachine` setting controls buyer discovery only.
 
 DealMachine buyer discovery and DealMachine underwriting comps are independent. Stonegate's
 production use is governed House buyer discovery only; keep
@@ -798,7 +782,7 @@ makes failures difficult to identify.
 - [ ] Owner and staff can sign in with individual accounts.
 - [ ] Each role sees only the correct workspaces.
 - [ ] OpenAI Copilots and Help work in advisory mode.
-- [ ] RentCast and underwriting reports pass controlled tests.
+- [ ] Cited public property research and underwriting reports pass controlled tests.
 - [ ] Resend sending, reply routing, attachments, and restricted aliases pass.
 - [ ] Twilio calls record under the approved disclosure and retention policy; transcript, AI-note
       review/apply, failure visibility, and deletion pass end to end.
@@ -811,7 +795,7 @@ makes failures difficult to identify.
 
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
-- [x] RealEstateAPI key and controlled property-research acceptance; continue monitoring credits,
+- [x] Cited public-web property-research acceptance; continue monitoring research quality,
       subject matches, and evidence quality.
 - [ ] Google conversion delivery after ad-account setup; continue monitoring the accepted Meta
       browser/server path.

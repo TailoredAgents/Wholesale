@@ -1324,13 +1324,15 @@ def canonical_subject_facts(
     )
     facts: dict[str, Any] = {}
     provenance: dict[str, str] = {}
+    subject_source = string(subject_record.get("_stonegateEvidenceSource")) or "property_record"
+    avm_source = string(avm_subject.get("_stonegateEvidenceSource")) or "avm_subject"
     for key in keys:
         if subject_record.get(key) is not None:
             facts[key] = subject_record[key]
-            provenance[key] = "rentcast_property_record"
+            provenance[key] = subject_source
         elif avm_subject.get(key) is not None:
             facts[key] = avm_subject[key]
-            provenance[key] = "rentcast_avm_subject"
+            provenance[key] = avm_source
     if facts.get("propertyType") is None and local_property_type:
         facts["propertyType"] = local_property_type
         provenance["propertyType"] = "stonegate_crm"

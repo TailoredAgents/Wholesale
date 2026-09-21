@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, principal_for_user
 from app.core.config import get_settings
 from app.domain.assets import LAND_RESEARCH_PROFILE
-from app.integrations.realestateapi_client import RealEstateAPIPropertySearch
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -33,55 +32,7 @@ OWNER_EMAIL = "land-underwriting-owner@example.com"
 OTHER_OWNER_EMAIL = "other-land-owner@example.com"
 
 
-class FakeRealEstateAPIClient:
-    calls = 0
-
-    def __init__(self, _settings: object) -> None:
-        pass
-
-    def search_land_sales(self, **_kwargs: object) -> RealEstateAPIPropertySearch:
-        type(self).calls += 1
-        sale_date = (datetime.now(UTC) - timedelta(days=180)).date().isoformat()
-        properties = [
-            land_sale(
-                provider_id="land-comp-1",
-                apn="COMP-1",
-                sale_date=sale_date,
-                sale_price=80_000,
-                lot_square_feet=348_480,
-                latitude=33.7505,
-                longitude=-84.3890,
-            ),
-            land_sale(
-                provider_id="land-comp-2",
-                apn="COMP-2",
-                sale_date=sale_date,
-                sale_price=100_000,
-                lot_square_feet=435_600,
-                latitude=33.7510,
-                longitude=-84.3885,
-            ),
-            land_sale(
-                provider_id="land-comp-3",
-                apn="COMP-3",
-                sale_date=sale_date,
-                sale_price=120_000,
-                lot_square_feet=522_720,
-                latitude=33.7515,
-                longitude=-84.3880,
-            ),
-        ]
-        return RealEstateAPIPropertySearch(
-            properties=properties,
-            result_count=3,
-            response_count=3,
-            status_code=200,
-            status_message="Success",
-            raw_response={"data": properties},
-        )
-
-
-def land_sale(
+def public_land_sale(
     *,
     provider_id: str,
     apn: str,
@@ -92,18 +43,19 @@ def land_sale(
     longitude: float,
 ) -> dict[str, object]:
     return {
-        "id": provider_id,
-        "apn": apn,
+        "formatted_address": f"{provider_id}, Atlanta, GA",
+        "parcel_id": apn,
         "county": "Fulton",
         "state": "GA",
-        "propertyType": "LAND",
-        "propertyUse": "Residential Vacant Land",
-        "latestArmsLengthSaleAmount": sale_price,
-        "latestArmsLengthSaleDate": sale_date,
-        "lotSquareFeet": lot_square_feet,
+        "land_use": "Residential Vacant Land",
+        "sale_price_dollars": sale_price,
+        "sale_date": sale_date,
+        "lot_size_square_feet": lot_square_feet,
         "latitude": latitude,
         "longitude": longitude,
-        "formattedAddress": f"{provider_id}, Atlanta, GA",
+        "arms_length_evidence": "County deed record identifies a market sale.",
+        "source_urls": [f"https://records.example/{provider_id}"],
+        "source_titles": [f"County deed record {provider_id}"],
     }
 
 
@@ -140,6 +92,36 @@ def seed_current_land_snapshot(db: Session, lead_id: UUID) -> PropertyIntelligen
     property_record = db.get(Property, lead.property_id)
     assert property_record is not None
     now = datetime.now(UTC)
+    sale_date = (now - timedelta(days=180)).date().isoformat()
+    public_sales = [
+        public_land_sale(
+            provider_id="land-comp-1",
+            apn="COMP-1",
+            sale_date=sale_date,
+            sale_price=80_000,
+            lot_square_feet=348_480,
+            latitude=33.7505,
+            longitude=-84.3890,
+        ),
+        public_land_sale(
+            provider_id="land-comp-2",
+            apn="COMP-2",
+            sale_date=sale_date,
+            sale_price=100_000,
+            lot_square_feet=435_600,
+            latitude=33.7510,
+            longitude=-84.3885,
+        ),
+        public_land_sale(
+            provider_id="land-comp-3",
+            apn="COMP-3",
+            sale_date=sale_date,
+            sale_price=120_000,
+            lot_square_feet=522_720,
+            latitude=33.7515,
+            longitude=-84.3880,
+        ),
+    ]
     snapshot = PropertyIntelligenceSnapshot(
         organization_id=lead.organization_id,
         property_id=property_record.id,
@@ -165,9 +147,9 @@ def seed_current_land_snapshot(db: Session, lead_id: UUID) -> PropertyIntelligen
             "longitude": {"value": -84.39},
         },
         valuation={},
-        comparables=[],
-        market_context={},
-        sources=[{"provider": "realestateapi", "operation": "property_detail"}],
+        comparables=public_sales,
+        market_context={"land_comparable_candidates": public_sales},
+        sources=[{"source": "openai_web_search", "role": "cited_public_research"}],
         conflicts=[],
         media={},
         snapshot_metadata={"lookup_mode": "apn"},
@@ -211,12 +193,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     )
     settings = get_settings()
     monkeypatch.setattr(settings, "land_workflow_enabled", True)
-    monkeypatch.setattr(settings, "realestateapi_api_key", "test-realestateapi-key")
-    monkeypatch.setattr(
-        "app.services.land_underwriting.RealEstateAPIClient",
-        FakeRealEstateAPIClient,
-    )
-    FakeRealEstateAPIClient.calls = 0
     client = TestClient(app)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
     lead_id = create_land_lead(client)
@@ -266,13 +242,13 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     assert first_analysis["guidance_status"] == "available"
     assert first_analysis["is_current"] is True
     assert len(first_analysis["selected_comps"]) == 3
-    assert first_analysis["search_snapshot"]["provider_call_made"] is True
-    assert first_analysis["search_snapshot"]["provider_credits_estimated"] == 3
+    assert first_analysis["search_snapshot"]["provider_call_made"] is False
+    assert first_analysis["search_snapshot"]["provider_credits_estimated"] is None
+    assert first_analysis["search_snapshot"]["provider"] == "openai_web_search"
     assert first_analysis["opening_offer_cents"] is not None
     assert first_analysis["seller_contract_ceiling_cents"] is not None
     assert first_analysis["subject_snapshot"]["land_use"] == "residential"
     assert first_analysis["subject_snapshot"]["land_use_source"] == "human_override"
-    assert FakeRealEstateAPIClient.calls == 1
 
     retried = client.post(
         f"/api/v1/leads/{lead_id}/land-valuations",
@@ -293,7 +269,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     )
     assert retried.status_code == 201, retried.text
     assert retried.json()["id"] == first_analysis["id"]
-    assert FakeRealEstateAPIClient.calls == 1
 
     detail = client.get(
         f"/api/v1/leads/{lead_id}",
@@ -314,7 +289,7 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     )
     assert source_snapshot is not None
     assert source_snapshot.valuation == {}
-    assert source_snapshot.comparables == []
+    assert len(source_snapshot.comparables) == 3
     owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
     assert owner is not None
     ai_context = build_lead_context(
@@ -348,7 +323,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     assert reviewed_analysis["source_analysis_id"] == first_analysis["id"]
     assert reviewed_analysis["search_snapshot"]["provider_call_made"] is False
     assert reviewed_analysis["search_snapshot"]["reused_saved_evidence"] is True
-    assert FakeRealEstateAPIClient.calls == 1
 
     incompatible_replay = client.post(
         f"/api/v1/leads/{lead_id}/land-valuations",
@@ -363,7 +337,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     )
     assert incompatible_replay.status_code == 422
     assert "fresh Land comparable search" in incompatible_replay.json()["detail"]
-    assert FakeRealEstateAPIClient.calls == 1
 
     reject_all = client.post(
         f"/api/v1/leads/{lead_id}/land-valuations",
@@ -383,7 +356,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
     assert len(rejected_analysis["rejected_comps"]) == 3
     assert rejected_analysis["status"] == "insufficient_evidence"
     assert rejected_analysis["guidance_status"] == "withheld"
-    assert FakeRealEstateAPIClient.calls == 1
 
     restored_key = rejected_analysis["rejected_comps"][0]["key"]
     restored = client.post(
@@ -406,7 +378,6 @@ def test_land_valuation_endpoints_save_history_and_reuse_evidence_without_paid_c
         restored_key
     ]
     assert restored_analysis["search_snapshot"]["provider_call_made"] is False
-    assert FakeRealEstateAPIClient.calls == 1
 
     history = client.get(
         f"/api/v1/leads/{lead_id}/land-valuations?limit=10",
@@ -524,7 +495,7 @@ def test_land_underwriting_is_tenant_scoped_and_rejects_house_leads(
     assert "only for Land leads" in response.json()["detail"]
 
 
-def test_paid_search_is_retry_idempotent_and_scoped_to_each_lead(
+def test_public_research_reuse_is_retry_idempotent_and_scoped_to_each_lead(
     db_session: Session,
     api_db_override: None,
     monkeypatch: pytest.MonkeyPatch,
@@ -537,12 +508,6 @@ def test_paid_search_is_retry_idempotent_and_scoped_to_each_lead(
     )
     settings = get_settings()
     monkeypatch.setattr(settings, "land_workflow_enabled", True)
-    monkeypatch.setattr(settings, "realestateapi_api_key", "test-realestateapi-key")
-    monkeypatch.setattr(
-        "app.services.land_underwriting.RealEstateAPIClient",
-        FakeRealEstateAPIClient,
-    )
-    FakeRealEstateAPIClient.calls = 0
     client = TestClient(app)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
     first_lead_id = create_land_lead(client)
@@ -561,7 +526,6 @@ def test_paid_search_is_retry_idempotent_and_scoped_to_each_lead(
     )
     assert missing_key.status_code == 422, missing_key.text
     assert "idempotency key is required" in missing_key.json()["detail"]
-    assert FakeRealEstateAPIClient.calls == 0
 
     def request(lead_id: UUID, key: str) -> Any:
         return client.post(
@@ -606,7 +570,6 @@ def test_paid_search_is_retry_idempotent_and_scoped_to_each_lead(
     assert second.json()["id"] != first.json()["id"]
     assert first.json()["lead_id"] == str(first_lead_id)
     assert second.json()["lead_id"] == str(second_lead_id)
-    assert FakeRealEstateAPIClient.calls == 2
 
 
 def test_saved_land_guidance_fails_closed_when_snapshot_policy_or_identity_changes(
@@ -622,12 +585,6 @@ def test_saved_land_guidance_fails_closed_when_snapshot_policy_or_identity_chang
     )
     settings = get_settings()
     monkeypatch.setattr(settings, "land_workflow_enabled", True)
-    monkeypatch.setattr(settings, "realestateapi_api_key", "test-realestateapi-key")
-    monkeypatch.setattr(
-        "app.services.land_underwriting.RealEstateAPIClient",
-        FakeRealEstateAPIClient,
-    )
-    FakeRealEstateAPIClient.calls = 0
     client = TestClient(app)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
     lead_id = create_land_lead(client)

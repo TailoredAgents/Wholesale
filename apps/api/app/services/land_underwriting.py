@@ -21,7 +21,7 @@ from app.domain.assets import (
     require_land_workflow_enabled,
 )
 from app.domain.rbac import PermissionKeys
-from app.integrations.realestateapi_client import RealEstateAPIClient, RealEstateAPIError
+from app.integrations.realestateapi_client import RealEstateAPIClient
 from app.models.foundation import (
     ActivityEvent,
     AuditEvent,
@@ -42,7 +42,7 @@ from app.services.land_comparable_evidence import (
     SQUARE_FEET_PER_ACRE,
     evaluate_land_sales,
     land_search_bounds,
-    normalize_realestateapi_land_sale,
+    normalize_public_land_sale,
 )
 from app.services.land_valuation import analyze_land_valuation
 from app.services.land_valuation_state import (
@@ -259,7 +259,7 @@ def create_land_valuation(
     )
     if payload.refresh_comps and request_idempotency_key is None:
         raise ValueError(
-            "An idempotency key is required for a paid Land comparable search."
+            "An idempotency key is required when loading a fresh Land comparable set."
         )
     if request_idempotency_key is not None:
         existing_request = db.scalar(
@@ -356,35 +356,21 @@ def create_land_valuation(
     else:
         if not payload.refresh_comps:
             raise ValueError(
-                "The first Land valuation requires an explicit comparable refresh. This may "
-                "consume RealEstateAPI credits."
+                "The first Land valuation requires an explicit refresh from the latest cited "
+                "property research."
             )
-        if not active_settings.realestateapi_api_key:
-            raise ValueError("REALESTATEAPI_API_KEY is required for Land comparable research.")
         bounds = land_search_bounds(
             subject_acres=subject_acres,
             tier=payload.search_tier,
             today=date.today(),
         )
-        provider = client or RealEstateAPIClient(active_settings)
         started = perf_counter()
-        try:
-            result = provider.search_land_sales(
-                state=subject_state,
-                county=subject_county,
-                latitude=subject_latitude,
-                longitude=subject_longitude,
-                radius_miles=float(bounds["radius_miles"]),
-                sale_date_min=str(bounds["sale_date_min"]),
-                lot_size_min=int(bounds["lot_size_min"]),
-                lot_size_max=int(bounds["lot_size_max"]),
-                size=active_settings.land_valuation_max_provider_results,
-            )
-        except RealEstateAPIError as exc:
-            raise RuntimeError(str(exc)) from exc
+        public_candidates = snapshot.market_context.get("land_comparable_candidates")
+        if not isinstance(public_candidates, list):
+            public_candidates = []
         latency_ms = round((perf_counter() - started) * 1000)
         normalized_candidates = [
-            normalize_realestateapi_land_sale(
+            normalize_public_land_sale(
                 item,
                 subject_acres=subject_acres,
                 subject_lot_count=payload.subject_lot_count,
@@ -393,20 +379,21 @@ def create_land_valuation(
                 subject_longitude=subject_longitude,
                 today=date.today(),
             )
-            for item in result.properties
+            for item in public_candidates
+            if isinstance(item, dict)
         ]
         search_snapshot = {
             **bounds,
-            "provider": "realestateapi",
-            "provider_call_made": True,
-            "provider_endpoint": "/v2/PropertySearch",
-            "provider_returned_count": len(result.properties),
-            "provider_result_count": result.result_count,
-            "provider_response_count": result.response_count,
-            "provider_credits_estimated": result.response_count,
+            "provider": "openai_web_search",
+            "provider_call_made": False,
+            "research_snapshot_reused": True,
+            "provider_returned_count": len(public_candidates),
+            "provider_result_count": len(public_candidates),
+            "provider_response_count": len(public_candidates),
+            "provider_credits_estimated": None,
             "provider_latency_ms": latency_ms,
-            "maximum_requested_results": active_settings.land_valuation_max_provider_results,
-            "one_paid_call_boundary": True,
+            "maximum_requested_results": 12,
+            "one_paid_call_boundary": False,
             "arms_length_filter": True,
             "property_type_filter": "LAND",
             "location_mode": (

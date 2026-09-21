@@ -443,7 +443,7 @@ class Settings(BaseSettings):
         validation_alias="GOOGLE_OAUTH_REDIRECT_URI",
     )
     property_data_provider: str = Field(
-        default="rentcast",
+        default="public_web",
         validation_alias="PROPERTY_DATA_PROVIDER",
     )
     property_intelligence_auto_research_enabled: bool = Field(
@@ -1433,16 +1433,17 @@ class Settings(BaseSettings):
 
     @property
     def facebook_address_enrichment_configuration_blockers(self) -> tuple[str, ...]:
-        blockers: list[str] = []
-        if self.property_data_provider.lower() != "rentcast":
-            blockers.append("PROPERTY_DATA_PROVIDER=rentcast")
-        if not self.rentcast_api_key:
-            blockers.append("RENTCAST_API_KEY")
-        return tuple(blockers)
+        return ("Paid address enrichment is retired; use direct entry and public research.",)
 
     @property
     def property_intelligence_configuration_blockers(self) -> tuple[str, ...]:
-        blockers = list(self.facebook_address_enrichment_configuration_blockers)
+        blockers: list[str] = []
+        if not self.ai_enabled:
+            blockers.append("AI_ENABLED=true")
+        if not self.openai_web_search_enabled:
+            blockers.append("OPENAI_WEB_SEARCH_ENABLED=true")
+        if not self.openai_api_key:
+            blockers.append("OPENAI_API_KEY")
         if not self.property_intelligence_auto_research_enabled:
             blockers.append("PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED=true")
         return tuple(blockers)
